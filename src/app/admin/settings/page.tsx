@@ -24,7 +24,7 @@ import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyl
 import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
+  Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote,
   QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
@@ -36,6 +36,7 @@ import {
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
   DayTimingGroup, DayTimingScope,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
+  fetchAllNonWorkingDayRules, saveNonWorkingDays, NonWorkingDayGroup,
 } from '@/lib/attendance'
 import { DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
 import FenceEditor from '@/components/attendance/FenceEditor'
@@ -49,6 +50,11 @@ const DayTimingModalDynamic = dynamic(
 
 const HolidayModalDynamic = dynamic(
   () => import('@/components/attendance/HolidayModal'),
+  { ssr: false }
+)
+
+const NonWorkingDayModalDynamic = dynamic(
+  () => import('@/components/attendance/NonWorkingDayModal'),
   { ssr: false }
 )
 
@@ -90,15 +96,17 @@ function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
   return [...map.values()]
 }
 
-interface HolidayDateGroup {
+interface DateGroup<T> {
   date: string
   label: string
-  rows: HolidayGroup[]
+  rows: T[]
 }
 
-// One row per rule in the DB, but the UI manages a whole date as a single unit.
-function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
-  const map = new Map<string, HolidayDateGroup>()
+// One row per rule in the DB, but the UI manages a whole date as a single
+// unit. Shared by Holidays and Non-working Days — same is_default + rows
+// shape, just a different backing table.
+function groupRulesByDate<T extends { date: string }>(rules: T[]): DateGroup<T>[] {
+  const map = new Map<string, DateGroup<T>>()
   for (const r of rules) {
     if (!map.has(r.date)) {
       const label = new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -373,6 +381,11 @@ export default function AdminSettingsPage() {
   const [editingHolidayDate, setEditingHolidayDate] = useState<string | null>(null)
   const [clearingHolidayDate, setClearingHolidayDate] = useState<string | null>(null)
 
+  const [nonWorkingRules, setNonWorkingRules] = useState<NonWorkingDayGroup[]>([])
+  const [showNonWorkingModal, setShowNonWorkingModal] = useState(false)
+  const [editingNonWorkingDate, setEditingNonWorkingDate] = useState<string | null>(null)
+  const [clearingNonWorkingDate, setClearingNonWorkingDate] = useState<string | null>(null)
+
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
   const [draftLogin, setDraftLogin] = useState<LoginPageConfig>(loginConfig)
@@ -439,11 +452,12 @@ export default function AdminSettingsPage() {
       Promise.all([
         fetchAttendanceConfig(), fetchAllStaff(),
         fetchAllDayTimingRules(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
-        fetchAllHolidayRules(),
-      ]).then(([cfg, staff, rules, teams, tracked, holRules]) => {
+        fetchAllHolidayRules(), fetchAllNonWorkingDayRules(),
+      ]).then(([cfg, staff, rules, teams, tracked, holRules, nonWorkingRls]) => {
         setAttendanceDraft(cfg); setStaffList(staff)
         setDayTimingRules(rules); setTeamOptions(teams); setTrackedStaff(tracked)
         setHolidayRules(holRules)
+        setNonWorkingRules(nonWorkingRls)
         setAttendanceLoaded(true)
       })
     }
@@ -566,6 +580,18 @@ export default function AdminSettingsPage() {
     const ok = await saveHolidays(date, [], profile.id)
     if (ok) await reloadHolidayRules()
     setClearingHolidayDate(null)
+  }
+
+  async function reloadNonWorkingRules() {
+    setNonWorkingRules(await fetchAllNonWorkingDayRules())
+  }
+
+  async function handleClearNonWorking(date: string) {
+    if (!profile) return
+    setClearingNonWorkingDate(date)
+    const ok = await saveNonWorkingDays(date, [], profile.id)
+    if (ok) await reloadNonWorkingRules()
+    setClearingNonWorkingDate(null)
   }
 
   async function reloadDayTimingRules() {
@@ -1127,7 +1153,8 @@ export default function AdminSettingsPage() {
       : staffList
     const hiddenCount = staffList.filter(s => s.attendance_hidden).length
     const dayTimingGroups = groupDayTimingRules(dayTimingRules)
-    const holidayDateGroups = groupHolidayRules(holidayRules)
+    const holidayDateGroups = groupRulesByDate(holidayRules)
+    const nonWorkingDateGroups = groupRulesByDate(nonWorkingRules)
 
     if (!attendanceLoaded) {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
@@ -1267,6 +1294,54 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="border-t border-[#E4E4E7] pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Non-working Days</SectionLabel>
+            <button
+              onClick={() => { setEditingNonWorkingDate(null); setShowNonWorkingModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> Add Non-working Day
+            </button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">
+            Declare a day that isn&apos;t worked and isn&apos;t paid — for the whole school, or just specific teams. Unlike a
+            Holiday, this reduces the working-day count for payroll. The same control is available on the Staff Attendance page.
+          </p>
+          {nonWorkingDateGroups.length === 0 ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><Ban size={12} className="text-[#71717A]" /> No non-working days declared yet.</p>
+          ) : (
+            <div className="space-y-px max-h-64 overflow-y-auto">
+              {nonWorkingDateGroups.map(g => {
+                const everyone = g.rows.find(r => r.is_default)
+                const overrides = g.rows.filter(r => !r.is_default)
+                return (
+                  <div key={g.date} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    <Ban size={13} className="text-[#71717A] flex-shrink-0" />
+                    <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
+                    <span className="text-sm text-[#71717A] flex-1 truncate">
+                      {everyone ? everyone.name : `${overrides.length} team non-working day${overrides.length === 1 ? '' : 's'}`}
+                    </span>
+                    <button
+                      onClick={() => { setEditingNonWorkingDate(g.date); setShowNonWorkingModal(true) }}
+                      className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleClearNonWorking(g.date)}
+                      disabled={clearingNonWorkingDate === g.date}
+                      className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                    >
+                      {clearingNonWorkingDate === g.date ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
           <SectionLabel>Attendance Visibility</SectionLabel>
           <p className="text-xs text-[#71717A] mb-3">
             Everyone (including admins) appears in attendance lists and counts by default. Hide individual staff who shouldn&apos;t be tracked ({hiddenCount} hidden).
@@ -1346,6 +1421,17 @@ export default function AdminSettingsPage() {
             allStaff={trackedStaff}
             onClose={() => { setShowHolidayModal(false); setEditingHolidayDate(null) }}
             onSaved={() => { reloadHolidayRules(); setEditingHolidayDate(null) }}
+          />
+        )}
+
+        {showNonWorkingModal && profile && (
+          <NonWorkingDayModalDynamic
+            initialDate={editingNonWorkingDate ?? new Date().toISOString().split('T')[0]}
+            viewerId={profile.id}
+            teams={teamOptions}
+            allStaff={trackedStaff}
+            onClose={() => { setShowNonWorkingModal(false); setEditingNonWorkingDate(null) }}
+            onSaved={() => { reloadNonWorkingRules(); setEditingNonWorkingDate(null) }}
           />
         )}
       </div>

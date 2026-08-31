@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { StaffAttendanceRecord, Holiday, deriveDayStatus } from './attendance'
+import { StaffAttendanceRecord, Holiday, AttendanceTimingDelta, deriveDayStatus } from './attendance'
 
 // Shared PF/ESI/LOP/bonus calibration engine — used by both the staff Salary
 // Manager and the driver Payroll pay-cycle pages so the math lives in exactly
@@ -27,7 +27,16 @@ export interface LopRule {
 export interface PayrollCalibration {
   pf: { rate: number }                                   // e.g. 0.12 = 12% of PF Basic
   esi: { rate: number; wage_ceiling: number }             // e.g. 0.0075 = 0.75%, ceiling ₹21,000
-  lop: { late: LopRule; leave: LopRule }
+  lop: {
+    late: LopRule
+    leave: LopRule
+    /** Same shape as late/leave — each half-day beyond the free quota costs its tier's days. */
+    halfDay: LopRule
+    /** A late arrival within this many minutes of the effective late cutoff isn't counted as a Late occurrence. */
+    lateGraceMinutes: number
+    /** A checkout within this many minutes of the effective checkout cutoff is excused — treated as a normal (full) day, not a Half Day. */
+    halfDayGraceMinutes: number
+  }
   bonus: { mode: 'per_point' | 'pool'; per_point_value: number; pool_amount: number }
 }
 
@@ -37,6 +46,11 @@ export const DEFAULT_PAYROLL_CALIBRATION: PayrollCalibration = {
   lop: {
     late: { free_count: 3, tiers: [{ count: null, lop_days_each: 0.5 }] },
     leave: { free_count: 1, tiers: [{ count: null, lop_days_each: 1 }] },
+    halfDay: { free_count: 0, tiers: [{ count: null, lop_days_each: 0.5 }] },
+    // 0 minutes = today's exact behavior (no excuses), so existing cycles are
+    // unaffected until an admin opts in.
+    lateGraceMinutes: 0,
+    halfDayGraceMinutes: 0,
   },
   bonus: { mode: 'per_point', per_point_value: 50, pool_amount: 5000 },
 }
@@ -47,6 +61,7 @@ export const PAYROLL_ITEM_LABELS = {
   esi: 'ESI',
   lopLate: 'LOP — Late',
   lopLeave: 'LOP — Leave',
+  lopHalfDay: 'LOP — Half Day',
   bonus: 'Task Bonus',
 } as const
 
@@ -88,7 +103,13 @@ export async function savePayrollCalibration(cfg: PayrollCalibration): Promise<{
   return { success: true }
 }
 
-/** A cycle-level override replaces whole sections (pf / esi / lop / bonus) of the base calibration, not individual fields. */
+/**
+ * A cycle-level override replaces whole sections (pf / esi / lop / bonus) of
+ * the base calibration, not individual fields — except `lop`, which merges
+ * per-field. That's what lets an *older* stored calibration (from before
+ * halfDay/lateGraceMinutes/halfDayGraceMinutes existed) fall back to the
+ * default for just those new keys instead of leaving them `undefined`.
+ */
 export function mergeCalibration(
   base: PayrollCalibration,
   override: Partial<PayrollCalibration> | null | undefined,
@@ -97,7 +118,13 @@ export function mergeCalibration(
   return {
     pf: override.pf ?? base.pf,
     esi: override.esi ?? base.esi,
-    lop: override.lop ?? base.lop,
+    lop: {
+      late: override.lop?.late ?? base.lop.late,
+      leave: override.lop?.leave ?? base.lop.leave,
+      halfDay: override.lop?.halfDay ?? base.lop.halfDay,
+      lateGraceMinutes: override.lop?.lateGraceMinutes ?? base.lop.lateGraceMinutes,
+      halfDayGraceMinutes: override.lop?.halfDayGraceMinutes ?? base.lop.halfDayGraceMinutes,
+    },
     bonus: override.bonus ?? base.bonus,
   }
 }
@@ -172,41 +199,69 @@ export function computeBonusAmounts(
 export interface StaffPayrollAttendance {
   lateCount: number
   leaveCount: number
+  halfDayCount: number
 }
 
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
+/** Grace periods, applied against each day's actual lateness/earliness in minutes. */
+export interface AttendanceGrace {
+  lateGraceMinutes: number
+  halfDayGraceMinutes: number
+  /** From `fetchAttendanceTimingDeltas`, keyed `${staff_id}|${date}`. */
+  timingDeltas: Map<string, AttendanceTimingDelta>
+}
+
 /**
- * Late/leave occurrence counts for one staff member across a calendar month,
- * derived day-by-day (holiday/weekend-aware, via the same `deriveDayStatus`
- * the attendance module itself uses). `leaveCount` covers both approved leave
- * and unmarked absence — the attendance sync writes approved Casual/Medical
- * leave as `absent` with a `leave_application_id`, not as `on_leave`.
+ * Late/leave/half-day occurrence counts for one staff member across a
+ * calendar month, derived day-by-day (holiday/non-working-day-aware, via the
+ * same `deriveDayStatus` the attendance module itself uses). `leaveCount`
+ * covers both approved leave and unmarked absence — the attendance sync
+ * writes approved Casual/Medical leave as `absent` with a
+ * `leave_application_id`, not as `on_leave`.
+ *
+ * With `grace` supplied, a Late day within `lateGraceMinutes` of the cutoff —
+ * or a Half Day checkout within `halfDayGraceMinutes` of the checkout cutoff —
+ * is excused: treated as a normal day and left out of both counts entirely.
+ * Without it (the default), behavior is unchanged from before grace existed.
  */
 export function computeStaffAttendanceStats(
   staffId: string,
   records: StaffAttendanceRecord[],
   holidays: Holiday[],
+  nonWorkingDays: Holiday[],
   year: number,
   month: number,
   today: string = new Date().toISOString().split('T')[0],
+  grace?: AttendanceGrace,
 ): StaffPayrollAttendance {
   const holidaySet = new Set(holidays.map(h => h.date))
+  const nonWorkingSet = new Set(nonWorkingDays.map(h => h.date))
   const recordByDate = new Map(
     records.filter(r => r.staff_id === staffId).map(r => [r.date, r]),
   )
   const lastDay = daysInMonth(year, month)
   let lateCount = 0
   let leaveCount = 0
+  let halfDayCount = 0
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const status = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today)
-    if (status === 'late') lateCount++
-    else if (status === 'absent' || status === 'on_leave') leaveCount++
+    const status = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, nonWorkingSet, today)
+    if (status === 'late') {
+      const delta = grace?.timingDeltas.get(`${staffId}|${dateStr}`)
+      const excused = !!grace && (delta?.lateByMinutes ?? Infinity) <= grace.lateGraceMinutes
+      if (!excused) lateCount++
+    } else if (status === 'half_day') {
+      const delta = grace?.timingDeltas.get(`${staffId}|${dateStr}`)
+      const excused = !!grace && (delta?.earlyByMinutes ?? Infinity) <= grace.halfDayGraceMinutes
+      if (!excused) halfDayCount++
+    } else if (status === 'absent' || status === 'on_leave') {
+      leaveCount++
+    }
   }
-  return { lateCount, leaveCount }
+  return { lateCount, leaveCount, halfDayCount }
 }
 
 // ============================================
@@ -221,6 +276,7 @@ export interface PayrollRowInputs {
   workingDaysInMonth: number
   lateCount: number
   leaveCount: number
+  halfDayCount: number
   calibration: PayrollCalibration
 }
 
@@ -228,6 +284,7 @@ export interface PayrollRowResult {
   salaryPerDay: number
   lopFromLate: number
   lopFromLeave: number
+  lopFromHalfDay: number
   lopTotal: number
   daysWorked: number
   earnedWage: number
@@ -237,12 +294,13 @@ export interface PayrollRowResult {
 
 /** Mirrors the sheet's `(daysWorked)*(salary/day)` earned-wage formula, then PF (fixed) and ESI (ROUNDUP 0.75%). */
 export function computePayrollRow(inputs: PayrollRowInputs): PayrollRowResult {
-  const { baseAmount, pfBasic, pfApplicable, esiOverride, workingDaysInMonth, lateCount, leaveCount, calibration } = inputs
+  const { baseAmount, pfBasic, pfApplicable, esiOverride, workingDaysInMonth, lateCount, leaveCount, halfDayCount, calibration } = inputs
 
   const salaryPerDay = workingDaysInMonth > 0 ? baseAmount / workingDaysInMonth : 0
   const lopFromLate = calcLopDays(lateCount, calibration.lop.late.free_count, calibration.lop.late.tiers)
   const lopFromLeave = calcLopDays(leaveCount, calibration.lop.leave.free_count, calibration.lop.leave.tiers)
-  const lopTotal = lopFromLate + lopFromLeave
+  const lopFromHalfDay = calcLopDays(halfDayCount, calibration.lop.halfDay.free_count, calibration.lop.halfDay.tiers)
+  const lopTotal = lopFromLate + lopFromLeave + lopFromHalfDay
   const daysWorked = Math.max(0, workingDaysInMonth - lopTotal)
   const earnedWage = Math.round(daysWorked * salaryPerDay)
 
@@ -250,5 +308,5 @@ export function computePayrollRow(inputs: PayrollRowInputs): PayrollRowResult {
   const esi = esiApplicable ? Math.ceil(earnedWage * calibration.esi.rate) : 0
   const pf = pfApplicable ? Math.round((pfBasic ?? 0) * calibration.pf.rate) : 0
 
-  return { salaryPerDay, lopFromLate, lopFromLeave, lopTotal, daysWorked, earnedWage, pf, esi }
+  return { salaryPerDay, lopFromLate, lopFromLeave, lopFromHalfDay, lopTotal, daysWorked, earnedWage, pf, esi }
 }

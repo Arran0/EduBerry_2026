@@ -213,7 +213,7 @@ export interface DayTimingGroupInput {
 }
 
 export interface StaffMonthlyStats {
-  working_days: number   // weekdays in month that are not holidays, up to today
+  working_days: number   // days in month up to today, minus non-working days — NOT reduced by holidays
   present: number
   late: number
   half_day: number
@@ -222,7 +222,8 @@ export interface StaffMonthlyStats {
   absent: number
   e: number
   holidays: number
-  present_pct: number    // (present + late + wfh + 0.5*half_day + e) / working_days
+  non_working: number    // excluded entirely from working_days — unpaid, not worked
+  present_pct: number    // (present + late + wfh + 0.5*half_day + e + holidays) / (working_days - on_leave)
 }
 
 // Statuses that count as the staff member having shown up for work.
@@ -361,7 +362,7 @@ export interface LocationWarning {
   details: string[]
 }
 
-const PUNCH_SLOTS = [
+export const PUNCH_SLOTS = [
   { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time',    distance: 'check_in_distance_m' },
   { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time',   distance: 'check_out_distance_m' },
   { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2',  distance: 'check_in_distance_m_2' },
@@ -1836,6 +1837,175 @@ export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
 }
 
 // ============================================
+// Non-working days — a day that is genuinely not worked and not paid, unlike
+// a Holiday (which is a paid day off and, since upgrade_attendance_holidays_
+// groups.sql / the working-days rework, no longer shrinks working days).
+// Mirrors the Holiday tables/functions above one-for-one — see
+// add_attendance_non_working_days.sql.
+// ============================================
+
+/** Same shape as `Holiday`, backed by its own table (attendance_non_working_days). */
+export interface NonWorkingDay {
+  id: string
+  date: string
+  name: string
+}
+
+export async function fetchNonWorkingDays(year?: number, month?: number): Promise<NonWorkingDay[]> {
+  let query = supabase.from('attendance_non_working_days').select('id, date, name').eq('is_default', true)
+
+  if (year != null && month != null) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month, 0).getDate()
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    query = query.gte('date', startDate).lte('date', endDate)
+  }
+
+  const { data, error } = await query.order('date', { ascending: true })
+  if (error) {
+    console.error('fetchNonWorkingDays error:', error)
+    return []
+  }
+  return (data ?? []) as NonWorkingDay[]
+}
+
+export interface NonWorkingDayGroup {
+  id: string
+  date: string
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+export interface NonWorkingDayGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+const NON_WORKING_DAY_COLUMNS = 'id, date, name, is_default'
+
+export async function fetchNonWorkingDaysForDate(date: string): Promise<NonWorkingDayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_non_working_days')
+    .select(NON_WORKING_DAY_COLUMNS)
+    .eq('date', date)
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchNonWorkingDaysForDate error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_non_working_day_members')
+    .select('non_working_day_id, staff_id')
+    .in('non_working_day_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchNonWorkingDaysForDate members error:', memError)
+
+  const staffByDay = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByDay.has(m.non_working_day_id)) staffByDay.set(m.non_working_day_id, [])
+    staffByDay.get(m.non_working_day_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByDay.get(r.id) ?? [] })) as NonWorkingDayGroup[]
+}
+
+/**
+ * Replaces every non-working-day row for a date with the given set
+ * (delete-then-insert). Pass an empty array to clear it for that date entirely.
+ */
+export async function saveNonWorkingDays(
+  date: string,
+  groups: NonWorkingDayGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('attendance_non_working_days')
+    .select('id')
+    .eq('date', date)
+
+  if (fetchError) {
+    console.error('saveNonWorkingDays fetch error:', fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase
+      .from('attendance_non_working_days')
+      .delete()
+      .in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error('saveNonWorkingDays delete error:', delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    date,
+    name: g.name.trim() || (g.is_default ? 'Non-working day' : 'Group non-working day'),
+    is_default: g.is_default,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from('attendance_non_working_days').insert(rows)
+  if (insError) {
+    console.error('saveNonWorkingDays insert error:', insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ non_working_day_id: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from('attendance_non_working_day_members').insert(memberRows)
+    if (memInsError) {
+      console.error('saveNonWorkingDays members insert error:', memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/** Every non-working-day rule that exists — for a management/overview list (e.g. Settings). */
+export async function fetchAllNonWorkingDayRules(): Promise<NonWorkingDayGroup[]> {
+  const { data: rows, error } = await supabase
+    .from('attendance_non_working_days')
+    .select(NON_WORKING_DAY_COLUMNS)
+    .order('date', { ascending: true })
+    .order('is_default', { ascending: false })
+
+  if (error) {
+    console.error('fetchAllNonWorkingDayRules error:', error)
+    return []
+  }
+  if (!rows || rows.length === 0) return []
+
+  const { data: members, error: memError } = await supabase
+    .from('attendance_non_working_day_members')
+    .select('non_working_day_id, staff_id')
+    .in('non_working_day_id', rows.map(r => r.id))
+
+  if (memError) console.error('fetchAllNonWorkingDayRules members error:', memError)
+
+  const staffByDay = new Map<string, string[]>()
+  for (const m of members ?? []) {
+    if (!staffByDay.has(m.non_working_day_id)) staffByDay.set(m.non_working_day_id, [])
+    staffByDay.get(m.non_working_day_id)!.push(m.staff_id)
+  }
+
+  return rows.map(r => ({ ...r, staff_ids: staffByDay.get(r.id) ?? [] })) as NonWorkingDayGroup[]
+}
+
+// ============================================
 // Day Timings (late-cutoff / checkout-cutoff overrides, scoped either
 // to one specific date or to a repeating weekday, and optionally split
 // into per-team overrides instead of applying to everyone)
@@ -2171,18 +2341,24 @@ export async function fetchMonthlyAttendanceRecords(
 /**
  * Effective status for a calendar day, deriving Absent for working days with no
  * record. Every day of the week is treated the same — weekends are working days
- * unless explicitly marked a holiday. A day becomes Absent the moment it is
- * "today" or earlier and has no record — the staff member can still check in
- * to flip it to Present/Late. Returns null for non-working days (holiday /
- * future).
+ * unless explicitly marked a holiday or non-working day. A day becomes Absent
+ * the moment it is "today" or earlier and has no record — the staff member can
+ * still check in to flip it to Present/Late. Returns null for future days.
+ *
+ * A Holiday is a *paid* day off — see computeMonthlyStats, it still counts
+ * toward working days. A non-working day is neither worked nor paid, and a
+ * non-working rule wins over a holiday rule on the same date (an edge case
+ * that shouldn't normally arise, but the day can only be one or the other).
  */
 export function deriveDayStatus(
   dateStr: string,
   record: StaffAttendanceRecord | undefined,
   holidaySet: Set<string>,
+  nonWorkingSet: Set<string>,
   today: string,
-): StaffAttendanceStatus | 'holiday' | null {
+): StaffAttendanceStatus | 'holiday' | 'non_working' | null {
   if (record) return record.status
+  if (nonWorkingSet.has(dateStr)) return 'non_working'
   if (holidaySet.has(dateStr)) return 'holiday'
   if (dateStr > today) return null // future days
   return 'absent'
@@ -2194,21 +2370,24 @@ export function computeMonthlyStats(
   records: StaffAttendanceRecord[],
   holidays: Holiday[],
   today: string = new Date().toISOString().split('T')[0],
+  nonWorkingDays: (Holiday | NonWorkingDay)[] = [],
 ): StaffMonthlyStats {
   const holidaySet = new Set(holidays.map(h => h.date))
+  const nonWorkingSet = new Set(nonWorkingDays.map(h => h.date))
   const recordByDate = new Map(records.map(r => [r.date, r]))
   const lastDay = new Date(year, month, 0).getDate()
 
   const stats: StaffMonthlyStats = {
     working_days: 0, present: 0, late: 0, half_day: 0, wfh: 0,
-    on_leave: 0, absent: 0, e: 0, holidays: 0, present_pct: 0,
+    on_leave: 0, absent: 0, e: 0, holidays: 0, non_working: 0, present_pct: 0,
   }
 
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today)
+    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, nonWorkingSet, today)
     if (eff === null) continue
-    if (eff === 'holiday') { stats.holidays++; continue }
+    if (eff === 'non_working') { stats.non_working++; continue } // excluded entirely — unpaid, not worked
+    if (eff === 'holiday') { stats.holidays++; stats.working_days++; continue } // paid — counts toward working days
     // Working day
     stats.working_days++
     if (eff === 'on_leave') stats.on_leave++
@@ -2216,8 +2395,9 @@ export function computeMonthlyStats(
   }
 
   // Present percentage excludes approved leave days from the denominator.
+  // Holidays are credited as full paid days, same weight as Present.
   const denominator = stats.working_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5 + stats.e
+  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5 + stats.e + stats.holidays
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }
@@ -2655,7 +2835,7 @@ export function formatMinutesAsHM(mins: number): string {
 // Same override priority as fetchEffectiveCutoffsForStaff, but against an
 // already-fetched timings list so a whole date range can be resolved without
 // re-querying per staff member.
-function resolveLateCutoff(
+export function resolveLateCutoff(
   timings: DayTimingGroup[],
   staffId: string,
   fallback: string | null
@@ -2671,6 +2851,83 @@ function resolveLateCutoff(
     if (everyone) return everyone.late_cutoff
   }
   return fallback
+}
+
+/** Sibling to resolveLateCutoff, resolving checkout_cutoff instead. */
+export function resolveCheckoutCutoff(
+  timings: DayTimingGroup[],
+  staffId: string,
+  fallback: string | null
+): string | null {
+  const dateRules = timings.filter(t => t.scope_type === 'date')
+  const weekdayRules = timings.filter(t => t.scope_type === 'weekday')
+  for (const pool of [dateRules, weekdayRules]) {
+    const override = pool.find(t => !t.is_default && t.staff_ids.includes(staffId))
+    if (override) return override.checkout_cutoff
+  }
+  for (const pool of [dateRules, weekdayRules]) {
+    const everyone = pool.find(t => t.is_default)
+    if (everyone) return everyone.checkout_cutoff
+  }
+  return fallback
+}
+
+export interface AttendanceTimingDelta {
+  /** Minutes the check-in landed past the effective late cutoff. 0 if not late / no cutoff. */
+  lateByMinutes: number
+  /** Minutes the checkout landed before the effective checkout cutoff. 0 if not early / no cutoff. */
+  earlyByMinutes: number
+}
+
+/**
+ * For every 'late' or 'half_day' record given, how late the check-in was past
+ * the effective late cutoff, and/or how early the checkout was before the
+ * effective checkout cutoff — reusing the same per-date day-timing resolution
+ * and zone-aware minute math as fetchLateSummaryReport. Keyed
+ * `${staff_id}|${date}`. Used by payroll to apply a late/half-day grace period
+ * against the cutoff that actually applied to that staff member that day.
+ */
+export async function fetchAttendanceTimingDeltas(
+  records: Pick<StaffAttendanceRecord, 'staff_id' | 'date' | 'status' | 'check_in_time' | 'check_out_time'>[]
+): Promise<Map<string, AttendanceTimingDelta>> {
+  const relevant = records.filter(r => r.status === 'late' || r.status === 'half_day')
+  if (relevant.length === 0) return new Map()
+
+  const uniqueDates = [...new Set(relevant.map(r => r.date))]
+  const [globalConfig, timingsPerDate, timezone] = await Promise.all([
+    fetchAttendanceConfig(),
+    Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
+    fetchAttendanceTimezone(),
+  ])
+  const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))
+
+  const out = new Map<string, AttendanceTimingDelta>()
+  for (const r of relevant) {
+    const timings = timingsByDate.get(r.date) ?? []
+    let lateByMinutes = 0
+    let earlyByMinutes = 0
+
+    if (r.status === 'late' && r.check_in_time) {
+      const cutoff = resolveLateCutoff(timings, r.staff_id, globalConfig.late_cutoff)
+      const cutoffMinutes = minutesFromCutoff(cutoff)
+      if (cutoffMinutes !== null) {
+        const checkInMinutes = minuteOfDayInZone(new Date(r.check_in_time), timezone)
+        lateByMinutes = Math.max(0, checkInMinutes - cutoffMinutes)
+      }
+    }
+
+    if (r.status === 'half_day' && r.check_out_time) {
+      const cutoff = resolveCheckoutCutoff(timings, r.staff_id, globalConfig.checkout_cutoff)
+      const cutoffMinutes = minutesFromCutoff(cutoff)
+      if (cutoffMinutes !== null) {
+        const checkOutMinutes = minuteOfDayInZone(new Date(r.check_out_time), timezone)
+        earlyByMinutes = Math.max(0, cutoffMinutes - checkOutMinutes)
+      }
+    }
+
+    out.set(`${r.staff_id}|${r.date}`, { lateByMinutes, earlyByMinutes })
+  }
+  return out
 }
 
 /**

@@ -45,6 +45,7 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
     working_days_override: r.working_days_override,
     leave_override: r.leave_override,
     late_override: r.late_override,
+    half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
     items: r.items, cycle: (r.cycle as unknown as SalaryCycle) ?? null,
