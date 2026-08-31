@@ -106,9 +106,9 @@ function ExamDetailPageContent() {
             {loading ? (
               <DetailSkeleton />
             ) : !exam ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+              <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>Exam not found.</div>
             ) : !isStaff ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>This page is for staff.</div>
+              <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>This page is for staff.</div>
             ) : (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -160,7 +160,7 @@ function ExamDetailPageContent() {
                   }))}
                 />
 
-                <div className={`${EXAM.card} shadow-sm p-5`}>
+                <div className={`${EXAM.cardBleed} p-5`}>
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={tab}
@@ -214,7 +214,7 @@ function DetailSkeleton() {
       {/* Tabs */}
       <Skeleton className="h-12 w-full rounded-xl mb-4" />
       {/* Body */}
-      <div className={`${EXAM.card} shadow-sm p-5 space-y-3`}>
+      <div className={`${EXAM.cardBleed} p-5 space-y-3`}>
         <Skeleton className="h-4 w-1/3" />
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 py-1">

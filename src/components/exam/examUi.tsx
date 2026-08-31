@@ -20,6 +20,13 @@ export const INK = '#1C1C1F'
 export const EXAM = {
   // Surfaces — soft, layered, with a hairline border and gentle elevation.
   card: 'bg-white border border-[#EAE7DF] rounded-2xl',
+  // Same surface, but edge-to-edge on phones: it bleeds out of the page's
+  // horizontal padding to a sharp, full-width strip (no rounding, no
+  // floating margins), then reverts to the normal floating rounded card
+  // from `sm:` up. Only use inside a container padded with `px-4` — the
+  // negative margin is sized to cancel exactly that.
+  cardBleed:
+    'bg-white border-y sm:border border-[#EAE7DF] rounded-none sm:rounded-2xl shadow-none sm:shadow-sm -mx-4 sm:mx-0',
   cardHover:
     'bg-white border border-[#EAE7DF] rounded-2xl shadow-[0_1px_2px_rgba(28,28,31,0.04)] hover:shadow-[0_8px_24px_-12px_rgba(28,28,31,0.18)] hover:border-[#D8D2C4] transition-all duration-200',
   // A premium icon tile — ink fill with a hairline gold ring + faint glow.

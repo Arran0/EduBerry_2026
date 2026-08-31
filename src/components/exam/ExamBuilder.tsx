@@ -209,7 +209,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
     )
   }
   if (!exam || !settings) {
-    return <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+    return <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>Exam not found.</div>
   }
 
   return (
@@ -271,7 +271,7 @@ export default function ExamBuilder({ examId }: { examId: string }) {
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold text-[#27272A]">Participants</h2>
         </div>
-        <div className={`${EXAM.card} shadow-sm p-5`}>
+        <div className={`${EXAM.cardBleed} p-5`}>
           <AudienceEditor examId={examId} />
         </div>
       </div>
@@ -414,7 +414,7 @@ function QuestionEditor({
   }
 
   return (
-    <div className={`${EXAM.card} shadow-sm p-4`}>
+    <div className={`${EXAM.cardBleed} p-4`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-[#A1A1AA]">
           <GripVertical size={16} />
