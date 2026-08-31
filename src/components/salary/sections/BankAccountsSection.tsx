@@ -9,7 +9,7 @@ import PersonSearch from '@/components/salary/PersonSearch'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
-import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, upsertBankAccount } from '@/lib/salary'
+import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, fetchHiddenSalaryMemberIds, upsertBankAccount } from '@/lib/salary'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
 
 /**
@@ -71,9 +71,11 @@ export default function BankAccountsSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, staffAccounts, drivers, driverAccounts] = await Promise.all([
-      fetchEligibleStaff(), fetchBankAccounts(), fetchDrivers(), fetchDriverBankAccounts(),
+    const [staff, staffAccounts, allDrivers, driverAccounts, hiddenIds] = await Promise.all([
+      fetchEligibleStaff(), fetchBankAccounts(), fetchDrivers(), fetchDriverBankAccounts(), fetchHiddenSalaryMemberIds(),
     ])
+    const hidden = new Set(hiddenIds)
+    const drivers = allDrivers.filter(d => !hidden.has(d.id))
     const staffMap: Record<string, StaffBankAccount> = {}
     for (const a of staffAccounts) staffMap[a.staff_id] = a
     const driverMap: Record<string, DriverBankAccount> = {}
@@ -165,7 +167,7 @@ export default function BankAccountsSection() {
         </Sheet>
       ) : entries.length === 0 ? (
         <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
-          No teacher, coordinator, principal, or driver accounts yet.
+          No staff or driver accounts yet.
         </div>
       ) : (
         <div className="overflow-x-auto">

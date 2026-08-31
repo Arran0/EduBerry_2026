@@ -113,15 +113,56 @@ export function formatPeriod(month: number, year: number): string {
   return `${MONTHS[month - 1] ?? month} ${year}`
 }
 
-/** Eligible staff for salaries: teacher / coordinator / principal (excludes admin & driver). */
+/** Staff roles eligible for salaries: teacher / coordinator / principal / admin (drivers are handled separately). */
+const ELIGIBLE_STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin']
+
+/** Eligible staff for salaries, minus anyone hidden from the salary app in settings. */
 export async function fetchEligibleStaff(): Promise<UserProfile[]> {
+  const [{ data, error }, hiddenIds] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*')
+      .in('role', ELIGIBLE_STAFF_ROLES)
+      .order('full_name', { ascending: true }),
+    fetchHiddenSalaryMemberIds(),
+  ])
+  if (error) { console.error('fetchEligibleStaff failed:', error); return [] }
+  const hidden = new Set(hiddenIds)
+  return ((data as UserProfile[]) || []).filter(p => !hidden.has(p.id))
+}
+
+/**
+ * Every staff/driver profile that could appear in the salary app, regardless of
+ * the hidden-members setting — used by the settings page to manage who's hidden.
+ */
+export async function fetchAllSalaryMembers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .in('role', ['teacher', 'coordinator', 'principal'])
+    .in('role', [...ELIGIBLE_STAFF_ROLES, 'driver'])
     .order('full_name', { ascending: true })
-  if (error) { console.error('fetchEligibleStaff failed:', error); return [] }
+  if (error) { console.error('fetchAllSalaryMembers failed:', error); return [] }
   return (data as UserProfile[]) || []
+}
+
+/** Profile ids an admin has chosen to keep out of the salary app's member lists (e.g. an admin account that isn't on payroll). */
+export async function fetchHiddenSalaryMemberIds(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('key', 'salary_hidden_members')
+    .maybeSingle()
+  if (error) { console.error('fetchHiddenSalaryMemberIds failed:', error); return [] }
+  const ids = (data?.value as { ids?: unknown } | null)?.ids
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+}
+
+export async function saveHiddenSalaryMemberIds(ids: string[]): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'salary_hidden_members', value: { ids } }, { onConflict: 'key' })
+  if (error) { console.error('saveHiddenSalaryMemberIds failed:', error); return { success: false, error: error.message } }
+  return { success: true }
 }
 
 // ============================================
