@@ -10,7 +10,6 @@ import {
   fetchPayrollCalibration, savePayrollCalibration,
 } from '@/lib/payroll'
 import PayrollCalibrationFields from '@/components/salary/PayrollCalibrationFields'
-import HiddenMembersSettings from '@/components/salary/HiddenMembersSettings'
 
 // Staff salary payout settings. The bank connection form is the same component
 // App Settings and Driver Payroll Settings mount, so there is one credential
@@ -53,10 +52,6 @@ export default function SalaryPayoutSettingsPage() {
         </p>
 
         <BankPayoutSettings ctx="salary" />
-
-        <div className="mt-5">
-          <HiddenMembersSettings />
-        </div>
 
         {!loading && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mt-5">

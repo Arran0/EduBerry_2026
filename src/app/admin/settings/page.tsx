@@ -113,6 +113,7 @@ function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
 // and Driver Payroll Settings never drift apart.
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
+import HiddenMembersSettings from '@/components/salary/HiddenMembersSettings'
 
 type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
@@ -1529,7 +1530,14 @@ export default function AdminSettingsPage() {
           <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
           <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'How students pay school fees into your bank account.' : 'How salaries reach staff bank accounts from your bank.'}</p>
         </div>
-        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : <BankPayoutSettings ctx="salary" />}
+        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : (
+          <>
+            <BankPayoutSettings ctx="salary" />
+            <div className="mt-5">
+              <HiddenMembersSettings />
+            </div>
+          </>
+        )}
       </div>
     )
   }
