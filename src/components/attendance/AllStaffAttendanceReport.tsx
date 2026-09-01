@@ -29,6 +29,7 @@ import {
   fetchNonWorkingDaysForDate,
   fetchAllTrackedStaff,
   fetchDayTimingsForDate,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
@@ -458,6 +459,14 @@ export default function AllStaffAttendanceReport({
   const loadRecords = useCallback(async () => {
     setLoading(true)
     setStreakMap(new Map())
+    // Apply any cutoff / holiday / non-working-day rule that changed since the
+    // last look before reading the day, so the report never shows a status
+    // scored against a rule the same screen no longer displays. A no-op — one
+    // read of an empty queue — unless something actually changed, and a no-op
+    // for viewers who cannot change the rules in the first place.
+    if (viewerRole === 'admin' || viewerRole === 'principal') {
+      await recomputePendingAttendance()
+    }
     const [recs, hol, nonWorking, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
       fetchHolidaysForDate(date),

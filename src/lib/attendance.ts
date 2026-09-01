@@ -2179,6 +2179,76 @@ export async function fetchEffectiveCutoffsForStaff(
   return null
 }
 
+// ============================================
+// Retroactive recomputation
+//
+// A day's status is decided at the punch, from the cutoffs in force at that
+// moment — and the rules a day is scored against are editable afterwards. Add a
+// checkout cutoff to a Saturday on Monday morning and every staff member who
+// left early that Saturday is still stamped Half Day, with the LOP rupees under
+// it, against a rule that no longer says what it said. Declaring a past day a
+// holiday or a non-working day has the same effect.
+//
+// attendance_retroactive_recompute.sql re-derives those statuses. It is not run
+// speculatively: every write to a cutoff / holiday / non-working-day rule marks
+// the affected scope dirty in `attendance_recompute_queue`, and this drains it.
+// With nothing queued — the overwhelmingly common case — the call is a single
+// indexed read of an empty table, which is what makes it reasonable for the
+// attendance report and the salary pages to call on every load.
+//
+// Only the punch's own rows move: a status an admin set by hand (`marked_by`)
+// or one written by the leave sync (`leave_application_id`) is left alone. See
+// the migration for the full list of guards, and for why a closed pay cycle is
+// deliberately not touched.
+// ============================================
+
+export interface AttendanceRecomputeResult {
+  /** Dates that were re-derived. 0 when nothing had changed. */
+  datesProcessed: number
+  /** Statuses that actually moved — always 0 on a second run over the same dates. */
+  recordsUpdated: number
+}
+
+const NO_RECOMPUTE: AttendanceRecomputeResult = { datesProcessed: 0, recordsUpdated: 0 }
+
+// A page load can reach this from several places at once (the report, a summary
+// card, a cycle sheet). They all want the same answer, so the first call in
+// flight is the one that runs and the rest wait on it.
+let recomputeInFlight: Promise<AttendanceRecomputeResult> | null = null
+
+/**
+ * Applies any attendance-rule change made since the last run, and reports what
+ * moved. Safe and cheap to call from any screen: callers without permission to
+ * change the rules get a no-op result rather than an error.
+ */
+export async function recomputePendingAttendance(): Promise<AttendanceRecomputeResult> {
+  if (recomputeInFlight) return recomputeInFlight
+
+  const run = (async (): Promise<AttendanceRecomputeResult> => {
+    const { data, error } = await supabase.rpc('attendance_recompute_pending')
+    if (error) {
+      // A deployment that hasn't had the migration applied yet lands here. The
+      // caller carries on with the statuses as stored — stale, but the same
+      // behaviour as before this existed, rather than a broken page.
+      console.error('recomputePendingAttendance error:', error)
+      return NO_RECOMPUTE
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      { dates_processed: number; records_updated: number } | undefined
+    return {
+      datesProcessed: Number(row?.dates_processed ?? 0),
+      recordsUpdated: Number(row?.records_updated ?? 0),
+    }
+  })()
+
+  recomputeInFlight = run
+  try {
+    return await run
+  } finally {
+    if (recomputeInFlight === run) recomputeInFlight = null
+  }
+}
+
 // All non-hidden, non-resigned trackable staff (teachers, coordinators, principals, admins).
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase

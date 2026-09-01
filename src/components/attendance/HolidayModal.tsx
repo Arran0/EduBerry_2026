@@ -7,6 +7,7 @@ import { X, Umbrella, Calendar, Repeat, Users, Plus, Trash2, AlertTriangle, Load
 import { UserProfile } from '@/lib/supabase'
 import {
   HolidayGroupInput, DayTimingScope, fetchHolidaysByScope, saveHolidays,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
 
@@ -228,8 +229,13 @@ export default function HolidayModal({
 
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveHolidays(scope, payload, viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to save. Please try again.'); return }
+    // A day declared a holiday after the fact has no cutoffs in force any more,
+    // so anyone who came in and was scored Late or Half Day on it is re-derived
+    // back to Present rather than being penalised for a day off.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to save. Please try again.') }
+    onSaved(); onClose()
   }
 
   const handleClear = async () => {
@@ -237,8 +243,11 @@ export default function HolidayModal({
     setError(null)
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveHolidays(scope, [], viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to clear. Please try again.'); return }
+    // The day is a working day again, so its cutoffs apply again.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to clear. Please try again.') }
+    onSaved(); onClose()
   }
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])

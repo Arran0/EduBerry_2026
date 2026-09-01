@@ -40,6 +40,7 @@ import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays, fetchAttendanceTimingDeltas,
+  recomputePendingAttendance,
   Holiday, NonWorkingDay, AttendanceTimingDelta, StaffAttendanceRecord,
 } from '@/lib/attendance'
 import {
@@ -183,6 +184,12 @@ export default function SalaryCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Late and Half Day are LOP occurrences, so an attendance rule edited after
+    // the day it covers moves real money on this sheet. Settle any such change
+    // before the month's attendance is read, rather than computing a payslip
+    // from statuses the attendance app has already stopped agreeing with. Costs
+    // one read of an empty queue when nothing has changed.
+    await recomputePendingAttendance()
     const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, globalCal, hiddenIds] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
       fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(), fetchPayrollCalibration(),

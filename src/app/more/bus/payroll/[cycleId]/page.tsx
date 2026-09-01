@@ -33,6 +33,7 @@ import { fetchDriverBankAccounts } from '@/lib/bus'
 import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays,
+  recomputePendingAttendance,
   Holiday, NonWorkingDay, StaffAttendanceRecord,
 } from '@/lib/attendance'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
@@ -158,6 +159,10 @@ export default function DriverCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Same reason as the staff cycle sheet: a driver's Late and Half Day days
+    // are LOP here too, so any attendance rule changed after the day it covers
+    // is settled before the month's attendance is read.
+    await recomputePendingAttendance()
     const [c, recs, cfg, banks, bases, globalCal] = await Promise.all([
       fetchDriverCycle(cycleId), fetchDriverCycleRecords(cycleId), fetchPayoutConfig(), fetchDriverBankAccounts(),
       fetchDriverBaseSalaries(), fetchPayrollCalibration(),

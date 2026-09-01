@@ -7,6 +7,7 @@ import { X, Ban, Calendar, Repeat, Users, Plus, Trash2, AlertTriangle, Loader2, 
 import { UserProfile } from '@/lib/supabase'
 import {
   NonWorkingDayGroupInput, DayTimingScope, fetchNonWorkingDaysByScope, saveNonWorkingDays,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
 
@@ -236,8 +237,13 @@ export default function NonWorkingDayModal({
 
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveNonWorkingDays(scope, payload, viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to save. Please try again.'); return }
+    // A day nobody was expected to work has no cutoffs in force, so anyone who
+    // did come in is re-derived to Present instead of keeping a Late or Half Day
+    // scored against a timetable that no longer applies to it.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to save. Please try again.') }
+    onSaved(); onClose()
   }
 
   const handleClear = async () => {
@@ -245,8 +251,11 @@ export default function NonWorkingDayModal({
     setError(null)
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveNonWorkingDays(scope, [], viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to clear. Please try again.'); return }
+    // The day is a working day again, so its cutoffs apply again.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to clear. Please try again.') }
+    onSaved(); onClose()
   }
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
