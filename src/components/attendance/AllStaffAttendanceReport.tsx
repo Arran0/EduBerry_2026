@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Ban, Repeat, Settings, FileText, ShieldAlert,
+  Umbrella, Ban, Repeat, Settings, FileText, ShieldAlert, HardHat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
@@ -117,6 +117,21 @@ const NonWorkingDayModalDynamic = dynamic(
 const LateSummaryReportModalDynamic = dynamic(
   () => import('@/components/attendance/reports/LateSummaryReportModal'),
   { ssr: false }
+)
+
+// The Support side of the report — a separate roster, separate records and
+// separate statistics (see src/lib/supportStaff.ts). Loaded only once an admin
+// actually switches to it.
+const SupportStaffAttendanceReportDynamic = dynamic(
+  () => import('@/components/attendance/SupportStaffAttendanceReport'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#A1A1AA]">
+        <Loader2 size={16} className="animate-spin" /> Loading support staff…
+      </div>
+    ),
+  }
 )
 
 function formatTimeShort(t: string) {
@@ -420,6 +435,14 @@ export default function AllStaffAttendanceReport({
 
   // Inline tab (Absent / Present / Irregular) — 'exception' kept as the internal key
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('absent')
+
+  // Which roster the report is showing. 'support' is the ground-level
+  // cleaning / maintenance staff, who have no account and no check-in of
+  // their own — an entirely separate list and set of statistics, offered to
+  // admins from the toggle beside the title.
+  const [section, setSection] = useState<'staff' | 'support'>('staff')
+  const canSeeSupport = viewerRole === 'admin'
+  const showSupport = canSeeSupport && section === 'support'
 
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
   const sectionRef = useRef<HTMLElement>(null)
@@ -791,12 +814,43 @@ export default function AllStaffAttendanceReport({
           className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
           style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
         >
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
-            <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-            <span className="truncate">Report</span>
-          </h2>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+              {showSupport
+                ? <HardHat size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+                : <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />}
+              <span className="truncate">Report</span>
+            </h2>
+
+            {/* Staff ⇄ Support toggle. Support staff never appear in the staff
+                list or its counts, and vice versa — this switches the whole
+                body, not a filter over one roster. */}
+            {canSeeSupport && (
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15 flex-shrink-0" role="tablist" aria-label="Attendance roster">
+                {([
+                  { key: 'staff' as const, label: 'Staff', icon: <Users size={11} />, title: 'Teaching, office and admin staff' },
+                  { key: 'support' as const, label: 'Support', icon: <HardHat size={11} />, title: 'Support staff — cleaning, maintenance and grounds' },
+                ]).map(t => (
+                  <button
+                    key={t.key}
+                    role="tab"
+                    aria-selected={section === t.key}
+                    onClick={() => setSection(t.key)}
+                    title={t.title}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      section === t.key ? 'bg-white text-[#18181B]' : 'text-white/70 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {t.icon}
+                    <span className="hidden sm:inline">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {viewerRole === 'admin' && (
+            {viewerRole === 'admin' && !showSupport && (
               <button
                 onClick={() => setShowLateSummaryModal(true)}
                 title="Late Summary Report — preview or download"
@@ -805,7 +859,7 @@ export default function AllStaffAttendanceReport({
                 <FileText size={14} />
               </button>
             )}
-            {viewerRole === 'admin' && (
+            {viewerRole === 'admin' && !showSupport && (
               <button
                 onClick={() => setShowAdminControls(v => !v)}
                 title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
@@ -826,7 +880,7 @@ export default function AllStaffAttendanceReport({
           </div>
         </div>
         {/* Controls strip — holiday + cutoff, admin only, hidden behind the settings toggle */}
-        {viewerRole === 'admin' && showAdminControls && (
+        {viewerRole === 'admin' && showAdminControls && !showSupport && (
         <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
           <div className="flex items-center gap-1.5">
             {holidayRules !== undefined && (
@@ -906,6 +960,26 @@ export default function AllStaffAttendanceReport({
         )}
       </div>
 
+      {showSupport ? (
+        <SupportStaffAttendanceReportDynamic
+          date={date}
+          todayStr={todayStr}
+          viewerId={viewerId}
+          canEdit={canEdit}
+          // The whole-school rules already loaded for the staff side apply to
+          // support staff too — nobody is expected in on a school holiday.
+          dayOff={
+            hasDefaultNonWorking
+              ? { kind: 'non_working', name: nonWorkingRules?.find(r => r.is_default)?.name ?? 'Non-working day' }
+              : hasDefaultHoliday
+                ? { kind: 'holiday', name: holidayRules?.find(r => r.is_default)?.name ?? 'Holiday' }
+                : null
+          }
+          refreshKey={refreshKey}
+          onChanged={onChanged}
+        />
+      ) : (
+      <>
       {/* Summary strip */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
         {hasDefaultHoliday ? (
@@ -1172,6 +1246,9 @@ export default function AllStaffAttendanceReport({
           </div>
         )}
       </div>
+
+      </>
+      )}
 
       {showTimingModal && (
         <DayTimingModalDynamic
