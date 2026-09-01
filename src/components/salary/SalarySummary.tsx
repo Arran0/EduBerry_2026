@@ -5,6 +5,7 @@ import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { formatPeriod } from '@/lib/salary'
+import { recomputePendingAttendance } from '@/lib/attendance'
 import {
   EMPTY_PAYROLL_CONTEXT, MonthlyPayrollStats, PayrollContext,
   fetchMonthlyPayrollStats, fetchPayrollContext, defaultPayrollMonth,
@@ -43,9 +44,18 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
 
   // The payroll setup (calibration, everyone's base salary) is the same
   // whichever month is on screen, so it is fetched once and handed to each.
+  //
+  // Settling any pending attendance recompute is gated behind the same fetch:
+  // an open month's loss of pay is computed live from the day statuses, so a
+  // cutoff or holiday added after the fact would otherwise show here as a
+  // deduction the attendance app no longer agrees with. It runs once per load,
+  // ahead of every month drawn from this context, and costs one read of an
+  // empty queue when no rule has changed.
   useEffect(() => {
     let alive = true
-    fetchPayrollContext(today).then(c => { if (alive) setCtx(c) })
+    recomputePendingAttendance()
+      .then(() => fetchPayrollContext(today))
+      .then(c => { if (alive) setCtx(c) })
     return () => { alive = false }
   }, [today, refreshKey])
 

@@ -37,6 +37,7 @@ import {
   DayTimingGroup, DayTimingScope, DayTimingScopeType,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
   fetchAllNonWorkingDayRules, saveNonWorkingDays, NonWorkingDayGroup,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
 import FenceEditor from '@/components/attendance/FenceEditor'
@@ -538,6 +539,10 @@ export default function AdminSettingsPage() {
   async function handleSaveAttendance() {
     setSavingAttendance(true)
     await saveAttendanceConfig(attendanceDraft)
+    // These are the cutoffs every day without an override is scored against, so
+    // moving them leaves the Late / Half Day statuses on all of those days
+    // decided by a rule that no longer exists. Re-derive them.
+    await recomputePendingAttendance()
     setSavedAttendance(true); setTimeout(() => setSavedAttendance(false), 2500); setSavingAttendance(false)
   }
 
@@ -563,7 +568,9 @@ export default function AdminSettingsPage() {
     if (!profile) return
     setClearingHolidayScopeKey(dayTimingScopeKey(scope))
     const ok = await saveHolidays(scope, [], profile.id)
-    if (ok) await reloadHolidayRules()
+    // The days this covered are working days again, so their cutoffs apply
+    // again and the statuses scored while it was a holiday have to be re-derived.
+    if (ok) { await recomputePendingAttendance(); await reloadHolidayRules() }
     setClearingHolidayScopeKey(null)
   }
 
@@ -575,7 +582,7 @@ export default function AdminSettingsPage() {
     if (!profile) return
     setClearingNonWorkingScopeKey(dayTimingScopeKey(scope))
     const ok = await saveNonWorkingDays(scope, [], profile.id)
-    if (ok) await reloadNonWorkingRules()
+    if (ok) { await recomputePendingAttendance(); await reloadNonWorkingRules() }
     setClearingNonWorkingScopeKey(null)
   }
 
@@ -587,7 +594,9 @@ export default function AdminSettingsPage() {
     if (!profile) return
     setClearingScopeKey(dayTimingScopeKey(scope))
     const ok = await saveDayTimings(scope, [], profile.id)
-    if (ok) await reloadDayTimingRules()
+    // Those days fall back to the school-wide cutoffs now, which can change
+    // whether a check-in was Late or a checkout a Half Day.
+    if (ok) { await recomputePendingAttendance(); await reloadDayTimingRules() }
     setClearingScopeKey(null)
   }
 

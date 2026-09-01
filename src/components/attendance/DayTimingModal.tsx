@@ -9,6 +9,7 @@ import {
 import { UserProfile } from '@/lib/supabase'
 import {
   DayTimingGroupInput, DayTimingScope, fetchDayTimingsByScope, saveDayTimings,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
 
@@ -245,8 +246,14 @@ export default function DayTimingModal({
 
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveDayTimings(scope, payload, viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to save. Please try again.'); return }
+    // Cutoffs are what decides Late and Half Day, and these ones may cover a day
+    // that is already over — where every status was scored against the cutoffs
+    // that just stopped applying. Re-derive before the caller reloads, or the
+    // day comes back reading exactly as it did a moment ago.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to save. Please try again.') }
+    onSaved(); onClose()
   }
 
   const handleClear = async () => {
@@ -254,8 +261,12 @@ export default function DayTimingModal({
     setError(null)
     setSaving(true)
     const results = await Promise.all(activeScopes.map(scope => saveDayTimings(scope, [], viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to clear. Please try again.'); return }
+    // Removing an override puts those days back on the school-wide cutoffs, so
+    // they need re-scoring exactly as much as adding one does.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (results.every(Boolean)) { onSaved(); onClose() } else { setError('Failed to clear. Please try again.') }
+    onSaved(); onClose()
   }
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
