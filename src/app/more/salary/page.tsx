@@ -58,8 +58,13 @@ function AdminSalaryHub() {
 
       {/* A narrow gutter on phones: the stat tiles float inside it, and the
           dense sheets below cancel it themselves so a payroll table gets the
-          whole screen. */}
-      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 pb-10">
+          whole screen.
+
+          The month stepper starts below the banner rather than tucked up into
+          it: a control that straddles the banner's bottom edge reads as having
+          slipped out of place, and half of it loses contrast against the
+          banner image behind it. */}
+      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-10">
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 

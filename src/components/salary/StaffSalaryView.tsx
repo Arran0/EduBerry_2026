@@ -142,7 +142,7 @@ export default function StaffSalaryView() {
         icon={<Banknote size={26} className="text-white" />}
         title="My Salary"
         subtitle="Payslips, deductions & year to date"
-        maxWidth="max-w-5xl"
+        maxWidth="max-w-7xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
         actions={
           <button
@@ -154,7 +154,10 @@ export default function StaffSalaryView() {
         }
       />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 pb-10">
+      {/* The stepper starts below the banner rather than tucked up into it: a
+          control straddling the banner's bottom edge reads as having slipped
+          out of place, and half of it loses contrast against the image. */}
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-10">
         {loading ? (
           <SalarySkeleton />
         ) : slips.length === 0 ? (
@@ -210,10 +213,14 @@ export default function StaffSalaryView() {
               </div>
             )}
 
-            <div className="grid lg:grid-cols-3 gap-1.5 items-start">
+            {/* Both columns are the same height at desktop: the grid stretches
+                them to the taller one, and inside each the list that can afford
+                to scroll (the deduction lines, the payslip history) absorbs the
+                slack, so neither column ends in dead space. */}
+            <div className="grid lg:grid-cols-[minmax(0,1.62fr)_minmax(0,1fr)] gap-1.5 items-stretch">
               {/* Breakdown — names its own month, so it is readable on its own. */}
               {slip && (
-                <Panel bleed className="lg:col-span-2">
+                <Panel bleed className="lg:flex lg:flex-col lg:min-h-0">
                   <PanelHead
                     title={`Payslip · ${period}`}
                     right={
@@ -265,18 +272,23 @@ export default function StaffSalaryView() {
                   {slip.notes && (
                     <p className="px-3 py-2 text-[11px] text-[#8C8878] italic border-t border-[#F0ECE2]">{slip.notes}</p>
                   )}
+
+                  {/* Takes whatever height the taller column has left over, so the
+                      two end level without a hole opening up mid-payslip. */}
+                  <div className="hidden lg:block lg:flex-1" />
                 </Panel>
               )}
 
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1.5 lg:min-h-0">
                 {/* Every payslip, so a month is one tap away and the year reads at a glance. */}
-                <Panel bleed>
+                <Panel bleed className="lg:flex-1 lg:flex lg:flex-col lg:min-h-0">
                   <PanelHead title={`${financialYearLabel(fy.start)} · ${fy.paid}/${fy.months} paid`} />
                   <div className="grid grid-cols-3 border-b border-[#E3DFD3]">
                     <MiniStat label="Gross" value={compactINR(fy.gross)} />
                     <MiniStat label="Deducted" value={compactINR(fy.deductions)} border />
                     <MiniStat label="Net" value={compactINR(fy.net)} border />
                   </div>
+                  <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
                   {slips.map((s, i) => (
                     <button
                       key={s.recordId}
@@ -298,10 +310,11 @@ export default function StaffSalaryView() {
                       </span>
                     </button>
                   ))}
+                  </div>
                 </Panel>
 
                 {/* What the office holds. Read-only — it is admin-managed. */}
-                <Panel bleed>
+                <Panel bleed className="lg:flex-shrink-0">
                   <PanelHead title="On file" />
                   <div className={ROW}>
                     <span className="text-[12px] text-[#6B675A]">Monthly base salary</span>
