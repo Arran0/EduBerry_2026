@@ -227,7 +227,7 @@ export function MonthStepper({ label, sub, onPrev, onNext, canPrev = true, canNe
  * the headline figure sits deepest, the supporting ones step back towards
  * white — so the eye finds the important number without any colour at all.
  */
-export const SHADE = ['#EDE9DC', '#F4F1E7', '#FAF8F2', '#FFFFFF'] as const
+export const SHADE = ['#F5F2E9', '#F9F7F1', '#FCFBF7', '#FFFFFF'] as const
 
 /**
  * Month-on-month change.

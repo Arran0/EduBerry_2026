@@ -2932,13 +2932,30 @@ export async function fetchAttendanceTimingDeltas(
   const relevant = records.filter(r => r.status === 'late' || r.status === 'half_day')
   if (relevant.length === 0) return new Map()
 
+  // A month of payroll asks about ~30 distinct dates, and resolving each one
+  // through fetchDayTimingsForDate would re-read the *weekday* rules 30 times
+  // over — there are only ever seven of those. Splitting the two scopes and
+  // reading each weekday once is the same set of rules for the same dates,
+  // for roughly half the round trips; on a screen that already makes over a
+  // hundred, and in a browser that runs six at a time, that is the difference
+  // between slow and timing out.
   const uniqueDates = [...new Set(relevant.map(r => r.date))]
-  const [globalConfig, timingsPerDate, timezone] = await Promise.all([
+  const weekdayOf = (d: string) => new Date(d + 'T12:00:00').getDay()
+  const uniqueWeekdays = [...new Set(uniqueDates.map(weekdayOf))]
+
+  const [globalConfig, dateRuleSets, weekdayRuleSets, timezone] = await Promise.all([
     fetchAttendanceConfig(),
-    Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
+    Promise.all(uniqueDates.map(d => fetchDayTimingsByScope({ type: 'date', date: d }))),
+    Promise.all(uniqueWeekdays.map(w => fetchDayTimingsByScope({ type: 'weekday', weekday: w }))),
     fetchAttendanceTimezone(),
   ])
-  const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))
+
+  // Date rules first, then the weekday's — the same order fetchDayTimingsForDate
+  // concatenates them in, which is what resolveLateCutoff's precedence expects.
+  const rulesByWeekday = new Map(uniqueWeekdays.map((w, i) => [w, weekdayRuleSets[i]]))
+  const timingsByDate = new Map(uniqueDates.map((d, i) => [
+    d, [...dateRuleSets[i], ...(rulesByWeekday.get(weekdayOf(d)) ?? [])],
+  ]))
 
   const out = new Map<string, AttendanceTimingDelta>()
   for (const r of relevant) {

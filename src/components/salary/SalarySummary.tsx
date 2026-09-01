@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
@@ -39,15 +40,30 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
   const [stats, setStats] = useState<MonthlyPayrollStats | null>(null)
   const [prev, setPrev] = useState<MonthlyPayrollStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const { today } = useSchoolClock()
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const { today, ready } = useSchoolClock()
 
   // The payroll setup (calibration, everyone's base salary) is the same
   // whichever month is on screen, so it is fetched once and handed to each.
+  //
+  // It waits for the clock rather than firing once against a null date and
+  // again against the real one: the second fetch replaces the context object,
+  // which restarts every month below it. One school date, one context, one
+  // pass over the months.
   useEffect(() => {
+    if (!ready) return
     let alive = true
-    fetchPayrollContext(today).then(c => { if (alive) setCtx(c) })
+    fetchPayrollContext(today)
+      .then(c => { if (alive) setCtx(c) })
+      .catch(e => {
+        console.error('fetchPayrollContext failed:', e)
+        if (!alive) return
+        setError('Could not load the payroll settings.')
+        setLoading(false)
+      })
     return () => { alive = false }
-  }, [today, refreshKey])
+  }, [ready, today, refreshKey, attempt])
 
   // The selected month lands first and renders on its own; last month follows
   // only to fill in the change chips. Waiting for both would leave the whole
@@ -58,20 +74,38 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
     const token = ++run.current
     let alive = true
     setLoading(true)
+    setError(null)
     setPrev(null)
     ;(async () => {
-      const current = await fetchMonthlyPayrollStats(period.year, period.month, ctx)
-      if (!alive || token !== run.current) return
-      setStats(current)
-      setLoading(false)
+      try {
+        const current = await fetchMonthlyPayrollStats(period.year, period.month, ctx)
+        if (!alive || token !== run.current) return
+        setStats(current)
+        setLoading(false)
 
-      const before = shiftMonth(period.year, period.month, -1)
-      const previous = await fetchMonthlyPayrollStats(before.year, before.month, ctx)
-      if (!alive || token !== run.current) return
-      setPrev(previous)
+        const before = shiftMonth(period.year, period.month, -1)
+        const previous = await fetchMonthlyPayrollStats(before.year, before.month, ctx)
+        if (!alive || token !== run.current) return
+        setPrev(previous)
+      } catch (e) {
+        // Without this the panel sat at four silent ₹0 tiles and a Loading
+        // chip forever, which reads as "payroll is zero this month" — the one
+        // wrong answer a payroll dashboard must never give quietly.
+        console.error('fetchMonthlyPayrollStats failed:', e)
+        if (!alive || token !== run.current) return
+        setStats(null)
+        setError(e instanceof Error ? e.message : 'Could not load this month.')
+        setLoading(false)
+      }
     })()
     return () => { alive = false }
-  }, [ctx, period])
+  }, [ctx, period, attempt])
+
+  const retry = useCallback(() => {
+    setError(null)
+    setLoading(true)
+    setAttempt(n => n + 1)
+  }, [])
 
   // Nothing to see past the month in progress — no cycle can exist there yet.
   const now = new Date()
@@ -154,7 +188,9 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
         onNext={() => setPeriod(p => shiftMonth(p.year, p.month, 1))}
         canNext={!atLatest}
         right={
-          loading ? (
+          error ? (
+            <Chip tone="bad">Unavailable</Chip>
+          ) : loading ? (
             <Chip tone="neutral">Loading</Chip>
           ) : stats?.projected ? (
             <Chip tone="gold">Projected</Chip>
@@ -166,7 +202,23 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+      {error && (
+        <div className="flex items-start gap-1.5 border border-[#EFCCCC] bg-[#FCECEC] px-2.5 py-2 mb-1.5">
+          <TriangleAlert size={13} className="text-[#A93232] flex-shrink-0 mt-px" />
+          <p className="flex-1 text-[11px] text-[#A93232] leading-snug">
+            <span className="font-semibold">These figures did not load.</span> They are not zero — nothing was
+            read. {error}
+          </p>
+          <button
+            onClick={retry}
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#A93232] hover:text-[#7A1F1F] flex-shrink-0"
+          >
+            <RefreshCw size={11} /> Retry
+          </button>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-1.5 ${error ? 'opacity-40' : ''}`}>
         {tiles.map(t => (
           <StatTile
             key={t.label}
