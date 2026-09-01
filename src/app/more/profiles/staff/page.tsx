@@ -24,6 +24,8 @@ import {
   Pencil,
   KeyRound,
   HardHat,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
@@ -95,6 +97,50 @@ const ROLE_BADGE: Record<string, string> = {
 const roleStyleKey = (p: { role: string; is_non_teaching?: boolean }): string =>
   p.role === 'teacher' && p.is_non_teaching ? 'non-teaching' : p.role
 
+// ── Filtering & sorting ──────────────────────────────────────────────────────
+
+const ROLE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All Roles' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'non-teaching', label: 'Non-Teaching' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'principal', label: 'Principal' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'smartboard', label: 'Smart Board' },
+  { value: SUPPORT_ROLE_VALUE, label: 'Support Staff' },
+]
+
+// Same order the role band colour and badge maps already use, so "sort by
+// role" reads the same top-to-bottom order the rest of the page implies.
+const ROLE_SORT_ORDER = ['admin', 'principal', 'coordinator', 'teacher', 'non-teaching', 'driver', 'smartboard', 'support']
+const roleRank = (key: string): number => {
+  const i = ROLE_SORT_ORDER.indexOf(key)
+  return i === -1 ? ROLE_SORT_ORDER.length : i
+}
+
+type StatusFilter = 'all' | 'active' | 'inactive'
+type SortKey = 'role' | 'name_asc' | 'name_desc' | 'employee_id' | 'designation' | 'recent'
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'role', label: 'Role' },
+  { value: 'name_asc', label: 'Name (A–Z)' },
+  { value: 'name_desc', label: 'Name (Z–A)' },
+  { value: 'employee_id', label: 'Employee ID' },
+  { value: 'designation', label: 'Designation' },
+  { value: 'recent', label: 'Recently Added' },
+]
+
+/** Blank values always sort after real ones, whichever direction is asked for. */
+function compareBlanksLast(a: string, b: string, desc = false): number {
+  const av = a?.trim() ?? ''
+  const bv = b?.trim() ?? ''
+  if (!av && !bv) return 0
+  if (!av) return 1
+  if (!bv) return -1
+  return desc ? bv.localeCompare(av) : av.localeCompare(bv)
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.025 } },
@@ -115,6 +161,9 @@ export default function StaffProfileManagerPage() {
   const [details, setDetails] = useState<Record<string, StaffDetails>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('role')
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
   const [editingSupport, setEditingSupport] = useState<SupportStaff | null>(null)
@@ -185,7 +234,7 @@ export default function StaffProfileManagerPage() {
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const filteredProfiles = profiles.filter(p => {
+  const searchedProfiles = profiles.filter(p => {
     const q = searchQuery.toLowerCase()
     const d = details[p.id]
     return (
@@ -199,7 +248,7 @@ export default function StaffProfileManagerPage() {
     )
   })
 
-  const filteredSupport = supportStaff.filter(s => {
+  const searchedSupport = supportStaff.filter(s => {
     const q = searchQuery.toLowerCase()
     return (
       s.full_name?.toLowerCase().includes(q) ||
@@ -211,7 +260,46 @@ export default function StaffProfileManagerPage() {
     )
   })
 
+  // Counts for the role filter dropdown — computed off the search-filtered
+  // set (not role/status-filtered) so switching the role filter never moves
+  // the numbers the admin is reading right before they click it.
+  const roleCounts: Record<string, number> = {}
+  for (const p of searchedProfiles) {
+    const key = roleStyleKey(p)
+    roleCounts[key] = (roleCounts[key] ?? 0) + 1
+  }
+  roleCounts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+
+  const matchesStatus = (isInactive: boolean) =>
+    statusFilter === 'all' || (statusFilter === 'inactive' ? isInactive : !isInactive)
+
+  const filteredProfiles = searchedProfiles
+    .filter(p => (roleFilter === 'all' || roleFilter === roleStyleKey(p)) && matchesStatus(!!p.is_banned))
+    .sort((a, b) => {
+      if (sortBy === 'role') {
+        return roleRank(roleStyleKey(a)) - roleRank(roleStyleKey(b))
+          || (a.full_name ?? '').localeCompare(b.full_name ?? '')
+      }
+      if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
+      if (sortBy === 'employee_id') return compareBlanksLast(details[a.id]?.employee_id ?? '', details[b.id]?.employee_id ?? '')
+      if (sortBy === 'designation') return compareBlanksLast(details[a.id]?.designation ?? '', details[b.id]?.designation ?? '')
+      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
+    })
+
+  const filteredSupport = searchedSupport
+    .filter(s => (roleFilter === 'all' || roleFilter === SUPPORT_ROLE_VALUE) && matchesStatus(!s.is_active))
+    .sort((a, b) => {
+      if (sortBy === 'name_desc') return b.full_name.localeCompare(a.full_name)
+      if (sortBy === 'employee_id') return compareBlanksLast(a.employee_id ?? '', b.employee_id ?? '')
+      if (sortBy === 'designation') return compareBlanksLast(a.designation ?? '', b.designation ?? '')
+      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      return a.full_name.localeCompare(b.full_name) // role and name_asc both fall back to name for support staff
+    })
+
   const totalRows = filteredProfiles.length + filteredSupport.length
+  const filtersActive = roleFilter !== 'all' || statusFilter !== 'all'
+  const clearFilters = () => { setRoleFilter('all'); setStatusFilter('all') }
 
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
@@ -380,6 +468,54 @@ export default function StaffProfileManagerPage() {
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
               {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
+            </div>
+
+            {/* Filter & sort */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Filter size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                <select
+                  value={roleFilter}
+                  onChange={e => setRoleFilter(e.target.value)}
+                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                >
+                  {ROLE_FILTER_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                className="px-3 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Resigned / Left Only</option>
+              </select>
+
+              <div className="relative">
+                <ArrowUpDown size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as SortKey)}
+                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                >
+                  {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                </select>
+              </div>
+
+              {filtersActive && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                >
+                  <X size={12} /> Clear filters
+                </button>
+              )}
             </div>
 
             {/* List */}
