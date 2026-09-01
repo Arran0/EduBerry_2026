@@ -72,23 +72,33 @@ export default function StaffSalaryView() {
   const [slipBusy, setSlipBusy] = useState(false)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [records, setRecords] = useState<SalaryRecord[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
     setLoading(true)
-    const [recs, acc, baseSalary] = await Promise.all([
-      fetchSalaryForStaff(profile.id),
-      fetchMyBankAccount(profile.id),
-      fetchMyBaseSalary(profile.id),
-    ])
-    // The payslips are only worth showing once they carry the same PF, ESI and
-    // loss of pay the office sees, so they are built before anything renders.
-    const built = await buildStaffPayslips(profile.id, recs, baseSalary, today)
-    setRecords(recs)
-    setBank(acc)
-    setBase(baseSalary)
-    setSlips(built)
-    setIndex(0)
+    setError(null)
+    try {
+      const [recs, acc, baseSalary] = await Promise.all([
+        fetchSalaryForStaff(profile.id),
+        fetchMyBankAccount(profile.id),
+        fetchMyBaseSalary(profile.id),
+      ])
+      // The payslips are only worth showing once they carry the same PF, ESI
+      // and loss of pay the office sees, so they are built before anything
+      // renders.
+      const built = await buildStaffPayslips(profile.id, recs, baseSalary, today)
+      setRecords(recs)
+      setBank(acc)
+      setBase(baseSalary)
+      setSlips(built)
+      setIndex(0)
+    } catch (e) {
+      // Better an explanation than an empty page that reads as "you have no
+      // payslips".
+      console.error('staff salary load failed:', e)
+      setError(e instanceof Error ? e.message : 'Could not load your payslips.')
+    }
     setLoading(false)
   }, [profile, today])
 
@@ -160,6 +170,14 @@ export default function StaffSalaryView() {
       <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-10">
         {loading ? (
           <SalarySkeleton />
+        ) : error ? (
+          <Panel bleed className="px-4 py-6 text-center">
+            <p className="text-[13px] font-semibold text-[#A93232] mb-1">Your payslips did not load.</p>
+            <p className="text-[12px] text-[#8C8878] max-w-md mx-auto">{error}</p>
+            <button onClick={load} className="mt-3 inline-flex items-center gap-1.5 border border-[#E3DFD3] px-2.5 py-[7px] text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#52525B] hover:text-[#18181B]">
+              Try again
+            </button>
+          </Panel>
         ) : slips.length === 0 ? (
           <Panel bleed className="px-6 py-10 text-center">
             <div className="w-12 h-12 mx-auto mb-3 bg-[#27272A] flex items-center justify-center">

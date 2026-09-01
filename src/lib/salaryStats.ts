@@ -312,6 +312,12 @@ const RECORD_COLUMNS =
   'id, cycle_id, staff_id, base_amount, status, working_days_override, leave_override, ' +
   'late_override, half_day_override, pf_amount_override, esi_amount_override'
 
+// These four throw rather than logging and returning [], which is what the
+// rest of this codebase does. A list page that shows nothing when a fetch
+// fails is merely unhelpful; a payroll dashboard that answers "₹0" is wrong,
+// and wrong in the one direction nobody double-checks. The callers catch and
+// say the figures could not be read.
+//
 // The select strings are spelled out per table rather than built from the
 // table name: supabase-js parses the column list at the type level, and it can
 // only do that for a string literal.
@@ -319,7 +325,7 @@ async function fetchStaffCycles(year: number, month: number): Promise<RawCycle[]
   const { data, error } = await supabase
     .from('salary_cycles').select('id, status, payroll_config')
     .eq('period_year', year).eq('period_month', month)
-  if (error) { console.error('fetchStaffCycles failed:', error); return [] }
+  if (error) throw new Error(`Could not read salary_cycles: ${error.message}`)
   return (data ?? []) as unknown as RawCycle[]
 }
 
@@ -327,7 +333,7 @@ async function fetchDriverCyclesFor(year: number, month: number): Promise<RawCyc
   const { data, error } = await supabase
     .from('driver_payroll_cycles').select('id, status, payroll_config')
     .eq('period_year', year).eq('period_month', month)
-  if (error) { console.error('fetchDriverCyclesFor failed:', error); return [] }
+  if (error) throw new Error(`Could not read driver_payroll_cycles: ${error.message}`)
   return (data ?? []) as unknown as RawCycle[]
 }
 
@@ -337,7 +343,7 @@ async function fetchStaffCycleRecords(cycleIds: string[]): Promise<(RawRecord & 
     .from('salary_records')
     .select(`${RECORD_COLUMNS}, items:salary_record_items(label, amount)`)
     .in('cycle_id', cycleIds)
-  if (error) { console.error('fetchStaffCycleRecords failed:', error); return [] }
+  if (error) throw new Error(`Could not read salary_records: ${error.message}`)
   return (data ?? []) as unknown as (RawRecord & { staff_id: string })[]
 }
 
@@ -351,7 +357,7 @@ async function fetchDriverCycleRecordsFor(cycleIds: string[]): Promise<(RawRecor
       'items:driver_payroll_record_items(label, amount)',
     )
     .in('cycle_id', cycleIds)
-  if (error) { console.error('fetchDriverCycleRecordsFor failed:', error); return [] }
+  if (error) throw new Error(`Could not read driver_payroll_records: ${error.message}`)
   return (data ?? []) as unknown as (RawRecord & { driver_id: string })[]
 }
 
@@ -378,6 +384,10 @@ async function fetchMonthAttendance(
   ])
   // Grace minutes are resolved per date off the fetched rows, so this one
   // cannot start until they land.
+  //
+  // It is tempting to skip this whenever no grace is configured — but a zero
+  // grace still excuses a day that is exactly zero minutes late, and this
+  // school's August has 131 of them. Skipping would quietly move the money.
   const deltas = await fetchAttendanceTimingDeltas(records)
   return { records, holidays, nonWorkingDays, deltas, bonusPoints }
 }
