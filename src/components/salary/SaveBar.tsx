@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Check, Loader2, AlertCircle, Save } from 'lucide-react'
-import { ADMIN } from '@/components/salary/adminUi'
+import { Btn, Chip } from '@/components/salary/ui'
 import { SaveState } from '@/components/salary/useAutosave'
 
 /**
@@ -10,6 +10,10 @@ import { SaveState } from '@/components/salary/useAutosave'
  * States it through so nobody has to wonder whether their typing was kept:
  * queued edits are counted, the write is announced while it runs, and a
  * failure stays on screen with its reason instead of disappearing.
+ *
+ * On a phone the wording collapses to the count alone — "3 unsaved" beside a
+ * button that says Save is the whole message, and the long form would push
+ * the search field it shares a row with down to nothing.
  */
 export default function SaveBar({ dirtyCount, state, error, onSave }: {
   dirtyCount: number
@@ -20,32 +24,25 @@ export default function SaveBar({ dirtyCount, state, error, onSave }: {
   const saving = state === 'saving'
 
   return (
-    <div className="flex items-center gap-2 min-h-[32px]">
+    <div className="flex items-center gap-1.5 flex-shrink-0">
       {state === 'error' ? (
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-600">
-          <AlertCircle size={13} /> {error ?? 'Could not save'}
-        </span>
+        <Chip tone="bad" className="max-w-[9rem] sm:max-w-none">
+          <AlertCircle size={10} className="flex-shrink-0" />
+          <span className="truncate">{error ?? 'Could not save'}</span>
+        </Chip>
       ) : saving ? (
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#71717A]">
-          <Loader2 size={13} className="animate-spin" /> Saving…
-        </span>
+        <Chip tone="neutral"><Loader2 size={10} className="animate-spin" /> Saving</Chip>
       ) : dirtyCount > 0 ? (
-        <span className="text-[11px] font-semibold text-[#8A6D1F]">
-          {dirtyCount} unsaved change{dirtyCount === 1 ? '' : 's'} · saves automatically
-        </span>
+        <Chip tone="gold">
+          {dirtyCount} unsaved<span className="hidden sm:inline"> · autosaves</span>
+        </Chip>
       ) : state === 'saved' ? (
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
-          <Check size={13} /> All changes saved
-        </span>
+        <Chip tone="good"><Check size={10} /> Saved</Chip>
       ) : null}
 
-      <button
-        onClick={onSave}
-        disabled={saving || dirtyCount === 0}
-        className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}
-      >
-        <Save size={12} /> Save now
-      </button>
+      <Btn tone="dark" onClick={onSave} disabled={saving || dirtyCount === 0}>
+        <Save size={11} /> Save
+      </Btn>
     </div>
   )
 }
