@@ -15,28 +15,6 @@ export const ADMIN = {
 // Honey-gold accent used on dark surfaces (icons, highlights).
 export const ADMIN_GOLD = '#B8983C'
 
-// ──────────────────────────────────────────────────────────────
-// Full-bleed on phones
-//
-// A phone screen is too narrow to spend 32px of it on gutters either side of a
-// dense payroll table, and a rounded card floating in that gutter only makes
-// the usable width look smaller than it is. These two tokens cancel the page's
-// 16px gutter and square the panel off so it runs edge to edge, then hand both
-// back at `sm:` where there is room for a card again.
-// ──────────────────────────────────────────────────────────────
-
-/** Cancels the page gutter so a panel reaches both screen edges on phones. */
-export const BLEED = '-mx-4 sm:mx-0'
-
-/**
- * Square corners and no side borders on phones; a bordered card from `sm:` up.
- *
- * Marked important because it is always appended to a base card class that
- * already sets `rounded-xl`, and Tailwind resolves that clash by stylesheet
- * order (where `rounded-xl` wins), not by the order the classes are written in.
- */
-export const BLEED_EDGES = '!rounded-none !border-x-0 sm:!rounded-xl sm:!border-x'
-
 // Status chips, restyled into the zinc palette (shared across cycle + record states).
 export const CYCLE_CHIP: Record<'open' | 'closed', string> = {
   open: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',

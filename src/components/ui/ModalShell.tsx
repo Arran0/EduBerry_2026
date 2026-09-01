@@ -47,6 +47,11 @@ interface ModalShellProps {
   headerActions?: React.ReactNode
   footer?: React.ReactNode
   bare?: boolean
+  /**
+   * Square the panel off, for surfaces whose own design language is sharp
+   * (the Salary hub). Opt-in: everything else keeps the rounded sheet.
+   */
+  sharp?: boolean
   zClass?: string
   /** Extra classes for the scrolling body (non-bare). */
   bodyClassName?: string
@@ -70,6 +75,7 @@ export default function ModalShell({
   headerActions,
   footer,
   bare = false,
+  sharp = false,
   zClass = 'z-50',
   bodyClassName = '',
   minHClass = '',
@@ -113,10 +119,12 @@ export default function ModalShell({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 ${
+        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden ${
+          sharp ? 'rounded-none' : 'rounded-t-[1.75rem] sm:rounded-[1.75rem]'
+        } ${
           bare
-            ? 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem]'
-            : 'overflow-hidden rounded-t-[1.75rem] sm:rounded-[1.75rem] bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]'
+            ? ''
+            : 'bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]'
         }`}
         initial={{ opacity: 0, y: 56, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -141,7 +149,7 @@ export default function ModalShell({
         {title != null && !bare && (
           <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
             {icon && (
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
+              <div className={`w-9 h-9 ${sharp ? '' : 'rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
                 {icon}
               </div>
             )}
@@ -155,7 +163,7 @@ export default function ModalShell({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all"
+              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : 'rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
             >
               <X size={15} strokeWidth={2.5} />
             </button>

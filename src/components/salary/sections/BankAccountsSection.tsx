@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Info, Bus } from 'lucide-react'
+import { Bus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { ADMIN, BLEED, BLEED_EDGES } from '@/components/salary/adminUi'
-import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
-import PersonSearch from '@/components/salary/PersonSearch'
+import {
+  Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Column,
+} from '@/components/salary/ui'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
@@ -18,14 +18,23 @@ import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverB
  * source, so a `grid-cols-[...]` built by joining strings never gets
  * generated and the grid silently collapses to one stacked column.
  */
-const GRID = 'grid items-center gap-x-2'
-const GRID_COLS = [
-  'minmax(180px,1.6fr)',  // person
-  'minmax(150px,1.3fr)',  // account holder
-  'minmax(130px,1.1fr)',  // bank
-  'minmax(150px,1.3fr)',  // account number
-  'minmax(104px,0.9fr)',  // IFSC
+const COLS = [
+  'minmax(150px,1.5fr)',  // person
+  'minmax(128px,1.3fr)',  // account holder
+  'minmax(104px,1fr)',    // bank
+  'minmax(126px,1.2fr)',  // account number
+  'minmax(92px,0.85fr)',  // IFSC
 ].join(' ')
+
+const COLUMNS: Column[] = [
+  { label: 'Person', className: 'pl-[26px]' },
+  { label: 'Account holder' },
+  { label: 'Bank' },
+  { label: 'Account number' },
+  { label: 'IFSC' },
+]
+
+const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
 
 type Kind = 'staff' | 'driver'
 type Account = StaffBankAccount | DriverBankAccount
@@ -138,77 +147,53 @@ export default function BankAccountsSection() {
   }, [entries, search])
 
   const incomplete = dirtyKeys.length - savableKeys.length
+  const onFile = entries.filter(e => e.existing).length
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className={ADMIN.label}>Bank accounts</h2>
-        <Info size={11} className="text-[#B8983C]" />
-        <span className="text-[10px] text-[#A1A1AA]">admin-managed · staff &amp; drivers</span>
-      </div>
+      <SectionBar
+        title="Bank accounts"
+        hint={loading
+          ? 'Admin-managed · staff & drivers'
+          : `${onFile} of ${entries.length} on file · admin-managed`}
+      />
 
       {!loading && entries.length > 0 && (
-        <div className="flex items-start justify-between gap-3">
-          <PersonSearch value={search} onChange={setSearch} placeholder="Search staff or drivers…" />
-          <div className="flex flex-col items-end">
-            <SaveBar dirtyCount={savableKeys.length} state={state} error={error} onSave={saveNow} />
-            {incomplete > 0 && (
-              <span className="text-[10px] text-[#A1A1AA] mt-0.5">
-                {incomplete} row{incomplete === 1 ? '' : 's'} need holder, account no. &amp; IFSC
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-2 mb-2">
+          <SearchField value={search} onChange={setSearch} placeholder="Search people…" className="sm:max-w-[16rem]" />
+          <SaveBar dirtyCount={savableKeys.length} state={state} error={error} onSave={saveNow} />
         </div>
       )}
 
-      {loading ? (
-        <div className={BLEED}>
-          <Sheet className={BLEED_EDGES}>
-            {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
-          </Sheet>
-        </div>
-      ) : entries.length === 0 ? (
-        <div className={`${BLEED} ${ADMIN.card} ${BLEED_EDGES} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
-          No staff or driver accounts yet.
-        </div>
-      ) : (
-        <div className={`${BLEED} overflow-x-auto`}>
-          <div className="min-w-[820px]">
-            <Sheet className={BLEED_EDGES}>
-              {/* Header shares GRID_COLS with every row, so labels sit above their own column.
-                  It scrolls sideways with the rows, so it stays on phones too — the columns
-                  are unreadable without their labels, and a phone is where that bites hardest. */}
-              <div className="flex items-stretch bg-[#27272A]">
-                <div className="w-1 flex-shrink-0" />
-                <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
-                  <span className={`${SHEET.headCell} pl-[30px]`}>Person</span>
-                  <span className={SHEET.headCell}>Account holder</span>
-                  <span className={SHEET.headCell}>Bank</span>
-                  <span className={SHEET.headCell}>Account number</span>
-                  <span className={SHEET.headCell}>IFSC</span>
-                </div>
-              </div>
-
-              {visible.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No one matches &quot;{search}&quot;.</div>
-              ) : visible.map(e => (
-                <BankRow
-                  key={e.key}
-                  entry={e}
-                  draft={drafts[e.key] ?? draftOf(e.existing)}
-                  dirty={dirtyKeys.includes(e.key)}
-                  onChange={patch => setDraft(e.key, patch)}
-                />
-              ))}
-            </Sheet>
-          </div>
-        </div>
+      {incomplete > 0 && (
+        <p className="text-[10.5px] text-[#7A6220] mb-2">
+          {incomplete} row{incomplete === 1 ? '' : 's'} still need a holder, account number and IFSC before they can save.
+        </p>
       )}
+
+      <Sheet minWidth={700}>
+        {/* The header scrolls sideways with the rows it labels, so it stays on
+            phones too — five unlabelled bank fields are read by guesswork. */}
+        <SheetHead cols={COLS} columns={COLUMNS} />
+        {loading ? (
+          <SheetSkeleton />
+        ) : entries.length === 0 ? (
+          <Note>No staff or driver accounts yet.</Note>
+        ) : visible.length === 0 ? (
+          <Note>No one matches &quot;{search}&quot;.</Note>
+        ) : visible.map(e => (
+          <BankRow
+            key={e.key}
+            entry={e}
+            draft={drafts[e.key] ?? draftOf(e.existing)}
+            dirty={dirtyKeys.includes(e.key)}
+            onChange={patch => setDraft(e.key, patch)}
+          />
+        ))}
+      </Sheet>
     </>
   )
 }
-
-const cellCls = 'bg-white border border-[#E4E4E7] rounded-md px-2 py-1 text-[11px] text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
 
 function BankRow({ entry, draft, dirty, onChange }: {
   entry: Entry
@@ -217,28 +202,25 @@ function BankRow({ entry, draft, dirty, onChange }: {
   onChange: (patch: Partial<Draft>) => void
 }) {
   const { kind, person, existing } = entry
+  // The edge bar doubles as the unsaved marker, so a pending row is obvious
+  // without a per-row control taking up a column.
+  const accent = dirty ? '#8A6D1F' : existing ? '#B8983C' : 'transparent'
   return (
-    <div className={SHEET.row}>
-      {/* The bar doubles as the unsaved marker, so a pending row is obvious without a per-row control. */}
-      <div className={`${SHEET.bar} ${dirty ? 'bg-[#8A6D1F]' : existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
-      <div className="flex-1 min-w-0 px-3 py-1.5">
-        <div className={GRID} style={{ gridTemplateColumns: GRID_COLS }}>
-          <div className="flex items-center gap-2 min-w-0">
-            <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={22} userId={person.id} />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-[#18181B] text-xs truncate">{person.full_name}</p>
-              <p className="text-[10px] text-[#A1A1AA] truncate flex items-center gap-1">
-                {kind === 'driver' && <Bus size={9} className="flex-shrink-0" />}
-                {getDisplayRole(person)}
-              </p>
-            </div>
-          </div>
-          <input value={draft.holder} onChange={e => onChange({ holder: e.target.value })} placeholder="Account holder" className={`${cellCls} w-full`} />
-          <input value={draft.bankName} onChange={e => onChange({ bankName: e.target.value })} placeholder="Bank" className={`${cellCls} w-full`} />
-          <input value={draft.account} onChange={e => onChange({ account: e.target.value })} placeholder="Account number" className={`${cellCls} w-full tabular-nums`} />
-          <input value={draft.ifsc} onChange={e => onChange({ ifsc: e.target.value })} placeholder="IFSC" className={`${cellCls} w-full uppercase`} />
+    <SheetRow cols={COLS} accent={accent}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={person.id} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
+          <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
+            {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
+            {getDisplayRole(person)}
+          </p>
         </div>
       </div>
-    </div>
+      <input value={draft.holder} onChange={e => onChange({ holder: e.target.value })} placeholder="Account holder" className={CELL} />
+      <input value={draft.bankName} onChange={e => onChange({ bankName: e.target.value })} placeholder="Bank" className={CELL} />
+      <input value={draft.account} onChange={e => onChange({ account: e.target.value })} placeholder="Account no." className={`${CELL} tabular-nums`} />
+      <input value={draft.ifsc} onChange={e => onChange({ ifsc: e.target.value })} placeholder="IFSC" className={`${CELL} uppercase`} />
+    </SheetRow>
   )
 }

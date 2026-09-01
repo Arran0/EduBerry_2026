@@ -3,20 +3,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { AnimatePresence } from 'framer-motion'
-import {
-  Banknote, Wallet, Landmark, Download, ChevronLeft, ChevronRight, ChevronDown,
-  ShieldCheck, FileText, Loader2,
-} from 'lucide-react'
+import { Banknote, Wallet, Download, FileText, Loader2, ShieldCheck } from 'lucide-react'
 import PageBanner from '@/components/PageBanner'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN_GOLD, BLEED, RECORD_CHIP } from '@/components/salary/adminUi'
+import { compactINR } from '@/components/salary/SalarySummary'
+import {
+  Chip, LABEL, MonthStepper, Panel, PanelHead, SHADE, StatTile,
+} from '@/components/salary/ui'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { useAuth } from '@/contexts/AuthContext'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { PAYROLL_ITEM_LABELS } from '@/lib/payroll'
 import {
   SalaryRecord, SalaryStatus, StaffBankAccount, StaffSalaryBase,
   fetchSalaryForStaff, fetchMyBankAccount, fetchMyBaseSalary, formatPeriod, maskAccountNumber,
 } from '@/lib/salary'
+import { StaffPayslip, buildStaffPayslips, percentChange } from '@/lib/salaryStats'
 import type { StatementSpec } from '@/components/salary/statements/generate'
 
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
@@ -25,14 +27,14 @@ const StatementPreviewModal = dynamic(() => import('@/components/salary/statemen
 // ──────────────────────────────────────────────────────────────
 // Employee salary view
 //
-// Built around the one question someone opens this page to answer — "what am I
-// getting this month, and what came off it?" — then the supporting detail in
-// decreasing order of how often it is wanted: the year so far, what's on file,
-// and the back catalogue of slips.
+// One month is on screen at a time and every figure on it belongs to that
+// month — the stepper names it, the breakdown panel repeats it in its own
+// header, and the year-to-date panel names the financial year instead so the
+// two can never be mistaken for each other.
 //
-// Sharp-edged panels that run the full width of a phone, matching the admin
-// hub. No floating rounded cards: on a 360px screen the gutters they float in
-// cost more than they buy.
+// Same sharp off-white language and the same width as the admin hub: on a
+// desktop the old two-column-wide layout left half the screen empty, so the
+// breakdown now sits beside the payslip history rather than above it.
 // ──────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<SalaryStatus, string> = {
@@ -41,62 +43,13 @@ const STATUS_LABEL: Record<SalaryStatus, string> = {
   paid: 'Paid',
 }
 
-const ROW = 'flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-b-0'
-
-/** A sharp panel that reaches both screen edges on phones and becomes a card at `sm:`. */
-function Panel({ title, action, children, className = '' }: {
-  title?: string
-  action?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <section className={`${BLEED} bg-white border-y border-[#E4E4E7] sm:border sm:rounded-xl overflow-hidden mb-3 ${className}`}>
-      {title && (
-        <header className="flex items-center justify-between gap-2 bg-[#27272A] px-4 py-2">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{title}</h2>
-          {action}
-        </header>
-      )}
-      {children}
-    </section>
-  )
+const STATUS_TONE: Record<SalaryStatus, 'neutral' | 'gold' | 'good'> = {
+  draft: 'neutral',
+  approved: 'gold',
+  paid: 'good',
 }
 
-// ============================================
-// Payslip maths
-// ============================================
-
-interface Line { label: string; amount: number }
-
-interface Breakdown {
-  earnings: Line[]
-  deductions: Line[]
-  gross: number
-  totalDeductions: number
-  net: number
-}
-
-/**
- * Splits a record into what was earned and what was withheld.
- *
- * Line items carry their sign — positive is an earning, negative a deduction —
- * so the payslip is read straight off them rather than re-derived, and always
- * agrees with the figures the office locked into the cycle.
- */
-function breakdownOf(record: SalaryRecord): Breakdown {
-  const base = Number(record.base_amount) || 0
-  const earnings: Line[] = [{ label: 'Basic salary', amount: base }]
-  const deductions: Line[] = []
-  for (const item of record.items ?? []) {
-    const amount = Number(item.amount) || 0
-    if (amount >= 0) earnings.push({ label: item.label, amount })
-    else deductions.push({ label: item.label, amount: -amount })
-  }
-  const gross = earnings.reduce((s, l) => s + l.amount, 0)
-  const totalDeductions = deductions.reduce((s, l) => s + l.amount, 0)
-  return { earnings, deductions, gross, totalDeductions, net: gross - totalDeductions }
-}
+const ROW = 'flex items-center justify-between gap-3 px-3 py-[6px] border-b border-[#F0ECE2] last:border-b-0'
 
 /** The Indian financial year (April–March) a period falls in, as its starting year. */
 function financialYearOf(year: number, month: number): number {
@@ -107,21 +60,18 @@ function financialYearLabel(start: number): string {
   return `FY ${start}–${String(start + 1).slice(2)}`
 }
 
-// ============================================
-// View
-// ============================================
-
-export default function StaffSalaryView({ onBack }: { onBack: () => void }) {
+export default function StaffSalaryView() {
   const { profile, dataRefreshKey } = useAuth()
+  const { today } = useSchoolClock()
   const [loading, setLoading] = useState(true)
-  const [records, setRecords] = useState<SalaryRecord[]>([])
+  const [slips, setSlips] = useState<StaffPayslip[]>([])
   const [bank, setBank] = useState<StaffBankAccount | null>(null)
   const [base, setBase] = useState<StaffSalaryBase | null>(null)
   const [index, setIndex] = useState(0)
   const [showDocs, setShowDocs] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
   const [slipBusy, setSlipBusy] = useState(false)
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
+  const [records, setRecords] = useState<SalaryRecord[]>([])
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -131,50 +81,53 @@ export default function StaffSalaryView({ onBack }: { onBack: () => void }) {
       fetchMyBankAccount(profile.id),
       fetchMyBaseSalary(profile.id),
     ])
+    // The payslips are only worth showing once they carry the same PF, ESI and
+    // loss of pay the office sees, so they are built before anything renders.
+    const built = await buildStaffPayslips(profile.id, recs, baseSalary, today)
     setRecords(recs)
     setBank(acc)
     setBase(baseSalary)
+    setSlips(built)
     setIndex(0)
     setLoading(false)
-  }, [profile])
+  }, [profile, today])
 
   useEffect(() => { load() }, [load, dataRefreshKey])
 
-  // `records` is newest-first, so a higher index is an older month.
-  const selected = records[index] ?? null
-  const breakdown = useMemo(() => (selected ? breakdownOf(selected) : null), [selected])
+  // `slips` is newest-first, so a higher index is an older month.
+  const slip = slips[index] ?? null
+  const older = slips[index + 1] ?? null
 
-  const period = selected?.cycle
-    ? formatPeriod(selected.cycle.period_month, selected.cycle.period_year)
+  const period = slip && slip.month
+    ? formatPeriod(slip.month, slip.year)
     : 'Salary'
 
-  // Year-to-date, over the financial year the *selected* slip sits in — so
+  // Year to date, over the financial year the *selected* slip sits in — so
   // stepping back to an old payslip shows the year it belonged to, not this one.
   const fy = useMemo(() => {
-    const anchor = selected?.cycle
-      ? { year: selected.cycle.period_year, month: selected.cycle.period_month }
+    const anchor = slip?.month
+      ? { year: slip.year, month: slip.month }
       : { year: new Date().getFullYear(), month: new Date().getMonth() + 1 }
     const start = financialYearOf(anchor.year, anchor.month)
-    const inYear = records.filter(r =>
-      r.cycle && financialYearOf(r.cycle.period_year, r.cycle.period_month) === start)
-    let gross = 0, deductions = 0, net = 0, paidMonths = 0
-    for (const r of inYear) {
-      const b = breakdownOf(r)
-      gross += b.gross
-      deductions += b.totalDeductions
-      net += b.net
-      if (r.status === 'paid') paidMonths += 1
+    const inYear = slips.filter(s => s.month && financialYearOf(s.year, s.month) === start)
+    return {
+      start,
+      months: inYear.length,
+      gross: inYear.reduce((t, s) => t + s.gross, 0),
+      deductions: inYear.reduce((t, s) => t + s.totalDeductions, 0),
+      net: inYear.reduce((t, s) => t + s.net, 0),
+      paid: inYear.filter(s => s.status === 'paid').length,
     }
-    return { start, months: inYear.length, gross, deductions, net, paidMonths }
-  }, [records, selected])
+  }, [slips, slip])
 
   const openSlip = async () => {
-    if (!selected || !profile || slipBusy) return
+    const record = records.find(r => r.id === slip?.recordId)
+    if (!record || !profile || slipBusy) return
     setSlipBusy(true)
     try {
       const { buildPayslip } = await import('@/components/salary/statements/generate')
       const staffLike = { full_name: profile.full_name, email: profile.email, role: profile.role }
-      setPreview({ spec: await buildPayslip(selected, staffLike, bank), title: `Salary Slip — ${period}` })
+      setPreview({ spec: await buildPayslip(record, staffLike, bank), title: `Salary Slip — ${period}` })
     } catch (e) {
       console.error('payslip generation failed:', e)
     }
@@ -189,205 +142,208 @@ export default function StaffSalaryView({ onBack }: { onBack: () => void }) {
         icon={<Banknote size={26} className="text-white" />}
         title="My Salary"
         subtitle="Payslips, deductions & year to date"
-        onBack={onBack}
-        maxWidth="max-w-2xl"
+        maxWidth="max-w-5xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
         actions={
           <button
             onClick={() => setShowDocs(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-white/20 border border-white/30 backdrop-blur-sm px-3 py-2.5 text-xs font-semibold text-white hover:bg-white/30 transition-colors"
+            className="inline-flex items-center gap-2 bg-white/20 border border-white/30 backdrop-blur-sm px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-white hover:bg-white/30 transition-colors"
           >
-            <Download size={14} /> Download Centre
+            <Download size={13} /> Documents
           </button>
         }
       />
 
-      <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 pb-10">
         {loading ? (
           <SalarySkeleton />
-        ) : records.length === 0 ? (
-          <EmptyState />
+        ) : slips.length === 0 ? (
+          <Panel bleed className="px-6 py-10 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 bg-[#27272A] flex items-center justify-center">
+              <Banknote size={22} className="text-[#B8983C]" strokeWidth={1.6} />
+            </div>
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#18181B] mb-1">No payslips yet</h2>
+            <p className="text-[12.5px] text-[#8C8878] max-w-sm mx-auto">
+              Your monthly salary appears here once the office runs a pay cycle.
+            </p>
+          </Panel>
         ) : (
           <>
-            <PayslipHero
-              record={selected!}
-              breakdown={breakdown!}
-              period={period}
-              index={index}
-              count={records.length}
-              onStep={d => setIndex(i => Math.min(records.length - 1, Math.max(0, i + d)))}
+            {/* The one control that says which month everything below belongs to. */}
+            <MonthStepper
+              className="mb-1.5"
+              label={period}
+              sub={slip && <span className="hidden sm:inline">{slip.locked ? 'final' : 'provisional'}</span>}
+              onPrev={() => setIndex(i => Math.min(slips.length - 1, i + 1))}
+              onNext={() => setIndex(i => Math.max(0, i - 1))}
+              canPrev={index < slips.length - 1}
+              canNext={index > 0}
+              right={slip && <Chip tone={STATUS_TONE[slip.status]}>{STATUS_LABEL[slip.status]}</Chip>}
             />
 
-            {/* Earnings and deductions, exactly as the office locked them in. */}
-            <Panel
-              title="Payslip breakdown"
-              action={
-                <button
-                  onClick={openSlip}
-                  disabled={slipBusy}
-                  className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#D8BC6A] hover:text-white transition-colors disabled:opacity-50"
-                >
-                  {slipBusy ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
-                  {slipBusy ? 'Building' : 'Slip'}
-                </button>
-              }
-            >
-              <SubHead>Earnings</SubHead>
-              {breakdown!.earnings.map((l, i) => (
-                <div key={`e-${i}`} className={ROW}>
-                  <span className="text-[13px] text-[#52525B] truncate">{l.label}</span>
-                  <span className="text-[13px] font-semibold text-[#18181B] tabular-nums flex-shrink-0">
-                    {formatINR(l.amount)}
-                  </span>
-                </div>
-              ))}
-              <TotalRow label="Gross earnings" amount={breakdown!.gross} />
-
-              {breakdown!.deductions.length > 0 && (
-                <>
-                  <SubHead>Deductions</SubHead>
-                  {breakdown!.deductions.map((l, i) => (
-                    <div key={`d-${i}`} className={ROW}>
-                      <span className="text-[13px] text-[#52525B] truncate">
-                        {l.label}
-                        {l.label === PAYROLL_ITEM_LABELS.pf && (
-                          <span className="text-[#A1A1AA]"> · provident fund</span>
-                        )}
-                        {l.label === PAYROLL_ITEM_LABELS.esi && (
-                          <span className="text-[#A1A1AA]"> · state insurance</span>
-                        )}
-                      </span>
-                      {/* Statutory deductions are routine, not bad news — they read in
-                          the same ink as the earnings, and only the total takes the accent. */}
-                      <span className="text-[13px] font-semibold text-[#52525B] tabular-nums flex-shrink-0">
-                        −{formatINR(l.amount)}
-                      </span>
-                    </div>
-                  ))}
-                  <TotalRow label="Total deductions" amount={breakdown!.totalDeductions} negative />
-                </>
-              )}
-
-              <div className="flex items-center justify-between gap-3 bg-[#FAFAF8] border-t border-[#E4E4E7] px-4 py-3">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A]">Net pay</span>
-                <span className="text-base font-bold text-[#18181B] tabular-nums">{formatINR(breakdown!.net)}</span>
-              </div>
-
-              {selected!.notes && (
-                <p className="px-4 py-2.5 text-[11px] text-[#A1A1AA] italic border-t border-[#F4F4F5]">
-                  {selected!.notes}
-                </p>
-              )}
-            </Panel>
-
-            {/* Year to date */}
-            <Panel title={`${financialYearLabel(fy.start)} · year to date`}>
-              <div className="grid grid-cols-2 sm:grid-cols-4">
-                <FyStat label="Gross earned" value={formatINR(fy.gross)} />
-                <FyStat label="Deductions" value={formatINR(fy.deductions)} border />
-                <FyStat label="Net paid" value={formatINR(fy.net)} topBorder />
-                <FyStat
-                  label="Payslips"
-                  value={`${fy.paidMonths}/${fy.months}`}
-                  sub={fy.paidMonths === fy.months ? 'all paid' : 'paid'}
-                  border
-                  topBorder
+            {slip && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 mb-1.5">
+                <StatTile
+                  label="Net pay" shade={0}
+                  value={formatINR(slip.net)}
+                  sub={older ? `vs ${formatPeriod(older.month, older.year)}` : 'take-home'}
+                  percent={older ? percentChange(slip.net, older.net) : null}
+                  goodWhenUp
+                />
+                <StatTile
+                  label="Gross earnings" shade={1}
+                  value={formatINR(slip.gross)}
+                  sub={slip.bonus ? `incl. ${compactINR(slip.bonus)} task bonus` : 'base & additions'}
+                />
+                <StatTile
+                  label="Deductions" shade={2}
+                  value={formatINR(slip.totalDeductions)}
+                  sub={slip.deductions.length
+                    ? slip.deductions.map(d => d.label.replace('Loss of pay', 'LOP')).join(' · ')
+                    : 'nothing withheld'}
+                />
+                <StatTile
+                  label={financialYearLabel(fy.start)} shade={3}
+                  value={compactINR(fy.net)}
+                  sub={`net over ${fy.months} payslip${fy.months === 1 ? '' : 's'}`}
                 />
               </div>
-            </Panel>
-
-            {/* What the office has on file. Read-only — it is admin-managed. */}
-            <Panel title="Salary & bank details">
-              <div className={ROW}>
-                <span className="text-[13px] text-[#52525B]">Monthly base salary</span>
-                <span className="text-[13px] font-semibold text-[#18181B] tabular-nums">
-                  {base ? formatINR(Number(base.base_amount)) : '—'}
-                </span>
-              </div>
-              <div className={ROW}>
-                <span className="text-[13px] text-[#52525B]">Provident fund</span>
-                <span className="text-[13px] text-[#18181B] tabular-nums text-right">
-                  {base?.pf_applicable
-                    ? <>Enrolled{base.uan ? <span className="text-[#A1A1AA]"> · UAN {base.uan}</span> : ''}</>
-                    : <span className="text-[#A1A1AA]">Not enrolled</span>}
-                </span>
-              </div>
-              <div className={ROW}>
-                <span className="text-[13px] text-[#52525B]">State insurance (ESI)</span>
-                <span className="text-[13px] text-[#18181B] tabular-nums text-right">
-                  {base?.esi_ip_number
-                    ? <>Enrolled<span className="text-[#A1A1AA]"> · IP {base.esi_ip_number}</span></>
-                    : <span className="text-[#A1A1AA]">Not enrolled</span>}
-                </span>
-              </div>
-              <div className="px-4 py-3 border-t border-[#F4F4F5]">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Landmark size={12} className="text-[#B8983C]" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">
-                    Salary account
-                  </span>
-                </div>
-                {bank ? (
-                  <div className="text-[13px] text-[#27272A]">
-                    <p className="font-semibold">{bank.account_holder_name}</p>
-                    <p className="text-[#71717A] tabular-nums text-xs mt-0.5">
-                      {maskAccountNumber(bank.account_number)} · {bank.ifsc}
-                      {bank.bank_name ? ` · ${bank.bank_name}` : ''}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-[#A1A1AA]">
-                    No account on record yet. Contact the office to add your details for salary disbursement.
-                  </p>
-                )}
-              </div>
-            </Panel>
-
-            {/* The back catalogue, folded away — most visits never need it. */}
-            {records.length > 1 && (
-              <Panel>
-                <button
-                  onClick={() => setShowHistory(v => !v)}
-                  className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-[#FAFAF8] transition-colors"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">
-                    All payslips · {records.length}
-                  </span>
-                  <ChevronDown
-                    size={15}
-                    className={`text-[#A1A1AA] transition-transform ${showHistory ? 'rotate-180' : ''}`}
-                  />
-                </button>
-                {showHistory && (
-                  <div className="border-t border-[#E4E4E7]">
-                    {records.map((r, i) => {
-                      const b = breakdownOf(r)
-                      const active = i === index
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => { setIndex(i); setShowHistory(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-b-0 text-left transition-colors ${
-                            active ? 'bg-[#FAF8F1]' : 'hover:bg-[#FAFAFA]'
-                          }`}
-                        >
-                          <span className="w-1 self-stretch flex-shrink-0 -my-2.5" style={{ background: active ? ADMIN_GOLD : 'transparent' }} />
-                          <span className="flex-1 min-w-0 text-[13px] font-semibold text-[#18181B] truncate">
-                            {r.cycle ? formatPeriod(r.cycle.period_month, r.cycle.period_year) : 'Salary'}
-                          </span>
-                          <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full flex-shrink-0 ${RECORD_CHIP[r.status]}`}>
-                            {STATUS_LABEL[r.status]}
-                          </span>
-                          <span className="text-[13px] font-semibold text-[#18181B] tabular-nums flex-shrink-0 w-24 text-right">
-                            {formatINR(b.net)}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </Panel>
             )}
+
+            <div className="grid lg:grid-cols-3 gap-1.5 items-start">
+              {/* Breakdown — names its own month, so it is readable on its own. */}
+              {slip && (
+                <Panel bleed className="lg:col-span-2">
+                  <PanelHead
+                    title={`Payslip · ${period}`}
+                    right={
+                      <button
+                        onClick={openSlip}
+                        disabled={slipBusy}
+                        className="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#D8BC6A] hover:text-white transition-colors disabled:opacity-40"
+                      >
+                        {slipBusy ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                        {slipBusy ? 'Building' : 'PDF'}
+                      </button>
+                    }
+                  />
+
+                  <SubHead>Earnings</SubHead>
+                  {slip.earnings.map((l, i) => (
+                    <Line key={`e-${i}`} label={l.label} amount={formatINR(l.amount)} />
+                  ))}
+                  <Total label="Gross earnings" amount={formatINR(slip.gross)} />
+
+                  <SubHead>Deductions</SubHead>
+                  {slip.deductions.length === 0 ? (
+                    <p className="px-3 py-[6px] text-[12px] text-[#A8A395]">Nothing withheld this month.</p>
+                  ) : slip.deductions.map((l, i) => (
+                    <Line
+                      key={`d-${i}`}
+                      label={l.label}
+                      note={DEDUCTION_NOTE[l.label]}
+                      amount={`−${formatINR(l.amount)}`}
+                    />
+                  ))}
+                  <Total label="Total deductions" amount={`−${formatINR(slip.totalDeductions)}`} accent />
+
+                  <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-t border-[#E3DFD3]" style={{ background: SHADE[1] }}>
+                    <span className={LABEL}>Net pay · {period}</span>
+                    <span className="text-[15px] font-bold text-[#18181B] tabular-nums">{formatINR(slip.net)}</span>
+                  </div>
+
+                  {!slip.locked && (
+                    <p className="px-3 py-2 text-[11px] text-[#7A6220] bg-[#FAF3DF] border-t border-[#E7D9AE]">
+                      Provisional — {period} is still open, so attendance-based figures can change until the office locks it.
+                    </p>
+                  )}
+                  {slip.status === 'paid' && slip.payoutReference && (
+                    <p className="px-3 py-2 text-[11px] text-[#1F6B42] flex items-center gap-1 border-t border-[#F0ECE2]">
+                      <ShieldCheck size={12} className="flex-shrink-0" /> Disbursed · ref {slip.payoutReference}
+                    </p>
+                  )}
+                  {slip.notes && (
+                    <p className="px-3 py-2 text-[11px] text-[#8C8878] italic border-t border-[#F0ECE2]">{slip.notes}</p>
+                  )}
+                </Panel>
+              )}
+
+              <div className="space-y-1.5">
+                {/* Every payslip, so a month is one tap away and the year reads at a glance. */}
+                <Panel bleed>
+                  <PanelHead title={`${financialYearLabel(fy.start)} · ${fy.paid}/${fy.months} paid`} />
+                  <div className="grid grid-cols-3 border-b border-[#E3DFD3]">
+                    <MiniStat label="Gross" value={compactINR(fy.gross)} />
+                    <MiniStat label="Deducted" value={compactINR(fy.deductions)} border />
+                    <MiniStat label="Net" value={compactINR(fy.net)} border />
+                  </div>
+                  {slips.map((s, i) => (
+                    <button
+                      key={s.recordId}
+                      onClick={() => setIndex(i)}
+                      className={`w-full flex items-center gap-2 px-3 py-[6px] border-b border-[#F0ECE2] last:border-b-0 text-left transition-colors ${
+                        i === index ? 'bg-[#F4F1E7]' : 'hover:bg-[#FAF8F2]'
+                      }`}
+                    >
+                      <span
+                        className="w-[3px] self-stretch flex-shrink-0 -my-[6px]"
+                        style={{ background: i === index ? '#B8983C' : 'transparent' }}
+                      />
+                      <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#18181B] truncate">
+                        {s.month ? formatPeriod(s.month, s.year) : 'Salary'}
+                      </span>
+                      <Chip tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Chip>
+                      <span className="text-[11.5px] font-semibold text-[#18181B] tabular-nums w-[68px] text-right">
+                        {formatINR(s.net)}
+                      </span>
+                    </button>
+                  ))}
+                </Panel>
+
+                {/* What the office holds. Read-only — it is admin-managed. */}
+                <Panel bleed>
+                  <PanelHead title="On file" />
+                  <div className={ROW}>
+                    <span className="text-[12px] text-[#6B675A]">Monthly base salary</span>
+                    <span className="text-[12px] font-semibold text-[#18181B] tabular-nums">
+                      {base ? formatINR(Number(base.base_amount)) : '—'}
+                    </span>
+                  </div>
+                  <div className={ROW}>
+                    <span className="text-[12px] text-[#6B675A]">Provident fund</span>
+                    <span className="text-[12px] text-[#18181B] tabular-nums text-right">
+                      {base?.pf_applicable
+                        ? <>Enrolled{base.uan ? <span className="text-[#A8A395]"> · UAN {base.uan}</span> : ''}</>
+                        : <span className="text-[#A8A395]">Not enrolled</span>}
+                    </span>
+                  </div>
+                  <div className={ROW}>
+                    <span className="text-[12px] text-[#6B675A]">State insurance</span>
+                    <span className="text-[12px] text-[#18181B] tabular-nums text-right">
+                      {base?.esi_ip_number
+                        ? <>Enrolled<span className="text-[#A8A395]"> · IP {base.esi_ip_number}</span></>
+                        : <span className="text-[#A8A395]">Not enrolled</span>}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2 border-t border-[#F0ECE2]">
+                    <span className={`${LABEL} block mb-1`}>Salary account</span>
+                    {bank ? (
+                      <div className="text-[12px] text-[#27272A] leading-tight">
+                        <p className="font-semibold">{bank.account_holder_name}</p>
+                        <p className="text-[#8C8878] tabular-nums text-[11px] mt-0.5">
+                          {maskAccountNumber(bank.account_number)} · {bank.ifsc}
+                          {bank.bank_name ? ` · ${bank.bank_name}` : ''}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11.5px] text-[#A8A395]">
+                        No account on record. Contact the office to add your details for salary disbursement.
+                      </p>
+                    )}
+                  </div>
+                </Panel>
+              </div>
+            </div>
           </>
         )}
       </div>
@@ -404,162 +360,70 @@ export default function StaffSalaryView({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ============================================
-// Pieces
-// ============================================
+/** Plain-English gloss for the statutory line items, which are initialisms. */
+const DEDUCTION_NOTE: Record<string, string> = {
+  [PAYROLL_ITEM_LABELS.pf]: 'provident fund',
+  [PAYROLL_ITEM_LABELS.esi]: 'state insurance',
+  'Loss of pay': 'unpaid days',
+}
 
-/**
- * The month being viewed, its net pay, and how it was reached — the whole
- * answer to "what am I getting", above the fold on a phone.
- */
-function PayslipHero({ record, breakdown, period, index, count, onStep }: {
-  record: SalaryRecord
-  breakdown: Breakdown
-  period: string
-  index: number
-  count: number
-  onStep: (delta: number) => void
-}) {
+function Line({ label, note, amount }: { label: string; note?: string; amount: string }) {
   return (
-    <div className={`${BLEED} bg-[#27272A] sm:rounded-xl overflow-hidden shadow-lg mb-3`}>
-      {/* Month stepper. Older months are further along the array, so "back" adds. */}
-      <div className="flex items-center border-b border-white/10">
-        <button
-          type="button"
-          onClick={() => onStep(1)}
-          disabled={index >= count - 1}
-          aria-label="Older payslip"
-          className="px-3 py-2.5 text-[#A1A1AA] hover:text-white transition-colors disabled:opacity-25 disabled:hover:text-[#A1A1AA]"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <span className="flex-1 min-w-0 text-center text-xs sm:text-sm font-bold tracking-wide text-white truncate">
-          {period}
-        </span>
-        <button
-          type="button"
-          onClick={() => onStep(-1)}
-          disabled={index <= 0}
-          aria-label="Newer payslip"
-          className="px-3 py-2.5 text-[#A1A1AA] hover:text-white transition-colors disabled:opacity-25 disabled:hover:text-[#A1A1AA]"
-        >
-          <ChevronRight size={16} />
-        </button>
-      </div>
-
-      <div className="px-4 pt-4 pb-3.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#8A8A93]">Net pay</p>
-            <p className="text-3xl font-bold text-white tabular-nums leading-tight mt-0.5">
-              {formatINR(breakdown.net)}
-            </p>
-          </div>
-          <span
-            className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full flex-shrink-0 mt-1 ${
-              record.status === 'paid'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                : record.status === 'approved'
-                ? 'bg-[#B8983C]/15 text-[#D8BC6A] border border-[#B8983C]/40'
-                : 'bg-white/10 text-[#A1A1AA] border border-white/15'
-            }`}
-          >
-            {STATUS_LABEL[record.status]}
-          </span>
-        </div>
-
-        {record.status === 'paid' && record.payout_reference && (
-          <p className="text-[11px] text-emerald-300/80 mt-2 flex items-center gap-1 truncate">
-            <ShieldCheck size={12} className="flex-shrink-0" /> Disbursed · ref {record.payout_reference}
-          </p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 border-t border-white/10">
-        <HeroStat label="Gross earnings" value={formatINR(breakdown.gross)} />
-        <HeroStat label="Deductions" value={`−${formatINR(breakdown.totalDeductions)}`} border />
-      </div>
+    <div className={ROW}>
+      <span className="text-[12px] text-[#52525B] truncate">
+        {label}
+        {note && <span className="text-[#A8A395]"> · {note}</span>}
+      </span>
+      <span className="text-[12px] font-semibold text-[#18181B] tabular-nums flex-shrink-0">{amount}</span>
     </div>
   )
 }
 
-function HeroStat({ label, value, border }: { label: string; value: string; border?: boolean }) {
+function Total({ label, amount, accent }: { label: string; amount: string; accent?: boolean }) {
   return (
-    <div className={`px-4 py-2.5 ${border ? 'border-l border-white/10' : ''}`}>
-      <p className="text-[9.5px] font-bold uppercase tracking-widest text-[#71717A]">{label}</p>
-      <p className="text-sm font-semibold text-white tabular-nums mt-0.5">{value}</p>
-    </div>
-  )
-}
-
-function FyStat({ label, value, sub, border, topBorder }: {
-  label: string; value: string; sub?: string; border?: boolean; topBorder?: boolean
-}) {
-  return (
-    <div className={`px-4 py-3 ${border ? 'border-l border-[#F0EFEA]' : ''} ${topBorder ? 'border-t border-[#F0EFEA] sm:border-t-0' : ''} sm:border-l sm:first:border-l-0`}>
-      <p className="text-[9.5px] font-bold uppercase tracking-widest text-[#71717A]">{label}</p>
-      <p className="text-sm font-bold text-[#18181B] tabular-nums mt-0.5 truncate">{value}</p>
-      {sub && <p className="text-[10px] text-[#A1A1AA] mt-0.5">{sub}</p>}
+    <div
+      className="flex items-center justify-between gap-3 px-3 py-[6px] border-y border-[#E3DFD3]"
+      style={{ background: SHADE[2] }}
+    >
+      <span className={`${LABEL} truncate`}>{label}</span>
+      <span className={`text-[12px] font-bold tabular-nums flex-shrink-0 ${accent ? 'text-[#A93232]' : 'text-[#18181B]'}`}>
+        {amount}
+      </span>
     </div>
   )
 }
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-4 pt-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-widest text-[#A1A1AA] bg-[#FAFAF8] border-b border-[#F4F4F5]">
+    <p className={`${LABEL} px-3 py-1 border-b border-[#F0ECE2]`} style={{ background: SHADE[3] }}>
       {children}
     </p>
   )
 }
 
-function TotalRow({ label, amount, negative }: { label: string; amount: number; negative?: boolean }) {
+function MiniStat({ label, value, border }: { label: string; value: string; border?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-[#E4E4E7] bg-[#FCFCFB]">
-      <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] truncate">{label}</span>
-      <span className={`text-[13px] font-bold tabular-nums flex-shrink-0 ${negative ? 'text-rose-600' : 'text-[#18181B]'}`}>
-        {negative ? '−' : ''}{formatINR(amount)}
-      </span>
+    <div className={`px-2.5 py-1.5 min-w-0 ${border ? 'border-l border-[#F0ECE2]' : ''}`}>
+      <span className={`${LABEL} block truncate`}>{label}</span>
+      <span className="block text-[12.5px] font-bold text-[#18181B] tabular-nums truncate mt-0.5">{value}</span>
     </div>
   )
 }
 
-function EmptyState() {
-  return (
-    <Panel className="!mb-0">
-      <div className="px-6 py-10 text-center">
-        <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
-          <Banknote size={26} style={{ color: ADMIN_GOLD }} strokeWidth={1.6} />
-        </div>
-        <h2 className="text-base font-bold text-[#18181B] mb-1">No payslips yet</h2>
-        <p className="text-sm text-[#71717A] max-w-sm mx-auto">
-          Your monthly salary will appear here once the office runs a pay cycle.
-        </p>
-      </div>
-    </Panel>
-  )
-}
-
-/** Matches the hero + breakdown shapes so the page does not jump on load. */
+/** Matches the real layout's shape so the page does not jump on load. */
 function SalarySkeleton() {
   return (
     <div className="animate-pulse">
-      <div className={`${BLEED} bg-[#27272A] sm:rounded-xl overflow-hidden shadow-lg mb-3`}>
-        <div className="h-10 border-b border-white/10" />
-        <div className="px-4 pt-4 pb-3.5 space-y-2">
-          <div className="h-2.5 w-20 rounded-full bg-white/10" />
-          <div className="h-7 w-40 rounded-lg bg-white/10" />
-        </div>
-        <div className="h-14 border-t border-white/10" />
-      </div>
-      <Panel>
-        <div className="h-8 bg-[#FAFAF8] border-b border-[#F4F4F5]" />
+      <div className="h-[34px] bg-white border border-[#E3DFD3] mb-1.5" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 mb-1.5">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className={ROW}>
-            <div className="h-2.5 w-28 rounded-full bg-[#E4E4E7]" />
-            <div className="h-2.5 w-16 rounded-full bg-[#E4E4E7]" />
-          </div>
+          <div key={i} className="h-[68px] border border-[#E3DFD3]" style={{ background: SHADE[i as 0 | 1 | 2 | 3] }} />
         ))}
-      </Panel>
+      </div>
+      <div className="grid lg:grid-cols-3 gap-1.5">
+        <div className="lg:col-span-2 h-[280px] bg-white border border-[#E3DFD3]" />
+        <div className="h-[180px] bg-white border border-[#E3DFD3]" />
+      </div>
     </div>
   )
 }

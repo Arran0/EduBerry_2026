@@ -1,15 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, ChevronRight, CalendarRange, Users, Bus, BadgeCheck, Clock3, Trash2 } from 'lucide-react'
+import { Plus, ChevronRight, Users, Bus, Trash2 } from 'lucide-react'
 import NewCycleForm from '@/components/salary/NewCycleForm'
 import ModalShell from '@/components/ui/ModalShell'
 import {
-  ADMIN, ADMIN_GOLD, BLEED, BLEED_EDGES, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, INCOMPLETE_CHIP,
-} from '@/components/salary/adminUi'
-import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
+  Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Btn, Chip, Column,
+} from '@/components/salary/ui'
 import {
   SalaryCycle, SalaryCycleStatus, CycleTally,
   fetchCycles, fetchCycleTallies, formatPeriod, deleteCycle,
@@ -18,6 +16,26 @@ import {
   DriverCycle,
   fetchDriverCycles, fetchDriverCycleTallies, deleteDriverCycle,
 } from '@/lib/driverSalary'
+
+// Kept narrow enough that a 390px phone sees the period, who it covers and
+// both status columns without scrolling — only the record count runs off.
+const COLS = [
+  'minmax(104px,1.7fr)',  // period
+  'minmax(52px,0.6fr)',   // who it covers
+  'minmax(62px,0.7fr)',   // lock state
+  'minmax(72px,0.9fr)',   // disbursement
+  'minmax(46px,0.5fr)',   // records
+  '40px',                 // row actions
+].join(' ')
+
+const COLUMNS: Column[] = [
+  { label: 'Period', className: 'pl-[24px]' },
+  { label: 'Covers' },
+  { label: 'Cycle' },
+  { label: 'Disbursed' },
+  { label: 'Records', align: 'right' },
+  { label: '' },
+]
 
 type Kind = 'staff' | 'driver'
 
@@ -41,6 +59,7 @@ export default function PayCyclesSection() {
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<UnifiedCycle[]>([])
   const [tallies, setTallies] = useState<Record<string, CycleTally>>({})
+  const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<UnifiedCycle | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -78,115 +97,110 @@ export default function PayCyclesSection() {
     load()
   }
 
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return cycles
+    return cycles.filter(c => formatPeriod(c.period_month, c.period_year).toLowerCase().includes(q))
+  }, [cycles, search])
+
+  const openCount = cycles.filter(c => c.status === 'open').length
+
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className={ADMIN.label}>Pay cycles</h2>
-        <button onClick={() => setShowNew(true)} className={ADMIN.darkBtn}>
-          <Plus size={14} /> New Cycle
-        </button>
-      </div>
+      <SectionBar
+        title="Pay cycles"
+        hint={loading
+          ? 'One cycle per month, staff and drivers together'
+          : `${cycles.length} run · ${openCount} still unlocked`}
+        actions={<Btn tone="dark" onClick={() => setShowNew(true)}><Plus size={11} /> New cycle</Btn>}
+      />
 
-      {loading ? (
-        <div className={BLEED}>
-          <Sheet className={BLEED_EDGES}>
-            {Array.from({ length: 4 }, (_, i) => <SheetRowSkeleton key={i} />)}
-          </Sheet>
+      {!loading && cycles.length > 0 && (
+        <div className="flex items-center gap-2 mb-2">
+          <SearchField value={search} onChange={setSearch} placeholder="Search months…" className="sm:max-w-[16rem]" />
         </div>
-      ) : cycles.length === 0 ? (
-        <div className={`${BLEED} ${ADMIN.card} ${BLEED_EDGES} shadow-sm p-8 text-center`}>
-          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
-            <CalendarRange size={28} style={{ color: ADMIN_GOLD }} strokeWidth={1.6} />
-          </div>
-          <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No pay cycles yet. Set base salaries first, then run a monthly cycle.</p>
-          <button onClick={() => setShowNew(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-            <Plus size={14} /> New Cycle
-          </button>
-        </div>
-      ) : (
-        <Sheet
-          className={`${BLEED} ${BLEED_EDGES}`}
-          columns={
-            <>
-              <span className={`${SHEET.headCell} flex-1 ml-10`}>Period</span>
-              <span className={`${SHEET.headCell} w-52 flex-shrink-0`}>Status</span>
-              <span className={`${SHEET.headCell} w-28 flex-shrink-0`}>Records</span>
-              <span className="w-16 flex-shrink-0" />
-            </>
-          }
-        >
-          {cycles.map(c => {
-            const bar = c.status === 'closed' ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'
-            const tally = tallies[c.id]
-            const allPaid = !!tally && tally.total > 0 && tally.paid === tally.total
-            return (
-              <Link key={`${c.kind}-${c.id}`} href={c.href} className={SHEET.row}>
-                <div className={`${SHEET.bar} ${bar}`} />
-                <div className="flex items-center gap-2.5 flex-1 min-w-0 px-3 py-2">
-                  <div className="w-7 h-7 rounded-md bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                    {c.kind === 'staff'
-                      ? <Users size={14} style={{ color: ADMIN_GOLD }} />
-                      : <Bus size={14} style={{ color: ADMIN_GOLD }} />}
-                  </div>
-                  <span className="flex-1 min-w-0 font-semibold text-[#18181B] text-sm truncate">
-                    {formatPeriod(c.period_month, c.period_year)}
-                    <span className="text-[#A1A1AA] font-normal"> · {c.kind === 'staff' ? 'Staff' : 'Drivers'}</span>
-                  </span>
-                  <div className="w-auto sm:w-52 flex-shrink-0 flex items-center gap-1.5">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[c.status]}`}>
-                      {CYCLE_STATUS_LABEL[c.status]}
-                    </span>
-                    {allPaid ? (
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${PAID_CHIP}`}>
-                        <BadgeCheck size={11} /> Paid
-                      </span>
-                    ) : (
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${INCOMPLETE_CHIP}`}>
-                        <Clock3 size={11} /> Incomplete
-                      </span>
-                    )}
-                  </div>
-                  <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">
-                    {tally?.total ?? 0} record{(tally?.total ?? 0) === 1 ? '' : 's'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={e => { e.preventDefault(); e.stopPropagation(); setPendingDelete(c) }}
-                    title="Delete cycle"
-                    aria-label="Delete cycle"
-                    className="p-1 text-[#D4D4D8] hover:text-rose-600 transition-colors flex-shrink-0"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                  <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0 w-8" />
-                </div>
-              </Link>
-            )
-          })}
-        </Sheet>
       )}
+
+      <Sheet minWidth={452}>
+        <SheetHead cols={COLS} columns={COLUMNS} />
+        {loading ? (
+          <SheetSkeleton rows={4} />
+        ) : cycles.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-[12.5px] text-[#8C8878] max-w-sm mx-auto mb-3">
+              No pay cycles yet. Set base salaries first, then run a month.
+            </p>
+            <Btn tone="dark" onClick={() => setShowNew(true)} className="mx-auto"><Plus size={11} /> New cycle</Btn>
+          </div>
+        ) : visible.length === 0 ? (
+          <Note>No cycle matches &quot;{search}&quot;.</Note>
+        ) : visible.map(c => {
+          const tally = tallies[c.id]
+          const total = tally?.total ?? 0
+          const paid = tally?.paid ?? 0
+          const allPaid = total > 0 && paid === total
+          const locked = c.status === 'closed'
+          return (
+            <SheetRow key={`${c.kind}-${c.id}`} cols={COLS} href={c.href} accent={locked ? '#27272A' : '#D9D4C4'}>
+              <span className="font-semibold text-[#18181B] text-[11.5px] truncate">
+                {formatPeriod(c.period_month, c.period_year)}
+              </span>
+
+              <span className="flex items-center gap-1 text-[10.5px] text-[#8C8878] truncate">
+                {c.kind === 'staff' ? <Users size={10} /> : <Bus size={10} />}
+                {c.kind === 'staff' ? 'Staff' : 'Drivers'}
+              </span>
+
+              <span>
+                <Chip tone={locked ? 'dark' : 'neutral'}>{locked ? 'Locked' : 'Open'}</Chip>
+              </span>
+
+              <span className="flex items-center gap-1.5 min-w-0">
+                <Chip tone={allPaid ? 'good' : 'gold'}>{allPaid ? 'All paid' : `${paid}/${total}`}</Chip>
+              </span>
+
+              <span className="text-[11px] tabular-nums text-[#8C8878] text-right">{total}</span>
+
+              <span className="flex items-center justify-end gap-0.5">
+                <button
+                  type="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); setPendingDelete(c) }}
+                  title="Delete cycle"
+                  aria-label="Delete cycle"
+                  className="p-0.5 text-[#CFCABA] hover:text-[#A93232] transition-colors"
+                >
+                  <Trash2 size={13} />
+                </button>
+                <ChevronRight size={14} className="text-[#CFCABA] flex-shrink-0" />
+              </span>
+            </SheetRow>
+          )
+        })}
+      </Sheet>
 
       <AnimatePresence>
         {showNew && (
           <NewCycleForm onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />
         )}
         {pendingDelete && (
-          <ModalShell onClose={() => { setPendingDelete(null); setError(null) }} size="sm">
-            <h3 className="font-bold text-slate-800 mb-1.5">
+          <ModalShell onClose={() => { setPendingDelete(null); setError(null) }} size="sm" sharp>
+            <h3 className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#18181B] mb-2">
               Delete {formatPeriod(pendingDelete.period_month, pendingDelete.period_year)}
-              {pendingDelete.kind === 'staff' ? ' (Staff)' : ' (Drivers)'}?
+              {pendingDelete.kind === 'staff' ? ' · Staff' : ' · Drivers'}?
             </h3>
-            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
+            <p className="text-[12.5px] text-[#6B675A] mb-4 leading-relaxed">
               This permanently removes the cycle and every record in it, including any bonuses, deductions and
               payout references. It cannot be undone. Payments already made at the bank are not affected — only
               this app&apos;s copy of the payroll is deleted.
             </p>
-            {error && <p className="text-xs text-rose-600 mb-3">{error}</p>}
+            {error && <p className="text-[11px] text-[#A93232] mb-3">{error}</p>}
             <div className="flex gap-2 justify-end">
-              <button onClick={() => { setPendingDelete(null); setError(null) }}
-                className="px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
-              <button onClick={confirmDelete} disabled={deleting}
-                className="text-sm font-semibold px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-50">
+              <Btn tone="ghost" onClick={() => { setPendingDelete(null); setError(null) }}>Cancel</Btn>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 bg-[#A93232] hover:bg-[#8E2828] text-white px-2.5 py-[7px] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none transition-colors disabled:opacity-40"
+              >
                 {deleting ? 'Deleting…' : 'Delete cycle'}
               </button>
             </div>

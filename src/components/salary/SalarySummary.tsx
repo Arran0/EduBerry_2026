@@ -1,103 +1,83 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
-import {
-  Banknote, Wallet, Receipt, Send, ChevronLeft, ChevronRight,
-  TrendingUp, TrendingDown, Minus,
-} from 'lucide-react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN_GOLD, BLEED } from '@/components/salary/adminUi'
+import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { formatPeriod } from '@/lib/salary'
 import {
-  MonthlyPayrollStats, fetchMonthlyPayrollStats, defaultPayrollMonth,
+  EMPTY_PAYROLL_CONTEXT, MonthlyPayrollStats, PayrollContext,
+  fetchMonthlyPayrollStats, fetchPayrollContext, defaultPayrollMonth,
   shiftMonth, monthIndex, percentChange, comparable,
 } from '@/lib/salaryStats'
 
-/** Which admin section a card jumps to when clicked. */
+/** Which admin section a tile jumps to when clicked. */
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'
 
 interface Props {
-  /** When provided, cards become buttons that jump to the section behind the figure. */
+  /** When provided, tiles become buttons that jump to the section behind the figure. */
   onSelect?: (key: SalarySummaryKey) => void
   /** Bump to force a re-fetch after edits elsewhere in the hub. */
   refreshKey?: number
 }
 
-/** Compact rupees for a stat card — ₹4.52L reads at a glance where ₹4,52,000 does not. */
-function compactINR(amount: number): string {
+/** Compact rupees for a stat tile — ₹4.52L reads at a glance where ₹4,52,000 does not. */
+export function compactINR(amount: number): string {
   const n = Math.abs(Number(amount) || 0)
-  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 2)}Cr`
-  if (n >= 1e5) return `₹${(n / 1e5).toFixed(n >= 1e6 ? 1 : 2)}L`
-  if (n >= 1e3) return `₹${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K`
-  return formatINR(n)
-}
-
-/**
- * Month-on-month change chip.
- *
- * `goodWhenUp` says which direction is worth celebrating: payroll cost rising
- * is not the same news as net pay rising, and deductions climbing is worse
- * news than either. Colour follows the news, never the arrow.
- */
-function DeltaChip({ percent, goodWhenUp, dark }: { percent: number; goodWhenUp: boolean; dark?: boolean }) {
-  const flat = Math.abs(percent) < 0.05
-  const up = percent > 0
-  const good = flat ? null : up === goodWhenUp
-  const tone = flat
-    ? (dark ? 'text-[#8A8A93]' : 'text-[#A1A1AA]')
-    : good
-    ? (dark ? 'text-emerald-400' : 'text-emerald-600')
-    : (dark ? 'text-rose-400' : 'text-rose-500')
-  const Icon = flat ? Minus : up ? TrendingUp : TrendingDown
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums ${tone}`}>
-      <Icon size={11} strokeWidth={2.5} />
-      {flat ? '0%' : `${Math.abs(percent).toFixed(Math.abs(percent) < 10 ? 1 : 0)}%`}
-    </span>
-  )
-}
-
-interface Card {
-  key: SalarySummaryKey
-  label: string
-  value: string
-  sub: string
-  icon: React.ReactNode
-  dark?: boolean
-  /** null hides the comparison entirely (a progress card has nothing to compare). */
-  percent: number | null
-  goodWhenUp: boolean
+  const sign = amount < 0 ? '−' : ''
+  if (n >= 1e7) return `${sign}₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 2)}Cr`
+  if (n >= 1e5) return `${sign}₹${(n / 1e5).toFixed(n >= 1e6 ? 1 : 2)}L`
+  if (n >= 1e3) return `${sign}₹${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K`
+  return sign + formatINR(n)
 }
 
 export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
   // Opens on the month payroll is most likely being worked on — the previous
   // month during the first ten days, when last month's salaries are processed.
   const [period, setPeriod] = useState(() => defaultPayrollMonth())
+  const [ctx, setCtx] = useState<PayrollContext | null>(null)
   const [stats, setStats] = useState<MonthlyPayrollStats | null>(null)
   const [prev, setPrev] = useState<MonthlyPayrollStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const { today } = useSchoolClock()
 
+  // The payroll setup (calibration, everyone's base salary) is the same
+  // whichever month is on screen, so it is fetched once and handed to each.
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    const before = shiftMonth(period.year, period.month, -1)
-    Promise.all([
-      fetchMonthlyPayrollStats(period.year, period.month),
-      fetchMonthlyPayrollStats(before.year, before.month),
-    ]).then(([current, previous]) => {
-      if (!alive) return
-      setStats(current)
-      setPrev(previous)
-      setLoading(false)
-    })
+    fetchPayrollContext(today).then(c => { if (alive) setCtx(c) })
     return () => { alive = false }
-  }, [period, refreshKey])
+  }, [today, refreshKey])
+
+  // The selected month lands first and renders on its own; last month follows
+  // only to fill in the change chips. Waiting for both would leave the whole
+  // panel blank for the slower of two multi-query months.
+  const run = useRef(0)
+  useEffect(() => {
+    if (!ctx) return
+    const token = ++run.current
+    let alive = true
+    setLoading(true)
+    setPrev(null)
+    ;(async () => {
+      const current = await fetchMonthlyPayrollStats(period.year, period.month, ctx)
+      if (!alive || token !== run.current) return
+      setStats(current)
+      setLoading(false)
+
+      const before = shiftMonth(period.year, period.month, -1)
+      const previous = await fetchMonthlyPayrollStats(before.year, before.month, ctx)
+      if (!alive || token !== run.current) return
+      setPrev(previous)
+    })()
+    return () => { alive = false }
+  }, [ctx, period])
 
   // Nothing to see past the month in progress — no cycle can exist there yet.
   const now = new Date()
   const atLatest = monthIndex(period.year, period.month) >= monthIndex(now.getFullYear(), now.getMonth() + 1)
 
-  const cards: Card[] = useMemo(() => {
+  const tiles = useMemo(() => {
     const s = stats
     const canCompare = !!s && !!prev && comparable(s, prev)
     const delta = (pick: (x: MonthlyPayrollStats) => number) =>
@@ -108,26 +88,25 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
 
     return [
       {
-        key: 'base',
+        key: 'base' as const,
         label: 'Payroll cost',
         value: compactINR(s?.gross ?? 0),
         sub: s?.headcount ? `${s.headcount} on payroll` : 'nobody on payroll',
-        icon: <Banknote size={15} style={{ color: ADMIN_GOLD }} />,
-        dark: true,
         percent: delta(x => x.gross),
         goodWhenUp: false,
+        shade: 0 as const,
       },
       {
-        key: 'cycles',
+        key: 'cycles' as const,
         label: 'Net pay',
         value: compactINR(s?.net ?? 0),
         sub: s?.bonus ? `incl. ${compactINR(s.bonus)} task bonus` : 'after deductions',
-        icon: <Wallet size={15} className="text-[#71717A]" />,
         percent: delta(x => x.net),
         goodWhenUp: true,
+        shade: 1 as const,
       },
       {
-        key: 'cycles',
+        key: 'cycles' as const,
         label: 'Deductions',
         value: compactINR(s?.deductions ?? 0),
         sub: s && (s.pf || s.esi || s.lop)
@@ -137,12 +116,12 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
               s.lop ? `LOP ${compactINR(s.lop)}` : null,
             ].filter(Boolean).join(' · ')
           : 'PF, ESI & loss of pay',
-        icon: <Receipt size={15} className="text-[#71717A]" />,
         percent: delta(x => x.deductions),
         goodWhenUp: false,
+        shade: 2 as const,
       },
       {
-        key: 'cycles',
+        key: 'cycles' as const,
         label: 'Disbursed',
         value: total > 0 ? `${paid}/${total}` : '—',
         sub: total === 0
@@ -150,10 +129,10 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
           : paid === total
           ? 'everyone paid'
           : `${compactINR(s?.pendingAmount ?? 0)} still to pay`,
-        icon: <Send size={15} className="text-[#71717A]" />,
         // A payout count is progress through one month, not a trend across two.
         percent: null,
         goodWhenUp: true,
+        shade: 3 as const,
       },
     ]
   }, [stats, prev])
@@ -164,100 +143,43 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
   }, [period])
 
   return (
-    <div className={`${BLEED} bg-white border-y border-[#E4E4E7] sm:border sm:rounded-xl overflow-hidden shadow-sm`}>
-      {/* Month toggler — one strip, the same dark as every sheet header. */}
-      <div className="flex items-center bg-[#27272A]">
-        <button
-          type="button"
-          onClick={() => setPeriod(p => shiftMonth(p.year, p.month, -1))}
-          aria-label="Previous month"
-          className="px-3 py-2.5 text-[#A1A1AA] hover:text-white transition-colors"
-        >
-          <ChevronLeft size={16} />
-        </button>
-
-        {/* Naming the month the arrows compare against saves anyone having to
-            work out what a "+6.4%" on the cards below is measured from. */}
-        <div className="flex-1 min-w-0 flex items-baseline justify-center gap-2">
-          <span className="text-xs sm:text-sm font-bold tracking-wide text-white flex-shrink-0">
-            {formatPeriod(period.month, period.year)}
-          </span>
-          <span className="text-[9.5px] sm:text-[10px] font-semibold uppercase tracking-widest text-[#71717A] truncate">
-            vs {previousLabel}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 pr-2">
-          {stats?.projected && (
-            <span
-              className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border border-[#8A6D1F] text-[#D8BC6A]"
-              title="No pay cycle has been run for this month yet — figures are projected from active base salaries and the bonus points earned so far."
-            >
-              Projected
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => setPeriod(p => shiftMonth(p.year, p.month, 1))}
-            disabled={atLatest}
-            aria-label="Next month"
-            className="px-1.5 py-2.5 text-[#A1A1AA] hover:text-white transition-colors disabled:opacity-25 disabled:hover:text-[#A1A1AA]"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Hairline dividers instead of gaps, so the four figures read as one panel. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4">
-        {cards.map((c, i) => {
-          const Tag = onSelect ? 'button' : 'div'
-          return (
-            <Tag
-              key={`${c.label}-${i}`}
-              onClick={onSelect ? () => onSelect(c.key) : undefined}
-              className={`text-left p-3 sm:p-3.5 border-[#F0EFEA] transition-colors ${
-                i % 2 === 0 ? 'border-r' : ''
-              } lg:border-r lg:last:border-r-0 ${i < 2 ? 'border-b lg:border-b-0' : ''} ${
-                c.dark ? 'bg-[#27272A]' : 'bg-white'
-              } ${onSelect && !c.dark ? 'hover:bg-[#FAFAF8]' : ''} ${
-                onSelect && c.dark ? 'hover:bg-[#18181B]' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1 mb-1.5">
-                <span
-                  className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-widest truncate ${
-                    c.dark ? 'text-[#A1A1AA]' : 'text-[#71717A]'
-                  }`}
-                >
-                  {c.label}
-                </span>
-                <span className="flex-shrink-0">{c.icon}</span>
-              </div>
-
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <p
-                  className={`text-lg sm:text-xl font-bold tabular-nums leading-tight ${
-                    loading ? 'opacity-30' : ''
-                  } ${c.dark ? 'text-white' : 'text-[#18181B]'}`}
-                >
-                  {c.value}
-                </p>
-                {!loading && c.percent !== null && (
-                  <DeltaChip percent={c.percent} goodWhenUp={c.goodWhenUp} dark={c.dark} />
-                )}
-              </div>
-
-              <p
-                className={`text-[10px] sm:text-[11px] mt-0.5 truncate ${
-                  c.dark ? 'text-[#8A8A93]' : 'text-[#A1A1AA]'
-                }`}
-              >
-                {c.sub}
-              </p>
-            </Tag>
+    <div>
+      {/* Naming the month the arrows compare against saves anyone having to
+          work out what a "▲6.4%" on the tiles below is measured from. */}
+      <MonthStepper
+        className="mb-1.5"
+        label={formatPeriod(period.month, period.year)}
+        sub={prev ? `vs ${previousLabel}` : undefined}
+        onPrev={() => setPeriod(p => shiftMonth(p.year, p.month, -1))}
+        onNext={() => setPeriod(p => shiftMonth(p.year, p.month, 1))}
+        canNext={!atLatest}
+        right={
+          loading ? (
+            <Chip tone="neutral">Loading</Chip>
+          ) : stats?.projected ? (
+            <Chip tone="gold">Projected</Chip>
+          ) : stats?.actual ? (
+            <Chip tone={stats.locked ? 'dark' : 'neutral'}>{stats.locked ? 'Locked' : 'Open'}</Chip>
+          ) : (
+            <Chip tone="neutral">No cycle</Chip>
           )
-        })}
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+        {tiles.map(t => (
+          <StatTile
+            key={t.label}
+            label={t.label}
+            value={t.value}
+            sub={t.sub}
+            percent={t.percent}
+            goodWhenUp={t.goodWhenUp}
+            shade={t.shade}
+            loading={loading}
+            onClick={onSelect ? () => onSelect(t.key) : undefined}
+          />
+        ))}
       </div>
     </div>
   )
