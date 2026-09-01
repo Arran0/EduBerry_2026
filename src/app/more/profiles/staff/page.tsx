@@ -23,10 +23,12 @@ import {
   UserPlus,
   Pencil,
   KeyRound,
+  HardHat,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 const EditStaffDetailsModal = dynamic(() => import('@/components/certificates/EditStaffDetailsModal'))
+const EditSupportStaffModal = dynamic(() => import('@/components/staff/EditSupportStaffModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -38,8 +40,26 @@ import {
 } from '@/lib/admin'
 import { UserRole, getDisplayRole } from '@/lib/supabase'
 import { upsertStaffDetails, fetchStaffDetailsMap, StaffDetails } from '@/lib/staffDetails'
+import {
+  SupportStaff,
+  fetchSupportStaff,
+  createSupportStaff,
+  deleteSupportStaff,
+  setSupportStaffActive,
+} from '@/lib/supportStaff'
+import SupportStaffFields, {
+  SupportStaffForm,
+  SupportFieldKey,
+  emptySupportStaffForm,
+  formToSupportPatch,
+} from '@/components/staff/SupportStaffFields'
 
 const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
+
+// Support staff are not profiles and have no login (see src/lib/supportStaff.ts).
+// In this manager they are one more option on the role picker, and one more
+// kind of row in the list — everywhere else in the app they are invisible.
+const SUPPORT_ROLE_VALUE = 'support'
 
 const STAFF_BANNER_DEFAULT = {
   gradFrom: '#92400E',
@@ -55,6 +75,7 @@ const ROLE_BAR: Record<string, string> = {
   'non-teaching': 'bg-cyan-500',
   driver:        'bg-orange-500',
   smartboard:    'bg-indigo-500',
+  support:       'bg-lime-600',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -65,6 +86,7 @@ const ROLE_BADGE: Record<string, string> = {
   'non-teaching': 'bg-cyan-50 text-cyan-700 border-cyan-200',
   driver:        'bg-orange-50 text-orange-700 border-orange-200',
   smartboard:    'bg-indigo-50 text-indigo-700 border-indigo-200',
+  support:       'bg-lime-50 text-lime-700 border-lime-200',
 }
 
 // A "non-teaching" staff member is stored as role='teacher' with is_non_teaching=true
@@ -89,11 +111,13 @@ export default function StaffProfileManagerPage() {
   const { openProfileCard } = useProfileCard()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
+  const [supportStaff, setSupportStaff] = useState<SupportStaff[]>([])
   const [details, setDetails] = useState<Record<string, StaffDetails>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
+  const [editingSupport, setEditingSupport] = useState<SupportStaff | null>(null)
 
   // Set password modal
   const [setPwTarget, setSetPwTarget] = useState<ProfileWithTeams | null>(null)
@@ -115,12 +139,23 @@ export default function StaffProfileManagerPage() {
   const [createdEmail, setCreatedEmail] = useState('')
 
   const [createForm, setCreateForm] = useState({ email: '', full_name: '', role: 'teacher' as UserRole, is_non_teaching: false })
+  // Support Staff is the one option on this picker that is not a UserRole at
+  // all — it creates a support_staff row instead of an account, so it is
+  // tracked on its own flag rather than squeezed into createForm.role.
+  const [createIsSupport, setCreateIsSupport] = useState(false)
+  const [createSupportForm, setCreateSupportForm] = useState<SupportStaffForm>(emptySupportStaffForm)
   // The role <select> shows "Non-Teaching" as its own option; it maps to role='teacher' + is_non_teaching=true.
-  const createRoleSelection = createForm.role === 'teacher' && createForm.is_non_teaching ? 'non-teaching' : createForm.role
+  const createRoleSelection = createIsSupport
+    ? SUPPORT_ROLE_VALUE
+    : createForm.role === 'teacher' && createForm.is_non_teaching ? 'non-teaching' : createForm.role
   const handleRoleSelect = (value: string) => {
+    setCreateIsSupport(value === SUPPORT_ROLE_VALUE)
+    if (value === SUPPORT_ROLE_VALUE) return
     if (value === 'non-teaching') setCreateForm(f => ({ ...f, role: 'teacher', is_non_teaching: true }))
     else setCreateForm(f => ({ ...f, role: value as UserRole, is_non_teaching: false }))
   }
+  const setSupportField = (key: SupportFieldKey, value: string) =>
+    setCreateSupportForm(f => ({ ...f, [key]: value }))
   const [createStaffFields, setCreateStaffFields] = useState({
     employee_id: '', designation: '', department: '', subjects_taught: '',
     employment_type: '', date_of_joining: '', date_of_retirement: '',
@@ -139,9 +174,10 @@ export default function StaffProfileManagerPage() {
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
-    const data = await fetchAllProfiles()
+    const [data, support] = await Promise.all([fetchAllProfiles(), fetchSupportStaff()])
     const staffList = data.filter(p => STAFF_ROLES.includes(p.role))
     setProfiles(staffList)
+    setSupportStaff(support)
     const map = await fetchStaffDetailsMap(staffList.map(s => s.id))
     setDetails(map)
     setLoading(false)
@@ -163,6 +199,20 @@ export default function StaffProfileManagerPage() {
     )
   })
 
+  const filteredSupport = supportStaff.filter(s => {
+    const q = searchQuery.toLowerCase()
+    return (
+      s.full_name?.toLowerCase().includes(q) ||
+      // Matches the way the staff rows above match on their role name.
+      'support'.includes(q) ||
+      s.employee_id?.toLowerCase().includes(q) ||
+      s.designation?.toLowerCase().includes(q) ||
+      s.department?.toLowerCase().includes(q)
+    )
+  })
+
+  const totalRows = filteredProfiles.length + filteredSupport.length
+
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
     const result = await deleteUser(userId)
@@ -180,7 +230,48 @@ export default function StaffProfileManagerPage() {
     else alert('Failed: ' + result.error)
   }
 
+  const handleDeleteSupport = async (person: SupportStaff) => {
+    if (!window.confirm(`Delete support staff "${person.full_name}"? Their attendance history goes with them. This cannot be undone.`)) return
+    const result = await deleteSupportStaff(person.id)
+    if (result.success) await loadProfiles()
+    else alert('Failed to delete: ' + result.error)
+  }
+
+  const handleToggleSupportActive = async (person: SupportStaff) => {
+    const msg = person.is_active
+      ? `Mark "${person.full_name}" as left? They stop appearing in attendance, and their past records are kept.`
+      : `Restore "${person.full_name}" to the support staff roster?`
+    if (!window.confirm(msg)) return
+    const result = await setSupportStaffActive(person.id, !person.is_active)
+    if (result.success) await loadProfiles()
+    else alert('Failed: ' + result.error)
+  }
+
+  const handleCreateSupportStaff = async () => {
+    setCreateError(null)
+    setCreateSuccess(false)
+    if (!createForm.full_name.trim()) { setCreateError('Full name is required'); return }
+    setCreating(true)
+    const result = await createSupportStaff(
+      { ...formToSupportPatch(createSupportForm), full_name: createForm.full_name.trim() },
+      user?.id,
+    )
+    if (result.success) {
+      setCreatedAutoConfirm(false)
+      setCreatedEmail('')
+      setCreateSuccess(true)
+      setCreateForm({ email: '', full_name: '', role: 'teacher', is_non_teaching: false })
+      setCreateSupportForm(emptySupportStaffForm())
+      await loadProfiles()
+      setTimeout(() => { setShowCreateModal(false); setCreateSuccess(false) }, 2500)
+    } else {
+      setCreateError(result.error || 'Failed to add support staff')
+    }
+    setCreating(false)
+  }
+
   const handleCreateProfile = async () => {
+    if (createIsSupport) return handleCreateSupportStaff()
     setCreateError(null)
     setCreateSuccess(false)
     if (!createForm.email || !createForm.full_name) { setCreateError('Email and full name are required'); return }
@@ -262,7 +353,9 @@ export default function StaffProfileManagerPage() {
           onEditingChange={setBannerEditing}
           actions={
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white/70 hidden sm:block">{profiles.length} staff</span>
+              <span className="text-sm text-white/70 hidden sm:block">
+                {profiles.length} staff{supportStaff.length > 0 ? ` · ${supportStaff.length} support` : ''}
+              </span>
               <button onClick={() => setShowBulkImport(true)} className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors">
                 <FileSpreadsheet size={15} /> Import CSV
               </button>
@@ -285,7 +378,7 @@ export default function StaffProfileManagerPage() {
             {/* Search */}
             <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search by name, email, role, employee ID, designation…" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
               {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
             </div>
 
@@ -295,7 +388,7 @@ export default function StaffProfileManagerPage() {
                 <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
                 <p className="text-sm text-[#71717A]">Loading staff…</p>
               </div>
-            ) : filteredProfiles.length === 0 ? (
+            ) : totalRows === 0 ? (
               <div className="border border-[#E4E4E7] bg-white rounded-xl p-12 text-center">
                 <Briefcase size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-sm font-semibold text-[#18181B] mb-1">No Staff Found</p>
@@ -368,6 +461,68 @@ export default function StaffProfileManagerPage() {
                       </motion.div>
                     )
                   })}
+
+                  {/* ── Support staff ──────────────────────────────────────
+                      Ground-level cleaning / maintenance staff. No account,
+                      no login, no email — an admin keeps the names here, and
+                      they are used only in attendance and salary. Kept in
+                      their own band so they never read as app users. */}
+                  {filteredSupport.length > 0 && (
+                    <motion.div variants={itemVariants}>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-[#F7F7F5] border-y border-[#E4E4E7]">
+                        <HardHat size={13} className="text-lime-700 flex-shrink-0" />
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Support Staff</p>
+                        <span className="text-[11px] text-[#A1A1AA]">({filteredSupport.length}) · no login</span>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {filteredSupport.map(s => (
+                    <motion.div key={s.id} variants={itemVariants}>
+                      <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors group">
+                        <div className={`w-1 flex-shrink-0 ${ROLE_BAR.support}`} />
+                        <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                          <div className="flex-shrink-0">
+                            <Avatar name={s.full_name} size={34} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className={`text-sm font-semibold truncate ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
+                              {!s.is_active && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Left</span>}
+                            </div>
+                            <p className="hidden sm:block text-xs text-[#71717A] truncate">
+                              {s.phone || <span className="text-[#C4C4C8]">No phone</span>}
+                            </p>
+                          </div>
+
+                          <div className="hidden sm:block w-28 flex-shrink-0">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE.support}`}>Support</span>
+                          </div>
+
+                          <span className="hidden sm:block text-xs text-[#71717A] w-28 flex-shrink-0 truncate">
+                            {s.employee_id || <span className="text-[#C4C4C8]">—</span>}
+                          </span>
+
+                          <span className="hidden sm:block text-xs text-[#71717A] w-32 flex-shrink-0 truncate">
+                            {s.designation || <span className="text-[#C4C4C8]">—</span>}
+                          </span>
+
+                          <div className="flex items-center gap-0.5 w-44 justify-end flex-shrink-0">
+                            {isAdmin && (
+                              <>
+                                <button onClick={() => setEditingSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit details"><Pencil size={14} /></button>
+                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Mark as left' : 'Restore'}>
+                                  {s.is_active ? <Ban size={14} /> : <ShieldCheck size={14} />}
+                                </button>
+                                <button onClick={() => handleDeleteSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </motion.div>
               </div>
             )}
@@ -382,8 +537,12 @@ export default function StaffProfileManagerPage() {
                   <div className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/10 rounded-lg"><UserPlus size={18} className="text-[#B8983C]" /></div>
-                        <h2 className="text-lg font-bold text-white">Add Staff Member</h2>
+                        <div className="p-2 bg-white/10 rounded-lg">
+                          {createIsSupport
+                            ? <HardHat size={18} className="text-[#B8983C]" />
+                            : <UserPlus size={18} className="text-[#B8983C]" />}
+                        </div>
+                        <h2 className="text-lg font-bold text-white">{createIsSupport ? 'Add Support Staff' : 'Add Staff Member'}</h2>
                       </div>
                       <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"><X size={18} className="text-white" /></button>
                     </div>
@@ -392,21 +551,25 @@ export default function StaffProfileManagerPage() {
                       {createSuccess ? (
                         <div className="text-center py-8">
                           <div className="w-16 h-16 bg-[#27272A] rounded-2xl flex items-center justify-center mx-auto mb-4"><Check size={32} className="text-white" /></div>
-                          <h3 className="font-bold text-lg text-[#18181B] mb-2">Staff Profile Created!</h3>
-                          {createdAutoConfirm
-                            ? <div className="space-y-1"><p className="text-sm text-[#71717A]">Account confirmed. Staff member can sign in immediately.</p><p className="text-xs text-[#71717A] mt-1">Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span></p></div>
-                            : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>
+                          <h3 className="font-bold text-lg text-[#18181B] mb-2">{createIsSupport ? 'Support Staff Added!' : 'Staff Profile Created!'}</h3>
+                          {createIsSupport
+                            ? <p className="text-sm text-[#71717A]">No account was created. Mark their attendance from the Support tab of the staff attendance report.</p>
+                            : createdAutoConfirm
+                              ? <div className="space-y-1"><p className="text-sm text-[#71717A]">Account confirmed. Staff member can sign in immediately.</p><p className="text-xs text-[#71717A] mt-1">Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span></p></div>
+                              : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>
                           }
                         </div>
                       ) : (
                         <div className="space-y-4">
                           {createError && <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg">{createError}</div>}
 
-                          {/* Account info */}
-                          <div>
-                            <label className={lbl}>Email Address *</label>
-                            <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={inp} placeholder="staff@example.com" disabled={creating} />
-                          </div>
+                          {/* Account info — support staff have no account, so no email */}
+                          {!createIsSupport && (
+                            <div>
+                              <label className={lbl}>Email Address *</label>
+                              <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={inp} placeholder="staff@example.com" disabled={creating} />
+                            </div>
+                          )}
                           <div>
                             <label className={lbl}>Full Name *</label>
                             <input type="text" value={createForm.full_name} onChange={e => setCreateForm({ ...createForm, full_name: e.target.value })} className={inp} placeholder="John Doe" disabled={creating} />
@@ -421,11 +584,22 @@ export default function StaffProfileManagerPage() {
                               <option value="admin">Admin</option>
                               <option value="driver">Driver</option>
                               <option value="smartboard">Smart Board</option>
+                              <option value={SUPPORT_ROLE_VALUE}>Support Staff</option>
                             </select>
-                            {createForm.role === 'smartboard' && <p className="text-[11px] text-indigo-600 mt-1.5">Smart boards are kiosk logins — enable auto-confirm below and link to a homeroom in the Homeroom Manager.</p>}
-                            {createForm.is_non_teaching && <p className="text-[11px] text-cyan-600 mt-1.5">Non-teaching staff get the exact same app access as teachers — only the displayed role label differs.</p>}
+                            {createForm.role === 'smartboard' && !createIsSupport && <p className="text-[11px] text-indigo-600 mt-1.5">Smart boards are kiosk logins — enable auto-confirm below and link to a homeroom in the Homeroom Manager.</p>}
+                            {createForm.is_non_teaching && !createIsSupport && <p className="text-[11px] text-cyan-600 mt-1.5">Non-teaching staff get the exact same app access as teachers — only the displayed role label differs.</p>}
+                            {createIsSupport && (
+                              <p className="text-[11px] text-lime-700 mt-1.5">
+                                Support staff (cleaning, maintenance, grounds) get no account and no login — many have no phone.
+                                The name is used only for attendance, which an admin marks for them, and for salary.
+                              </p>
+                            )}
                           </div>
 
+                          {createIsSupport ? (
+                            <SupportStaffFields form={createSupportForm} onChange={setSupportField} disabled={creating} />
+                          ) : (
+                          <>
                           {/* Employment */}
                           <div className="border border-[#E4E4E7] bg-white p-4 rounded-xl space-y-3">
                             <p className={sHead}>Employment</p>
@@ -534,11 +708,15 @@ export default function StaffProfileManagerPage() {
                               <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member's address.</p>
                             )}
                           </div>
+                          </>
+                          )}
 
                           <div className="flex gap-3 pt-2">
                             <button onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors" disabled={creating}>Cancel</button>
                             <button onClick={handleCreateProfile} className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2" disabled={creating}>
-                              {creating ? <><Loader2 size={16} className="animate-spin" /> Creating…</> : <><UserPlus size={16} /> Add Staff</>}
+                              {creating
+                                ? <><Loader2 size={16} className="animate-spin" /> {createIsSupport ? 'Adding…' : 'Creating…'}</>
+                                : createIsSupport ? <><HardHat size={16} /> Add Support Staff</> : <><UserPlus size={16} /> Add Staff</>}
                             </button>
                           </div>
                         </div>
@@ -569,6 +747,14 @@ export default function StaffProfileManagerPage() {
           staffIsNonTeaching={editingDetails.is_non_teaching}
           staffDisplayRole={editingDetails.display_role}
           onClose={() => setEditingDetails(null)}
+          onSaved={loadProfiles}
+        />
+      )}
+
+      {editingSupport && (
+        <EditSupportStaffModal
+          person={editingSupport}
+          onClose={() => setEditingSupport(null)}
           onSaved={loadProfiles}
         />
       )}
