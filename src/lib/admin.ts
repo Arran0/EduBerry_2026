@@ -223,6 +223,29 @@ export async function createNewUser(input: NewUserInput): Promise<{ success: boo
   }
 }
 
+// Converts an existing staff account into a support staff entry (no login) —
+// copies what support_staff has room for, then deletes the account entirely.
+// One-way: see src/app/api/admin/convert-to-support/route.ts for why.
+export async function convertToSupportStaff(userId: string): Promise<{ success: boolean; error?: string; supportStaffId?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const response = await fetch('/api/admin/convert-to-support', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error converting to support staff:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
 // Delete a user — calls server-side API route (needs SUPABASE_SERVICE_ROLE_KEY)
 export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
