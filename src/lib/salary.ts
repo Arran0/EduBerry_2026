@@ -211,15 +211,39 @@ export async function fetchCycle(cycleId: string): Promise<SalaryCycle | null> {
 }
 
 /** All records for a cycle, with items and staff, ordered by staff name. */
+// `is_banned` and `email` ride along because the cycle sheet needs them: a
+// resigned member is dropped from the sheet entirely, and the search box
+// matches on email as well as name.
+const CYCLE_RECORD_SELECT =
+  '*, items:salary_record_items(*), ' +
+  'staff:profiles!staff_id(id, full_name, email, avatar_url, role, is_non_teaching, display_role, is_banned)'
+
 export async function fetchCycleRecords(cycleId: string): Promise<SalaryRecord[]> {
   const { data, error } = await supabase
     .from('salary_records')
-    .select('*, items:salary_record_items(*), staff:profiles!staff_id(id, full_name, avatar_url, role, is_non_teaching, display_role)')
+    .select(CYCLE_RECORD_SELECT)
     .eq('cycle_id', cycleId)
   if (error) { console.error('fetchCycleRecords failed:', error); return [] }
-  return ((data as SalaryRecord[]) || []).sort(
+  return ((data as unknown as SalaryRecord[]) || []).sort(
     (a, b) => (a.staff?.full_name ?? '').localeCompare(b.staff?.full_name ?? ''),
   )
+}
+
+/**
+ * One record, in the same shape the sheet holds.
+ *
+ * Editing a single cell used to reload the whole cycle — every record, every
+ * bank account, a month of attendance — to refresh one number. This is what
+ * the sheet re-reads instead when only one row can have changed.
+ */
+export async function fetchSalaryRecord(recordId: string): Promise<SalaryRecord | null> {
+  const { data, error } = await supabase
+    .from('salary_records')
+    .select(CYCLE_RECORD_SELECT)
+    .eq('id', recordId)
+    .maybeSingle()
+  if (error) { console.error('fetchSalaryRecord failed:', error); return null }
+  return (data as unknown as SalaryRecord) ?? null
 }
 
 /** Count of records per cycle, keyed by cycle_id (for the cycles list). */
