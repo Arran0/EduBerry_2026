@@ -8,6 +8,7 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft, CalendarRange, Send, Download, ChevronRight,
   Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, BadgeCheck, CalendarDays, Landmark,
+  ShieldAlert,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -16,6 +17,8 @@ import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/Salary
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
 import EditableCell from '@/components/salary/EditableCell'
+import { useVerifiedEdits } from '@/components/salary/useVerifiedEdits'
+import { describeRecordEdits, editFingerprint } from '@/lib/salaryEdits'
 import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal'
 import CycleStatsStrip, { CycleTotals } from '@/components/salary/CycleStatsStrip'
 import CycleToolbar, { CycleFilters, DEFAULT_CYCLE_FILTERS } from '@/components/salary/CycleToolbar'
@@ -31,7 +34,7 @@ import {
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
-  updateSalaryRecordOverrides, SalaryRecordOverrides,
+  updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
@@ -54,6 +57,18 @@ const StatementPreviewModal = dynamic(() => import('@/components/salary/statemen
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 const EpfDocumentsModal = dynamic(() => import('@/components/salary/EpfDocumentsModal'))
 
+/**
+ * How many rows mount at a time.
+ *
+ * A cycle is one row per person and a school runs to a hundred, each carrying
+ * an avatar and six editable cells. Mounting them all costs a visible pause on
+ * open and again on every keystroke in the search box, for rows nobody has
+ * scrolled to yet. The month's data is still fetched in full — the totals and
+ * the bank export have to cover the whole cycle — but the DOM is built a
+ * screenful at a time.
+ */
+const ROWS_PER_CHUNK = 30
+
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
   return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
@@ -71,23 +86,29 @@ function sumItems(items: SalaryRecordItem[] | undefined, label: string): number 
  */
 const GRID = 'grid items-center gap-x-1.5'
 const GRID_COLS = [
+  // The sign-off sits first so it stays on screen at the width a phone scrolls
+  // the sheet to — a check you have to scroll sideways to find is one that
+  // gets skipped.
+  '22px',                 // hand-edit sign-off
   // The staff column takes a deliberately outsized share of the spare width:
   // the numeric columns are fixed-width figures that gain nothing from more
   // room, while a full name plus its role, an avatar and three icons is the
-  // one cell that actually needs it. At the sheet's 1040px floor every column
-  // is at its minimum and the name truncates; past that, the growth goes here.
+  // one cell that actually needs it. At the sheet's floor every column is at
+  // its minimum and the name truncates; past that, the growth goes here.
   'minmax(168px,2.8fr)',  // staff (chevron + avatar + name + statements & calendar icons)
   'minmax(74px,1fr)',     // base
   'minmax(46px,0.66fr)',  // work days
   'minmax(44px,0.6fr)',   // leave
   'minmax(40px,0.56fr)',  // late
   'minmax(44px,0.58fr)',  // half day
-  'minmax(70px,0.85fr)',  // LOP leave
-  'minmax(70px,0.85fr)',  // LOP late
+  // The per-reason loss-of-pay splits are gone: three columns said one thing,
+  // and the reason is already in the Leave/Late/Half counts beside them and in
+  // the expanded row's item list.
   'minmax(70px,0.85fr)',  // LOP total
   'minmax(62px,0.75fr)',  // ₹/day
   'minmax(60px,0.8fr)',   // PF
   'minmax(60px,0.8fr)',   // ESI
+  'minmax(70px,0.9fr)',   // other (hand-added bonuses & deductions, netted)
   'minmax(46px,0.62fr)',  // bonus points
   'minmax(84px,1.1fr)',   // net pay
 ].join(' ')
@@ -146,6 +167,11 @@ export default function SalaryCycleDetailPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
   const [filters, setFilters] = useState<CycleFilters>(DEFAULT_CYCLE_FILTERS)
+  /** Records left out of the sheet because the person has resigned or is hidden. */
+  const [excludedCount, setExcludedCount] = useState(0)
+  /** How many rows are actually mounted — the rest arrive as you scroll. */
+  const [renderLimit, setRenderLimit] = useState(ROWS_PER_CHUNK)
+  const verified = useVerifiedEdits(cycleId)
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -157,10 +183,21 @@ export default function SalaryCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, bm, bases, driverBases, driverBanks, globalCal] = await Promise.all([
+    const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, globalCal, hiddenIds] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
       fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(), fetchPayrollCalibration(),
+      fetchHiddenSalaryMemberIds(),
     ])
+
+    // A cycle is generated for everyone on the roster at the time it was run,
+    // so months later it still carries rows for people who have since resigned
+    // — and for anyone an admin has hidden from the salary app. Neither should
+    // be paid, and neither should be counted in the month's totals, so they
+    // come out here rather than being left for the eye to skip. The rows stay
+    // in the database; they are simply not this sheet's business.
+    const hidden = new Set(hiddenIds)
+    const recs = allRecs.filter(r => !r.staff?.is_banned && !hidden.has(r.staff_id))
+    setExcludedCount(allRecs.length - recs.length)
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     // A cycle lists staff and drivers together, but their base-salary and bank
@@ -309,7 +346,7 @@ export default function SalaryCycleDetailPage() {
       const lopHalfDayRs = Math.abs(sumItems(stored, PAYROLL_ITEM_LABELS.lopHalfDay))
       const bonus = sumItems(stored, PAYROLL_ITEM_LABELS.bonus)
       return {
-        c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems,
+        c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems, manualTotal,
         previewItems: undefined as PreviewItem[] | undefined,
         net: salaryNet(r),
       }
@@ -322,7 +359,7 @@ export default function SalaryCycleDetailPage() {
     const lopHalfDayRs = c?.lopHalfDayRs ?? 0
     const bonus = c?.bonusAmount ?? 0
     return {
-      c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems,
+      c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, bonus, manualItems, manualTotal,
       previewItems: [
         { label: PAYROLL_ITEM_LABELS.pf, amount: -pf },
         { label: PAYROLL_ITEM_LABELS.esi, amount: -esi },
@@ -334,6 +371,21 @@ export default function SalaryCycleDetailPage() {
       net: base - pf - esi - lopLateRs - lopLeaveRs - lopHalfDayRs + bonus + manualTotal,
     }
   }, [computedRows, closed])
+
+  /** What a row has had typed into it by hand — see src/lib/salaryEdits.ts. */
+  const editsOf = useCallback(
+    (r: SalaryRecord) => describeRecordEdits(r, baseMap[r.staff_id]?.base_amount),
+    [baseMap],
+  )
+
+  /** Edited rows still waiting to be signed off. Locking is blocked until this is empty. */
+  const unverified = useMemo(
+    () => records.filter(r => {
+      const e = editsOf(r)
+      return e.length > 0 && !verified.isVerified(r.id, editFingerprint(e))
+    }),
+    [records, editsOf, verified],
+  )
 
   /**
    * Every record flattened into what the EPF and ESI monthly returns need.
@@ -420,19 +472,51 @@ export default function SalaryCycleDetailPage() {
         : filters.sort === 'statutory' ? f.pf + f.esi
         : filters.sort === 'leave' ? f.c?.leaveCount ?? 0
         : null
-      return { r, num, name: (r.staff?.full_name ?? '').toLowerCase() }
+      return { r, num, name: (r.staff?.full_name ?? '').toLowerCase(), edited: editsOf(r).length > 0 }
     })
     keyed.sort((a, b) => (
-      a.num === null || b.num === null
+      // Hand-edited rows come first whatever the sort — they are the ones
+      // somebody has to look at before this cycle can be locked, and hunting
+      // for them down a hundred-row sheet is how they get missed.
+      Number(b.edited) - Number(a.edited) ||
+      (a.num === null || b.num === null
         ? a.name.localeCompare(b.name) * dir
         // Equal figures fall back to the name, so the order is stable and
         // readable rather than whatever the filter happened to leave behind.
-        : ((a.num - b.num) || a.name.localeCompare(b.name) * (filters.desc ? -1 : 1)) * dir
+        : ((a.num - b.num) || a.name.localeCompare(b.name) * (filters.desc ? -1 : 1)) * dir)
     ))
     return keyed.map(k => k.r)
-  }, [records, filters, teamMemberIds, bankMap, rowFigures])
+  }, [records, filters, teamMemberIds, bankMap, rowFigures, editsOf])
 
   const narrowed = visibleRecords.length !== records.length
+
+  // Narrowing the list starts the count again — otherwise a search that matches
+  // three people would still be paying to keep ninety rows mounted.
+  useEffect(() => { setRenderLimit(ROWS_PER_CHUNK) }, [filters])
+
+  const mountedRecords = visibleRecords.slice(0, renderLimit)
+  const moreToMount = visibleRecords.length - mountedRecords.length
+
+  // Mount the next chunk as its placeholder comes into view. The margin means
+  // the rows are already there by the time the scroll reaches them, so this
+  // reads as a long sheet rather than as paging.
+  //
+  // The sentinel is tracked as state rather than through a ref, because the
+  // node appears a render *later* than the count that describes it: the
+  // records land while the sheet is still behind its loading spinner, so a
+  // ref-based effect would run once against a null ref and then never again,
+  // its dependency having already settled. Keying off the element itself means
+  // the observer is attached the moment there is something to observe.
+  const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!sentinel || moreToMount <= 0) return
+    const io = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) setRenderLimit(n => n + ROWS_PER_CHUNK) },
+      { rootMargin: '600px' },
+    )
+    io.observe(sentinel)
+    return () => io.disconnect()
+  }, [sentinel, moreToMount])
 
   /**
    * Totals for whatever set is passed in.
@@ -456,16 +540,39 @@ export default function SalaryCycleDetailPage() {
 
   const totals = useMemo(() => totalsOf(visibleRecords), [totalsOf, visibleRecords])
 
-  /** Persist one hand-typed cell, then reload so every dependent figure recomputes. */
+  /**
+   * Re-read one record and slot it back into the sheet.
+   *
+   * Every figure on the row — LOP, PF, ESI, net, the totals strip — is a
+   * `useMemo` over `records`, so replacing the one record recomputes exactly
+   * what changed. The whole-cycle `load()` this replaced re-fetched every
+   * record, every bank account, both base-salary tables and a month of
+   * attendance to refresh a single cell.
+   */
+  const refreshRecord = useCallback(async (recordId: string) => {
+    const fresh = await fetchSalaryRecord(recordId)
+    if (!fresh) return
+    setRecords(prev => prev.map(r => (r.id === recordId ? fresh : r)))
+  }, [])
+
+  /** Persist one hand-typed cell, then refresh just that row. */
   const saveOverride = async (recordId: string, patch: SalaryRecordOverrides) => {
     const res = await updateSalaryRecordOverrides(recordId, patch)
     if (!res.success) { setDisburseMsg(`Could not save: ${res.error}`); return }
     setDisburseMsg(null)
-    await load()
+    await refreshRecord(recordId)
   }
 
   const closeCycle = async () => {
     if (!cycle || busy) return
+    if (unverified.length > 0) {
+      setConfirmAction(null)
+      setDisburseMsg(
+        `${unverified.length} hand-edited row(s) still need checking before this cycle can be locked. ` +
+        'They are at the top of the sheet — tick each one to confirm its figures.',
+      )
+      return
+    }
     setBusy(true); setDisburseMsg(null)
     const recordIds = records.map(r => r.id)
     // Delete-then-insert makes this idempotent: safe to re-run (e.g. after a
@@ -493,6 +600,9 @@ export default function SalaryCycleDetailPage() {
     const cy = await setCycleStatus(cycleId, 'closed')
     if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }
 
+    // The sign-offs were a check on the way to this point; past it the figures
+    // are fixed and the notes have nothing left to say.
+    verified.clear()
     setBusy(false)
     setConfirmAction(null)
     load()
@@ -649,7 +759,9 @@ export default function SalaryCycleDetailPage() {
 
               {records.length === 0 ? (
                 <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
-                  No eligible staff found for this cycle.
+                  {excludedCount > 0
+                    ? `Every record in this cycle belongs to someone who has resigned or is hidden from the salary app (${excludedCount}).`
+                    : 'No eligible staff found for this cycle.'}
                 </div>
               ) : (
                 <>
@@ -692,32 +804,44 @@ export default function SalaryCycleDetailPage() {
                     </div>
                   )}
 
+                  {!closed && unverified.length > 0 && (
+                    <div className="flex items-start gap-1.5 bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] px-2.5 py-2 mb-2 mx-2 sm:mx-0">
+                      <ShieldAlert size={13} className="flex-shrink-0 mt-px" />
+                      <p className="text-[11px] leading-snug">
+                        <span className="font-semibold">{unverified.length} row(s) have hand-typed figures.</span>{' '}
+                        They are pinned to the top of the sheet — tick each one to confirm it before locking the
+                        cycle. Editing a row again clears its tick.
+                      </p>
+                    </div>
+                  )}
+
                   {!closed && (
                     <p className="text-[10px] text-[#A1A1AA] mb-2 px-2 sm:px-0">
                       Figures are a live preview. Lock the cycle to fix PF/ESI/LOP/bonus and enable disbursement.
+                      {excludedCount > 0 && ` ${excludedCount} record(s) hidden — resigned or hidden from the salary app.`}
                     </p>
                   )}
 
                   <div className="overflow-x-auto">
-                    <div className="min-w-[1040px] bg-white border-y sm:border border-[#E4E4E7]">
+                    <div className="min-w-[1000px] bg-white border-y sm:border border-[#E4E4E7]">
                       {/* Header — shares the GRID template with every data row, so labels always sit above their column.
                           Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w wrapper
                           as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
                       <div className="flex items-stretch bg-[#27272A]">
                         <div className="w-1 flex-shrink-0" />
                         <div className={`${GRID} flex-1 min-w-0 px-2.5 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
+                          <span className={`${SHEET.headCell} text-center`} title="Sign-off on hand-edited rows">✓</span>
                           <span className={`${SHEET.headCell} pl-[42px]`}>Staff</span>
                           <span className={`${SHEET.headCell} text-right`}>Base</span>
                           <span className={`${SHEET.headCell} text-center`}>Days</span>
                           <span className={`${SHEET.headCell} text-center`}>Leave</span>
                           <span className={`${SHEET.headCell} text-center`}>Late</span>
                           <span className={`${SHEET.headCell} text-center`}>Half</span>
-                          <span className={`${SHEET.headCell} text-right`}>LOP Leave</span>
-                          <span className={`${SHEET.headCell} text-right`}>LOP Late/HD</span>
-                          <span className={`${SHEET.headCell} text-right`}>LOP Total</span>
+                          <span className={`${SHEET.headCell} text-right`}>LOP</span>
                           <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
                           <span className={`${SHEET.headCell} text-right`}>PF</span>
                           <span className={`${SHEET.headCell} text-right`}>ESI</span>
+                          <span className={`${SHEET.headCell} text-right`}>Other</span>
                           <span className={`${SHEET.headCell} text-center`}>Pts</span>
                           <span className={`${SHEET.headCell} text-right`}>Net pay</span>
                         </div>
@@ -727,12 +851,15 @@ export default function SalaryCycleDetailPage() {
                         <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">
                           No staff match the current search and filters.
                         </div>
-                      ) : visibleRecords.map((r, idx) => {
+                      ) : mountedRecords.map((r, idx) => {
                         const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
                         const key = `payslip-${r.id}`
                         const open = expanded.has(r.id)
-                        const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, previewItems, net } = rowFigures(r)
+                        const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
                         const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
+                        const edits = editsOf(r)
+                        const fingerprint = editFingerprint(edits)
+                        const signedOff = edits.length > 0 && verified.isVerified(r.id, fingerprint)
                         // PF only computes when someone is enrolled *and* has a PF Basic wage,
                         // and a stored override beats both. Say which it is, so a zero in this
                         // column is never a mystery.
@@ -747,7 +874,7 @@ export default function SalaryCycleDetailPage() {
                         const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
                         const hasBank = !!bankMap[r.staff_id]
                         return (
-                          <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
+                          <div key={r.id} className={idx < mountedRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
                             <div
                               role="button"
                               tabIndex={0}
@@ -757,6 +884,20 @@ export default function SalaryCycleDetailPage() {
                             >
                               <div className={`${SHEET.bar} ${bar}`} />
                               <div className={`${GRID} flex-1 min-w-0 px-2.5 py-1.5`} style={{ gridTemplateColumns: GRID_COLS }}>
+                                {/* Empty for a row nothing was typed into: only a
+                                    hand-edited figure needs a person to vouch for it. */}
+                                {edits.length === 0 ? <span /> : (
+                                  <input
+                                    type="checkbox"
+                                    checked={signedOff}
+                                    disabled={closed}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => verified.setVerified(r.id, fingerprint, e.target.checked)}
+                                    title={`Hand-edited: ${edits.join(', ')}. Tick once you have checked these figures — editing the row again clears the tick.`}
+                                    aria-label={`Confirm hand-edited figures for ${r.staff?.full_name ?? 'this row'}`}
+                                    className="w-3 h-3 accent-[#27272A] cursor-pointer disabled:cursor-default"
+                                  />
+                                )}
                                 <div className="flex items-center gap-1 min-w-0">
                                   <ChevronRight size={13} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
                                   <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={22} userId={r.staff_id} />
@@ -819,9 +960,12 @@ export default function SalaryCycleDetailPage() {
                                   align="center" format={n => String(n)} title="Half days — clear to use attendance"
                                   onSave={v => saveOverride(r.id, { half_day_override: v })}
                                 />
-                                <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
-                                <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) (incl. half day)`}>{formatINR(lopLateRs + lopHalfDayRs)}</span>
-                                <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-[#BE123C]' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
+                                <span
+                                  className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-[#BE123C]' : 'text-[#71717A]'}`}
+                                  title={`${(c?.lopFromLeave ?? 0)} day(s) leave · ${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) late/half day`}
+                                >
+                                  {formatINR(lopTotalRs)}
+                                </span>
                                 <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
                                 <EditableCell
                                   value={pf} derived={r.pf_amount_override == null} editable={!closed}
@@ -833,6 +977,21 @@ export default function SalaryCycleDetailPage() {
                                   format={formatINR} title="ESI — clear to use the computed figure"
                                   onSave={v => saveOverride(r.id, { esi_amount_override: v })}
                                 />
+                                {/* Hand-added bonuses and deductions, netted against each
+                                    other — the one column on the sheet that is nobody's
+                                    formula. Open the row to see what makes it up. */}
+                                <span
+                                  className={`text-right text-[11px] tabular-nums ${
+                                    manualTotal > 0 ? 'text-[#15803D] font-semibold'
+                                      : manualTotal < 0 ? 'text-[#BE123C] font-semibold'
+                                      : 'text-[#A1A1AA]'
+                                  }`}
+                                  title={manualItems.length === 0
+                                    ? 'No manual bonuses or deductions on this row'
+                                    : manualItems.map(i => `${i.label}: ${formatINR(Number(i.amount))}`).join('\n')}
+                                >
+                                  {manualTotal === 0 ? '—' : `${manualTotal > 0 ? '+' : '−'}${formatINR(Math.abs(manualTotal))}`}
+                                </span>
                                 <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-[#15803D]' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
                                 <span className="text-right text-[13px] font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
                               </div>
@@ -850,7 +1009,7 @@ export default function SalaryCycleDetailPage() {
                                 </div>
                                 <SalaryRecordItemsEditor
                                   record={r}
-                                  onChanged={load}
+                                  onChanged={() => refreshRecord(r.id)}
                                   previewItems={previewItems}
                                   items={closed ? (r.items ?? []) : manualItems}
                                   net={net}
@@ -866,6 +1025,13 @@ export default function SalaryCycleDetailPage() {
                           </div>
                         )
                       })}
+
+                      {moreToMount > 0 && (
+                        <div ref={setSentinel} className="flex items-center justify-center gap-2 px-4 py-3 text-[11px] text-[#A1A1AA]">
+                          <span className="spinner-sm" aria-hidden />
+                          Loading {moreToMount} more row{moreToMount === 1 ? '' : 's'}…
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
