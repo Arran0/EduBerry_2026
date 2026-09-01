@@ -77,7 +77,7 @@ function ModeBadge({ mode, className }: { mode: ScriptMode; className?: string }
   if (mode === 'normal') return null
   return (
     <span
-      className={`pointer-events-none select-none text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8] ${className ?? ''}`}
+      className={`pointer-events-none select-none text-[10px] font-semibold px-1.5 py-0.5 bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8] ${className ?? ''}`}
       title={mode === 'sup' ? 'Superscript mode — Ctrl/Cmd+. to exit' : 'Subscript mode — Ctrl/Cmd+, to exit'}
     >
       {MODE_BADGE[mode]}

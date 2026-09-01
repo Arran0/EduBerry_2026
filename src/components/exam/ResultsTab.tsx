@@ -85,11 +85,11 @@ export default function ResultsTab({
     return (
       <div className="space-y-2">
         <Skeleton className="h-4 w-3/4 mb-4" />
-        <Skeleton className="h-11 w-full rounded-md mb-3" />
+        <Skeleton className="h-9 w-full mb-3" />
         <div className={EXAM.listWrap}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-2">
-              <Skeleton className="w-8 h-8 rounded-md shrink-0" />
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+              <Skeleton className="w-8 h-8 shrink-0" />
               <div className="flex-1 space-y-1.5">
                 <Skeleton className="h-3.5 w-1/3" />
                 <Skeleton className="h-2.5 w-1/4" />
@@ -107,13 +107,14 @@ export default function ResultsTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#71717A] flex items-center gap-2">
-        <Link2 size={15} className="text-[#B8983C] shrink-0" /> Push graded results into a classroom as an assessment. Only students in both the exam and the classroom get a mark.
+      <p className="flex items-start gap-2 text-[11px] leading-relaxed text-[#8A8578]">
+        <Link2 size={14} className="mt-px text-[#B8983C] shrink-0" />
+        Push graded results into a classroom as an assessment. Only students in both the exam and the classroom get a mark.
       </p>
 
       {!exam.results_published && (
-        <div className="flex items-center gap-2 text-xs text-[#9C7F2C] bg-[#F4F2EC] border border-[#E7E2D8] rounded-lg px-3 py-2">
-          <Lock size={13} className="shrink-0" /> Tip: finish grading before linking — only graded students are included.
+        <div className="flex items-start gap-2 border border-[#E7E2D8] bg-[#F4F2EC] px-3 py-2 text-[11px] leading-relaxed text-[#9C7F2C]">
+          <Lock size={13} className="mt-px shrink-0" /> Finish grading before linking — only graded students are included.
         </div>
       )}
 
@@ -127,15 +128,15 @@ export default function ResultsTab({
           onSelect={addClassroom}
           getKey={c => c.id}
           placeholder="Type a classroom name or subject…"
-          className="flex items-center gap-2 border border-[#E4E1D8] rounded-md px-3 py-2 bg-white focus-within:border-[#B8983C] transition-colors"
+          className="flex items-center gap-2 h-9 border border-[#E4E1D8] px-3 bg-white focus-within:border-[#B8983C] transition-colors"
           renderSuggestion={(c, active) => (
-            <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
-              <div className="w-8 h-8 rounded-md bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center shrink-0">
+            <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#FAF9F6]' : 'hover:bg-[#FAF9F6]'}`}>
+              <div className="w-8 h-8 bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center shrink-0">
                 <GraduationCap size={15} className="text-[#B8983C]" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#27272A] truncate">{c.title}</p>
-                {c.subject && <p className="text-xs text-[#A1A1AA] truncate">{c.subject}</p>}
+                <p className="text-sm font-medium text-[#18181B] truncate">{c.title}</p>
+                {c.subject && <p className="text-[11px] text-[#A8A29A] truncate">{c.subject}</p>}
               </div>
             </div>
           )}
@@ -146,9 +147,9 @@ export default function ResultsTab({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selected.map(c => (
-            <span key={c.id} className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-md bg-[#1C1C1F] text-white text-xs font-medium">
+            <span key={c.id} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 bg-[#18181B] text-white text-[11px] font-semibold uppercase tracking-[0.06em]">
               {c.title}
-              <button onClick={() => removeClassroom(c.id)} className="rounded-full p-0.5 hover:bg-white/20 transition-colors" title="Remove">
+              <button onClick={() => removeClassroom(c.id)} className="h-5 w-5 flex items-center justify-center hover:bg-white/20 transition-colors" title="Remove">
                 <X size={12} />
               </button>
             </span>
@@ -163,14 +164,16 @@ export default function ResultsTab({
           <div className={EXAM.listWrap}>
             {linkedClassrooms.map(c => (
               <div key={c.id} className={EXAM.listRow}>
-                <div className="w-8 h-8 rounded-md bg-white border border-[#E4E1D8] flex items-center justify-center shrink-0">
-                  <GraduationCap size={15} className="text-[#71717A]" />
+                <div className="w-8 h-8 bg-[#FAF9F6] border border-[#E4E1D8] flex items-center justify-center shrink-0">
+                  <GraduationCap size={15} className="text-[#8A8578]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-[#27272A] truncate">{c.title}</p>
-                  {c.subject && <p className="text-xs text-[#A1A1AA] truncate">{c.subject}</p>}
+                  <p className="text-sm font-medium text-[#18181B] truncate">{c.title}</p>
+                  {c.subject && <p className="text-[11px] text-[#A8A29A] truncate">{c.subject}</p>}
                 </div>
-                <span className="text-xs text-emerald-500 flex items-center gap-1 shrink-0"><CheckCircle2 size={12} /> Linked</span>
+                <span className="shrink-0 inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                  <CheckCircle2 size={11} /> Linked
+                </span>
               </div>
             ))}
           </div>

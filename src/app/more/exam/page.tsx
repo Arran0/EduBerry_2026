@@ -144,13 +144,13 @@ export default function ExamPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => router.push('/more/exam/pyq')}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 border border-white/25 text-sm font-semibold text-white backdrop-blur-sm hover:bg-white/25 active:scale-[0.97] transition-all"
+                className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 bg-white/15 border border-white/25 text-xs font-semibold uppercase tracking-[0.06em] text-white backdrop-blur-sm hover:bg-white/25 active:scale-[0.98] transition-colors"
               >
                 <Library size={15} /> PYQ
               </button>
               <button
                 onClick={() => setShowNew(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] active:scale-[0.97] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.6),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-[#B8983C] border border-[#B8983C] text-white text-xs font-semibold uppercase tracking-[0.06em] hover:bg-[#9C7F2C] active:scale-[0.98] transition-colors"
               >
                 <Plus size={16} /> New Exam
               </button>
@@ -184,13 +184,13 @@ export default function ExamPage() {
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search title or subject"
                 aria-label="Search exams"
-                className="w-full h-full bg-white border border-[#E4E1D8] rounded-2xl pl-9 pr-8 py-2.5 text-sm text-[#27272A] placeholder:text-[#A8A29A] shadow-[0_1px_2px_rgba(28,28,31,0.04)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
+                className="w-full h-full bg-white border border-[#E4E1D8] pl-9 pr-8 py-2.5 text-sm text-[#18181B] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-1 focus:ring-[#B8983C]/25 transition-colors"
               />
               {query && (
                 <button
                   onClick={() => setQuery('')}
                   aria-label="Clear search"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-[#A8A29A] hover:text-[#27272A] hover:bg-[#F4F4F5] transition-colors"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-[#A8A29A] hover:text-[#27272A] hover:bg-[#F4F4F5] transition-colors"
                 >
                   <X size={14} />
                 </button>
@@ -203,7 +203,7 @@ export default function ExamPage() {
             <ExamRowListSkeleton rows={8} />
           ) : empty ? (
             <FadeIn>
-              <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
+              <div className={`${EXAM.card} p-10 text-center`}>
                 <div className={`w-14 h-14 mx-auto mb-3.5 ${EXAM.iconTile}`}>
                   <FileText size={24} className="text-[#D4BC6A]" strokeWidth={1.6} />
                 </div>
@@ -293,7 +293,7 @@ function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacher
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="font-semibold text-sm text-[#18181B] tracking-[-0.01em] truncate">{exam.title}</span>
             {badge && (
-              <span className="text-[10px] px-1.5 py-px rounded bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-bold uppercase tracking-wide shrink-0">{badge}</span>
+              <span className="text-[10px] px-1.5 py-px bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8] font-bold uppercase tracking-wide shrink-0">{badge}</span>
             )}
             {exam.immediate_results && <ImmediateResultsChip compact />}
             {showPhase && <span className="shrink-0"><ExamPhaseChip phase={exam.phase} compact /></span>}
@@ -317,9 +317,9 @@ function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacher
 
       {/* Graded */}
       <div className="hidden md:flex items-center gap-2">
-        <div className="h-1.5 flex-1 rounded-full bg-[#EDEAE2] overflow-hidden">
+        <div className="h-1.5 flex-1 bg-[#EDEAE2] overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full transition-all duration-500"
             style={{ width: `${pct}%`, background: complete ? '#16a34a' : 'linear-gradient(90deg,#B8983C,#D4BC6A)' }}
           />
         </div>
@@ -331,11 +331,11 @@ function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacher
       {/* Actions */}
       <div className="hidden md:flex items-center justify-end gap-0.5">
         {exam.isOwner && (
-          <button onClick={onEdit} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#EDEAE2] rounded-lg transition-colors" title="Edit exam">
+          <button onClick={onEdit} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#EDEAE2] transition-colors" title="Edit exam">
             <Pencil size={14} />
           </button>
         )}
-        <button onClick={onOpen} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#EDEAE2] rounded-lg transition-all group-hover:translate-x-0.5" title="Open exam">
+        <button onClick={onOpen} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#EDEAE2] transition-all group-hover:translate-x-0.5" title="Open exam">
           <ChevronRight size={15} />
         </button>
       </div>
@@ -343,11 +343,11 @@ function TeacherExamRow({ exam, showPhase, onOpen, onEdit }: { exam: ExamTeacher
       {/* Actions, phone */}
       <div className="flex md:hidden items-center gap-0.5 shrink-0">
         {exam.isOwner && (
-          <button onClick={onEdit} className="p-1.5 text-[#A1A1AA] active:text-[#27272A] rounded-lg" title="Edit exam">
+          <button onClick={onEdit} className="p-1.5 text-[#A1A1AA] active:text-[#27272A]" title="Edit exam">
             <Pencil size={14} />
           </button>
         )}
-        <button onClick={onOpen} className="p-1.5 text-[#A1A1AA] active:text-[#27272A] rounded-lg" title="Open exam">
+        <button onClick={onOpen} className="p-1.5 text-[#A1A1AA] active:text-[#27272A]" title="Open exam">
           <ChevronRight size={15} />
         </button>
       </div>
@@ -396,18 +396,18 @@ function StudentExamRow({ exam, onTake, onReview }: { exam: ExamStudentSummary; 
   )
 
   const action = exam.canReview ? (
-    <button onClick={onReview} className="w-full px-2.5 py-1.5 rounded-lg bg-[#1C1C1F] text-white text-xs font-semibold hover:bg-black active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all">
+    <button onClick={onReview} className="w-full px-2.5 py-1.5 bg-[#1C1C1F] text-white text-xs font-semibold hover:bg-black active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all">
       Review
     </button>
   ) : canAttempt ? (
     <button
       onClick={onTake}
-      className="w-full px-2.5 py-1.5 rounded-lg bg-[#B8983C] text-white text-xs font-semibold hover:bg-[#9C7F2C] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition-all"
+      className="w-full px-2.5 py-1.5 bg-[#B8983C] text-white text-xs font-semibold hover:bg-[#9C7F2C] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition-all"
     >
       {sub?.status === 'in_progress' ? 'Resume' : 'Start'}
     </button>
   ) : (
-    <span className="block w-full text-center px-2.5 py-1.5 rounded-lg bg-[#F2F0EA] text-[#A1A1AA] text-xs font-medium">
+    <span className="block w-full text-center px-2.5 py-1.5 bg-[#F2F0EA] text-[#A1A1AA] text-xs font-medium">
       {handedIn ? 'Sent' : exam.phase === 'scheduled' ? 'Soon' : 'Closed'}
     </span>
   )

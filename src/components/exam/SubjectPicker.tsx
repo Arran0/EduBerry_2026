@@ -5,7 +5,7 @@ import { Check, Search } from 'lucide-react'
 import { CBSE_SUBJECTS, searchSubjects } from '@/lib/cbseSubjects'
 
 const field =
-  'w-full bg-white border border-[#E4E1D8] rounded-md pl-9 pr-3 py-2 text-sm text-[#27272A] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all'
+  'w-full h-9 bg-white border border-[#E4E1D8] pl-9 pr-3 text-sm text-[#18181B] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-1 focus:ring-[#B8983C]/25 transition-colors'
 
 /**
  * Subject combobox with smart search over the official CBSE subject list.
@@ -54,7 +54,7 @@ export default function SubjectPicker({
       />
 
       {open && (matches.length > 0 || isCustom) && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-[#E4E1D8] rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-20 mt-1 w-full bg-white border border-[#E4E1D8] shadow-lg overflow-hidden">
           {matches.map(s => {
             const selected = s.toLowerCase() === trimmed.toLowerCase()
             return (

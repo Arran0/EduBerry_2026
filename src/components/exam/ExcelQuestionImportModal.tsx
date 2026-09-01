@@ -333,12 +333,12 @@ export default function ExcelQuestionImportModal({
           exit={{ y: '100%', opacity: 0.6 }}
           transition={{ type: 'tween', duration: 0.36, ease: [0.32, 0.72, 0, 1] }}
           onClick={e => e.stopPropagation()}
-          className="bg-white w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl rounded-t-lg sm:rounded-lg overflow-hidden"
+          className="bg-white w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
         >
           {/* Header */}
           <div className="flex-shrink-0 bg-gradient-to-br from-[#27272A] to-[#18181B] px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-md bg-white/10 ring-1 ring-inset ring-[#B8983C]/70 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 bg-white/10 ring-1 ring-inset ring-[#B8983C]/70 flex items-center justify-center shrink-0">
                 <FileSpreadsheet size={17} className="text-[#D4BC6A]" />
               </div>
               <div>
@@ -346,7 +346,7 @@ export default function ExcelQuestionImportModal({
                 <p className="text-[11px] text-[#A1A1AA]">{cfg.label} mode &middot; {cfg.allowedKinds.map(k => QUESTION_KINDS[k].label).join(', ')}</p>
               </div>
             </div>
-            <button onClick={handleClose} className="p-2 text-[#A1A1AA] hover:text-white hover:bg-white/10 rounded-md transition-colors">
+            <button onClick={handleClose} className="h-8 w-8 flex items-center justify-center text-[#A1A1AA] hover:text-white hover:bg-white/10 transition-colors">
               <X size={18} />
             </button>
           </div>
@@ -364,10 +364,10 @@ export default function ExcelQuestionImportModal({
             ) : (
               <>
                 <div
-                  className="border-2 border-dashed border-[#E4E1D8] hover:border-[#B8983C] rounded-lg p-6 text-center cursor-pointer transition-colors bg-white"
+                  className="border-2 border-dashed border-[#E4E1D8] hover:border-[#B8983C] p-6 text-center cursor-pointer transition-colors bg-white"
                   onClick={() => fileRef.current?.click()}
                 >
-                  <div className="w-10 h-10 border border-[#E4E1D8] bg-[#F4F2EC] rounded-md flex items-center justify-center mx-auto mb-3">
+                  <div className="w-10 h-10 border border-[#E4E1D8] bg-[#F4F2EC] flex items-center justify-center mx-auto mb-3">
                     <Upload size={18} className="text-[#8A8578]" />
                   </div>
                   {fileName ? (
@@ -401,17 +401,17 @@ export default function ExcelQuestionImportModal({
             {rows.length > 0 && !result && (
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="px-2.5 py-1 bg-white border border-[#E4E1D8] text-[#52525B] font-medium rounded-md">
+                  <span className="px-2.5 py-1 bg-white border border-[#E4E1D8] text-[#52525B] font-medium">
                     {validRows.length} ready to import
                   </span>
                   {invalidRows.length > 0 && (
-                    <span className="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-700 font-medium rounded-md">
+                    <span className="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-700 font-medium">
                       {invalidRows.length} invalid &middot; skipped
                     </span>
                   )}
                 </div>
 
-                <div className="border border-[#E4E1D8] overflow-hidden rounded-lg">
+                <div className="border border-[#E4E1D8] overflow-hidden">
                   <div className="max-h-64 overflow-y-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-[#27272A] sticky top-0">
@@ -453,7 +453,7 @@ export default function ExcelQuestionImportModal({
           <div className="flex items-center justify-between px-5 py-4 border-t border-[#F0EEE7] bg-white flex-shrink-0">
             <button
               onClick={handleClose}
-              className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-1.5 hover:bg-[#F4F4F5] rounded-md transition-colors"
+              className="h-8 px-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#8A8578] hover:text-[#18181B] hover:bg-[#FAF9F6] transition-colors"
             >
               {result ? 'Close' : 'Cancel'}
             </button>

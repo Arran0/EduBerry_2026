@@ -23,11 +23,10 @@ export interface MiniNavItem {
 }
 
 /**
- * A compact segmented navigation bar. Items are spread evenly across the full
- * width of their container (each is `flex-1`), giving the Apple-style segmented
- * control used across the admin spaces: a recessed track with a single raised
- * pill riding over it. Works both as a tab switcher (pass `active`) and as a
- * cross-page navigation row.
+ * A square segmented control: one hairline-bordered track, tabs divided by
+ * hairlines rather than gaps, and the active tab filled with ink and railed
+ * in gold along its bottom edge. Works both as a tab switcher (pass `active`)
+ * and as a cross-page navigation row.
  */
 export default function MiniNav({
   items,
@@ -37,26 +36,26 @@ export default function MiniNav({
   className?: string
 }) {
   return (
-    <div
-      className={`flex gap-1 rounded-lg border border-[#E4E1D8] bg-[#F2F0EA] p-1 shadow-[inset_0_1px_2px_rgba(28,28,31,0.05)] ${className}`}
-    >
-      {items.map(it => (
+    <div className={`flex border border-[#E4E1D8] bg-[#FAF9F6] ${className}`}>
+      {items.map((it, i) => (
         <button
           key={it.id}
           onClick={it.onClick}
           disabled={it.disabled}
           title={it.title}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 h-10 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+            i > 0 ? 'border-l border-[#E4E1D8]' : ''
+          } ${
             it.active
-              ? 'bg-gradient-to-b from-[#3A3A3E] to-[#1C1C1F] text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-inset ring-[#B8983C]/40'
-              : 'text-[#71717A] hover:bg-white/70 hover:text-[#27272A]'
+              ? 'bg-[#18181B] text-white shadow-[inset_0_-2px_0_#B8983C]'
+              : 'text-[#71717A] hover:bg-white hover:text-[#18181B]'
           }`}
         >
           {it.icon}
           <span className="truncate">{it.label}</span>
           {it.badge !== undefined && it.badge !== '' && (
             <span
-              className={`ml-0.5 rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums leading-[1.4] ${
+              className={`ml-0.5 px-1.5 py-px text-[10px] font-bold tabular-nums leading-[1.4] ${
                 it.active ? 'bg-white/15 text-[#E8DCB4]' : 'bg-[#E4E1D8] text-[#8A8578]'
               }`}
             >

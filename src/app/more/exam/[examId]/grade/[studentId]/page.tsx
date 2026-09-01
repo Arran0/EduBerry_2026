@@ -123,28 +123,31 @@ export default function GradeSubmissionPage() {
       <div data-page-theme="exam">
         <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-            <button onClick={() => router.push(`/more/exam/${examId}`)} className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 -ml-3 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] mb-4 transition-colors">
-              <ChevronLeft size={16} /> Back to Exam
+            <button onClick={() => router.push(`/more/exam/${examId}`)} className={`${EXAM.ghostBtnSm} mb-4`}>
+              <ChevronLeft size={14} /> Back to Exam
             </button>
 
             {loading ? (
               <GradeSkeleton />
             ) : !exam || !isStaffRole(profile.role) ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Not available.</div>
+              <div className={`${EXAM.card} p-10 text-center text-[#71717A]`}>Not available.</div>
             ) : !submission ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>
+              <div className={`${EXAM.card} p-10 text-center text-[#71717A]`}>
                 {student?.full_name ?? 'This student'} has not attempted this exam.
               </div>
             ) : (
               <>
-                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-[#FDFCF9]/85 backdrop-blur border-b border-[#EAE7DF] flex items-center justify-between gap-3">
+                <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-5 bg-[#FDFCF9]/90 backdrop-blur border-b border-[#E4E1D8] flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <h1 className="font-display text-xl font-bold text-[#18181B] truncate">{student?.full_name}</h1>
-                    <p className="text-xs text-[#A1A1AA] truncate">{exam.title}</p>
+                    <p className={EXAM.eyebrow}>Grading</p>
+                    <h1 className="font-display text-xl font-bold text-[#18181B] truncate mt-0.5">{student?.full_name}</h1>
+                    <p className="text-[11px] text-[#A8A29A] truncate">{exam.title}</p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-lg font-bold text-[#18181B] tabular-nums">{Math.round(runningTotal * 100) / 100}<span className="text-[#A1A1AA] text-sm">/{maxTotal}</span></div>
-                    <div className="text-[11px] text-[#A1A1AA]">running total</div>
+                  <div className="text-right shrink-0 border-l border-[#E4E1D8] pl-3">
+                    <p className={EXAM.label}>Running total</p>
+                    <div className="mt-1 font-display text-xl font-bold leading-none text-[#18181B] tabular-nums">
+                      {Math.round(runningTotal * 100) / 100}<span className="text-[#A8A29A] text-sm">/{maxTotal}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -158,16 +161,16 @@ export default function GradeSubmissionPage() {
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.28, delay: Math.min(idx * 0.04, 0.3), ease: [0.22, 0.61, 0.36, 1] }}
-                        className={`${EXAM.card} shadow-sm p-4`}
+                        className={`${EXAM.card} p-4`}
                       >
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <p className="text-sm font-medium text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
-                          <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A]">{q.marks} marks</span>
+                          <span className="shrink-0 border border-[#E4E1D8] bg-[#FAF9F6] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#52525B] tabular-nums">{q.marks} marks</span>
                         </div>
 
                         {q.image_url && <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} className="mb-2" />}
 
-                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-md px-3 py-2 mb-2">
+                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] px-3 py-2 mb-2">
                           <span className="text-xs text-[#A1A1AA]">Answer: </span>{renderResponse(q, ans?.response ?? null)}
                         </div>
 
@@ -196,7 +199,7 @@ export default function GradeSubmissionPage() {
                                 value={edits[q.id]?.marks ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: e.target.value, remark: prev[q.id]?.remark ?? '' } }))}
                                 placeholder="0"
-                                className="w-20 bg-white border border-[#E4E1D8] rounded-md px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
+                                className="w-20 h-8 bg-white border border-[#E4E1D8] px-2 text-sm tabular-nums text-[#18181B] focus:outline-none focus:border-[#B8983C] focus:ring-1 focus:ring-[#B8983C]/25 transition-colors"
                               />
                               <span className="text-xs text-[#A1A1AA]">/ {q.marks}</span>
                               <input
@@ -204,9 +207,9 @@ export default function GradeSubmissionPage() {
                                 value={edits[q.id]?.remark ?? ''}
                                 onChange={e => setEdits(prev => ({ ...prev, [q.id]: { marks: prev[q.id]?.marks ?? '', remark: e.target.value } }))}
                                 placeholder="Remark (optional)"
-                                className="flex-1 bg-white border border-[#E4E1D8] rounded-md px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/15 transition-all"
+                                className="flex-1 h-8 bg-white border border-[#E4E1D8] px-2 text-sm text-[#18181B] placeholder:text-[#A8A29A] focus:outline-none focus:border-[#B8983C] focus:ring-1 focus:ring-[#B8983C]/25 transition-colors"
                               />
-                              <button onClick={() => handleSaveManual(q)} disabled={locked || savingId === q.id} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#1C1C1F] hover:bg-black text-white text-xs disabled:opacity-60 transition-colors">
+                              <button onClick={() => handleSaveManual(q)} disabled={locked || savingId === q.id} className={EXAM.darkBtnSm}>
                                 {savingId === q.id ? <Loader2 size={13} className="animate-spin" /> : savedId === q.id ? <Check size={13} /> : 'Save'}
                               </button>
                             </div>
@@ -223,7 +226,7 @@ export default function GradeSubmissionPage() {
                       <Lock size={13} /> Results published — grading is locked
                     </span>
                   )}
-                  <button onClick={handleFinalize} disabled={locked || finalizing} className="inline-flex items-center gap-2 px-6 py-3 rounded-md bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
+                  <button onClick={handleFinalize} disabled={locked || finalizing} className={EXAM.goldBtnLg}>
                     {finalizing ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Finalize grading
                   </button>
@@ -245,14 +248,14 @@ function GradeSkeleton() {
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-3 w-28" />
         </div>
-        <Skeleton className="h-10 w-16 rounded-lg" />
+        <Skeleton className="h-10 w-16" />
       </div>
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={`${EXAM.card} shadow-sm p-4 space-y-2`}>
+          <div key={i} className={`${EXAM.card} p-4 space-y-2`}>
             <Skeleton className="h-3.5 w-3/4" />
-            <Skeleton className="h-8 w-full rounded-lg" />
-            <Skeleton className="h-7 w-1/2 rounded-lg" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-7 w-1/2" />
           </div>
         ))}
       </div>

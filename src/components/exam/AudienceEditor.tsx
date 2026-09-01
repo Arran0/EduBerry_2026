@@ -58,16 +58,16 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
+          <h3 className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]"><Users size={13} /> Classes</h3>
           <div className="flex flex-wrap gap-2">
             {value.homerooms.map(hr => (
-              <span key={hr.id} className="px-2.5 py-1 rounded-md bg-[#F4F2EC] text-[#9C7F2C] text-sm border border-[#E7E2D8]">{hr.name}</span>
+              <span key={hr.id} className="inline-flex items-center h-6 px-2 border border-[#E7E2D8] bg-[#F4F2EC] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#9C7F2C]">{hr.name}</span>
             ))}
             {value.homerooms.length === 0 && <span className="text-xs text-[#A1A1AA]">None</span>}
           </div>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><UserPlus size={15} /> Individual students</h3>
+          <h3 className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]"><UserPlus size={13} /> Individual students</h3>
           <div className="space-y-1.5">
             {value.students.map(s => (
               <div key={s.id} className="flex items-center gap-2 py-1">

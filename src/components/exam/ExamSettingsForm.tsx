@@ -4,7 +4,7 @@ import React from 'react'
 import { CreateExamInput, Exam } from '@/lib/exam'
 import { ExamMode, listExamModes, getExamMode } from '@/lib/examScoring'
 import SubjectPicker from '@/components/exam/SubjectPicker'
-import { EXAM } from '@/components/exam/examUi'
+import { EXAM, SectionBand } from '@/components/exam/examUi'
 
 // Local form state — strings for inputs, converted on save.
 export interface SettingsState {
@@ -96,7 +96,28 @@ export function settingsError(s: SettingsState): string | null {
 }
 
 const field = EXAM.field
-const label = EXAM.fieldLabel
+
+/** One labelled control in the settings grid. `span` widens it on desktop. */
+function Field({
+  label: text,
+  hint,
+  span = 1,
+  children,
+}: {
+  label: string
+  hint?: string
+  span?: 1 | 2 | 3
+  children: React.ReactNode
+}) {
+  const spanCls = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
+  return (
+    <div className={spanCls}>
+      <label className={EXAM.fieldLabel}>{text}</label>
+      {children}
+      {hint && <p className={EXAM.hint}>{hint}</p>}
+    </div>
+  )
+}
 
 export function ExamSettingsForm({
   value,
@@ -114,41 +135,31 @@ export function ExamSettingsForm({
   const error = settingsError(value)
 
   return (
-    <div className={`${EXAM.card} shadow-sm p-5 space-y-5`}>
-      {/* Basics */}
-      <div className="space-y-3">
-        <p className={EXAM.sectionLabel}>Basics</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
-            <label className={label}>Title *</label>
-            <input className={field} value={value.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Physics Unit Test 1" />
-          </div>
-          <div>
-            <label className={label}>Grade</label>
-            <input className={field} type="number" value={value.grade} onChange={e => set({ grade: e.target.value })} placeholder="11" />
-          </div>
-        </div>
-        <div>
-          <label className={label}>Description</label>
-          <textarea className={field} rows={2} value={value.description} onChange={e => set({ description: e.target.value })} placeholder="Optional instructions" />
-        </div>
+    <div className={EXAM.card}>
+      {/* Identity */}
+      <SectionBand label="Paper" hint="What this exam is" />
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
+        <Field label="Title *" span={2}>
+          <input className={field} value={value.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Physics Unit Test 1" />
+        </Field>
+        <Field label="Grade">
+          <input className={field} type="number" value={value.grade} onChange={e => set({ grade: e.target.value })} placeholder="11" />
+        </Field>
+        <Field label="Subject" span={2}>
+          <SubjectPicker value={value.subject} onChange={v => set({ subject: v })} />
+        </Field>
+        <Field label="Duration" hint="Minutes from the moment a student starts.">
+          <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
+        </Field>
+        <Field label="Instructions" span={3} hint="Shown to students before they begin. Optional.">
+          <textarea className={EXAM.textarea} rows={2} value={value.description} onChange={e => set({ description: e.target.value })} placeholder="Optional instructions" />
+        </Field>
       </div>
 
-      {/* Classification */}
-      <div className="space-y-3">
-        <p className={EXAM.sectionLabel}>Classification</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
-            <label className={label}>Subject</label>
-            <SubjectPicker value={value.subject} onChange={v => set({ subject: v })} />
-          </div>
-          <div>
-            <label className={label}>Duration (min)</label>
-            <input className={field} type="number" value={value.duration_minutes} onChange={e => set({ duration_minutes: e.target.value })} placeholder="60" />
-          </div>
-        </div>
-        <div>
-          <label className={label}>Exam mode</label>
+      {/* Scoring */}
+      <SectionBand label="Scoring" hint="How answers earn marks" />
+      <div className="p-4">
+        <Field label="Exam mode" hint={mode.description}>
           <select
             className={field}
             value={value.exam_mode}
@@ -158,66 +169,66 @@ export function ExamSettingsForm({
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
-          <p className="mt-1.5 text-[11px] text-[#A1A1AA] leading-relaxed">{mode.description}</p>
-        </div>
+        </Field>
       </div>
 
-      {/* Schedule */}
-      <div className="space-y-3">
-        <p className={EXAM.sectionLabel}>Schedule</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={label}>Opens at</label>
-            <input className={field} type="datetime-local" value={value.start_at} onChange={e => set({ start_at: e.target.value })} />
-          </div>
-          <div>
-            <label className={label}>Due at</label>
-            <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
-            <p className="mt-1 text-[11px] text-[#A1A1AA]">Date &amp; time this exam is due.</p>
-          </div>
-        </div>
+      {/* Window */}
+      <SectionBand label="Window" hint="When students may attempt" />
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+        <Field label="Opens at" hint="Before this, the exam is visible but locked.">
+          <input className={field} type="datetime-local" value={value.start_at} onChange={e => set({ start_at: e.target.value })} />
+        </Field>
+        <Field label="Due at" hint="Last moment an attempt can be handed in.">
+          <input className={field} type="datetime-local" value={value.due_at} onChange={e => set({ due_at: e.target.value })} />
+        </Field>
       </div>
 
       {/* Results */}
-      <div className="space-y-3">
-        <p className={EXAM.sectionLabel}>Results</p>
-        <div className="rounded-lg border border-[#E7E2D8] bg-[#FCFBF7] p-4 space-y-3">
-          <label className={`flex items-start gap-3 ${blocker ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-            <input
-              type="checkbox"
-              className="mt-0.5 w-4 h-4 accent-[#B8983C] disabled:opacity-40"
-              checked={value.immediate_results && !blocker}
-              disabled={!!blocker}
-              onChange={e => set({ immediate_results: e.target.checked })}
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-[#27272A]">Publish results immediately</span>
-              <span className="block text-[11px] text-[#A1A1AA] leading-relaxed mt-0.5">
-                {blocker
-                  ? blocker
-                  : 'Each student sees their score and answer review the moment they submit. Available because every question is auto-graded.'}
-              </span>
+      <SectionBand label="Results" hint="When scores reach students" />
+      <div className="p-4 space-y-3">
+        <label
+          className={`flex items-start gap-3 border p-3 transition-colors ${
+            blocker
+              ? 'cursor-not-allowed border-[#E4E1D8] bg-[#FAF9F6]'
+              : value.immediate_results
+                ? 'cursor-pointer border-[#B8983C] bg-[#F4F2EC]'
+                : 'cursor-pointer border-[#E4E1D8] hover:border-[#B8983C]'
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 w-4 h-4 accent-[#B8983C] disabled:opacity-40"
+            checked={value.immediate_results && !blocker}
+            disabled={!!blocker}
+            onChange={e => set({ immediate_results: e.target.checked })}
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-bold uppercase tracking-[0.08em] text-[#18181B]">Publish results immediately</span>
+            <span className="block text-[11px] text-[#8A8578] leading-relaxed mt-1">
+              {blocker
+                ? blocker
+                : 'Each student sees their score and answer review the moment they submit. Available because every question is auto-graded.'}
             </span>
-          </label>
+          </span>
+        </label>
 
-          {value.immediate_results && !blocker && (
-            <div>
-              <label className={label}>Auto-close the exam at *</label>
-              <input
-                className={field}
-                type="datetime-local"
-                value={value.auto_close_at}
-                onChange={e => set({ auto_close_at: e.target.value })}
-              />
-              <p className="mt-1 text-[11px] text-[#A1A1AA] leading-relaxed">
-                At this moment the exam publishes results to everyone, marks no-shows absent and moves to the
-                Closed section. Exams without immediate results close when you publish results.
-              </p>
-            </div>
-          )}
+        {value.immediate_results && !blocker && (
+          <div className="sm:max-w-sm">
+            <label className={EXAM.fieldLabel}>Auto-close the exam at *</label>
+            <input
+              className={field}
+              type="datetime-local"
+              value={value.auto_close_at}
+              onChange={e => set({ auto_close_at: e.target.value })}
+            />
+            <p className={EXAM.hint}>
+              At this moment the exam publishes results to everyone, marks no-shows absent and closes.
+              Exams without immediate results close when you publish results.
+            </p>
+          </div>
+        )}
 
-          {error && <p className="text-[11px] text-rose-500">{error}</p>}
-        </div>
+        {error && <p className={EXAM.error}>{error}</p>}
       </div>
     </div>
   )

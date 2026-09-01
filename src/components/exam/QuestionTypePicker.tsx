@@ -52,7 +52,7 @@ export default function QuestionTypePicker({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0.6 }}
             transition={{ type: 'tween', duration: 0.36, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-white rounded-t-lg sm:rounded-lg shadow-2xl w-full sm:max-w-md"
+            className="bg-white border border-[#E4E1D8] shadow-2xl w-full sm:max-w-md"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#EAE7DF]">
@@ -60,7 +60,7 @@ export default function QuestionTypePicker({
                 <h2 className="text-base font-bold text-[#18181B]">What type of question?</h2>
                 <p className="text-xs text-[#A1A1AA]">{cfg.label} mode</p>
               </div>
-              <button onClick={onClose} className="p-2 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-md transition-colors">
+              <button onClick={onClose} className="h-8 w-8 flex items-center justify-center text-[#A8A29A] hover:text-[#18181B] hover:bg-[#FAF9F6] transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -73,9 +73,9 @@ export default function QuestionTypePicker({
                   <button
                     key={kind}
                     onClick={() => onPick(kind)}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-[#E4E1D8] hover:border-[#B8983C] hover:bg-[#F4F2EC]/60 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-3 border border-[#E4E1D8] hover:border-[#B8983C] hover:bg-[#FAF9F6] transition-colors text-left"
                   >
-                    <div className="w-10 h-10 rounded-md bg-[#F4F2EC] text-[#B8983C] flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 border border-[#E7E2D8] bg-[#F4F2EC] text-[#B8983C] flex items-center justify-center shrink-0">
                       {KIND_ICON[kind]}
                     </div>
                     <div className="min-w-0">
