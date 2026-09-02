@@ -1,5 +1,6 @@
 import { supabase, UserProfile, isMissingRelation } from './supabase'
 import type { CycleTally } from './salary'
+import { fetchHiddenSalaryMemberIds } from './salary'
 
 // Driver Payroll data layer — a cycle-based payroll for bus drivers that mirrors
 // the staff Salary Manager (src/lib/salary.ts) on the driver_payroll_* tables:
@@ -175,11 +176,23 @@ export async function fetchDriverCycleRecordCounts(): Promise<Record<string, num
 }
 
 /** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+/**
+ * Per-cycle record and paid-record counts for the legacy driver-only cycles
+ * (see PayCyclesSection.tsx — new cycles fold drivers into the unified
+ * salary_records instead, so this only ever covers cycles created before
+ * that). Excludes resigned drivers and anyone since hidden from the salary
+ * app, the same way fetchCycleTallies does for the unified cycles.
+ */
 export async function fetchDriverCycleTallies(): Promise<Record<string, CycleTally>> {
-  const { data, error } = await supabase.from('driver_payroll_records').select('cycle_id, status')
+  const [{ data, error }, hiddenIds] = await Promise.all([
+    supabase.from('driver_payroll_records').select('cycle_id, status, driver_id, driver:profiles!driver_id(is_banned)'),
+    fetchHiddenSalaryMemberIds(),
+  ])
   if (error) { console.error('fetchDriverCycleTallies failed:', error); return {} }
+  const hidden = new Set(hiddenIds)
   const out: Record<string, CycleTally> = {}
-  for (const r of (data || []) as { cycle_id: string; status: DriverSalaryStatus }[]) {
+  for (const r of (data || []) as unknown as { cycle_id: string; status: DriverSalaryStatus; driver_id: string; driver: { is_banned?: boolean } | null }[]) {
+    if (r.driver?.is_banned || hidden.has(r.driver_id)) continue
     const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
     t.total += 1
     if (r.status === 'paid') t.paid += 1

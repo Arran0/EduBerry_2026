@@ -38,7 +38,7 @@ const STATUS_CHIP: Record<string, string> = {
 // reuse the staff salary statement builders (payslip / register / certificate / etc.).
 function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   return {
-    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id,
+    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id, support_staff_id: null,
     base_amount: r.base_amount, status: r.status,
     payout_status: r.payout_status, payout_reference: r.payout_reference,
     notes: r.notes, created_at: r.created_at, updated_at: r.updated_at,

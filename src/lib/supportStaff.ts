@@ -1,4 +1,5 @@
 import { supabase, isMissingRelation } from './supabase'
+import type { StaffAttendanceRecord, StaffAttendanceStatus } from './attendance'
 
 // ============================================
 // Support staff — ground-level cleaning / maintenance staff
@@ -392,4 +393,138 @@ export function groupSupportRecordsByStaff(
   }
   for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date))
   return map
+}
+
+/**
+ * Adapts one support-staff attendance row into the shape
+ * computeStaffAttendanceStats (src/lib/payroll.ts) and deriveDayStatus /
+ * computeMonthlyStats (src/lib/attendance.ts) already know how to reduce
+ * over — so a support staff member's pay-cycle figures (working days,
+ * leave, late, half day) come from the exact same math as everyone else's
+ * pay cycle, rather than a second copy of it. Every geofence/check-in field,
+ * which that math never reads, is filled with null; there is no punch to
+ * report because support staff never punch in.
+ */
+export function supportRecordToStaffShape(r: SupportAttendanceRecord): StaffAttendanceRecord {
+  return {
+    id: r.id,
+    staff_id: r.support_staff_id,
+    date: r.date,
+    status: r.status as StaffAttendanceStatus,
+    check_in_time: null, check_in_lat: null, check_in_lng: null, check_in_accuracy: null,
+    check_in_distance_m: null, geofence_passed: null,
+    check_out_time: null, check_out_lat: null, check_out_lng: null, check_out_accuracy: null,
+    check_out_distance_m: null,
+    check_in_time_2: null, check_in_lat_2: null, check_in_lng_2: null, check_in_accuracy_2: null,
+    check_in_distance_m_2: null,
+    check_out_time_2: null, check_out_lat_2: null, check_out_lng_2: null, check_out_accuracy_2: null,
+    check_out_distance_m_2: null,
+    leave_application_id: null, marked_by: r.marked_by, remarks: r.remarks,
+    created_at: r.created_at ?? '', updated_at: r.updated_at ?? '',
+    check_in_verdict: null, check_out_verdict: null, check_in_verdict_2: null, check_out_verdict_2: null,
+    forgotten_checkout_ack_at: null,
+  }
+}
+
+// ============================================
+// Salary — base config & bank account
+// --------------------------------------------
+// Mirrors staff_salary_base / staff_bank_accounts (src/lib/salary.ts) and
+// driver_payroll_base / driver_bank_accounts (src/lib/driverSalary.ts, bus.ts)
+// column-for-column, in their own tables: support staff have no profiles row
+// to hang a foreign key off, so they can't share the staff/driver tables —
+// see supabase-migrations/add_support_staff_salary.sql.
+// ============================================
+
+export interface SupportStaffSalaryBase {
+  id: string
+  support_staff_id: string
+  base_amount: number
+  active: boolean
+  notes: string | null
+  pf_basic: number | null
+  pf_applicable: boolean
+  esi_override: boolean | null
+  uan: string | null
+  esi_ip_number: string | null
+  eps_applicable: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SupportStaffBankAccount {
+  id: string
+  support_staff_id: string
+  account_holder_name: string
+  account_number: string
+  ifsc: string
+  bank_name: string | null
+  payout_fund_account_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Every support staff base-salary row, ordered by nothing in particular — callers key it by support_staff_id. */
+export async function fetchSupportStaffSalaryBases(): Promise<SupportStaffSalaryBase[]> {
+  const { data, error } = await supabase.from('support_staff_salary_base').select('*')
+  if (error) {
+    if (isMissingRelation(error)) return []
+    console.error('fetchSupportStaffSalaryBases failed:', error)
+    return []
+  }
+  return (data as SupportStaffSalaryBase[]) || []
+}
+
+export interface SupportStaffBaseSalaryInput {
+  support_staff_id: string
+  base_amount: number
+  active?: boolean
+  notes?: string | null
+  pf_basic?: number | null
+  pf_applicable?: boolean
+  esi_override?: boolean | null
+  uan?: string | null
+  esi_ip_number?: string | null
+  eps_applicable?: boolean
+}
+
+export async function upsertSupportStaffSalaryBase(
+  input: SupportStaffBaseSalaryInput,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('support_staff_salary_base')
+    .upsert({ ...input, created_by: user?.id }, { onConflict: 'support_staff_id' })
+  if (error) { console.error('upsertSupportStaffSalaryBase failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** All support staff bank accounts (admin). */
+export async function fetchSupportStaffBankAccounts(): Promise<SupportStaffBankAccount[]> {
+  const { data, error } = await supabase.from('support_staff_bank_accounts').select('*')
+  if (error) {
+    if (isMissingRelation(error)) return []
+    console.error('fetchSupportStaffBankAccounts failed:', error)
+    return []
+  }
+  return (data as SupportStaffBankAccount[]) || []
+}
+
+export interface SupportStaffBankAccountInput {
+  support_staff_id: string
+  account_holder_name: string
+  account_number: string
+  ifsc: string
+  bank_name?: string | null
+}
+
+export async function upsertSupportStaffBankAccount(
+  input: SupportStaffBankAccountInput,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('support_staff_bank_accounts')
+    .upsert({ ...input, created_by: user?.id }, { onConflict: 'support_staff_id' })
+  if (error) { console.error('upsertSupportStaffBankAccount failed:', error); return { success: false, error: error.message } }
+  return { success: true }
 }

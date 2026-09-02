@@ -13,6 +13,10 @@ import {
   fetchBaseSalaries, fetchEligibleStaff, fetchHiddenSalaryMemberIds, fetchMonthlyBonusPoints,
 } from './salary'
 import { DriverSalaryBase, fetchDriverBaseSalaries, fetchEligibleDrivers } from './driverSalary'
+import {
+  SupportStaffSalaryBase, fetchSupportStaffSalaryBases, fetchSupportStaff,
+  fetchSupportAttendanceRange, supportRecordToStaffShape,
+} from './supportStaff'
 
 // ============================================
 // Month-scoped payroll figures for the Salary Manager dashboard
@@ -248,7 +252,7 @@ export interface PayrollContext {
   today: string
 }
 
-function toBaseConfig(b: StaffSalaryBase | DriverSalaryBase): PayrollBaseConfig {
+function toBaseConfig(b: StaffSalaryBase | DriverSalaryBase | SupportStaffSalaryBase): PayrollBaseConfig {
   return {
     base_amount: Number(b.base_amount) || 0,
     pf_basic: b.pf_basic,
@@ -265,12 +269,13 @@ function toBaseConfig(b: StaffSalaryBase | DriverSalaryBase): PayrollBaseConfig 
  * stepping back a month costs the month's own data and nothing else.
  */
 export async function fetchPayrollContext(today?: string | null): Promise<PayrollContext> {
-  const [calibration, staffBases, driverBases] = await Promise.all([
-    fetchPayrollCalibration(), fetchBaseSalaries(), fetchDriverBaseSalaries(),
+  const [calibration, staffBases, driverBases, supportBases] = await Promise.all([
+    fetchPayrollCalibration(), fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchSupportStaffSalaryBases(),
   ])
   const baseMap: Record<string, PayrollBaseConfig> = {}
   for (const b of staffBases) baseMap[b.staff_id] = toBaseConfig(b)
   for (const b of driverBases) baseMap[b.driver_id] = toBaseConfig(b)
+  for (const b of supportBases) baseMap[b.support_staff_id] = toBaseConfig(b)
   return {
     calibration,
     baseMap,
@@ -309,7 +314,7 @@ interface RawRecord {
 }
 
 const RECORD_COLUMNS =
-  'id, cycle_id, staff_id, base_amount, status, working_days_override, leave_override, ' +
+  'id, cycle_id, staff_id, support_staff_id, base_amount, status, working_days_override, leave_override, ' +
   'late_override, half_day_override, pf_amount_override, esi_amount_override'
 
 // These four throw rather than logging and returning [], which is what the
@@ -337,14 +342,14 @@ async function fetchDriverCyclesFor(year: number, month: number): Promise<RawCyc
   return (data ?? []) as unknown as RawCycle[]
 }
 
-async function fetchStaffCycleRecords(cycleIds: string[]): Promise<(RawRecord & { staff_id: string })[]> {
+async function fetchStaffCycleRecords(cycleIds: string[]): Promise<(RawRecord & { staff_id: string | null; support_staff_id: string | null })[]> {
   if (cycleIds.length === 0) return []
   const { data, error } = await supabase
     .from('salary_records')
     .select(`${RECORD_COLUMNS}, items:salary_record_items(label, amount)`)
     .in('cycle_id', cycleIds)
   if (error) throw new Error(`Could not read salary_records: ${error.message}`)
-  return (data ?? []) as unknown as (RawRecord & { staff_id: string })[]
+  return (data ?? []) as unknown as (RawRecord & { staff_id: string | null; support_staff_id: string | null })[]
 }
 
 async function fetchDriverCycleRecordsFor(cycleIds: string[]): Promise<(RawRecord & { driver_id: string })[]> {
@@ -370,25 +375,44 @@ interface MonthAttendance {
   bonusPoints: Record<string, number>
 }
 
+/**
+ * Support staff have no profiles row, so they read attendance from a
+ * different table (support_staff_attendance) and never earn task-manager
+ * bonus points (no account to earn them with). `staffIds` are real profile
+ * ids (staff/drivers); `supportStaffIds` are support_staff ids — mirrors the
+ * same split the cycle detail page makes in its own `load()`.
+ */
 async function fetchMonthAttendance(
-  personIds: string[], year: number, month: number,
+  staffIds: string[], supportStaffIds: string[], year: number, month: number,
 ): Promise<MonthAttendance> {
-  if (personIds.length === 0) {
+  if (staffIds.length === 0 && supportStaffIds.length === 0) {
     return { records: [], holidays: [], nonWorkingDays: [], deltas: new Map(), bonusPoints: {} }
   }
-  const [records, holidays, nonWorkingDays, bonusPoints] = await Promise.all([
-    fetchMonthlyAttendanceRecords(personIds, year, month),
+  const [staffRecords, holidays, nonWorkingDays, bonusPoints, supportRecords] = await Promise.all([
+    fetchMonthlyAttendanceRecords(staffIds, year, month),
     fetchHolidays(year, month),
     fetchNonWorkingDays(year, month),
-    fetchMonthlyBonusPoints(personIds, year, month),
+    fetchMonthlyBonusPoints(staffIds, year, month),
+    supportStaffIds.length > 0
+      ? fetchSupportAttendanceRange(
+          `${year}-${String(month).padStart(2, '0')}-01`,
+          `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth(year, month)).padStart(2, '0')}`,
+        )
+      : Promise.resolve([]),
   ])
+  const supportIdSet = new Set(supportStaffIds)
+  const records = [
+    ...staffRecords,
+    ...supportRecords.filter(r => supportIdSet.has(r.support_staff_id)).map(supportRecordToStaffShape),
+  ]
   // Grace minutes are resolved per date off the fetched rows, so this one
   // cannot start until they land.
   //
   // It is tempting to skip this whenever no grace is configured — but a zero
   // grace still excuses a day that is exactly zero minutes late, and this
   // school's August has 131 of them. Skipping would quietly move the money.
-  const deltas = await fetchAttendanceTimingDeltas(records)
+  // Support staff never punch, so they carry no timing deltas either.
+  const deltas = await fetchAttendanceTimingDeltas(staffRecords)
   return { records, holidays, nonWorkingDays, deltas, bonusPoints }
 }
 
@@ -445,13 +469,14 @@ function computeLive(
 // ============================================
 
 async function project(year: number, month: number, ctx: PayrollContext): Promise<MonthlyPayrollStats> {
-  const [staff, allDrivers, hiddenIds] = await Promise.all([
-    fetchEligibleStaff(), fetchEligibleDrivers(), fetchHiddenSalaryMemberIds(),
+  const [staff, allDrivers, allSupport, hiddenIds] = await Promise.all([
+    fetchEligibleStaff(), fetchEligibleDrivers(), fetchSupportStaff({ activeOnly: true }), fetchHiddenSalaryMemberIds(),
   ])
   const hidden = new Set(hiddenIds)
   const onPayroll = new Set<string>([
     ...staff.map(p => p.id),
     ...allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned).map(d => d.id),
+    ...allSupport.filter(s => !hidden.has(s.id)).map(s => s.id),
   ])
   const active = Object.entries(ctx.baseMap)
     .filter(([id, b]) => b.active && b.base_amount > 0 && onPayroll.has(id))
@@ -506,7 +531,11 @@ export async function fetchMonthlyPayrollStats(
   ])
 
   const records: (CycleRecordLike & { cycle_id: string })[] = [
-    ...staffRows.map(r => ({ ...r, person_id: r.staff_id })),
+    // A staff-cycle row is for a profile (staff_id) or a support staff member
+    // (support_staff_id) — never both, never neither (see salary_records'
+    // person-check constraint) — so this is exactly recordPersonId's logic,
+    // just against the raw untyped row shape this module reads.
+    ...staffRows.map(r => ({ ...r, person_id: (r.staff_id ?? r.support_staff_id) as string })),
     ...driverRows.map(r => ({ ...r, person_id: r.driver_id })),
   ]
 
@@ -520,8 +549,10 @@ export async function fetchMonthlyPayrollStats(
   // Attendance is only needed while at least one cycle is still open — a fully
   // locked month is read entirely off its stored items.
   const anyOpen = cycles.some(c => c.status !== 'closed')
+  const supportStaffIds = [...new Set(staffRows.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))]
+  const profileIds = [...new Set(records.map(r => r.person_id).filter(id => !supportStaffIds.includes(id)))]
   const attendance = anyOpen
-    ? await fetchMonthAttendance([...new Set(records.map(r => r.person_id))], year, month)
+    ? await fetchMonthAttendance(profileIds, supportStaffIds, year, month)
     : { records: [], holidays: [], nonWorkingDays: [], deltas: new Map(), bonusPoints: {} }
 
   const groups: CycleGroup[] = cycles.map(cycle => {
@@ -593,7 +624,9 @@ export async function buildStaffPayslips(
 
   const [globalCalibration, ...attendances] = await Promise.all([
     fetchPayrollCalibration(),
-    ...[...openPeriods.values()].map(p => fetchMonthAttendance([staffId], p.year, p.month)),
+    // Always a real profile (self-view is only ever reached by someone with a
+    // login), so nothing is passed for the support-staff side of the split.
+    ...[...openPeriods.values()].map(p => fetchMonthAttendance([staffId], [], p.year, p.month)),
   ])
   const attendanceByPeriod = new Map<string, MonthAttendance>()
   ;[...openPeriods.keys()].forEach((key, i) => attendanceByPeriod.set(key, attendances[i]))

@@ -35,9 +35,14 @@ import {
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
+  recordPersonId, recordPersonName, recordPersonLeft,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
+import {
+  fetchSupportStaffSalaryBases, fetchSupportStaffBankAccounts, fetchSupportAttendanceRange,
+  supportRecordToStaffShape,
+} from '@/lib/supportStaff'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays, fetchAttendanceTimingDeltas,
   recomputePendingAttendance,
@@ -190,28 +195,36 @@ export default function SalaryCycleDetailPage() {
     // from statuses the attendance app has already stopped agreeing with. Costs
     // one read of an empty queue when nothing has changed.
     await recomputePendingAttendance()
-    const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, globalCal, hiddenIds] = await Promise.all([
+    const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, supportBases, supportBanks, globalCal, hiddenIds] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
-      fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(), fetchPayrollCalibration(),
-      fetchHiddenSalaryMemberIds(),
+      fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(),
+      fetchSupportStaffSalaryBases(), fetchSupportStaffBankAccounts(),
+      fetchPayrollCalibration(), fetchHiddenSalaryMemberIds(),
     ])
 
     // A cycle is generated for everyone on the roster at the time it was run,
     // so months later it still carries rows for people who have since resigned
-    // — and for anyone an admin has hidden from the salary app. Neither should
-    // be paid, and neither should be counted in the month's totals, so they
-    // come out here rather than being left for the eye to skip. The rows stay
-    // in the database; they are simply not this sheet's business.
+    // (staff/driver) or left (support staff) — and for anyone an admin has
+    // hidden from the salary app. Neither should be paid, and neither should be
+    // counted in the month's totals, so they come out here rather than being
+    // left for the eye to skip. The rows stay in the database; they are simply
+    // not this sheet's business.
     const hidden = new Set(hiddenIds)
-    const recs = allRecs.filter(r => !r.staff?.is_banned && !hidden.has(r.staff_id))
+    const recs = allRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
     setExcludedCount(allRecs.length - recs.length)
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
-    // A cycle lists staff and drivers together, but their base-salary and bank
-    // details live in separate tables. Key both by profile id so every row can
-    // look its own up without caring which kind of person it is.
+    // A cycle lists staff, drivers and support staff together, but their
+    // base-salary and bank details live in separate tables (support staff have
+    // no profiles row to key a shared table off — see
+    // supabase-migrations/add_support_staff_salary.sql). Key all three by
+    // whichever id applies (recordPersonId) so every row can look its own up
+    // without caring which kind of person it is.
     for (const a of driverBanks) {
       bm[a.driver_id] = { ...a, staff_id: a.driver_id } as unknown as StaffBankAccount
+    }
+    for (const a of supportBanks) {
+      bm[a.support_staff_id] = { ...a, staff_id: a.support_staff_id } as unknown as StaffBankAccount
     }
     setBankMap(bm)
 
@@ -220,19 +233,46 @@ export default function SalaryCycleDetailPage() {
     for (const b of driverBases) {
       bMap[b.driver_id] = { ...b, staff_id: b.driver_id } as unknown as StaffSalaryBase
     }
+    for (const b of supportBases) {
+      bMap[b.support_staff_id] = { ...b, staff_id: b.support_staff_id } as unknown as StaffSalaryBase
+    }
     setBaseMap(bMap)
 
     if (c && recs.length > 0) {
-      const staffIds = recs.map(r => r.staff_id)
-      const [attRecs, hols, nonWorking, bonusPts] = await Promise.all([
+      // Profile-backed people (staff/drivers) vs. support staff read attendance
+      // from two different tables — split the roster so each fetch only asks
+      // its own table, then merge into one StaffAttendanceRecord-shaped array
+      // (see supportRecordToStaffShape) so every downstream figure — working
+      // days, leave, late, half day, LOP, PF, ESI — is computed by the exact
+      // same math for everyone on the sheet, regardless of which table they
+      // actually live in. Task-manager bonus points are profile-only: support
+      // staff have no account to earn them with, so that fetch stays scoped to
+      // staffIds.
+      const staffIds = recs.filter(r => r.staff_id).map(r => r.staff_id as string)
+      const supportStaffIds = new Set(recs.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))
+      const [staffAttRecs, hols, nonWorking, bonusPts, supportAttRecs] = await Promise.all([
         fetchMonthlyAttendanceRecords(staffIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
         fetchNonWorkingDays(c.period_year, c.period_month),
         fetchMonthlyBonusPoints(staffIds, c.period_year, c.period_month),
+        supportStaffIds.size > 0
+          ? fetchSupportAttendanceRange(
+              `${c.period_year}-${String(c.period_month).padStart(2, '0')}-01`,
+              `${c.period_year}-${String(c.period_month).padStart(2, '0')}-${String(daysInMonth(c.period_year, c.period_month)).padStart(2, '0')}`,
+            )
+          : Promise.resolve([]),
       ])
+      const attRecs = [
+        ...staffAttRecs,
+        ...supportAttRecs
+          .filter(r => supportStaffIds.has(r.support_staff_id))
+          .map(supportRecordToStaffShape),
+      ]
       // Grace-minute lateness/earliness needs the fetched records first — the
       // day-timing cutoffs are resolved per date, not per staff, from them.
-      const deltas = await fetchAttendanceTimingDeltas(attRecs)
+      // Support staff never punch, so they carry no timing deltas — grace
+      // periods simply never apply to their Late/Half Day counts.
+      const deltas = await fetchAttendanceTimingDeltas(staffAttRecs)
       setAttendanceRecords(attRecs); setHolidays(hols); setNonWorkingDays(nonWorking)
       setTimingDeltas(deltas); setBonusPoints(bonusPts)
     } else {
@@ -275,9 +315,10 @@ export default function SalaryCycleDetailPage() {
       timingDeltas,
     }
     for (const r of records) {
-      const base = baseMap[r.staff_id]
+      const personId = recordPersonId(r)
+      const base = baseMap[personId]
       const derived = computeStaffAttendanceStats(
-        r.staff_id, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+        personId, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
         schoolToday ?? undefined, grace,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
@@ -304,7 +345,7 @@ export default function SalaryCycleDetailPage() {
         lopHalfDayRs: Math.round(row.lopFromHalfDay * row.salaryPerDay),
         pf: r.pf_amount_override ?? row.pf,
         esi: r.esi_amount_override ?? row.esi,
-        bonusPoints: bonusPoints[r.staff_id] ?? 0, bonusAmount: bonusAmounts[r.staff_id] ?? 0,
+        bonusPoints: bonusPoints[personId] ?? 0, bonusAmount: bonusAmounts[personId] ?? 0,
       }
     }
     return out
@@ -381,7 +422,7 @@ export default function SalaryCycleDetailPage() {
 
   /** What a row has had typed into it by hand — see src/lib/salaryEdits.ts. */
   const editsOf = useCallback(
-    (r: SalaryRecord) => describeRecordEdits(r, baseMap[r.staff_id]?.base_amount),
+    (r: SalaryRecord) => describeRecordEdits(r, baseMap[recordPersonId(r)]?.base_amount),
     [baseMap],
   )
 
@@ -405,15 +446,15 @@ export default function SalaryCycleDetailPage() {
    */
   const statutoryRows = useMemo<StatutorySourceRow[]>(() => records.map(r => {
     const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs } = rowFigures(r)
-    const cfg = baseMap[r.staff_id]
+    const cfg = baseMap[recordPersonId(r)]
     const baseAmount = Number(r.base_amount) || 0
     const perDay = c?.salaryPerDay ?? 0
     const lopDays = closed && perDay > 0
       ? (lopLateRs + lopLeaveRs + lopHalfDayRs) / perDay
       : (c?.lopFromLate ?? 0) + (c?.lopFromLeave ?? 0) + (c?.lopFromHalfDay ?? 0)
     return {
-      staffId: r.staff_id,
-      name: r.staff?.full_name ?? '',
+      staffId: recordPersonId(r),
+      name: recordPersonName(r),
       baseAmount,
       workingDays: c?.workingDays ?? 0,
       lopDays,
@@ -453,13 +494,15 @@ export default function SalaryCycleDetailPage() {
     const q = filters.search.trim().toLowerCase()
     const out = records.filter(r => {
       if (q) {
-        const hay = `${r.staff?.full_name ?? ''} ${r.staff?.email ?? ''}`.toLowerCase()
+        const hay = `${recordPersonName(r)} ${r.staff?.email ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
-      if (teamMemberIds && !teamMemberIds.has(r.staff_id)) return false
+      // Support staff are on no team, so a team filter naturally excludes
+      // them — r.staff_id is null for those rows and never in the set.
+      if (teamMemberIds && !(r.staff_id && teamMemberIds.has(r.staff_id))) return false
       if (filters.pay === 'paid' && r.status !== 'paid') return false
       if (filters.pay === 'unpaid' && r.status === 'paid') return false
-      if (filters.noBank && bankMap[r.staff_id]) return false
+      if (filters.noBank && bankMap[recordPersonId(r)]) return false
       if (filters.withLop) {
         const f = rowFigures(r)
         if (f.lopLateRs + f.lopLeaveRs + f.lopHalfDayRs <= 0) return false
@@ -479,7 +522,7 @@ export default function SalaryCycleDetailPage() {
         : filters.sort === 'statutory' ? f.pf + f.esi
         : filters.sort === 'leave' ? f.c?.leaveCount ?? 0
         : null
-      return { r, num, name: (r.staff?.full_name ?? '').toLowerCase(), edited: editsOf(r).length > 0 }
+      return { r, num, name: recordPersonName(r).toLowerCase(), edited: editsOf(r).length > 0 }
     })
     keyed.sort((a, b) => (
       // Hand-edited rows come first whatever the sort — they are the ones
@@ -767,7 +810,7 @@ export default function SalaryCycleDetailPage() {
               {records.length === 0 ? (
                 <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
                   {excludedCount > 0
-                    ? `Every record in this cycle belongs to someone who has resigned or is hidden from the salary app (${excludedCount}).`
+                    ? `Every record in this cycle belongs to someone who has since left or is hidden from the salary app (${excludedCount}).`
                     : 'No eligible staff found for this cycle.'}
                 </div>
               ) : (
@@ -825,7 +868,7 @@ export default function SalaryCycleDetailPage() {
                   {!closed && (
                     <p className="text-[10px] text-[#A1A1AA] mb-2 px-2 sm:px-0">
                       Figures are a live preview. Lock the cycle to fix PF/ESI/LOP/bonus and enable disbursement.
-                      {excludedCount > 0 && ` ${excludedCount} record(s) hidden — resigned or hidden from the salary app.`}
+                      {excludedCount > 0 && ` ${excludedCount} record(s) hidden — left or hidden from the salary app.`}
                     </p>
                   )}
 
@@ -859,7 +902,11 @@ export default function SalaryCycleDetailPage() {
                           No staff match the current search and filters.
                         </div>
                       ) : mountedRecords.map((r, idx) => {
-                        const staffLike = r.staff ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role } : undefined
+                        const staffLike = r.staff
+                          ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role }
+                          : r.support_staff
+                            ? { full_name: r.support_staff.full_name, email: null, role: r.support_staff.designation || 'Support Staff' }
+                            : undefined
                         const key = `payslip-${r.id}`
                         const open = expanded.has(r.id)
                         const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
@@ -870,7 +917,7 @@ export default function SalaryCycleDetailPage() {
                         // PF only computes when someone is enrolled *and* has a PF Basic wage,
                         // and a stored override beats both. Say which it is, so a zero in this
                         // column is never a mystery.
-                        const pfCfg = baseMap[r.staff_id]
+                        const pfCfg = baseMap[recordPersonId(r)]
                         const pfWhy = r.pf_amount_override != null
                           ? `Manually set to ${formatINR(pf)} — clear the cell to use the computed figure`
                           : !pfCfg?.pf_applicable
@@ -879,7 +926,7 @@ export default function SalaryCycleDetailPage() {
                               ? 'No PF Basic wage set for this person — add one in Base Salaries'
                               : 'Computed from PF Basic x the PF rate'
                         const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
-                        const hasBank = !!bankMap[r.staff_id]
+                        const hasBank = !!bankMap[recordPersonId(r)]
                         return (
                           <div key={r.id} className={idx < mountedRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
                             <div
@@ -901,16 +948,18 @@ export default function SalaryCycleDetailPage() {
                                     onClick={e => e.stopPropagation()}
                                     onChange={e => verified.setVerified(r.id, fingerprint, e.target.checked)}
                                     title={`Hand-edited: ${edits.join(', ')}. Tick once you have checked these figures — editing the row again clears the tick.`}
-                                    aria-label={`Confirm hand-edited figures for ${r.staff?.full_name ?? 'this row'}`}
+                                    aria-label={`Confirm hand-edited figures for ${recordPersonName(r) || 'this row'}`}
                                     className="w-3 h-3 accent-[#27272A] cursor-pointer disabled:cursor-default"
                                   />
                                 )}
                                 <div className="flex items-center gap-1 min-w-0">
                                   <ChevronRight size={13} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                                  <Avatar avatarUrl={r.staff?.avatar_url} name={r.staff?.full_name ?? '?'} size={22} userId={r.staff_id} />
+                                  <Avatar avatarUrl={r.staff?.avatar_url} name={recordPersonName(r) || '?'} size={22} userId={r.staff_id ?? undefined} />
                                   <div className="min-w-0 flex-1 leading-tight">
-                                    <p className="text-[11px] font-semibold text-[#18181B] truncate">{r.staff?.full_name ?? 'Staff'}</p>
-                                    <p className="text-[9px] text-[#71717A] truncate">{r.staff ? getDisplayRole(r.staff) : ''}</p>
+                                    <p className="text-[11px] font-semibold text-[#18181B] truncate">{recordPersonName(r) || 'Staff'}</p>
+                                    <p className="text-[9px] text-[#71717A] truncate">
+                                      {r.staff ? getDisplayRole(r.staff) : r.support_staff ? (r.support_staff.designation || 'Support Staff') : ''}
+                                    </p>
                                   </div>
                                   {!hasBank && (
                                     <span title="No bank account on file — this row can't be exported for disbursement"
@@ -1008,7 +1057,7 @@ export default function SalaryCycleDetailPage() {
                                 <div className="flex items-center justify-end gap-2 mb-2.5">
                                   <button
                                     disabled={pdfBusy === key}
-                                    onClick={() => openPdf(key, `Payslip — ${r.staff?.full_name ?? 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[r.staff_id]))}
+                                    onClick={() => openPdf(key, `Payslip — ${recordPersonName(r) || 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[recordPersonId(r)]))}
                                     className={SHARP.ghostBtn}
                                   >
                                     <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}

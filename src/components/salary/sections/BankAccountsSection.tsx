@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Bus } from 'lucide-react'
+import { Bus, HardHat } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Column,
@@ -11,6 +11,10 @@ import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, fetchHiddenSalaryMemberIds, upsertBankAccount } from '@/lib/salary'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
+import {
+  SupportStaff, SupportStaffBankAccount,
+  fetchSupportStaff, fetchSupportStaffBankAccounts, upsertSupportStaffBankAccount,
+} from '@/lib/supportStaff'
 
 /**
  * Shared column template for the header and every row. Applied as an inline
@@ -36,13 +40,16 @@ const COLUMNS: Column[] = [
 
 const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
 
-type Kind = 'staff' | 'driver'
-type Account = StaffBankAccount | DriverBankAccount
+type Kind = 'staff' | 'driver' | 'support'
+type Account = StaffBankAccount | DriverBankAccount | SupportStaffBankAccount
+
+/** Just enough to display a row and open its profile card — support staff have no profile at all. */
+type EntryPerson = UserProfile | (SupportStaff & { avatar_url?: undefined })
 
 interface Entry {
   key: string
   kind: Kind
-  person: UserProfile
+  person: EntryPerson
   existing?: Account
 }
 
@@ -80,19 +87,24 @@ export default function BankAccountsSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, staffAccounts, allDrivers, driverAccounts, hiddenIds] = await Promise.all([
-      fetchEligibleStaff(), fetchBankAccounts(), fetchDrivers(), fetchDriverBankAccounts(), fetchHiddenSalaryMemberIds(),
+    const [staff, staffAccounts, allDrivers, driverAccounts, allSupport, supportAccounts, hiddenIds] = await Promise.all([
+      fetchEligibleStaff(), fetchBankAccounts(), fetchDrivers(), fetchDriverBankAccounts(),
+      fetchSupportStaff(), fetchSupportStaffBankAccounts(), fetchHiddenSalaryMemberIds(),
     ])
     const hidden = new Set(hiddenIds)
     const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
+    const support = allSupport.filter(s => !hidden.has(s.id) && s.is_active)
     const staffMap: Record<string, StaffBankAccount> = {}
     for (const a of staffAccounts) staffMap[a.staff_id] = a
     const driverMap: Record<string, DriverBankAccount> = {}
     for (const a of driverAccounts) driverMap[a.driver_id] = a
+    const supportMap: Record<string, SupportStaffBankAccount> = {}
+    for (const a of supportAccounts) supportMap[a.support_staff_id] = a
 
     const merged: Entry[] = [
       ...staff.map(person => ({ key: `staff-${person.id}`, kind: 'staff' as const, person, existing: staffMap[person.id] })),
       ...drivers.map(person => ({ key: `driver-${person.id}`, kind: 'driver' as const, person, existing: driverMap[person.id] })),
+      ...support.map(person => ({ key: `support-${person.id}`, kind: 'support' as const, person, existing: supportMap[person.id] })),
     ].sort((a, b) => a.person.full_name.localeCompare(b.person.full_name))
 
     setEntries(merged)
@@ -128,7 +140,9 @@ export default function BankAccountsSection() {
       }
       const res = entry.kind === 'staff'
         ? await upsertBankAccount({ staff_id: entry.person.id, ...input })
-        : await upsertDriverBankAccount({ driver_id: entry.person.id, ...input })
+        : entry.kind === 'driver'
+          ? await upsertDriverBankAccount({ driver_id: entry.person.id, ...input })
+          : await upsertSupportStaffBankAccount({ support_staff_id: entry.person.id, ...input })
       if (!res.success) return res
     }
     await load()
@@ -154,7 +168,7 @@ export default function BankAccountsSection() {
       <SectionBar
         title="Bank accounts"
         hint={loading
-          ? 'Admin-managed · staff & drivers'
+          ? 'Admin-managed · staff, drivers & support staff'
           : `${onFile} of ${entries.length} on file · admin-managed`}
       />
 
@@ -178,7 +192,7 @@ export default function BankAccountsSection() {
         {loading ? (
           <SheetSkeleton />
         ) : entries.length === 0 ? (
-          <Note>No staff or driver accounts yet.</Note>
+          <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
           <Note>No one matches &quot;{search}&quot;.</Note>
         ) : visible.map(e => (
@@ -208,12 +222,13 @@ function BankRow({ entry, draft, dirty, onChange }: {
   return (
     <SheetRow cols={COLS} accent={accent}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={person.id} />
+        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={kind === 'support' ? undefined : person.id} />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
           <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
             {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
-            {getDisplayRole(person)}
+            {kind === 'support' && <HardHat size={8} className="flex-shrink-0" />}
+            {kind === 'support' ? ((person as SupportStaff).designation || 'Support Staff') : getDisplayRole(person as UserProfile)}
           </p>
         </div>
       </div>

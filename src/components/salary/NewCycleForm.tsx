@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { CalendarRange, AlertCircle } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { Btn, LABEL } from '@/components/salary/ui'
-import { generateSalaryCycle, ensureDriverRecordsInCycle, formatPeriod } from '@/lib/salary'
+import { generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle, formatPeriod } from '@/lib/salary'
 import { defaultPayrollMonth } from '@/lib/salaryStats'
 
 /**
@@ -38,11 +38,16 @@ export default function NewCycleForm({ onClose, onCreated }: {
       setError(res.error ?? 'Failed to create the cycle')
       return
     }
-    // Fill in any drivers the database function didn't add itself, so the
-    // cycle covers everyone even before that migration has been applied.
-    const drivers = await ensureDriverRecordsInCycle(res.cycleId)
+    // Fill in any drivers or support staff the database function didn't add
+    // itself, so the cycle covers everyone even before that migration has
+    // been applied.
+    const [drivers, support] = await Promise.all([
+      ensureDriverRecordsInCycle(res.cycleId),
+      ensureSupportStaffRecordsInCycle(res.cycleId),
+    ])
     setSaving(false)
     if (!drivers.success) { setError(drivers.error ?? 'Cycle created, but drivers could not be added'); return }
+    if (!support.success) { setError(support.error ?? 'Cycle created, but support staff could not be added'); return }
     onCreated()
   }
 
@@ -52,7 +57,7 @@ export default function NewCycleForm({ onClose, onCreated }: {
       size="sm"
       sharp
       title="New pay cycle"
-      subtitle="Staff and bus drivers together"
+      subtitle="Staff, bus drivers & support staff together"
       icon={<CalendarRange size={15} />}
       iconClassName="bg-[#27272A] text-[#B8983C]"
       footer={
@@ -80,7 +85,7 @@ export default function NewCycleForm({ onClose, onCreated }: {
       </div>
 
       <p className="text-[12px] text-[#6B675A] leading-relaxed mt-3">
-        Creates a record for every staff member and bus driver, using their base salary where one is set.
+        Creates a record for every staff member, bus driver and support staff member, using their base salary where one is set.
         Re-running a month only adds records for people who don&apos;t have one yet — nothing already in the
         cycle is touched.
       </p>

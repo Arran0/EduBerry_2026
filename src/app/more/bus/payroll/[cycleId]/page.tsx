@@ -57,7 +57,7 @@ const ADMIN_GOLD = '#B8983C'
 // payroll cycle share the salary cycle's Download Centre + bank CSV.
 function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   return {
-    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id,
+    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id, support_staff_id: null,
     base_amount: r.base_amount, status: r.status,
     payout_status: r.payout_status, payout_reference: r.payout_reference,
     notes: r.notes, created_at: r.created_at, updated_at: r.updated_at,

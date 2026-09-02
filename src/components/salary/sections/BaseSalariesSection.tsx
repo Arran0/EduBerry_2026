@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Bus } from 'lucide-react'
+import { Bus, HardHat } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Column,
@@ -11,6 +11,10 @@ import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, fetchHiddenSalaryMemberIds, upsertBaseSalary } from '@/lib/salary'
 import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries, upsertDriverBaseSalary } from '@/lib/driverSalary'
+import {
+  SupportStaff, SupportStaffSalaryBase,
+  fetchSupportStaff, fetchSupportStaffSalaryBases, upsertSupportStaffSalaryBase,
+} from '@/lib/supportStaff'
 
 /**
  * Shared column template for the header and every row. Applied as an inline
@@ -45,14 +49,17 @@ const COLUMNS: Column[] = [
 const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] tabular-nums text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
 const FLAG = 'ring-1 ring-[#C0392B] border-[#C0392B] placeholder:text-[#C0392B]'
 
-type Kind = 'staff' | 'driver'
-type Base = StaffSalaryBase | DriverSalaryBase
+type Kind = 'staff' | 'driver' | 'support'
+type Base = StaffSalaryBase | DriverSalaryBase | SupportStaffSalaryBase
 type EsiChoice = 'auto' | 'on' | 'off'
+
+/** Just enough to display a row and open its profile card — support staff have no profile at all. */
+type EntryPerson = UserProfile | (SupportStaff & { avatar_url?: undefined })
 
 interface Entry {
   key: string
   kind: Kind
-  person: UserProfile
+  person: EntryPerson
   existing?: Base
 }
 
@@ -108,19 +115,24 @@ export default function BaseSalariesSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, staffBases, allDrivers, driverBases, hiddenIds] = await Promise.all([
-      fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(), fetchHiddenSalaryMemberIds(),
+    const [staff, staffBases, allDrivers, driverBases, allSupport, supportBases, hiddenIds] = await Promise.all([
+      fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(),
+      fetchSupportStaff(), fetchSupportStaffSalaryBases(), fetchHiddenSalaryMemberIds(),
     ])
     const hidden = new Set(hiddenIds)
     const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
+    const support = allSupport.filter(s => !hidden.has(s.id) && s.is_active)
     const staffMap: Record<string, StaffSalaryBase> = {}
     for (const b of staffBases) staffMap[b.staff_id] = b
     const driverMap: Record<string, DriverSalaryBase> = {}
     for (const b of driverBases) driverMap[b.driver_id] = b
+    const supportMap: Record<string, SupportStaffSalaryBase> = {}
+    for (const b of supportBases) supportMap[b.support_staff_id] = b
 
     const merged: Entry[] = [
       ...staff.map(person => ({ key: `staff-${person.id}`, kind: 'staff' as const, person, existing: staffMap[person.id] })),
       ...drivers.map(person => ({ key: `driver-${person.id}`, kind: 'driver' as const, person, existing: driverMap[person.id] })),
+      ...support.map(person => ({ key: `support-${person.id}`, kind: 'support' as const, person, existing: supportMap[person.id] })),
     ].sort((a, b) => a.person.full_name.localeCompare(b.person.full_name))
 
     setEntries(merged)
@@ -153,7 +165,9 @@ export default function BaseSalariesSection() {
       }
       const res = entry.kind === 'staff'
         ? await upsertBaseSalary({ staff_id: entry.person.id, ...input })
-        : await upsertDriverBaseSalary({ driver_id: entry.person.id, ...input })
+        : entry.kind === 'driver'
+          ? await upsertDriverBaseSalary({ driver_id: entry.person.id, ...input })
+          : await upsertSupportStaffSalaryBase({ support_staff_id: entry.person.id, ...input })
       if (!res.success) return res
     }
     await load()
@@ -192,7 +206,7 @@ export default function BaseSalariesSection() {
       <SectionBar
         title="Base salaries"
         hint={loading
-          ? 'Used when running a monthly cycle · staff & drivers'
+          ? 'Used when running a monthly cycle · staff, drivers & support staff'
           : `${warnings.onPayroll} of ${entries.length} on payroll · used when running a cycle`}
       />
 
@@ -221,7 +235,7 @@ export default function BaseSalariesSection() {
         {loading ? (
           <SheetSkeleton />
         ) : entries.length === 0 ? (
-          <Note>No staff or driver accounts yet.</Note>
+          <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
           <Note>No one matches &quot;{search}&quot;.</Note>
         ) : visible.map(e => (
@@ -270,12 +284,13 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   return (
     <SheetRow cols={COLS} accent={accent}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={person.id} />
+        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={kind === 'support' ? undefined : person.id} />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
           <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
             {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
-            {getDisplayRole(person)}
+            {kind === 'support' && <HardHat size={8} className="flex-shrink-0" />}
+            {kind === 'support' ? ((person as SupportStaff).designation || 'Support Staff') : getDisplayRole(person as UserProfile)}
           </p>
         </div>
       </div>

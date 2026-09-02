@@ -110,7 +110,7 @@ export default function PayCyclesSection() {
       <SectionBar
         title="Pay cycles"
         hint={loading
-          ? 'One cycle per month, staff and drivers together'
+          ? 'One cycle per month, staff, drivers & support staff together'
           : `${cycles.length} run · ${openCount} still unlocked`}
         actions={<Btn tone="dark" onClick={() => setShowNew(true)}><Plus size={11} /> New cycle</Btn>}
       />

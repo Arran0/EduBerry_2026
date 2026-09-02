@@ -3,7 +3,7 @@
 // common denominator across Indian bank bulk-upload formats; admins remap
 // columns in their bank tool as needed.
 
-import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod } from '@/lib/salary'
+import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod, recordPersonId, recordPersonName } from '@/lib/salary'
 
 /** Escape a value for CSV (wrap in quotes, double embedded quotes). */
 function csvCell(value: string | number): string {
@@ -72,8 +72,8 @@ export function buildBankDisbursementCsv(
 
   for (const r of records) {
     if (r.status !== 'approved') { notApproved += 1; continue }
-    const bank = bankMap[r.staff_id]
-    if (!bank) { missingBank.push(r.staff?.full_name ?? r.staff_id); continue }
+    const bank = bankMap[recordPersonId(r)]
+    if (!bank) { missingBank.push(recordPersonName(r) || recordPersonId(r)); continue }
     slNo += 1
     rows.push([
       slNo,
@@ -82,7 +82,7 @@ export function buildBankDisbursementCsv(
       bank.bank_name ?? '',
       bank.ifsc,
       salaryNet(r).toFixed(2),
-      `Salary ${period} - ${r.staff?.full_name ?? ''}`.trim(),
+      `Salary ${period} - ${recordPersonName(r)}`.trim(),
       'Savings',
       '',
     ])

@@ -1,4 +1,4 @@
-import { supabase, UserProfile } from './supabase'
+import { supabase, UserProfile, isMissingRelation } from './supabase'
 
 // ============================================
 // Types
@@ -30,10 +30,30 @@ export interface SalaryRecordItem {
   created_at: string
 }
 
+/**
+ * The support-staff shape embedded on a SalaryRecord — just what the salary
+ * app needs to show and file a row, not the full SupportStaff record from
+ * src/lib/supportStaff.ts.
+ */
+export interface SalaryRecordSupportStaff {
+  id: string
+  full_name: string
+  designation: string | null
+  is_active: boolean
+}
+
 export interface SalaryRecord {
   id: string
   cycle_id: string
-  staff_id: string
+  // Exactly one of staff_id / support_staff_id is set — see
+  // supabase-migrations/add_support_staff_salary.sql. Support staff have no
+  // profiles row (no login) to reference, so they carry support_staff_id
+  // instead. Use recordPersonId()/recordPersonName() below rather than
+  // reading staff_id directly wherever "whoever this record is for" is
+  // needed — every base-salary/bank-account/attendance lookup keys off that,
+  // not off staff_id specifically.
+  staff_id: string | null
+  support_staff_id: string | null
   base_amount: number
   status: SalaryStatus
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
@@ -49,8 +69,29 @@ export interface SalaryRecord {
   created_at: string
   updated_at: string
   items?: SalaryRecordItem[]
-  staff?: UserProfile | null     // embedded for admin views
+  staff?: UserProfile | null                       // embedded for admin views (staff & drivers)
+  support_staff?: SalaryRecordSupportStaff | null   // embedded for admin views (support staff)
   cycle?: SalaryCycle | null     // embedded for staff views (month/year)
+}
+
+/** The id this record is actually about, whichever of the two is set. Every
+ *  lookup keyed "by person" (base salary, bank account, attendance, bonus
+ *  points) uses this — never staff_id directly, since a support-staff
+ *  record's staff_id is null. */
+export function recordPersonId(r: Pick<SalaryRecord, 'staff_id' | 'support_staff_id'>): string {
+  return r.staff_id ?? r.support_staff_id ?? ''
+}
+
+/** Display name regardless of which kind of person the record is for. */
+export function recordPersonName(r: Pick<SalaryRecord, 'staff' | 'support_staff'>): string {
+  return r.staff?.full_name ?? r.support_staff?.full_name ?? ''
+}
+
+/** True once the person has left — resigned staff/driver, or support staff marked inactive. */
+export function recordPersonLeft(r: Pick<SalaryRecord, 'staff' | 'support_staff'>): boolean {
+  if (r.staff) return !!r.staff.is_banned
+  if (r.support_staff) return !r.support_staff.is_active
+  return false
 }
 
 /** The pay-cycle columns an admin may type over by hand. */
@@ -213,10 +254,12 @@ export async function fetchCycle(cycleId: string): Promise<SalaryCycle | null> {
 /** All records for a cycle, with items and staff, ordered by staff name. */
 // `is_banned` and `email` ride along because the cycle sheet needs them: a
 // resigned member is dropped from the sheet entirely, and the search box
-// matches on email as well as name.
+// matches on email as well as name. support_staff rides along the same way,
+// for the rows that have no profile at all — see recordPersonId/recordPersonName.
 const CYCLE_RECORD_SELECT =
   '*, items:salary_record_items(*), ' +
-  'staff:profiles!staff_id(id, full_name, email, avatar_url, role, is_non_teaching, display_role, is_banned)'
+  'staff:profiles!staff_id(id, full_name, email, avatar_url, role, is_non_teaching, display_role, is_banned), ' +
+  'support_staff:support_staff!support_staff_id(id, full_name, designation, is_active)'
 
 export async function fetchCycleRecords(cycleId: string): Promise<SalaryRecord[]> {
   const { data, error } = await supabase
@@ -225,7 +268,7 @@ export async function fetchCycleRecords(cycleId: string): Promise<SalaryRecord[]
     .eq('cycle_id', cycleId)
   if (error) { console.error('fetchCycleRecords failed:', error); return [] }
   return ((data as unknown as SalaryRecord[]) || []).sort(
-    (a, b) => (a.staff?.full_name ?? '').localeCompare(b.staff?.full_name ?? ''),
+    (a, b) => recordPersonName(a).localeCompare(recordPersonName(b)),
   )
 }
 
@@ -259,12 +302,26 @@ export async function fetchCycleRecordCounts(): Promise<Record<string, number>> 
 
 export interface CycleTally { total: number; paid: number }
 
-/** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
+/**
+ * Per-cycle record and paid-record counts, so the list can flag fully-disbursed
+ * cycles. A cycle keeps its rows for whoever has since resigned (staff/driver)
+ * or left (support staff), and for anyone since hidden from the salary app —
+ * neither is on payroll any more, so neither is counted here, matching exactly
+ * what the cycle detail page itself excludes from the sheet (see its `load`).
+ */
 export async function fetchCycleTallies(): Promise<Record<string, CycleTally>> {
-  const { data, error } = await supabase.from('salary_records').select('cycle_id, status')
+  const [{ data, error }, hiddenIds] = await Promise.all([
+    supabase
+      .from('salary_records')
+      .select('cycle_id, status, staff_id, support_staff_id, ' +
+        'staff:profiles!staff_id(is_banned), support_staff:support_staff!support_staff_id(is_active)'),
+    fetchHiddenSalaryMemberIds(),
+  ])
   if (error) { console.error('fetchCycleTallies failed:', error); return {} }
+  const hidden = new Set(hiddenIds)
   const out: Record<string, CycleTally> = {}
-  for (const r of (data || []) as { cycle_id: string; status: SalaryStatus }[]) {
+  for (const r of (data ?? []) as unknown as (Pick<SalaryRecord, 'cycle_id' | 'status' | 'staff_id' | 'support_staff_id' | 'staff' | 'support_staff'>)[]) {
+    if (recordPersonLeft(r) || hidden.has(recordPersonId(r))) continue
     const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
     t.total += 1
     if (r.status === 'paid') t.paid += 1
@@ -331,6 +388,52 @@ export async function ensureDriverRecordsInCycle(
 
   const { error } = await supabase.from('salary_records').insert(rows)
   if (error) { console.error('ensureDriverRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  return { success: true, added: rows.length }
+}
+
+/**
+ * Add a record for every active support staff member missing one from this
+ * cycle — the client-side fallback for support staff, exactly mirroring
+ * ensureDriverRecordsInCycle above (see it for why this exists alongside the
+ * generate_salary_cycle RPC doing the same thing server-side).
+ */
+export async function ensureSupportStaffRecordsInCycle(
+  cycleId: string,
+): Promise<{ success: boolean; added?: number; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const [supportRes, basesRes, existingRes] = await Promise.all([
+    supabase.from('support_staff').select('id').eq('is_active', true),
+    supabase.from('support_staff_salary_base').select('support_staff_id, base_amount, active'),
+    supabase.from('salary_records').select('support_staff_id').eq('cycle_id', cycleId).not('support_staff_id', 'is', null),
+  ])
+  if (supportRes.error) {
+    // A school with no support staff module applied yet has no such table —
+    // treat it as "nobody to add" rather than failing the whole cycle run.
+    if (isMissingRelation(supportRes.error)) return { success: true, added: 0 }
+    return { success: false, error: supportRes.error.message }
+  }
+  if (existingRes.error) return { success: false, error: existingRes.error.message }
+
+  const bases = new Map(
+    ((basesRes.data ?? []) as { support_staff_id: string; base_amount: number; active: boolean }[])
+      .map(b => [b.support_staff_id, b]),
+  )
+  const already = new Set(((existingRes.data ?? []) as { support_staff_id: string }[]).map(r => r.support_staff_id))
+
+  const rows = ((supportRes.data ?? []) as { id: string }[])
+    .filter(s => !already.has(s.id) && (bases.get(s.id)?.active ?? true))
+    .map(s => ({
+      cycle_id: cycleId,
+      support_staff_id: s.id,
+      base_amount: bases.get(s.id)?.base_amount ?? 0,
+      created_by: user?.id,
+    }))
+
+  if (rows.length === 0) return { success: true, added: 0 }
+
+  const { error } = await supabase.from('salary_records').insert(rows)
+  if (error) { console.error('ensureSupportStaffRecordsInCycle failed:', error); return { success: false, error: error.message } }
   return { success: true, added: rows.length }
 }
 
