@@ -1274,6 +1274,20 @@ export async function adminMarkStaffAttendance(
   return true
 }
 
+/** Removes a mark, putting the staff member back to "not marked" for that day. */
+export async function clearStaffAttendance(staffId: string, date: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff_attendance_records')
+    .delete()
+    .eq('staff_id', staffId)
+    .eq('date', date)
+  if (error) {
+    console.error('clearStaffAttendance error:', error)
+    return false
+  }
+  return true
+}
+
 // ============================================
 // Geofence Config (site_settings key: 'geofence')
 // ============================================
@@ -2260,6 +2274,29 @@ export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
     .order('full_name', { ascending: true })
   if (error) {
     console.error('fetchAllTrackedStaff error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/**
+ * Drivers, trackable the same way school staff are (not resigned, not
+ * hidden). Drivers have a real login but no self check-in of their own — see
+ * ProtectedLayout, which routes role='driver' straight to /driver and away
+ * from this app entirely — so like ground-level support staff, every row is
+ * set by an admin. Folded into the Support Staff section of the attendance
+ * report rather than getting a self-service flow of its own.
+ */
+export async function fetchTrackedDrivers(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .eq('role', 'driver')
+    .eq('is_banned', false)
+    .eq('attendance_hidden', false)
+    .order('full_name', { ascending: true })
+  if (error) {
+    console.error('fetchTrackedDrivers error:', error)
     return []
   }
   return (data ?? []) as UserProfile[]

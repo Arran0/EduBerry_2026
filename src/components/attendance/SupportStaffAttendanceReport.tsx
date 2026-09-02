@@ -18,19 +18,39 @@ import {
   computeSupportPersonStats,
   groupSupportRecordsByStaff,
 } from '@/lib/supportStaff'
+import {
+  StaffAttendanceRecord,
+  StaffAttendanceStatus,
+  fetchTrackedDrivers,
+  fetchMonthlyAttendanceRecords,
+  adminMarkStaffAttendance,
+  clearStaffAttendance,
+} from '@/lib/attendance'
+import { UserProfile } from '@/lib/supabase'
+import { fetchStaffDetailsMap } from '@/lib/staffDetails'
 
 // ============================================
-// The Support tab of the staff attendance report.
+// The Support Staff tab of the staff attendance report.
 //
-// Support staff carry no phone and have no account, so there is no check-in,
-// no geofence and no "unverified location" here — every row is set by an
-// admin. That also means an unmarked person is genuinely unknown rather than
-// absent, which is why this list never derives Absent the way the staff
-// report does, and why "Not marked" is a first-class count.
+// Two very different kinds of person share this list:
+//   - ground-level support staff (cleaning, maintenance, grounds) — no
+//     account, no login, live in support_staff / support_staff_attendance
+//     (see src/lib/supportStaff.ts)
+//   - drivers — a real profile and login, but no self check-in of their own
+//     (ProtectedLayout routes role='driver' straight to /driver and away
+//     from this app), so their attendance lives in the same
+//     staff_attendance_records table the school-staff side uses, just
+//     admin-marked the same way ground staff are here.
 //
-// These figures cover support staff only. They share no roster, no records
-// and no totals with the regular staff report on the other side of the
-// toggle.
+// Both are folded into one roster because from an admin's point of view they
+// are the same kind of task: nobody here can check themselves in, so every
+// row is set by hand. Statuses are deliberately restricted to the five this
+// tab offers (present/absent/late/half_day/on_leave) for both kinds — no WFH,
+// no exception, since neither concept applies to either group.
+//
+// An unmarked person is NOT derived as absent the way the school-staff report
+// derives it: a missing row means "not marked yet", not "away" — see
+// computeSupportDayStats.
 // ============================================
 
 interface Props {
@@ -43,6 +63,15 @@ interface Props {
   dayOff?: { kind: 'holiday' | 'non_working'; name: string } | null
   refreshKey?: number
   onChanged?: () => void
+}
+
+/** One row in this section, whichever table it actually comes from. */
+interface SectionPerson {
+  id: string
+  kind: 'ground' | 'driver'
+  full_name: string
+  designation: string | null
+  avatar_url?: string | null
 }
 
 const QUICK_SET: SupportAttendanceStatus[] = ['present', 'absent', 'late', 'half_day', 'on_leave']
@@ -59,6 +88,15 @@ const QUICK_ACTIVE: Record<SupportAttendanceStatus, string> = {
   on_leave: 'bg-blue-600 text-white border-blue-600',
 }
 
+// The only statuses this tab ever writes, for either kind of person — a
+// driver's staff_attendance_records row is only ever trusted here if its
+// status is one of these, so a stray wfh/e value (which this tab never
+// writes, but nothing stops another admin screen from having) falls back to
+// "not marked" rather than needing a pill of its own.
+const SHARED_STATUSES = new Set<string>(['present', 'absent', 'late', 'half_day', 'on_leave'])
+const asSupportStatus = (status: string): SupportAttendanceStatus | null =>
+  SHARED_STATUSES.has(status) ? (status as SupportAttendanceStatus) : null
+
 type Tab = 'all' | 'present' | 'absent' | 'unmarked'
 
 function monthStartOf(date: string) {
@@ -69,14 +107,14 @@ function shortName(name: string, max = 14) {
   return name.length > max ? `${name.slice(0, max).trimEnd()}…` : name
 }
 
-// ── One support staff row ────────────────────────────────────────────────────
+// ── One row (ground support staff or driver) ─────────────────────────────────
 
 function SupportRow({
   person, record, monthRecords, saving, canEdit, onSet, onClear,
 }: {
-  person: SupportStaff
-  record?: SupportAttendanceRecord
-  monthRecords: SupportAttendanceRecord[]
+  person: SectionPerson
+  record?: { status: SupportAttendanceStatus }
+  monthRecords: { status: SupportAttendanceStatus }[]
   saving: boolean
   canEdit: boolean
   onSet: (id: string, status: SupportAttendanceStatus) => void
@@ -86,7 +124,12 @@ function SupportRow({
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
-      <Avatar name={person.full_name} size={30} />
+      <Avatar
+        avatarUrl={person.avatar_url ?? null}
+        name={person.full_name}
+        size={30}
+        userId={person.kind === 'driver' ? person.id : undefined}
+      />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -165,8 +208,11 @@ function SupportRow({
 export default function SupportStaffAttendanceReport({
   date, todayStr, viewerId, canEdit, dayOff = null, refreshKey = 0, onChanged,
 }: Props) {
-  const [roster, setRoster] = useState<SupportStaff[]>([])
-  const [monthRecords, setMonthRecords] = useState<SupportAttendanceRecord[]>([])
+  const [groundRoster, setGroundRoster] = useState<SupportStaff[]>([])
+  const [driverRoster, setDriverRoster] = useState<UserProfile[]>([])
+  const [driverDesignations, setDriverDesignations] = useState<Record<string, string | null>>({})
+  const [groundMonthRecords, setGroundMonthRecords] = useState<SupportAttendanceRecord[]>([])
+  const [driverMonthRecords, setDriverMonthRecords] = useState<StaffAttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -176,29 +222,79 @@ export default function SupportStaffAttendanceReport({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [people, records] = await Promise.all([
+    const [ground, drivers] = await Promise.all([
       fetchSupportStaff({ activeOnly: true, trackedOnly: true }),
-      fetchSupportAttendanceRange(monthStartOf(date), date),
+      fetchTrackedDrivers(),
     ])
-    setRoster(people)
-    setMonthRecords(records)
+    const driverIds = drivers.map(d => d.id)
+    const [year, month] = date.split('-').map(Number)
+    const [groundMonth, driverDetails, driverMonth] = await Promise.all([
+      fetchSupportAttendanceRange(monthStartOf(date), date),
+      fetchStaffDetailsMap(driverIds),
+      fetchMonthlyAttendanceRecords(driverIds, year, month),
+    ])
+    setGroundRoster(ground)
+    setDriverRoster(drivers)
+    setDriverDesignations(
+      Object.fromEntries(drivers.map(d => [d.id, driverDetails[d.id]?.designation ?? null]))
+    )
+    setGroundMonthRecords(groundMonth)
+    setDriverMonthRecords(driverMonth)
     setLoading(false)
   }, [date])
 
   useEffect(() => { load() }, [load, refreshKey])
 
+  // One merged, alphabetical roster — from an admin's point of view these are
+  // the same kind of task (nobody here can check in for themselves), so they
+  // share one list rather than two.
+  const roster: SectionPerson[] = useMemo(() => {
+    const ground: SectionPerson[] = groundRoster.map(s => ({
+      id: s.id, kind: 'ground', full_name: s.full_name, designation: s.designation,
+    }))
+    const drivers: SectionPerson[] = driverRoster.map(d => ({
+      id: d.id, kind: 'driver', full_name: d.full_name,
+      designation: driverDesignations[d.id] || 'Driver',
+      avatar_url: d.avatar_url,
+    }))
+    return [...ground, ...drivers].sort((a, b) => a.full_name.localeCompare(b.full_name))
+  }, [groundRoster, driverRoster, driverDesignations])
+
+  const personById = useMemo(() => new Map(roster.map(p => [p.id, p])), [roster])
+
   const dayRecords = useMemo(
-    () => monthRecords.filter(r => r.date === date),
-    [monthRecords, date],
+    () => {
+      const out: { support_staff_id: string; status: SupportAttendanceStatus }[] = []
+      for (const r of groundMonthRecords) {
+        if (r.date === date) out.push({ support_staff_id: r.support_staff_id, status: r.status })
+      }
+      for (const r of driverMonthRecords) {
+        if (r.date !== date) continue
+        const status = asSupportStatus(r.status)
+        if (status) out.push({ support_staff_id: r.staff_id, status })
+      }
+      return out
+    },
+    [groundMonthRecords, driverMonthRecords, date],
   )
 
   const recordByStaff = useMemo(
-    () => new Map(dayRecords.map(r => [r.support_staff_id, r])),
+    () => new Map(dayRecords.map(r => [r.support_staff_id, { status: r.status }])),
     [dayRecords],
   )
 
   // Month-to-date rows per person, for the badge on each row.
-  const monthByStaff = useMemo(() => groupSupportRecordsByStaff(monthRecords), [monthRecords])
+  const monthByStaff = useMemo(() => {
+    const map = new Map<string, { status: SupportAttendanceStatus }[]>(groupSupportRecordsByStaff(groundMonthRecords))
+    for (const r of driverMonthRecords) {
+      const status = asSupportStatus(r.status)
+      if (!status) continue
+      const list = map.get(r.staff_id)
+      if (list) list.push({ status })
+      else map.set(r.staff_id, [{ status }])
+    }
+    return map
+  }, [groundMonthRecords, driverMonthRecords])
 
   const stats = useMemo(() => computeSupportDayStats(roster, dayRecords), [roster, dayRecords])
 
@@ -226,37 +322,36 @@ export default function SupportStaffAttendanceReport({
     if (!q) return tabRoster
     return tabRoster.filter(p =>
       p.full_name?.toLowerCase().includes(q) ||
-      p.designation?.toLowerCase().includes(q) ||
-      p.employee_id?.toLowerCase().includes(q)
+      p.designation?.toLowerCase().includes(q)
     )
   }, [tabRoster, query])
 
   const handleSet = async (id: string, status: SupportAttendanceStatus) => {
+    const person = personById.get(id)
+    if (!person) return
     setSavingId(id)
-    const ok = await markSupportAttendance(id, date, status, viewerId)
+    const ok = person.kind === 'ground'
+      ? await markSupportAttendance(id, date, status, viewerId)
+      : await adminMarkStaffAttendance(id, date, status as StaffAttendanceStatus, viewerId)
     if (ok) { await load(); onChanged?.() }
     setSavingId(null)
   }
 
   const handleClear = async (id: string) => {
+    const person = personById.get(id)
+    if (!person) return
     setSavingId(id)
-    const ok = await clearSupportAttendance(id, date)
+    const ok = person.kind === 'ground'
+      ? await clearSupportAttendance(id, date)
+      : await clearStaffAttendance(id, date)
     if (ok) { await load(); onChanged?.() }
     setSavingId(null)
   }
 
-  const statTiles: { key: string; label: string; value: number; className: string }[] = [
-    { key: 'present',   label: 'Present',    value: stats.present,    className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    { key: 'absent',    label: 'Absent',     value: stats.absent,     className: 'bg-red-50 text-red-700 border-red-200' },
-    { key: 'late',      label: 'Late',       value: stats.late,       className: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { key: 'half_day',  label: 'Half Day',   value: stats.half_day,   className: 'bg-orange-50 text-orange-700 border-orange-200' },
-    { key: 'on_leave',  label: 'On Leave',   value: stats.on_leave,   className: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { key: 'unmarked',  label: 'Not Marked', value: stats.not_marked, className: 'bg-[#FAFAF9] text-[#71717A] border-[#E4E4E7]' },
-  ]
-
   return (
     <>
-      {/* Summary strip — support staff only, no overlap with the staff numbers */}
+      {/* Summary strip — support staff + drivers only, no overlap with the
+          school staff numbers */}
       <div className="border-b border-[#E4E4E7]">
         <div className="flex items-center gap-4 px-4 py-3">
           {dayOff ? (
@@ -286,26 +381,13 @@ export default function SupportStaffAttendanceReport({
                   <div className="h-full bg-lime-600 rounded-full transition-all" style={{ width: `${stats.present_pct}%` }} />
                 </div>
                 <p className="text-[11px] text-[#71717A] mt-1">
-                  {stats.present_pct}% present · support staff
+                  {stats.present_pct}% present · support staff & drivers
                   {stats.not_marked > 0 ? ` · ${stats.not_marked} not marked` : ''}
                 </p>
               </div>
             </>
           )}
         </div>
-
-        {/* Support staff statistics for the day, kept separate from the staff
-            report's counts on purpose. */}
-        {!loading && roster.length > 0 && (
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 px-3 sm:px-4 pb-3">
-            {statTiles.map(t => (
-              <div key={t.key} className={`border rounded-lg px-2 py-1.5 text-center ${t.className}`}>
-                <p className="text-base font-bold leading-none">{t.value}</p>
-                <p className="text-[9px] font-bold uppercase tracking-wider mt-1 opacity-80">{t.label}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* List */}
@@ -319,7 +401,7 @@ export default function SupportStaffAttendanceReport({
             <HardHat size={30} className="text-[#D4D4D8] mx-auto mb-3" />
             <p className="text-sm font-semibold text-[#18181B] mb-1">No Support Staff Yet</p>
             <p className="text-sm text-[#71717A] mb-3">
-              Cleaning, maintenance and grounds staff are added by an admin — they have no login of their own.
+              Cleaning, maintenance, grounds staff and drivers are added by an admin — they have no self check-in of their own.
             </p>
             <Link
               href="/more/profiles/staff"
@@ -355,7 +437,7 @@ export default function SupportStaffAttendanceReport({
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search support staff…"
+                placeholder="Search support staff & drivers…"
                 className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
               />
               {query && (
@@ -373,7 +455,7 @@ export default function SupportStaffAttendanceReport({
 
             {visible.length === 0 ? (
               <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                {query ? `No support staff match "${query}".` : 'Nobody in this list for the day.'}
+                {query ? `No support staff or drivers match "${query}".` : 'Nobody in this list for the day.'}
               </p>
             ) : (
               <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">

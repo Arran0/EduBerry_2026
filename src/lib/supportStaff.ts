@@ -305,10 +305,16 @@ export interface SupportDayStats {
  * themselves in here, so a missing row means the admin has not gotten to them
  * yet, which is a different fact from being away — and counting it as absent
  * would silently distort the salary side.
+ *
+ * Roster and records are typed loosely (just an id, just a status keyed by
+ * support_staff_id) so the same function also covers drivers folded into
+ * this section from `profiles` — see SupportStaffAttendanceReport.tsx, which
+ * maps their staff_attendance_records rows onto this shape rather than this
+ * function knowing two different tables.
  */
 export function computeSupportDayStats(
-  roster: SupportStaff[],
-  records: SupportAttendanceRecord[],
+  roster: { id: string }[],
+  records: { support_staff_id: string; status: SupportAttendanceStatus }[],
 ): SupportDayStats {
   const byStaff = new Map(records.map(r => [r.support_staff_id, r]))
   const stats: SupportDayStats = {
@@ -347,9 +353,13 @@ export interface SupportPersonStats {
  * marked. Unmarked days are left out of both sides of the fraction for the
  * reason given on computeSupportDayStats — it keeps the percentage a
  * statement about observed days rather than about how far the admin has got.
+ *
+ * Takes just `{ status }[]` (SupportAttendanceRecord satisfies this) so a
+ * driver's staff_attendance_records rows can be passed in after mapping
+ * their status into this narrower enum, without a second copy of this math.
  */
 export function computeSupportPersonStats(
-  records: SupportAttendanceRecord[],
+  records: { status: SupportAttendanceStatus }[],
 ): SupportPersonStats {
   const stats: SupportPersonStats = {
     marked_days: records.length,

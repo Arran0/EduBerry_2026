@@ -837,8 +837,8 @@ export default function AllStaffAttendanceReport({
             {canSeeSupport && (
               <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15 flex-shrink-0" role="tablist" aria-label="Attendance roster">
                 {([
-                  { key: 'staff' as const, label: 'Staff', icon: <Users size={11} />, title: 'Teaching, office and admin staff' },
-                  { key: 'support' as const, label: 'Support', icon: <HardHat size={11} />, title: 'Support staff — cleaning, maintenance and grounds' },
+                  { key: 'staff' as const, label: 'School Staff', icon: <Users size={11} />, title: 'Teaching, office and admin staff' },
+                  { key: 'support' as const, label: 'Support Staff', icon: <HardHat size={11} />, title: 'Support staff and drivers — cleaning, maintenance, grounds and transport' },
                 ]).map(t => (
                   <button
                     key={t.key}
