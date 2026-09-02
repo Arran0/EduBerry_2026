@@ -58,7 +58,6 @@ export async function deleteUserAccountServerSide(
   const nullifyTables: { table: string; column: string }[] = [
     { table: 'subtasks', column: 'assignee_id' },
     { table: 'subtasks', column: 'created_by' },
-    { table: 'teams', column: 'coordinator_id' },
     { table: 'feedbacks', column: 'replied_by' },
   ]
 

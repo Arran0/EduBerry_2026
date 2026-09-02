@@ -190,18 +190,17 @@ export async function fetchApproversWithCalendarAccess(
 
     const teamIds = myTeams.map(t => t.team_id)
 
-    // Use each team's designated coordinator_id — a coordinator added as a
+    // Use each team's designated coordinators — a coordinator added as a
     // regular member of another team should not appear as an approver there.
-    const { data: teamRecords } = await supabase
-      .from('teams')
-      .select('coordinator_id')
-      .in('id', teamIds)
-      .not('coordinator_id', 'is', null)
+    const { data: coordinatorRows } = await supabase
+      .from('team_coordinators')
+      .select('user_id')
+      .in('team_id', teamIds)
 
-    if (!teamRecords) return []
+    if (!coordinatorRows) return []
 
     const coordinatorIds = [
-      ...new Set(teamRecords.map(t => t.coordinator_id as string).filter(Boolean)),
+      ...new Set(coordinatorRows.map(r => r.user_id as string)),
     ].filter(id => id !== applicantId)
 
     if (coordinatorIds.length === 0) return []

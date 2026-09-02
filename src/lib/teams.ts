@@ -8,7 +8,6 @@ export interface Team {
   description: string | null
   start_date: string | null
   end_date: string | null
-  coordinator_id: string | null
   created_at: string
   updated_at: string
 }
@@ -23,7 +22,7 @@ export interface TeamMember {
 
 export interface TeamWithDetails extends Team {
   members: TeamMember[]
-  coordinator?: UserProfile
+  coordinators: UserProfile[]
   member_count: number
 }
 
@@ -60,7 +59,6 @@ export async function createTeam(input: {
       description: input.description || null,
       start_date: input.start_date || null,
       end_date: input.end_date || null,
-      coordinator_id: coordinatorId,
     })
 
   if (error) {
@@ -68,9 +66,10 @@ export async function createTeam(input: {
     return null
   }
 
-  // Add coordinator as member if resolved
+  // Add coordinator as member + coordinator if resolved
   if (coordinatorId) {
     await addTeamMember(id, coordinatorId)
+    await addTeamCoordinator(id, coordinatorId)
   }
 
   // Add all principals and admins as default members
@@ -91,17 +90,17 @@ export async function createTeam(input: {
     description: input.description || null,
     start_date: input.start_date || null,
     end_date: input.end_date || null,
-    coordinator_id: coordinatorId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
 }
 
 export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
-  // Teams and members are independent — fetch in parallel
-  const [{ data: teams, error }, { data: members }] = await Promise.all([
+  // Teams, members and coordinators are independent — fetch in parallel
+  const [{ data: teams, error }, { data: members }, { data: coordinatorRows }] = await Promise.all([
     supabase.from('teams').select('*').order('name', { ascending: true }),
     supabase.from('team_members').select('*'),
+    supabase.from('team_coordinators').select('*'),
   ])
 
   if (error) {
@@ -114,8 +113,8 @@ export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
   for (const m of members ?? []) {
     allUserIds.add(m.user_id)
   }
-  for (const t of teams ?? []) {
-    if (t.coordinator_id) allUserIds.add(t.coordinator_id)
+  for (const c of coordinatorRows ?? []) {
+    allUserIds.add(c.user_id)
   }
 
   let profiles: UserProfile[] = []
@@ -140,17 +139,27 @@ export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
     })
   }
 
+  const coordinatorsByTeam = new Map<string, UserProfile[]>()
+  for (const c of (coordinatorRows ?? []) as { team_id: string; user_id: string }[]) {
+    const profile = profileMap.get(c.user_id)
+    if (!profile) continue
+    if (!coordinatorsByTeam.has(c.team_id)) {
+      coordinatorsByTeam.set(c.team_id, [])
+    }
+    coordinatorsByTeam.get(c.team_id)!.push(profile)
+  }
+
   return (teams ?? []).map((t: Team) => ({
     ...t,
     members: membersByTeam.get(t.id) || [],
-    coordinator: t.coordinator_id ? profileMap.get(t.coordinator_id) : undefined,
+    coordinators: coordinatorsByTeam.get(t.id) || [],
     member_count: (membersByTeam.get(t.id) || []).length,
   }))
 }
 
 export async function updateTeam(
   teamId: string,
-  updates: Partial<Pick<Team, 'name' | 'description' | 'start_date' | 'end_date' | 'coordinator_id'>>
+  updates: Partial<Pick<Team, 'name' | 'description' | 'start_date' | 'end_date'>>
 ): Promise<boolean> {
   const { error } = await supabase
     .from('teams')
@@ -229,6 +238,36 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
   return true
 }
 
+// --- Team Coordinators ---
+// A team can have any number of coordinators (see team_coordinators join table).
+
+export async function addTeamCoordinator(teamId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('team_coordinators')
+    .insert({ team_id: teamId, user_id: userId })
+
+  if (error) {
+    if (error.code === '23505') return true // duplicate
+    console.error('Failed to add team coordinator:', error.message)
+    return false
+  }
+  return true
+}
+
+export async function removeTeamCoordinator(teamId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('team_coordinators')
+    .delete()
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Failed to remove team coordinator:', error.message)
+    return false
+  }
+  return true
+}
+
 /** Lightweight team list for dropdown menus — fetches only id/name, no member joins. */
 export async function fetchTeamsForDropdown(): Promise<{ id: string; name: string }[]> {
   const { data, error } = await supabase
@@ -253,7 +292,7 @@ export interface TeamRoster {
 
 /**
  * Every team the viewer belongs to — both the ones they coordinate
- * (teams.coordinator_id) and the ones they are a plain member of
+ * (team_coordinators) and the ones they are a plain member of
  * (team_members) — each with its roster attached.
  *
  * Attendance surfaces use this instead of fetchTeamMembers() so that a
@@ -262,12 +301,12 @@ export interface TeamRoster {
  */
 export async function fetchMyTeamRosters(userId: string): Promise<TeamRoster[]> {
   const [{ data: coordinated }, { data: memberships }] = await Promise.all([
-    supabase.from('teams').select('id').eq('coordinator_id', userId),
+    supabase.from('team_coordinators').select('team_id').eq('user_id', userId),
     supabase.from('team_members').select('team_id').eq('user_id', userId),
   ])
 
   const teamIds = [...new Set([
-    ...((coordinated ?? []) as { id: string }[]).map(t => t.id),
+    ...((coordinated ?? []) as { team_id: string }[]).map(t => t.team_id),
     ...((memberships ?? []) as { team_id: string }[]).map(m => m.team_id),
   ])]
   if (teamIds.length === 0) return []

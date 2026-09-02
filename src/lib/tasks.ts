@@ -1124,15 +1124,15 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
   }
 
   if (userRole === 'coordinator') {
-    // Only scope to teams where this user is the designated coordinator
+    // Only scope to teams where this user is a designated coordinator
     const { data: myTeams } = await supabase
-      .from('teams')
-      .select('id')
-      .eq('coordinator_id', userId)
+      .from('team_coordinators')
+      .select('team_id')
+      .eq('user_id', userId)
 
     if (!myTeams || myTeams.length === 0) return []
 
-    const teamIds = myTeams.map(t => t.id)
+    const teamIds = myTeams.map(t => t.team_id)
     const { data: members } = await supabase
       .from('team_members')
       .select('user_id, user:profiles(id, full_name, avatar_url, role)')

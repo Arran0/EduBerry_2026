@@ -853,10 +853,10 @@ export async function fetchExamsForTeacher(
   }
 }
 
-/** Ids of every member of the teams where `coordinatorId` is the coordinator. */
+/** Ids of every member of the teams where `coordinatorId` is a coordinator. */
 async function fetchCoordinatorTeamMemberIds(coordinatorId: string): Promise<string[]> {
-  const { data: teams } = await supabase.from('teams').select('id').eq('coordinator_id', coordinatorId)
-  const teamIds = (teams ?? []).map(t => t.id as string)
+  const { data: teamRows } = await supabase.from('team_coordinators').select('team_id').eq('user_id', coordinatorId)
+  const teamIds = [...new Set((teamRows ?? []).map(t => t.team_id as string))]
   if (teamIds.length === 0) return []
   const { data: members } = await supabase
     .from('team_members')
