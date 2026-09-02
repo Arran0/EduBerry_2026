@@ -1090,10 +1090,10 @@ export async function uploadTaskAttachment(file: File, taskId: string, userId: s
 /**
  * Fetch accessible team members based on role hierarchy:
  * - Teacher: members of the same team(s) as the teacher (including coordinator)
- * - Coordinator: all members of teams where they are the designated coordinator,
- *   regardless of each member's global role (a coordinator-role user added as a
- *   plain member of this team is included too)
- * - Principal: all teachers + coordinators (all teams)
+ * - Coordinator: members of teams where they are a designated coordinator,
+ *   excluding principals/admins — teams auto-add every principal/admin as a
+ *   member, but a coordinator should never see their superiors here
+ * - Principal: all teachers + coordinators (all teams) — never admins
  * - Admin: all teachers + coordinators + principals (everyone)
  *
  * NEVER includes the current user (no duplicates)
@@ -1143,8 +1143,10 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
     const uniqueUsers = new Map<string, UserProfile>()
     members.forEach(m => {
       const profile = m.user as unknown as UserProfile
-      // Include all members regardless of global role; skip self
-      if (profile && m.user_id !== userId) {
+      // Include teammates regardless of role, but never a superior — teams
+      // auto-add every principal/admin as a member, which would otherwise
+      // put them in a coordinator's assignee/toggle list.
+      if (profile && m.user_id !== userId && profile.role !== 'principal' && profile.role !== 'admin') {
         uniqueUsers.set(m.user_id, profile)
       }
     })
