@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
@@ -25,7 +26,7 @@ import {
   Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
   Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
   Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
+  QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff, ChevronRight,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
@@ -106,7 +107,6 @@ function groupRulesByScope<T extends { scope_type: DayTimingScopeType; scope_dat
 // and Driver Payroll Settings never drift apart.
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
-import HiddenMembersSettings from '@/components/salary/HiddenMembersSettings'
 
 type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
 
@@ -388,7 +388,6 @@ export default function AdminSettingsPage() {
   const [selectedBannerKey, setSelectedBannerKey] = useState(PAGE_BANNERS[0].key)
 
   // ── Payment gateway (shared by Fee Setting + Bus Fee) ──
-  const [paymentsSub, setPaymentsSub] = useState<'fees' | 'salary'>('fees')
   const [busSub, setBusSub] = useState<'busfee' | 'driver'>('busfee')
 
   // ── School Profile (CBSE institutional info) ──
@@ -1606,23 +1605,30 @@ export default function AdminSettingsPage() {
   function renderPayments() {
     return (
       <div>
-        <InlineTabs
-          value={paymentsSub} onChange={setPaymentsSub}
-          items={[
-            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={14} /> },
-            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={14} /> },
-          ]}
-        />
         <div className="mb-4">
-          <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
-          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'How students pay school fees into your bank account.' : 'How salaries reach staff bank accounts from your bank.'}</p>
+          <h3 className="text-sm font-bold text-[#18181B]">Fee Settings</h3>
+          <p className="text-xs text-[#71717A]">How students pay school fees into your bank account.</p>
         </div>
-        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : (
-          <>
-            <BankPayoutSettings ctx="salary" />
-            <HiddenMembersSettings />
-          </>
-        )}
+        <BankCollectSettings ctx="fees" />
+
+        {/* Salary payout moved to its own page under Admin Space. Two screens
+            editing one bank connection is how the two drift apart, so this is a
+            signpost rather than a second copy of the form. */}
+        <Link
+          href="/admin/payroll-settings"
+          className="mt-4 flex items-center gap-3 px-4 py-3.5 bg-white border border-[#E4E4E7] hover:border-[#D4D4D8] transition-colors"
+        >
+          <div className="w-9 h-9 bg-[#F5F5F5] border border-[#E4E4E7] flex items-center justify-center flex-shrink-0">
+            <Banknote size={16} className="text-[#27272A]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#18181B]">Salary Payout Settings</p>
+            <p className="text-xs text-[#71717A] mt-0.5 leading-snug">
+              Now on its own page, with the default pay-cycle rules alongside it
+            </p>
+          </div>
+          <ChevronRight size={15} className="text-[#D4D4D8] flex-shrink-0" />
+        </Link>
       </div>
     )
   }
