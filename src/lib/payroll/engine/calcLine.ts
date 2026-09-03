@@ -22,6 +22,7 @@ import type {
   EngineInput, EngineResult, ResolvedComponent, ExplainNode, EngineWarning, ComponentDef,
 } from './types'
 import { resolvePolicyFor, resolveCalendarFor } from './resolvePolicy'
+import { resolveJurisdiction } from './resolveLocation'
 import { calcAttendance } from './attendance'
 import { assignmentOn, buildStructure, StructureError } from './structure'
 import { calcPf, calcEsi, calcPt, calcLwf, statutoryWarnings } from './statutory'
@@ -63,6 +64,21 @@ export function calcLine(input: EngineInput, today: string): EngineResult {
   // ── 1. Which rules govern this person ────────────────────────────────
   const { policy, source: policySource } = resolvePolicyFor(input.policyGroups, employee, onDate)
   const { calendar, source: calendarSource } = resolveCalendarFor(input.calendars, employee, onDate)
+
+  // Where they work decides which state's Professional Tax and LWF apply. The
+  // hydrator resolved this too, with this same function, to pick the rule sets
+  // pinned in `input.rules` — so the two cannot disagree about the state.
+  const place = resolveJurisdiction(input.locations, employee, onDate, input.defaultJurisdiction)
+  if (place.unlocated) {
+    warnings.push({
+      code: 'NO_LOCATION',
+      // Blocking: guessing a state means guessing somebody's tax, and the wrong
+      // guess is a return filed in the wrong state.
+      severity: 'block',
+      message: `${employee.name} is not assigned to a work location, so no state's Professional Tax rules can be applied with confidence.`,
+      details: { assumed: place.jurisdiction },
+    })
+  }
 
   // ── 2. Attendance ────────────────────────────────────────────────────
   const attendance = calcAttendance({
@@ -167,8 +183,20 @@ export function calcLine(input: EngineInput, today: string): EngineResult {
   // ── 5. Statutory deductions ──────────────────────────────────────────
   const pf = calcPf(employee, components, rules.pf)
   const esi = calcEsi(employee, components, rules.esi, period.month)
-  const pt = calcPt(components, rules.pt, period.month, employee.jurisdiction)
-  const lwf = calcLwf(components, rules.lwf, period.month, employee.jurisdiction)
+  const pt = calcPt(components, rules.pt, period.month, place.jurisdiction)
+  const lwf = calcLwf(components, rules.lwf, period.month, place.jurisdiction)
+  // Not every state levies Professional Tax — Delhi, Haryana and UP do not — so
+  // "no PT rule set" is not wrong in itself. It is wrong when it happens for a
+  // state other than the school's own: the school has evidently configured PT
+  // where it is headquartered, so a second state with nothing published is an
+  // unconfigured state rather than a state without the levy.
+  if (!rules.pt && place.jurisdiction !== input.defaultJurisdiction) {
+    warnings.push({
+      code: 'NO_PT_RULE_FOR_STATE', severity: 'block',
+      message: `No Professional Tax rule set is published for ${place.jurisdiction}, which is where ${employee.name} works.`,
+      details: { jurisdiction: place.jurisdiction, location: place.location?.name ?? null },
+    })
+  }
   warnings.push(...statutoryWarnings(employee, pf, esi))
 
   if (pf.applicable && pf.employee > 0) {
@@ -280,8 +308,10 @@ export function calcLine(input: EngineInput, today: string): EngineResult {
       'Structure': structure ? `${structure.name} v${structure.version}` : '—',
       'Policy group': policySource.groupName,
       'Working calendar': calendarSource.groupName,
+      'Work location': place.location?.name ?? '—',
+      'Taxed in': place.jurisdiction,
     },
-    note: `${policySource.why} ${calendarSource.why}`,
+    note: `${policySource.why} ${calendarSource.why} ${place.why}`,
     children: [
       { label: 'Earnings', value: totalEarnings, unit: 'INR', children: components.filter(c => c.kind === 'earning').map(c => c.trace) },
       { label: 'Deductions', value: totalDeductions, unit: 'INR', children: components.filter(c => c.kind === 'deduction').map(c => c.trace) },
@@ -304,6 +334,9 @@ export function calcLine(input: EngineInput, today: string): EngineResult {
     structureId: structure?.id ?? null,
     policyGroupId: policySource.groupId || null,
     calendarId: calendarSource.groupId || null,
+    locationId: place.location?.id ?? null,
+    entityId: place.location?.entityId ?? null,
+    jurisdiction: place.jurisdiction,
     attendance,
     recoveries: rec.recoveries,
     trace,

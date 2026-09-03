@@ -69,7 +69,7 @@ function Policies() {
     category: (s.category as EngineEmployee['category']) ?? (s.role === 'driver' ? 'transport' : 'teaching'),
     dateOfJoining: null, dateOfExit: null, department: s.department, designation: s.designation,
     pan: null, uan: null, esiIpNumber: null, pfApplicable: false, epsApplicable: true,
-    esiOverride: null, esiCoveredAtPeriodStart: null, pfWageOverride: null, jurisdiction: 'IN-TN',
+    esiOverride: null, esiCoveredAtPeriodStart: null, pfWageOverride: null, jurisdictionOverride: null,
   })
 
   const today = new Date().toISOString().slice(0, 10)

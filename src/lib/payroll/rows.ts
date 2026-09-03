@@ -8,7 +8,7 @@
 
 import type {
   ComponentDef, EngineStructure, EngineAssignment, EngineOverride, PolicyGroup,
-  WorkingCalendar, RuleSet, RuleBody, EngineEmployee, EmployeeCategory, PayrollPolicy,
+  WorkingCalendar, RuleSet, RuleBody, EngineEmployee, EmployeeCategory, PayrollPolicy, WorkLocation,
 } from './engine/types'
 import type { RunStatus } from './engine/workflow'
 
@@ -65,6 +65,18 @@ export interface CalendarRow {
   members?: { employee_id: string }[]
 }
 
+export interface WorkLocationRow {
+  id: string; entity_id: string; name: string; code: string | null
+  state_code: string; is_default: boolean; priority: number
+  effective_from: string; effective_to: string | null
+  match: WorkLocation['match']
+  epf_establishment_id: string | null; esi_employer_code: string | null
+  pt_registration_no: string | null; lwf_registration_no: string | null
+  bank_account_id: string | null; status: 'active' | 'archived'
+  entity?: { name: string } | null
+  members?: { employee_id: string; effective_from: string; effective_to: string | null }[]
+}
+
 export interface RuleSetRow {
   id: string; domain: RuleSet['domain']; jurisdiction: string; version: number
   effective_from: string; effective_to: string | null; rules: RuleBody
@@ -72,12 +84,35 @@ export interface RuleSetRow {
   published_at: string | null
 }
 
+export function toWorkLocation(r: WorkLocationRow): WorkLocation {
+  return {
+    id: r.id,
+    entityId: r.entity_id,
+    entityName: r.entity?.name ?? '',
+    name: r.name,
+    stateCode: r.state_code,
+    isDefault: r.is_default,
+    priority: r.priority,
+    effectiveFrom: r.effective_from,
+    effectiveTo: r.effective_to,
+    match: r.match ?? null,
+    members: (r.members ?? []).map(m => ({
+      employeeId: m.employee_id, effectiveFrom: m.effective_from, effectiveTo: m.effective_to,
+    })),
+    epfEstablishmentId: r.epf_establishment_id,
+    esiEmployerCode: r.esi_employer_code,
+    ptRegistrationNo: r.pt_registration_no,
+    lwfRegistrationNo: r.lwf_registration_no,
+  }
+}
+
 export interface RunRow {
   id: string; period_month: number; period_year: number
   period_from: string; period_to: string; pay_date: string | null
   run_type: 'regular' | 'supplementary' | 'arrears' | 'bonus' | 'ff'
   status: RunStatus; label: string | null; notes: string | null
-  rule_set_ids: Record<string, string> | null
+  /** {jurisdiction: {domain: rule_set_id}} — see the pinning note in hydrate.ts. */
+  rule_set_ids: Record<string, Record<string, string>> | null
   variance_acknowledged_by: string | null; variance_acknowledged_at: string | null
   calculated_at: string | null; approved_by: string | null; approved_at: string | null
   locked_by: string | null; locked_at: string | null; locked_hash: string | null
@@ -87,6 +122,7 @@ export interface RunRow {
 export interface RunLineRow {
   id: string; run_id: string; employee_id: string
   structure_id: string | null; policy_group_id: string | null; calendar_id: string | null
+  location_id: string | null; entity_id: string | null; jurisdiction: string | null
   gross_earnings: number; total_deductions: number; employer_contributions: number
   employer_cost: number; net_pay: number
   payable_days: number; paid_days: number; lop_days: number
@@ -203,7 +239,6 @@ export function toEngineEmployee(
     pt_jurisdiction?: string | null
   } | null,
   statutory: StatutoryRow | null,
-  defaultJurisdiction: string,
 ): EngineEmployee {
   // profiles.role is the only categorisation the app had before payroll v2, so
   // it remains the fallback when staff_details has not been filled in.
@@ -227,6 +262,8 @@ export function toEngineEmployee(
     esiOverride: statutory?.esi_override ?? null,
     esiCoveredAtPeriodStart: statutory?.esi_covered_at_period_start ?? null,
     pfWageOverride: statutory?.pf_wage_override ?? null,
-    jurisdiction: details?.pt_jurisdiction ?? defaultJurisdiction,
+    // Not the answer, the exception: normally null, and the work location
+    // decides. See resolveJurisdiction.
+    jurisdictionOverride: details?.pt_jurisdiction ?? null,
   }
 }
