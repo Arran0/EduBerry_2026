@@ -17,6 +17,29 @@ This round closes four gaps, each named against what Zoho Payroll actually does:
 Each part is independently shippable. C1 is a prerequisite for the per-location
 parts of C2 and C4, and should go first.
 
+### Status
+
+**C1 is delivered.** Migrations `payroll_v3_locations.sql` and
+`payroll_v3_seed_states.sql`; `engine/resolveLocation.ts`; the pinning fix in
+`hydrate.ts`; `lib/payroll/locations.ts` and `lib/payroll/returns.ts`;
+`/more/payroll/locations` and the Returns tab on a run. 28 new tests, 144 pass,
+build clean.
+
+Two things inside C1 were deliberately not finished, and are called out here
+rather than left to be discovered:
+
+- **The seeded state rule sets are drafts.** Every PT and LWF set except the
+  no-levy states is `status = 'draft'`, so the engine will not price with it
+  until somebody checks the slab against that state's current notification and
+  publishes it on the Compliance screen. A run covering an unpublished state is
+  blocked, by design.
+- **`PtRules` cannot express Maharashtra.** It has no gender dimension and no
+  month-specific amount, so Maharashtra's higher exemption for women and its
+  different February instalment are both unrepresentable. The seeded draft says
+  so. A Maharashtra office needs the rule shape extended first.
+
+C4, C2 and C3 are not started.
+
 ---
 
 ## Where we actually stand
