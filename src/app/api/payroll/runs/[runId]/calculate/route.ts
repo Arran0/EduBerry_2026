@@ -137,6 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: { runId: 
         attendanceDays: result.attendance.days,
         locationId: result.locationId,
         jurisdiction: result.jurisdiction,
+        statutory: result.statutoryBases,
         ruleSetIds: lineRuleSetIds,
       },
       trace: result.trace as unknown as Record<string, unknown>,

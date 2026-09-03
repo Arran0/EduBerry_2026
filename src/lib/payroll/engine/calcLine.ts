@@ -338,6 +338,19 @@ export function calcLine(input: EngineInput, today: string): EngineResult {
     entityId: place.location?.entityId ?? null,
     jurisdiction: place.jurisdiction,
     attendance,
+    statutoryBases: {
+      pfWages: pf.pfWages,
+      epsWages: pf.epsWages,
+      edliWages: pf.edliWages,
+      esiWages: esi.esiWages,
+      pfApplicable: pf.applicable,
+      esiApplicable: esi.applicable,
+      // The EPFO counts a non-contributory period in whole days, and the ESIC
+      // counts paid days the same way; both are rounded here rather than at the
+      // file writer, so every return reads the same number.
+      ncpDays: Math.round(attendance.lopDays),
+      paidDaysWhole: Math.ceil(attendance.paidDays),
+    },
     recoveries: rec.recoveries,
     trace,
     warnings,

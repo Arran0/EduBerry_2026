@@ -21,6 +21,7 @@ const RUN_COLUMNS =
 
 const LINE_SELECT = `
   id, run_id, employee_id, structure_id, policy_group_id, calendar_id,
+  location_id, entity_id, jurisdiction,
   gross_earnings, total_deductions, employer_contributions, employer_cost, net_pay,
   payable_days, paid_days, lop_days, inputs, trace, payout_status, payout_reference,
   employee:profiles!payroll_run_lines_employee_id_fkey(id, full_name, role, avatar_url),

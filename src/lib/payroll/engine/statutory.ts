@@ -43,6 +43,8 @@ export interface PfResult {
   admin: number
   pfWages: number
   epsWages: number
+  /** The EDLI wage base — needed by the ECR, which files it as its own column. */
+  edliWages: number
   applicable: boolean
   trace: ExplainNode
 }
@@ -53,7 +55,7 @@ export function calcPf(
   rs: RuleSet<PfRules> | null,
 ): PfResult {
   const empty: PfResult = {
-    employee: 0, employerPf: 0, eps: 0, edli: 0, admin: 0, pfWages: 0, epsWages: 0, applicable: false,
+    employee: 0, employerPf: 0, eps: 0, edli: 0, admin: 0, pfWages: 0, epsWages: 0, edliWages: 0, applicable: false,
     trace: { label: 'Provident Fund', value: 0, unit: 'INR', note: 'No PF rule set is in force for this period.' },
   }
   if (!rs) return empty
@@ -85,14 +87,15 @@ export function calcPf(
   // The employer's 12% is not an extra payment on top of EPS — EPS is carved out
   // of it. Adding them would overstate employer cost by the pension share.
   const employerPf = round2(Math.max(0, employerTotal - eps))
-  const edli = round0(Math.min(pfWages, r.edliWageCeiling) * r.edliRate)
+  const edliWages = Math.min(pfWages, r.edliWageCeiling)
+  const edli = round0(edliWages * r.edliRate)
   // Administrative charges carry a per-establishment monthly minimum, not a
   // per-member one, so only the rate is applied here; the floor is imposed on
   // the run total where it actually belongs.
   const admin = round2(pfWages * r.adminRate)
 
   return {
-    employee: employeeShare, employerPf, eps, edli, admin, pfWages, epsWages, applicable: true,
+    employee: employeeShare, employerPf, eps, edli, admin, pfWages, epsWages, edliWages, applicable: true,
     trace: {
       label: 'Provident Fund', value: employeeShare, unit: 'INR', rule: ruleRef(rs),
       formula: `PF wages × ${(r.employeeRate * 100).toFixed(2)}%`,

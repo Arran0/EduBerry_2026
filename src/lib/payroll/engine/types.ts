@@ -620,11 +620,31 @@ export interface EngineResult {
   /** The state whose PT and LWF priced this line. Snapshotted; a later transfer must not move it. */
   jurisdiction: string
   attendance: AttendanceResult
+  /**
+   * The wage bases each statutory contribution was calculated on. The monthly
+   * EPFO and ESIC returns file these as their own columns, and a return that
+   * recomputed them from the payslip instead of reading what the run used would
+   * be a second, disagreeing answer to a question already settled.
+   */
+  statutoryBases: StatutoryBases
   recoveries: RecoveryResult[]
   /** Root of the explanation. Every figure above appears somewhere beneath it. */
   trace: ExplainNode
   /** Non-fatal problems the run should surface as exceptions. */
   warnings: EngineWarning[]
+}
+
+export interface StatutoryBases {
+  pfWages: number
+  epsWages: number
+  edliWages: number
+  esiWages: number
+  pfApplicable: boolean
+  esiApplicable: boolean
+  /** Whole days in the period no wages were paid for — the ECR's NCP figure. */
+  ncpDays: number
+  /** Whole days wages were paid or are payable for — the ESIC MC figure. */
+  paidDaysWhole: number
 }
 
 export interface EngineWarning {
