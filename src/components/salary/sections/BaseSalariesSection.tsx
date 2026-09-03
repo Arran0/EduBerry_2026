@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Bus, HardHat } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
-  Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Column,
+  Sheet, SheetHead, SheetRow, SheetSkeleton, SectionBar, Note, Column,
 } from '@/components/salary/ui'
+import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolbar'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
@@ -107,11 +108,19 @@ function digits(v: string): string {
   return v.replace(/\D+/g, '')
 }
 
+type SortKey = 'name' | 'base'
+
 export default function BaseSalariesSection() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [search, setSearch] = useState('')
+  const [kindFilter, setKindFilter] = useState<RosterKindFilter>('all')
+  const [offPayrollOnly, setOffPayrollOnly] = useState(false)
+  const [missingPfBasicOnly, setMissingPfBasicOnly] = useState(false)
+  const [missingUanOnly, setMissingUanOnly] = useState(false)
+  const [sort, setSort] = useState<SortKey>('name')
+  const [desc, setDesc] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -181,9 +190,32 @@ export default function BaseSalariesSection() {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return entries
-    return entries.filter(e => e.person.full_name.toLowerCase().includes(q))
-  }, [entries, search])
+    const filtered = entries.filter(e => {
+      if (q && !e.person.full_name.toLowerCase().includes(q)) return false
+      if (kindFilter !== 'all' && e.kind !== kindFilter) return false
+      const d = drafts[e.key]
+      if (!d) return true
+      const onPayroll = d.active && (parseFloat(d.amount) || 0) > 0
+      if (offPayrollOnly && onPayroll) return false
+      if (missingPfBasicOnly && !(d.pfApplicable && !((parseFloat(d.pfBasic) || 0) > 0))) return false
+      if (missingUanOnly && !(d.pfApplicable && d.uan.length !== 12)) return false
+      return true
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      if (sort === 'base') {
+        const diff = (parseFloat(drafts[a.key]?.amount ?? '') || 0) - (parseFloat(drafts[b.key]?.amount ?? '') || 0)
+        if (diff !== 0) return diff
+      }
+      return a.person.full_name.localeCompare(b.person.full_name)
+    })
+    return desc ? sorted.reverse() : sorted
+  }, [entries, drafts, search, kindFilter, offPayrollOnly, missingPfBasicOnly, missingUanOnly, sort, desc])
+
+  const kindCounts = useMemo(() => ({
+    staff: entries.filter(e => e.kind === 'staff').length,
+    driver: entries.filter(e => e.kind === 'driver').length,
+    support: entries.filter(e => e.kind === 'support').length,
+  }), [entries])
 
   // Ticking PF on without a PF Basic wage computes a silent ₹0; a PF member
   // with no UAN drops out of the monthly EPF return without the return itself
@@ -211,10 +243,19 @@ export default function BaseSalariesSection() {
       />
 
       {!loading && entries.length > 0 && (
-        <div className="flex items-center gap-2 mb-2">
-          <SearchField value={search} onChange={setSearch} placeholder="Search people…" className="sm:max-w-[16rem]" />
-          <SaveBar dirtyCount={dirtyKeys.length} state={state} error={error} onSave={saveNow} />
-        </div>
+        <RosterToolbar
+          search={search} onSearchChange={setSearch}
+          kind={kindFilter} onKindChange={setKindFilter} kindCounts={kindCounts}
+          toggles={[
+            { key: 'offPayroll', label: 'Off payroll', selected: offPayrollOnly, onClick: () => setOffPayrollOnly(v => !v) },
+            { key: 'pfBasic', label: 'Missing PF Basic wage', selected: missingPfBasicOnly, onClick: () => setMissingPfBasicOnly(v => !v) },
+            { key: 'uan', label: 'Missing UAN', selected: missingUanOnly, onClick: () => setMissingUanOnly(v => !v) },
+          ]}
+          sortOptions={[{ key: 'name', label: 'Name' }, { key: 'base', label: 'Base salary' }]}
+          sort={sort} onSortChange={setSort} desc={desc} onDescChange={setDesc}
+          shown={visible.length} total={entries.length}
+          right={<SaveBar dirtyCount={dirtyKeys.length} state={state} error={error} onSave={saveNow} />}
+        />
       )}
 
       {!loading && (warnings.pfBasicMissing > 0 || warnings.uanMissing > 0) && (
@@ -237,7 +278,7 @@ export default function BaseSalariesSection() {
         ) : entries.length === 0 ? (
           <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
-          <Note>No one matches &quot;{search}&quot;.</Note>
+          <Note>No one matches the current search and filters.</Note>
         ) : visible.map(e => (
           <BaseRow
             key={e.key}

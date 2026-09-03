@@ -250,6 +250,8 @@ export interface PayrollContext {
   baseMap: Record<string, PayrollBaseConfig>
   /** The school's own date — a month in progress is only adjudicated up to it. */
   today: string
+  /** Anyone hidden from the salary app in settings — never counted, whatever a stored record says. */
+  hidden: Set<string>
 }
 
 function toBaseConfig(b: StaffSalaryBase | DriverSalaryBase | SupportStaffSalaryBase): PayrollBaseConfig {
@@ -269,8 +271,9 @@ function toBaseConfig(b: StaffSalaryBase | DriverSalaryBase | SupportStaffSalary
  * stepping back a month costs the month's own data and nothing else.
  */
 export async function fetchPayrollContext(today?: string | null): Promise<PayrollContext> {
-  const [calibration, staffBases, driverBases, supportBases] = await Promise.all([
+  const [calibration, staffBases, driverBases, supportBases, hiddenIds] = await Promise.all([
     fetchPayrollCalibration(), fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchSupportStaffSalaryBases(),
+    fetchHiddenSalaryMemberIds(),
   ])
   const baseMap: Record<string, PayrollBaseConfig> = {}
   for (const b of staffBases) baseMap[b.staff_id] = toBaseConfig(b)
@@ -280,6 +283,7 @@ export async function fetchPayrollContext(today?: string | null): Promise<Payrol
     calibration,
     baseMap,
     today: today ?? new Date().toISOString().split('T')[0],
+    hidden: new Set(hiddenIds),
   }
 }
 
@@ -287,6 +291,7 @@ export const EMPTY_PAYROLL_CONTEXT: PayrollContext = {
   calibration: DEFAULT_PAYROLL_CALIBRATION,
   baseMap: {},
   today: new Date().toISOString().split('T')[0],
+  hidden: new Set(),
 }
 
 // ============================================
@@ -342,28 +347,41 @@ async function fetchDriverCyclesFor(year: number, month: number): Promise<RawCyc
   return (data ?? []) as unknown as RawCycle[]
 }
 
-async function fetchStaffCycleRecords(cycleIds: string[]): Promise<(RawRecord & { staff_id: string | null; support_staff_id: string | null })[]> {
+/** Just enough of the person behind a record to tell whether they've since left — see recordPersonLeft. */
+interface LeftJoin {
+  staff: { is_banned: boolean } | null
+  support_staff: { is_active: boolean } | null
+}
+
+async function fetchStaffCycleRecords(
+  cycleIds: string[],
+): Promise<(RawRecord & { staff_id: string | null; support_staff_id: string | null } & LeftJoin)[]> {
   if (cycleIds.length === 0) return []
   const { data, error } = await supabase
     .from('salary_records')
-    .select(`${RECORD_COLUMNS}, items:salary_record_items(label, amount)`)
+    .select(
+      `${RECORD_COLUMNS}, items:salary_record_items(label, amount), ` +
+      'staff:profiles!staff_id(is_banned), support_staff:support_staff!support_staff_id(is_active)',
+    )
     .in('cycle_id', cycleIds)
   if (error) throw new Error(`Could not read salary_records: ${error.message}`)
-  return (data ?? []) as unknown as (RawRecord & { staff_id: string | null; support_staff_id: string | null })[]
+  return (data ?? []) as unknown as (RawRecord & { staff_id: string | null; support_staff_id: string | null } & LeftJoin)[]
 }
 
-async function fetchDriverCycleRecordsFor(cycleIds: string[]): Promise<(RawRecord & { driver_id: string })[]> {
+async function fetchDriverCycleRecordsFor(
+  cycleIds: string[],
+): Promise<(RawRecord & { driver_id: string } & LeftJoin)[]> {
   if (cycleIds.length === 0) return []
   const { data, error } = await supabase
     .from('driver_payroll_records')
     .select(
       'id, cycle_id, driver_id, base_amount, status, working_days_override, leave_override, ' +
       'late_override, half_day_override, pf_amount_override, esi_amount_override, ' +
-      'items:driver_payroll_record_items(label, amount)',
+      'items:driver_payroll_record_items(label, amount), staff:profiles!driver_id(is_banned)',
     )
     .in('cycle_id', cycleIds)
   if (error) throw new Error(`Could not read driver_payroll_records: ${error.message}`)
-  return (data ?? []) as unknown as (RawRecord & { driver_id: string })[]
+  return (data ?? []) as unknown as (RawRecord & { driver_id: string; support_staff: null } & LeftJoin)[]
 }
 
 /** Everything a month's attendance-derived figures are computed from. */
@@ -469,14 +487,13 @@ function computeLive(
 // ============================================
 
 async function project(year: number, month: number, ctx: PayrollContext): Promise<MonthlyPayrollStats> {
-  const [staff, allDrivers, allSupport, hiddenIds] = await Promise.all([
-    fetchEligibleStaff(), fetchEligibleDrivers(), fetchSupportStaff({ activeOnly: true }), fetchHiddenSalaryMemberIds(),
+  const [staff, allDrivers, allSupport] = await Promise.all([
+    fetchEligibleStaff(), fetchEligibleDrivers(), fetchSupportStaff({ activeOnly: true }),
   ])
-  const hidden = new Set(hiddenIds)
   const onPayroll = new Set<string>([
     ...staff.map(p => p.id),
-    ...allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned).map(d => d.id),
-    ...allSupport.filter(s => !hidden.has(s.id)).map(s => s.id),
+    ...allDrivers.filter(d => !ctx.hidden.has(d.id) && !d.is_banned).map(d => d.id),
+    ...allSupport.filter(s => !ctx.hidden.has(s.id)).map(s => s.id),
   ])
   const active = Object.entries(ctx.baseMap)
     .filter(([id, b]) => b.active && b.base_amount > 0 && onPayroll.has(id))
@@ -530,26 +547,47 @@ export async function fetchMonthlyPayrollStats(
     fetchDriverCycleRecordsFor(driverCycles.map(c => c.id)),
   ])
 
-  const records: (CycleRecordLike & { cycle_id: string })[] = [
-    // A staff-cycle row is for a profile (staff_id) or a support staff member
-    // (support_staff_id) — never both, never neither (see salary_records'
-    // person-check constraint) — so this is exactly recordPersonId's logic,
-    // just against the raw untyped row shape this module reads.
-    ...staffRows.map(r => ({ ...r, person_id: (r.staff_id ?? r.support_staff_id) as string })),
-    ...driverRows.map(r => ({ ...r, person_id: r.driver_id })),
-  ]
+  // A cycle keeps its rows for whoever has since resigned (staff/driver) or
+  // left (support staff), and for anyone since hidden from the salary app —
+  // neither is on payroll any more. This has to match exactly what the cycle
+  // detail page itself excludes from its sheet (see its `load`) and what
+  // fetchCycleTallies excludes from the Pay Cycles list — mirroring
+  // recordPersonLeft in src/lib/salary.ts, against this module's narrower
+  // join shape — or this dashboard reports a different headcount for the
+  // same month than every other screen that reads the same records.
+  const left = (r: LeftJoin): boolean => {
+    if (r.staff) return !!r.staff.is_banned
+    if (r.support_staff) return !r.support_staff.is_active
+    return false
+  }
+  const onRoster = <T extends LeftJoin & { person_id: string }>(r: T) =>
+    !left(r) && !ctx.hidden.has(r.person_id)
 
-  if (records.length === 0) {
+  // A staff-cycle row is for a profile (staff_id) or a support staff member
+  // (support_staff_id) — never both, never neither (see salary_records'
+  // person-check constraint) — so this is exactly recordPersonId's logic,
+  // just against the raw untyped row shape this module reads.
+  const onRosterStaffRows = staffRows
+    .map(r => ({ ...r, person_id: (r.staff_id ?? r.support_staff_id) as string }))
+    .filter(onRoster)
+  const onRosterDriverRows = driverRows.map(r => ({ ...r, person_id: r.driver_id })).filter(onRoster)
+
+  const records: (CycleRecordLike & { cycle_id: string })[] = [...onRosterStaffRows, ...onRosterDriverRows]
+
+  const cycles = [...staffCycles, ...driverCycles]
+
+  // No cycle at all for this month — as opposed to a cycle whose every record
+  // has since left or been hidden, which is a real (if empty) month and must
+  // not be mistaken for one that was never run.
+  if (cycles.length === 0) {
     const now = new Date()
     const isFuture = monthIndex(year, month) >= monthIndex(now.getFullYear(), now.getMonth() + 1)
     return isFuture ? project(year, month, ctx) : emptyStats(year, month)
   }
-
-  const cycles = [...staffCycles, ...driverCycles]
   // Attendance is only needed while at least one cycle is still open — a fully
   // locked month is read entirely off its stored items.
   const anyOpen = cycles.some(c => c.status !== 'closed')
-  const supportStaffIds = [...new Set(staffRows.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))]
+  const supportStaffIds = [...new Set(onRosterStaffRows.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))]
   const profileIds = [...new Set(records.map(r => r.person_id).filter(id => !supportStaffIds.includes(id)))]
   const attendance = anyOpen
     ? await fetchMonthAttendance(profileIds, supportStaffIds, year, month)
@@ -635,6 +673,7 @@ export async function buildStaffPayslips(
     calibration: globalCalibration,
     baseMap: base ? { [staffId]: toBaseConfig(base) } : {},
     today: today ?? new Date().toISOString().split('T')[0],
+    hidden: new Set(),
   }
 
   return records.map(r => {

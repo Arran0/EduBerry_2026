@@ -36,6 +36,7 @@ import {
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
   recordPersonId, recordPersonName, recordPersonLeft,
+  generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
@@ -202,6 +203,28 @@ export default function SalaryCycleDetailPage() {
       fetchPayrollCalibration(), fetchHiddenSalaryMemberIds(),
     ])
 
+    // A cycle is generated once, for the roster at the moment it's run — a new
+    // hire, a driver just enrolled, or a support-staff member just activated
+    // afterwards never gets a row of their own. Left alone, an open cycle
+    // silently drifts further behind the current roster the longer it stays
+    // open, showing a headcount that no longer matches Base Salaries or Bank
+    // Accounts. Re-running the generator is idempotent (it only ever inserts
+    // rows that don't already exist), so it is safe to run again on every load
+    // of an open cycle; a closed cycle is history and is never touched.
+    let cycleRecs = allRecs
+    if (c && c.status !== 'closed') {
+      const [staffSync, driverSync, supportSync] = await Promise.all([
+        generateSalaryCycle(c.period_month, c.period_year),
+        ensureDriverRecordsInCycle(c.id),
+        ensureSupportStaffRecordsInCycle(c.id),
+      ])
+      if (!staffSync.success) console.error('Roster sync (staff) failed:', staffSync.error)
+      if (!driverSync.success) console.error('Roster sync (drivers) failed:', driverSync.error)
+      if (!supportSync.success) console.error('Roster sync (support staff) failed:', supportSync.error)
+      const added = (staffSync.created ?? 0) + (driverSync.added ?? 0) + (supportSync.added ?? 0)
+      if (added > 0) cycleRecs = await fetchCycleRecords(cycleId)
+    }
+
     // A cycle is generated for everyone on the roster at the time it was run,
     // so months later it still carries rows for people who have since resigned
     // (staff/driver) or left (support staff) — and for anyone an admin has
@@ -210,8 +233,8 @@ export default function SalaryCycleDetailPage() {
     // left for the eye to skip. The rows stay in the database; they are simply
     // not this sheet's business.
     const hidden = new Set(hiddenIds)
-    const recs = allRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
-    setExcludedCount(allRecs.length - recs.length)
+    const recs = cycleRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
+    setExcludedCount(cycleRecs.length - recs.length)
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     // A cycle lists staff, drivers and support staff together, but their
