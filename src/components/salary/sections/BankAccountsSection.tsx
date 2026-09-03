@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Bus, HardHat } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
-  Sheet, SheetHead, SheetRow, SheetSkeleton, SearchField, SectionBar, Note, Column,
+  Sheet, SheetHead, SheetRow, SheetSkeleton, SectionBar, Note, Column,
 } from '@/components/salary/ui'
+import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolbar'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
@@ -79,11 +80,17 @@ function isComplete(d: Draft): boolean {
   return d.holder.trim() !== '' && d.account.trim() !== '' && d.ifsc.trim() !== ''
 }
 
+type SortKey = 'name' | 'status'
+
 export default function BankAccountsSection() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [search, setSearch] = useState('')
+  const [kindFilter, setKindFilter] = useState<RosterKindFilter>('all')
+  const [missingOnly, setMissingOnly] = useState(false)
+  const [sort, setSort] = useState<SortKey>('name')
+  const [desc, setDesc] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -156,9 +163,27 @@ export default function BankAccountsSection() {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return entries
-    return entries.filter(e => e.person.full_name.toLowerCase().includes(q))
-  }, [entries, search])
+    const filtered = entries.filter(e => {
+      if (q && !e.person.full_name.toLowerCase().includes(q)) return false
+      if (kindFilter !== 'all' && e.kind !== kindFilter) return false
+      if (missingOnly && e.existing) return false
+      return true
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      if (sort === 'status') {
+        const diff = (a.existing ? 0 : 1) - (b.existing ? 0 : 1)
+        if (diff !== 0) return diff
+      }
+      return a.person.full_name.localeCompare(b.person.full_name)
+    })
+    return desc ? sorted.reverse() : sorted
+  }, [entries, search, kindFilter, missingOnly, sort, desc])
+
+  const kindCounts = useMemo(() => ({
+    staff: entries.filter(e => e.kind === 'staff').length,
+    driver: entries.filter(e => e.kind === 'driver').length,
+    support: entries.filter(e => e.kind === 'support').length,
+  }), [entries])
 
   const incomplete = dirtyKeys.length - savableKeys.length
   const onFile = entries.filter(e => e.existing).length
@@ -173,10 +198,17 @@ export default function BankAccountsSection() {
       />
 
       {!loading && entries.length > 0 && (
-        <div className="flex items-center gap-2 mb-2">
-          <SearchField value={search} onChange={setSearch} placeholder="Search people…" className="sm:max-w-[16rem]" />
-          <SaveBar dirtyCount={savableKeys.length} state={state} error={error} onSave={saveNow} />
-        </div>
+        <RosterToolbar
+          search={search} onSearchChange={setSearch}
+          kind={kindFilter} onKindChange={setKindFilter} kindCounts={kindCounts}
+          toggles={[
+            { key: 'missing', label: 'Missing bank details', selected: missingOnly, onClick: () => setMissingOnly(v => !v) },
+          ]}
+          sortOptions={[{ key: 'name', label: 'Name' }, { key: 'status', label: 'On file' }]}
+          sort={sort} onSortChange={setSort} desc={desc} onDescChange={setDesc}
+          shown={visible.length} total={entries.length}
+          right={<SaveBar dirtyCount={savableKeys.length} state={state} error={error} onSave={saveNow} />}
+        />
       )}
 
       {incomplete > 0 && (
@@ -194,7 +226,7 @@ export default function BankAccountsSection() {
         ) : entries.length === 0 ? (
           <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
-          <Note>No one matches &quot;{search}&quot;.</Note>
+          <Note>No one matches the current search and filters.</Note>
         ) : visible.map(e => (
           <BankRow
             key={e.key}
