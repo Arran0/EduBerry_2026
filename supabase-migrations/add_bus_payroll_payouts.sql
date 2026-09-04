@@ -46,11 +46,16 @@ CREATE TRIGGER driver_bank_accounts_updated_at
   BEFORE UPDATE ON public.driver_bank_accounts
   FOR EACH ROW EXECUTE FUNCTION update_task_updated_at();
 
+-- Dropped first so the whole migration can be re-run. Without this a second
+-- run stops on "policy already exists", which is how a half-applied migration
+-- happens: the table is there, the grants at the bottom never ran.
+DROP POLICY IF EXISTS "Admin manage driver bank accounts" ON public.driver_bank_accounts;
 CREATE POLICY "Admin manage driver bank accounts"
   ON public.driver_bank_accounts FOR ALL
   USING (public.get_user_role() = 'admin')
   WITH CHECK (public.get_user_role() = 'admin');
 
+DROP POLICY IF EXISTS "Driver views own bank account" ON public.driver_bank_accounts;
 CREATE POLICY "Driver views own bank account"
   ON public.driver_bank_accounts FOR SELECT
   USING (driver_id = auth.uid());
