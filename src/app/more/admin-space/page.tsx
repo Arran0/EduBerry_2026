@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Shield, BookOpen, Users, Home, Settings,
-  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap, Banknote, CreditCard,
+  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap, Banknote, CreditCard, Layers,
 } from 'lucide-react'
 
 const adminTools = [
@@ -50,8 +50,14 @@ const adminTools = [
     icon: Users,
   },
   {
+    title: 'Fee Configuration',
+    description: 'The price list — fee heads, cohort groups, per-grade structures and installments, with a one-click clone into next year',
+    href: '/more/fees/config',
+    icon: Layers,
+  },
+  {
     title: 'Fee Settings',
-    description: 'Bank collection setup for school fees — how student payments reach your account',
+    description: 'Who can take, discount or reverse a payment; part-payment and grace rules; receipt numbering; academic sessions; bank collection; WhatsApp',
     href: '/admin/fee-settings',
     icon: CreditCard,
   },
