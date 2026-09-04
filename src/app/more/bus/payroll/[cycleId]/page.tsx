@@ -701,7 +701,6 @@ export default function DriverCycleDetailPage() {
           <CycleSettingsModal
             initial={calibration}
             hasOverride={!!cycle.payroll_config}
-            ctx="driver"
             onClose={() => setShowSettings(false)}
             onSave={saveCycleConfig}
           />
