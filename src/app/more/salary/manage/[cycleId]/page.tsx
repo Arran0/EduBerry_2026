@@ -35,7 +35,7 @@ import {
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
-  recordPersonId, recordPersonName, recordPersonLeft,
+  recordPersonId, recordPersonName, recordPersonLeft, recordPersonKind,
   generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
@@ -520,6 +520,7 @@ export default function SalaryCycleDetailPage() {
         const hay = `${recordPersonName(r)} ${r.staff?.email ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
+      if (filters.kind !== 'all' && recordPersonKind(r) !== filters.kind) return false
       // Support staff are on no team, so a team filter naturally excludes
       // them — r.staff_id is null for those rows and never in the set.
       if (teamMemberIds && !(r.staff_id && teamMemberIds.has(r.staff_id))) return false

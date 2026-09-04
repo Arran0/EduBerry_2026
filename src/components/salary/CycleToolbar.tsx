@@ -4,12 +4,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Search, X, SlidersHorizontal, ArrowUpDown, Check, Table2 } from 'lucide-react'
 import { SHARP } from '@/components/salary/adminUi'
 import type { TeamMembership } from '@/lib/teams'
+import type { RosterKindFilter } from '@/components/salary/RosterToolbar'
 
 export type CycleSortKey = 'name' | 'net' | 'base' | 'lop' | 'statutory' | 'leave'
 export type CyclePayFilter = 'all' | 'unpaid' | 'paid'
 
 export interface CycleFilters {
   search: string
+  /** Staff / drivers / support staff, or every kind. */
+  kind: RosterKindFilter
   /** Team ids to keep. Empty = every team, and staff on no team at all. */
   teamIds: string[]
   pay: CyclePayFilter
@@ -22,8 +25,15 @@ export interface CycleFilters {
 }
 
 export const DEFAULT_CYCLE_FILTERS: CycleFilters = {
-  search: '', teamIds: [], pay: 'all', noBank: false, withLop: false, sort: 'name', desc: false,
+  search: '', kind: 'all', teamIds: [], pay: 'all', noBank: false, withLop: false, sort: 'name', desc: false,
 }
+
+const KIND_OPTIONS: { key: RosterKindFilter; label: string }[] = [
+  { key: 'all', label: 'Everyone' },
+  { key: 'staff', label: 'Staff' },
+  { key: 'driver', label: 'Drivers' },
+  { key: 'support', label: 'Support staff' },
+]
 
 const SORTS: { key: CycleSortKey; label: string }[] = [
   { key: 'name', label: 'Name' },
@@ -90,7 +100,8 @@ export default function CycleToolbar({
   }
 
   const activeFilterCount =
-    filters.teamIds.length + (filters.pay !== 'all' ? 1 : 0) + (filters.noBank ? 1 : 0) + (filters.withLop ? 1 : 0)
+    filters.teamIds.length + (filters.kind !== 'all' ? 1 : 0)
+    + (filters.pay !== 'all' ? 1 : 0) + (filters.noBank ? 1 : 0) + (filters.withLop ? 1 : 0)
   const narrowed = activeFilterCount > 0 || filters.search.trim() !== ''
   const sortLabel = SORTS.find(s => s.key === filters.sort)?.label ?? 'Name'
 
@@ -149,8 +160,15 @@ export default function CycleToolbar({
 
       {openMenu === 'filter' && (
         <Popover onClear={activeFilterCount > 0
-          ? () => set({ teamIds: [], pay: 'all', noBank: false, withLop: false })
+          ? () => set({ kind: 'all', teamIds: [], pay: 'all', noBank: false, withLop: false })
           : undefined}>
+          <Group label="Type">
+            {KIND_OPTIONS.map(o => (
+              <Option key={o.key} selected={filters.kind === o.key} onClick={() => set({ kind: o.key })}>
+                {o.label}
+              </Option>
+            ))}
+          </Group>
           <Group label="Payment">
             {PAY_OPTIONS.map(o => (
               <Option key={o.key} selected={filters.pay === o.key} onClick={() => set({ pay: o.key })}>

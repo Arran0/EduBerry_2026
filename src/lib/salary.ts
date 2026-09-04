@@ -94,6 +94,12 @@ export function recordPersonLeft(r: Pick<SalaryRecord, 'staff' | 'support_staff'
   return false
 }
 
+/** Which of the three rosters this record's person belongs to — for filtering the cycle sheet. */
+export function recordPersonKind(r: Pick<SalaryRecord, 'support_staff_id' | 'staff'>): 'staff' | 'driver' | 'support' {
+  if (r.support_staff_id) return 'support'
+  return r.staff?.role === 'driver' ? 'driver' : 'staff'
+}
+
 /** The pay-cycle columns an admin may type over by hand. */
 export interface SalaryRecordOverrides {
   base_amount?: number
@@ -362,7 +368,7 @@ export async function ensureDriverRecordsInCycle(
   const [driversRes, basesRes, existingRes] = await Promise.all([
     supabase.from('profiles').select('id').eq('role', 'driver'),
     supabase.from('driver_payroll_base').select('driver_id, base_amount, active'),
-    supabase.from('salary_records').select('staff_id').eq('cycle_id', cycleId),
+    supabase.from('salary_records').select('id, staff_id, base_amount').eq('cycle_id', cycleId).not('staff_id', 'is', null),
   ])
   if (driversRes.error) return { success: false, error: driversRes.error.message }
   if (existingRes.error) return { success: false, error: existingRes.error.message }
@@ -371,12 +377,12 @@ export async function ensureDriverRecordsInCycle(
     ((basesRes.data ?? []) as { driver_id: string; base_amount: number; active: boolean }[])
       .map(b => [b.driver_id, b]),
   )
-  const already = new Set(((existingRes.data ?? []) as { staff_id: string }[]).map(r => r.staff_id))
+  const already = ((existingRes.data ?? []) as { id: string; staff_id: string; base_amount: number }[])
 
   const rows = ((driversRes.data ?? []) as { id: string }[])
     // A driver explicitly marked inactive stays off payroll; one with no base
     // row at all is still included, at zero, to be filled in on the cycle page.
-    .filter(d => !already.has(d.id) && (bases.get(d.id)?.active ?? true))
+    .filter(d => !already.some(r => r.staff_id === d.id) && (bases.get(d.id)?.active ?? true))
     .map(d => ({
       cycle_id: cycleId,
       staff_id: d.id,
@@ -384,10 +390,22 @@ export async function ensureDriverRecordsInCycle(
       created_by: user?.id,
     }))
 
-  if (rows.length === 0) return { success: true, added: 0 }
+  if (rows.length > 0) {
+    const { error } = await supabase.from('salary_records').insert(rows)
+    if (error) { console.error('ensureDriverRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  }
 
-  const { error } = await supabase.from('salary_records').insert(rows)
-  if (error) { console.error('ensureDriverRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  // Catch up drivers whose cycle row was created before a base salary
+  // existed and is still sitting at that zero default, now that a base is on
+  // file — otherwise a base added after the cycle opened never shows up.
+  for (const r of already) {
+    const base = bases.get(r.staff_id)
+    if (Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0) {
+      const { error } = await supabase.from('salary_records').update({ base_amount: base.base_amount }).eq('id', r.id)
+      if (error) console.error('ensureDriverRecordsInCycle base sync failed:', error)
+    }
+  }
+
   return { success: true, added: rows.length }
 }
 
@@ -405,7 +423,7 @@ export async function ensureSupportStaffRecordsInCycle(
   const [supportRes, basesRes, existingRes] = await Promise.all([
     supabase.from('support_staff').select('id').eq('is_active', true),
     supabase.from('support_staff_salary_base').select('support_staff_id, base_amount, active'),
-    supabase.from('salary_records').select('support_staff_id').eq('cycle_id', cycleId).not('support_staff_id', 'is', null),
+    supabase.from('salary_records').select('id, support_staff_id, base_amount').eq('cycle_id', cycleId).not('support_staff_id', 'is', null),
   ])
   if (supportRes.error) {
     // A school with no support staff module applied yet has no such table —
@@ -419,10 +437,10 @@ export async function ensureSupportStaffRecordsInCycle(
     ((basesRes.data ?? []) as { support_staff_id: string; base_amount: number; active: boolean }[])
       .map(b => [b.support_staff_id, b]),
   )
-  const already = new Set(((existingRes.data ?? []) as { support_staff_id: string }[]).map(r => r.support_staff_id))
+  const already = ((existingRes.data ?? []) as { id: string; support_staff_id: string; base_amount: number }[])
 
   const rows = ((supportRes.data ?? []) as { id: string }[])
-    .filter(s => !already.has(s.id) && (bases.get(s.id)?.active ?? true))
+    .filter(s => !already.some(r => r.support_staff_id === s.id) && (bases.get(s.id)?.active ?? true))
     .map(s => ({
       cycle_id: cycleId,
       support_staff_id: s.id,
@@ -430,10 +448,22 @@ export async function ensureSupportStaffRecordsInCycle(
       created_by: user?.id,
     }))
 
-  if (rows.length === 0) return { success: true, added: 0 }
+  if (rows.length > 0) {
+    const { error } = await supabase.from('salary_records').insert(rows)
+    if (error) { console.error('ensureSupportStaffRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  }
 
-  const { error } = await supabase.from('salary_records').insert(rows)
-  if (error) { console.error('ensureSupportStaffRecordsInCycle failed:', error); return { success: false, error: error.message } }
+  // Catch up support staff whose cycle row was created before a base salary
+  // existed and is still sitting at that zero default, now that a base is on
+  // file — otherwise a base added after the cycle opened never shows up.
+  for (const r of already) {
+    const base = bases.get(r.support_staff_id)
+    if (Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0) {
+      const { error } = await supabase.from('salary_records').update({ base_amount: base.base_amount }).eq('id', r.id)
+      if (error) console.error('ensureSupportStaffRecordsInCycle base sync failed:', error)
+    }
+  }
+
   return { success: true, added: rows.length }
 }
 
