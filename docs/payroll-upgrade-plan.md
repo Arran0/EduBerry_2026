@@ -6,6 +6,12 @@ badly: opaque numbers, mutable history, one-size-fits-all leave rules, and no
 answer to "why did this change?". Each round is independently shippable, builds
 on the last, and ends with a paste-ready prompt.
 
+> **Continued in `docs/payroll-multi-location-plan.md` (Round C)** — work
+> locations and multi-state statutories, the taxes-and-forms module (TDS
+> liabilities, challans, Form 24Q, Form 16), loan management with perquisite,
+> and bulk disbursal from the v2 runs, with a competitive analysis of Zoho
+> Payroll on each.
+
 ---
 
 ## Where we start (current state)

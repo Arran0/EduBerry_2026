@@ -15,6 +15,7 @@ import ExceptionsBoard from '@/components/payroll/ExceptionsBoard'
 import PreApprovalSummary from '@/components/payroll/PreApprovalSummary'
 import DayGrid from '@/components/payroll/DayGrid'
 import WhyPanel, { Explain } from '@/components/payroll/WhyPanel'
+import StatutoryReturns from '@/components/payroll/StatutoryReturns'
 import { PUI, STATUS_CHIP, inr } from '@/components/payroll/ui'
 import {
   fetchRun, fetchRunLines, fetchExceptions, fetchRunEvents, fetchVariance,
@@ -33,7 +34,7 @@ import type { ExplainNode, DayVerdict } from '@/lib/payroll/engine/types'
 // Every amount in the register is wrapped in <Explain>, so any figure opens the
 // workings the engine stored when it computed it.
 
-type Tab = 'register' | 'exceptions' | 'approval' | 'audit'
+type Tab = 'register' | 'exceptions' | 'approval' | 'returns' | 'audit'
 
 export default function PayrollRunPage() {
   return (
@@ -192,6 +193,7 @@ function RunDetail() {
             ['register', 'Register', lines.length],
             ['exceptions', 'Exceptions', exceptions.filter(e => !e.resolved_at).length],
             ['approval', 'Approval', null],
+            ['returns', 'Returns', null],
             ['audit', 'Audit', events.length],
           ] as [Tab, string, number | null][]).map(([key, label, count]) => (
             <button
@@ -327,6 +329,8 @@ function RunDetail() {
             }}
           />
         )}
+
+        {tab === 'returns' && <StatutoryReturns run={run} lines={lines} />}
 
         {tab === 'audit' && (
           <div className={`${PUI.card} p-4`}>

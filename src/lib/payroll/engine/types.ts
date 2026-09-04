@@ -80,8 +80,14 @@ export interface EngineEmployee {
   esiCoveredAtPeriodStart: boolean | null
   /** Explicit PF wage where the school contributes on something other than the derived PF wages. */
   pfWageOverride: number | null
-  /** State for Professional Tax and Labour Welfare Fund, e.g. 'IN-TN'. */
-  jurisdiction: string
+  /**
+   * Per-person override of the work location's state, e.g. 'IN-TN'. Normally
+   * null: the office someone works at is what decides which state's
+   * Professional Tax and LWF apply, and `resolveJurisdiction` reads it from the
+   * work location. This exists for the genuine exception — someone taxed where
+   * they live rather than where the school is — and for nothing else.
+   */
+  jurisdictionOverride: string | null
 }
 
 // ============================================
@@ -186,6 +192,35 @@ export interface PolicySource {
   rank: 'explicit' | 'matched' | 'default' | 'builtin'
   priority: number
   why: string
+}
+
+/**
+ * A work location — an office, a campus, a branch. It carries the state, and
+ * the state carries Professional Tax and the Labour Welfare Fund; it carries
+ * the EPFO establishment id and ESIC employer code, and the monthly returns are
+ * filed per establishment.
+ *
+ * Resolved with the same precedence as policy groups and calendars, except that
+ * membership is effective-dated: a transfer is a dated event with tax
+ * consequences on both sides of it.
+ */
+export interface WorkLocation {
+  id: string
+  entityId: string
+  entityName: string
+  name: string
+  /** ISO 3166-2:IN, e.g. 'IN-TN'. Matched directly against a rule set's jurisdiction. */
+  stateCode: string
+  isDefault: boolean
+  priority: number
+  effectiveFrom: string
+  effectiveTo: string | null
+  match: { categories?: string[]; departments?: string[]; designations?: string[] } | null
+  members: { employeeId: string; effectiveFrom: string; effectiveTo: string | null }[]
+  epfEstablishmentId: string | null
+  esiEmployerCode: string | null
+  ptRegistrationNo: string | null
+  lwfRegistrationNo: string | null
 }
 
 export interface LopTier {
@@ -529,8 +564,16 @@ export interface EngineInput {
   components: ComponentDef[]
   policyGroups: PolicyGroup[]
   calendars: WorkingCalendar[]
+  locations: WorkLocation[]
+  /** The state to fall back on when no location and no override applies, e.g. 'IN-TN'. */
+  defaultJurisdiction: string
   holidays: EngineHoliday[]
   attendance: EngineAttendanceDay[]
+  /**
+   * Pinned for the jurisdiction this employee resolves to. The hydrator picks
+   * them with the same `resolveJurisdiction` the engine uses below, so what a
+   * run records having used and what it actually used cannot diverge.
+   */
   rules: PinnedRules
   arrears: EngineArrear[]
   advances: EngineAdvance[]
@@ -572,12 +615,36 @@ export interface EngineResult {
   structureId: string | null
   policyGroupId: string | null
   calendarId: string | null
+  locationId: string | null
+  entityId: string | null
+  /** The state whose PT and LWF priced this line. Snapshotted; a later transfer must not move it. */
+  jurisdiction: string
   attendance: AttendanceResult
+  /**
+   * The wage bases each statutory contribution was calculated on. The monthly
+   * EPFO and ESIC returns file these as their own columns, and a return that
+   * recomputed them from the payslip instead of reading what the run used would
+   * be a second, disagreeing answer to a question already settled.
+   */
+  statutoryBases: StatutoryBases
   recoveries: RecoveryResult[]
   /** Root of the explanation. Every figure above appears somewhere beneath it. */
   trace: ExplainNode
   /** Non-fatal problems the run should surface as exceptions. */
   warnings: EngineWarning[]
+}
+
+export interface StatutoryBases {
+  pfWages: number
+  epsWages: number
+  edliWages: number
+  esiWages: number
+  pfApplicable: boolean
+  esiApplicable: boolean
+  /** Whole days in the period no wages were paid for — the ECR's NCP figure. */
+  ncpDays: number
+  /** Whole days wages were paid or are payable for — the ESIC MC figure. */
+  paidDaysWhole: number
 }
 
 export interface EngineWarning {

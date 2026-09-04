@@ -9,6 +9,11 @@ import CycleCalibrationCompact from '@/components/salary/CycleCalibrationCompact
 /**
  * Per-cycle PF/ESI/LOP/bonus override editor.
  *
+ * Only this cycle's rules. The payout connection is site-wide — one bank funds
+ * every cycle, staff and driver alike — so it lives with the other site-wide
+ * settings, behind the Salary Manager's own settings button, and not in a popup
+ * whose every other control applies to one month.
+ *
  * Sharp-edged and dense to match the sheet it opens over — see
  * `CycleCalibrationCompact` for why this doesn't reuse the settings page's
  * form. Whether the cycle is currently on its own rules or the site-wide

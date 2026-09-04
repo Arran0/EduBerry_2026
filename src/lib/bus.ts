@@ -935,18 +935,36 @@ export interface DriverBankAccountInput {
   bank_name?: string | null
 }
 
+/**
+ * Reads treat a missing `driver_bank_accounts` as "no accounts" (see
+ * `fetchDriverBankAccounts`), which means the shared Bank Accounts sheet
+ * happily shows driver rows in a database where the bus migrations were never
+ * run — and then the save fails with PostgREST's own wording, "Could not find
+ * the table 'public.driver_bank_accounts' in the schema cache". That sentence
+ * names the cause to somebody who already knows the schema and nobody else.
+ * Both writers translate it into the actual next step.
+ */
+const DRIVER_BANK_MIGRATION_HINT =
+  'Driver bank accounts are not set up in this database yet. Run supabase-migrations/add_bus_payroll_payouts.sql, then try again.'
+
 export async function upsertDriverBankAccount(input: DriverBankAccountInput): Promise<{ success: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
     .from('driver_bank_accounts')
     .upsert({ ...input, created_by: user?.id }, { onConflict: 'driver_id' })
-  if (error) { console.error('upsertDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  if (error) {
+    console.error('upsertDriverBankAccount failed:', error)
+    return { success: false, error: isMissingRelation(error) ? DRIVER_BANK_MIGRATION_HINT : error.message }
+  }
   return { success: true }
 }
 
 export async function deleteDriverBankAccount(driverId: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('driver_bank_accounts').delete().eq('driver_id', driverId)
-  if (error) { console.error('deleteDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  if (error) {
+    console.error('deleteDriverBankAccount failed:', error)
+    return { success: false, error: isMissingRelation(error) ? DRIVER_BANK_MIGRATION_HINT : error.message }
+  }
   return { success: true }
 }
 

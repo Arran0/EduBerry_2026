@@ -16,21 +16,32 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   EngineInput, EnginePeriod, PinnedRules, EngineAttendanceDay, EngineHoliday,
   ComponentDef, EngineStructure, PolicyGroup, WorkingCalendar, TaxDeclaration, YtdSnapshot,
+  WorkLocation,
 } from './engine/types'
 import {
   toComponentDef, toEngineStructure, toEngineAssignment, toEngineOverride,
-  toPolicyGroup, toWorkingCalendar, toRuleSet, toEngineEmployee,
+  toPolicyGroup, toWorkingCalendar, toRuleSet, toEngineEmployee, toWorkLocation,
 } from './rows'
 import type {
   ComponentRow, StructureRow, AssignmentRow, OverrideRow, PolicyGroupRow,
-  CalendarRow, RuleSetRow, StatutoryRow,
+  CalendarRow, RuleSetRow, StatutoryRow, WorkLocationRow,
 } from './rows'
+import { resolveJurisdiction } from './engine/resolveLocation'
 import { financialYearOf } from './engine/calcLine'
 import { toEngineLoan, toEngineAdvance, toEngineArrear } from './money'
 import type { LoanBalanceRow, AdvanceBalanceRow, ArrearRow } from './money'
 
-/** The school's default state for Professional Tax and LWF when a person has none. */
-const DEFAULT_JURISDICTION = 'IN-TN'
+/**
+ * The state to fall back on when an employee has neither a work location nor an
+ * explicit override. It is only a fallback — the work location is what normally
+ * decides — and a run raises a blocking NO_LOCATION exception rather than
+ * leaning on it silently.
+ */
+export const FALLBACK_JURISDICTION = 'IN-TN'
+
+/** Central domains apply countrywide; the rest are levied by the state. */
+const CENTRAL_DOMAINS = ['pf', 'esi', 'tds', 'gratuity', 'bonus'] as const
+const STATE_DOMAINS = ['pt', 'lwf'] as const
 
 export interface RunContext {
   period: EnginePeriod
@@ -38,10 +49,18 @@ export interface RunContext {
   structures: EngineStructure[]
   policyGroups: PolicyGroup[]
   calendars: WorkingCalendar[]
+  locations: WorkLocation[]
+  defaultJurisdiction: string
   holidays: EngineHoliday[]
   ruleRows: RuleSetRow[]
-  /** Rule-set ids actually pinned, by domain, for storing on the run. */
-  pinnedIds: Record<string, string>
+  /**
+   * Rule sets actually used, as {jurisdiction: {domain: id}}, for storing on the
+   * run. Filled by `pinFor` as each employee's state is resolved — never
+   * guessed up front, because a run's states are not known until its people are.
+   */
+  pinnedIds: Record<string, Record<string, string>>
+  /** Memoised PinnedRules per jurisdiction, so a 200-person run resolves each state once. */
+  pinnedRules: Record<string, PinnedRules>
 }
 
 export function periodFor(year: number, month: number, from?: string, to?: string): EnginePeriod {
@@ -53,28 +72,25 @@ export function periodFor(year: number, month: number, from?: string, to?: strin
 
 /** Everything shared by every line in a run. Fetched once. */
 export async function loadRunContext(
-  db: SupabaseClient, period: EnginePeriod, jurisdiction = DEFAULT_JURISDICTION,
+  db: SupabaseClient, period: EnginePeriod, fallbackJurisdiction = FALLBACK_JURISDICTION,
 ): Promise<RunContext> {
-  const [comps, structs, policies, cals, hols, rules] = await Promise.all([
+  const [comps, structs, policies, cals, locs, hols, rules, defaultState] = await Promise.all([
     db.from('payroll_components').select('*'),
     db.from('payroll_structures').select('*, components:payroll_structure_components(*, component:payroll_components(code))'),
     db.from('payroll_policy_groups').select('*, members:payroll_policy_group_members(employee_id)'),
     db.from('payroll_calendars').select('*, members:payroll_calendar_members(employee_id)'),
+    db.from('payroll_work_locations')
+      .select('*, entity:payroll_legal_entities(name), members:payroll_location_members(employee_id, effective_from, effective_to)')
+      .eq('status', 'active'),
     // Holidays already carry their own group scoping; reused rather than duplicated.
     db.from('attendance_holidays').select('id, date, name, is_default, members:attendance_holiday_members(staff_id)')
       .gte('date', period.from).lte('date', period.to),
     db.from('payroll_rule_sets').select('*').eq('status', 'published'),
+    db.from('site_settings').select('value').eq('key', 'payroll_default_jurisdiction').maybeSingle(),
   ])
 
   const componentRows = (comps.data ?? []) as ComponentRow[]
   const codeById = new Map(componentRows.map(c => [c.id, c.code]))
-
-  const ruleRows = (rules.data ?? []) as RuleSetRow[]
-  const pinnedIds: Record<string, string> = {}
-  for (const domain of ['pf', 'esi', 'pt', 'lwf', 'tds', 'gratuity', 'bonus']) {
-    const hit = pickRuleSet(ruleRows, domain, jurisdiction, period.to)
-    if (hit) pinnedIds[domain] = hit.id
-  }
 
   return {
     period,
@@ -82,11 +98,48 @@ export async function loadRunContext(
     structures: ((structs.data ?? []) as unknown as StructureRow[]).map(s => toEngineStructure(s, codeById)),
     policyGroups: ((policies.data ?? []) as unknown as PolicyGroupRow[]).map(toPolicyGroup),
     calendars: ((cals.data ?? []) as unknown as CalendarRow[]).map(toWorkingCalendar),
+    locations: ((locs.data ?? []) as unknown as WorkLocationRow[]).map(toWorkLocation),
+    defaultJurisdiction: (defaultState.data?.value as string | undefined) || fallbackJurisdiction,
     holidays: ((hols.data ?? []) as unknown as { date: string; name: string; is_default: boolean; members: { staff_id: string }[] }[])
       .map(h => ({ date: h.date, name: h.name, isDefault: h.is_default, staffIds: (h.members ?? []).map(m => m.staff_id) })),
-    ruleRows,
-    pinnedIds,
+    ruleRows: (rules.data ?? []) as RuleSetRow[],
+    pinnedIds: {},
+    pinnedRules: {},
   }
+}
+
+/**
+ * The rule sets for one state, resolved once and remembered — and recorded in
+ * `ctx.pinnedIds` as a side effect.
+ *
+ * That side effect is the point. Pinning used to happen up front against a
+ * single assumed jurisdiction while the engine resolved rules per employee, so a
+ * two-state run stored provenance it had not used. Recording the pin at the
+ * moment the rules are handed to the engine makes the two the same act.
+ */
+export function pinFor(ctx: RunContext, jurisdiction: string): PinnedRules {
+  const cached = ctx.pinnedRules[jurisdiction]
+  if (cached) return cached
+
+  const pinned = pinnedRulesFor(ctx.ruleRows, jurisdiction, ctx.period.to)
+  ctx.pinnedRules[jurisdiction] = pinned
+
+  // Central domains are recorded once under 'IN' however many states are in the
+  // run; state domains under the state that levied them. That is also how they
+  // read back: one PF rule set for the run, one PT rule set per state.
+  for (const domain of CENTRAL_DOMAINS) {
+    const rs = pinned[domain]
+    if (!rs) continue
+    ctx.pinnedIds[rs.jurisdiction] ??= {}
+    ctx.pinnedIds[rs.jurisdiction][domain] = rs.id
+  }
+  for (const domain of STATE_DOMAINS) {
+    const rs = pinned[domain]
+    if (!rs) continue
+    ctx.pinnedIds[jurisdiction] ??= {}
+    ctx.pinnedIds[jurisdiction][domain] = rs.id
+  }
+  return pinned
 }
 
 /** The rule set in force for a domain on a date, preferring the state-specific one over the central one. */
@@ -241,9 +294,12 @@ export function buildEngineInput(args: BuildInputArgs): EngineInput {
     profile,
     details as Parameters<typeof toEngineEmployee>[1],
     data.statutory,
-    DEFAULT_JURISDICTION,
   )
   const codeById = new Map<string, string>()
+
+  // The same resolver the engine runs, for the same date, so the rules pinned
+  // here are the rules `calcLine` will price with.
+  const place = resolveJurisdiction(ctx.locations, employee, ctx.period.to, ctx.defaultJurisdiction)
 
   return {
     period: ctx.period,
@@ -254,9 +310,11 @@ export function buildEngineInput(args: BuildInputArgs): EngineInput {
     components: ctx.components,
     policyGroups: ctx.policyGroups,
     calendars: ctx.calendars,
+    locations: ctx.locations,
+    defaultJurisdiction: ctx.defaultJurisdiction,
     holidays: ctx.holidays,
     attendance: data.attendance,
-    rules: pinnedRulesFor(ctx.ruleRows, employee.jurisdiction, ctx.period.to),
+    rules: pinFor(ctx, place.jurisdiction),
     arrears: data.arrears.map(toEngineArrear),
     advances: data.advances.filter(a => a.status === 'active').map(toEngineAdvance),
     loans: data.loans.filter(l => l.status === 'active').map(toEngineLoan),

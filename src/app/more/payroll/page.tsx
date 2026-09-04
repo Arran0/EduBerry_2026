@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Plus, Layers, SlidersHorizontal, Scale, Wallet, ChevronRight, Lock, FlaskConical,
+  ArrowLeft, Plus, Layers, SlidersHorizontal, Scale, Wallet, ChevronRight, Lock, FlaskConical, MapPin,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,11 +13,13 @@ import type { RunRow } from '@/lib/payroll/rows'
 import { RUN_STATUS_LABEL } from '@/lib/payroll/engine/workflow'
 import { PUI, STATUS_CHIP, inr } from '@/components/payroll/ui'
 
-// The payroll hub: every run, and the way in to the four things that shape one
-// — structures, policies, compliance rules and the money owed ledger.
+// The payroll hub: every run, and the way in to the five things that shape one
+// — structures, policies, work locations, compliance rules and the money owed
+// ledger.
 
 const SECTIONS = [
   { href: '/more/payroll/structures', icon: Layers, label: 'Salary structures', hint: 'Heads, templates, assignments and revisions' },
+  { href: '/more/payroll/locations', icon: MapPin, label: 'Work locations', hint: 'Offices, states and statutory registrations' },
   { href: '/more/payroll/policies', icon: SlidersHorizontal, label: 'Policies & calendars', hint: 'LOP rules and working calendars, per cohort' },
   { href: '/more/payroll/compliance', icon: Scale, label: 'Compliance', hint: 'Versioned PF, ESI, PT, LWF and TDS rules' },
   { href: '/more/payroll/money', icon: Wallet, label: 'Loans & advances', hint: 'Advances, loans, EMIs and outstanding balances' },

@@ -106,9 +106,12 @@ function groupRulesByScope<T extends { scope_type: DayTimingScopeType; scope_dat
 // and Driver Payroll Settings never drift apart.
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
-import HiddenMembersSettings from '@/components/salary/HiddenMembersSettings'
 
-type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
+// Fees and salary payout are no longer here: each has its own page under Admin
+// Space (/admin/fee-settings, /admin/payroll-settings). Bus Finance stays,
+// because bus fees and driver payout are a different account and a different
+// reconciliation from either.
+type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'bus'
 
 const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
 
@@ -388,7 +391,6 @@ export default function AdminSettingsPage() {
   const [selectedBannerKey, setSelectedBannerKey] = useState(PAGE_BANNERS[0].key)
 
   // ── Payment gateway (shared by Fee Setting + Bus Fee) ──
-  const [paymentsSub, setPaymentsSub] = useState<'fees' | 'salary'>('fees')
   const [busSub, setBusSub] = useState<'busfee' | 'driver'>('busfee')
 
   // ── School Profile (CBSE institutional info) ──
@@ -1603,30 +1605,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderPayments() {
-    return (
-      <div>
-        <InlineTabs
-          value={paymentsSub} onChange={setPaymentsSub}
-          items={[
-            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={14} /> },
-            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={14} /> },
-          ]}
-        />
-        <div className="mb-4">
-          <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
-          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'How students pay school fees into your bank account.' : 'How salaries reach staff bank accounts from your bank.'}</p>
-        </div>
-        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : (
-          <>
-            <BankPayoutSettings ctx="salary" />
-            <HiddenMembersSettings />
-          </>
-        )}
-      </div>
-    )
-  }
-
   function renderBusFinance() {
     return (
       <div>
@@ -1656,7 +1634,6 @@ export default function AdminSettingsPage() {
     { id: 'banners',     label: 'Banners',      icon: <Layout size={13} />  },
     { id: 'geofence',    label: 'Geofencing',   icon: <MapPin size={13} />  },
     { id: 'attendance',  label: 'Attendance',   icon: <Clock size={13} />   },
-    { id: 'payments',    label: 'Fees & Salary', icon: <CreditCard size={13} /> },
     { id: 'bus',         label: 'Bus Finance',  icon: <Bus size={13} />     },
   ]
 
@@ -1729,7 +1706,6 @@ export default function AdminSettingsPage() {
               {tab === 'banners'     && renderBanners()}
               {tab === 'geofence'    && renderGeofence()}
               {tab === 'attendance'  && renderAttendance()}
-              {tab === 'payments'    && renderPayments()}
               {tab === 'bus'         && renderBusFinance()}
             </div>
           </div>

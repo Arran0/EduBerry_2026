@@ -5,7 +5,7 @@
 import type {
   EngineInput, EngineEmployee, ComponentDef, EngineStructure, EngineAssignment,
   PolicyGroup, WorkingCalendar, PinnedRules, RuleSet, PfRules, EsiRules, PtRules,
-  LwfRules, TdsRules, GratuityRules, BonusRules, EnginePeriod, EngineAttendanceDay,
+  LwfRules, TdsRules, GratuityRules, BonusRules, EnginePeriod, EngineAttendanceDay, WorkLocation,
 } from '../engine/types'
 import { BUILTIN_POLICY } from '../engine/resolvePolicy'
 
@@ -54,7 +54,21 @@ export function employee(over: Partial<EngineEmployee> = {}): EngineEmployee {
     department: 'Science', designation: 'PGT',
     pan: 'ABCDE1234F', uan: '101234567890', esiIpNumber: '3101234567',
     pfApplicable: true, epsApplicable: true, esiOverride: null, esiCoveredAtPeriodStart: null,
-    pfWageOverride: null, jurisdiction: 'IN-TN', ...over,
+    pfWageOverride: null, jurisdictionOverride: null, ...over,
+  }
+}
+
+/**
+ * One default location in Tamil Nadu, so a fixture without a location set up
+ * behaves exactly as the single-state school did before locations existed.
+ */
+export function workLocation(over: Partial<WorkLocation> = {}): WorkLocation {
+  return {
+    id: 'loc-main', entityId: 'ent-1', entityName: 'Default entity', name: 'Main campus',
+    stateCode: 'IN-TN', isDefault: true, priority: 0,
+    effectiveFrom: '2000-01-01', effectiveTo: null, match: null, members: [],
+    epfEstablishmentId: 'TNMAS0012345000', esiEmployerCode: '51000123450001000',
+    ptRegistrationNo: null, lwfRegistrationNo: null, ...over,
   }
 }
 
@@ -187,6 +201,8 @@ export function engineInput(over: Partial<EngineInput> = {}): EngineInput {
     components: STANDARD_COMPONENTS,
     policyGroups: [policyGroup()],
     calendars: [calendar()],
+    locations: [workLocation()],
+    defaultJurisdiction: 'IN-TN',
     holidays: [],
     attendance: presentMonth(p.from, p.to),
     rules: ALL_RULES,

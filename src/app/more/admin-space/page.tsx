@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Shield, BookOpen, Users, Home, Settings,
-  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap,
+  ChevronRight, Lock, ArrowLeft, FileBadge, Briefcase, GraduationCap, Banknote, CreditCard,
 } from 'lucide-react'
 
 const adminTools = [
@@ -48,6 +48,18 @@ const adminTools = [
     description: 'Organise staff into teams and assign coordinator roles',
     href: '/more/teacher-teams',
     icon: Users,
+  },
+  {
+    title: 'Fee Settings',
+    description: 'Bank collection setup for school fees — how student payments reach your account',
+    href: '/admin/fee-settings',
+    icon: CreditCard,
+  },
+  {
+    title: 'Payroll Settings',
+    description: 'Bank payout connection and the default PF / ESI / LOP / bonus rules new pay cycles start from',
+    href: '/admin/payroll-settings',
+    icon: Banknote,
   },
   {
     title: 'App Settings',

@@ -107,10 +107,21 @@ export async function POST(request: NextRequest, { params }: { params: { runId: 
 
   // ── Persist ───────────────────────────────────────────────────────────
   for (const { lineId, result } of results) {
+    // Only the rule sets this line's own state was priced with, not the whole
+    // run's. A Karnataka line recording Tamil Nadu's PT set would be provenance
+    // that lies, which is worse than none.
+    const lineRuleSetIds = {
+      ...(ctx.pinnedIds['IN'] ? { IN: ctx.pinnedIds['IN'] } : {}),
+      ...(ctx.pinnedIds[result.jurisdiction] ? { [result.jurisdiction]: ctx.pinnedIds[result.jurisdiction] } : {}),
+    }
+
     await db.from('payroll_run_lines').update({
       structure_id: result.structureId,
       policy_group_id: result.policyGroupId,
       calendar_id: result.calendarId,
+      location_id: result.locationId,
+      entity_id: result.entityId,
+      jurisdiction: result.jurisdiction,
       gross_earnings: result.grossEarnings,
       total_deductions: result.totalDeductions,
       employer_contributions: result.employerContributions,
@@ -124,7 +135,10 @@ export async function POST(request: NextRequest, { params }: { params: { runId: 
         calendarId: result.calendarId,
         structureId: result.structureId,
         attendanceDays: result.attendance.days,
-        ruleSetIds: ctx.pinnedIds,
+        locationId: result.locationId,
+        jurisdiction: result.jurisdiction,
+        statutory: result.statutoryBases,
+        ruleSetIds: lineRuleSetIds,
       },
       trace: result.trace as unknown as Record<string, unknown>,
     }).eq('id', lineId)
@@ -197,6 +211,28 @@ export async function POST(request: NextRequest, { params }: { params: { runId: 
         })
       }
     }
+  }
+
+  // A location without its EPFO or ESIC registration still calculates correctly
+  // — the rates are central — but its monthly return cannot be filed. That is a
+  // warning now and a blocker at file generation, not a reason to stop payroll.
+  const locationById = new Map(ctx.locations.map(l => [l.id, l]))
+  const flaggedLocations = new Set<string>()
+  for (const { employeeId, result } of results) {
+    const loc = result.locationId ? locationById.get(result.locationId) : null
+    if (!loc || flaggedLocations.has(loc.id)) continue
+    const missing: string[] = []
+    if (!loc.epfEstablishmentId) missing.push('EPFO establishment id')
+    if (!loc.esiEmployerCode) missing.push('ESIC employer code')
+    if (missing.length === 0) continue
+    flaggedLocations.add(loc.id)
+    exceptions.push({
+      run_id: runId, employee_id: employeeId, severity: 'warn',
+      code: missing.length === 2 ? 'LOCATION_MISSING_REGISTRATION'
+        : missing[0].startsWith('EPFO') ? 'LOCATION_MISSING_PF_CODE' : 'LOCATION_MISSING_ESI_CODE',
+      message: `"${loc.name}" has no ${missing.join(' and no ')}, so its statutory return cannot be filed.`,
+      details: { locationId: loc.id, locationName: loc.name, missing },
+    })
   }
 
   // Bank details are checked here rather than in the engine: the engine computes

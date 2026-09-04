@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Banknote, Landmark, Wallet, CalendarRange } from 'lucide-react'
+import { Banknote, Landmark, Wallet, CalendarRange, Settings } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import dynamic from 'next/dynamic'
@@ -10,6 +10,8 @@ const BaseSalariesSection = dynamic(() => import('@/components/salary/sections/B
 const BankAccountsSection = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
 const SalarySummary       = dynamic(() => import('@/components/salary/SalarySummary'))
 const StaffSalaryView     = dynamic(() => import('@/components/salary/StaffSalaryView'))
+const PayrollSettingsPanel = dynamic(() => import('@/components/settings/PayrollSettingsPanel'))
+import ModalShell from '@/components/ui/ModalShell'
 import { useAuth } from '@/contexts/AuthContext'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
 
@@ -41,6 +43,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
 function AdminSalaryHub() {
   const [section, setSection] = useState<SectionKey>('cycles')
   const [bannerEditing, setBannerEditing] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -54,6 +57,16 @@ function AdminSalaryHub() {
         onEditingChange={setBannerEditing}
         maxWidth="max-w-5xl"
         backgroundIcon={<Wallet size={150} className="text-white" />}
+        actions={
+          <button
+            onClick={() => setShowSettings(true)}
+            title="Payroll settings"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white text-sm font-medium border border-white/25 rounded-lg backdrop-blur-sm transition-colors"
+          >
+            <Settings size={15} />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+        }
       />
 
       {/* A narrow gutter on phones: the stat tiles float inside it, and the
@@ -96,6 +109,24 @@ function AdminSalaryHub() {
           {section === 'bank' && <BankAccountsSection />}
         </div>
       </div>
+
+      {/* The same panel /admin/payroll-settings renders, opened where payroll is
+          actually being run. One copy of the settings, two ways in — a second
+          copy would be two things to keep in step and eventually two answers. */}
+      {showSettings && (
+        <ModalShell
+          onClose={() => setShowSettings(false)}
+          size="2xl"
+          title="Payroll settings"
+          subtitle="Salary payout and the default rules every new cycle starts from"
+          icon={<Settings size={16} />}
+          iconClassName="bg-[#27272A] text-white"
+          bodyClassName="bg-[#F5F5F5]"
+          minHClass="sm:min-h-[36rem]"
+        >
+          <PayrollSettingsPanel />
+        </ModalShell>
+      )}
     </div>
   )
 }
