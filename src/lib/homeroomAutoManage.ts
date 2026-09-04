@@ -1,16 +1,24 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { gradeLabel } from '@/lib/grades'
+import { deriveYearCode } from '@/lib/academicYear'
 
 // ── Academic year helpers ────────────────────────────────────
 
 /**
- * Returns the academic year label for a given date based on the calendar year.
- * e.g. any date in 2026 → "2026-27", any date in 2027 → "2027-28"
+ * The academic year label for a date.
+ *
+ * This used to say "any date in 2026 -> 2026-27", i.e. a calendar year, while
+ * the fee module read the same dates as April-March. Between January and March
+ * the two disagreed, so a student edited in February was put in a homeroom for
+ * the *next* session while their fees stayed in the current one.
+ *
+ * It now delegates to the one shared rule in src/lib/academicYear.ts. Kept as a
+ * named export because three call sites and a sync route use it; new code
+ * should read the stored session from `academic_years` (via
+ * useAcademicYear() or fetchActiveAcademicYear()) rather than deriving it.
  */
 export function getAcademicYear(date: Date = new Date()): string {
-  const year = date.getFullYear()
-  const shortNext = String(year + 1).slice(-2)
-  return `${year}-${shortNext}`
+  return deriveYearCode(date)
 }
 
 /**

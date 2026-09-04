@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { deriveYearCode } from '@/lib/academicYear'
 
 // School Fee Manager data layer. Mirrors the fee section of src/lib/bus.ts but
 // operates on the school_fees / school_fee_payments / fee_heads tables. Fees are
@@ -90,12 +91,16 @@ export interface FeeCollectionSummary {
 // Matches homerooms.academic_year and the homeroom_expiry_dates keys.
 // ============================================
 
-/** The 'YYYY-YY' academic year a date falls in (Indian Apr–Mar session). */
+/**
+ * The 'YYYY-YY' academic year a date falls in (Indian Apr–Mar session).
+ *
+ * Delegates to the one shared rule in src/lib/academicYear.ts. Round 1 of
+ * docs/fee-upgrade-plan.md made the academic year a stored row rather than a
+ * derived string, so this is now only the fallback for a date no session
+ * covers — new code should read the session from `academic_years`.
+ */
 export function academicYearOf(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  const month = d.getMonth() + 1 // 1–12
-  const start = month >= 4 ? d.getFullYear() : d.getFullYear() - 1
-  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`
+  return deriveYearCode(date)
 }
 
 export function currentAcademicYear(): string {
