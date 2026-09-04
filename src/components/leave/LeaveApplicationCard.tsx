@@ -8,6 +8,7 @@ import {
   Calendar,
   Sunset,
   Clock,
+  Timer,
   CheckCircle,
   XCircle,
   ImageIcon,
@@ -52,6 +53,7 @@ const TYPE_STYLE = {
   on_duty:  { accentFrom: 'from-teal-400',   iconBg: 'bg-teal-50',   iconColor: 'text-teal-500',   pill: 'bg-teal-50 text-teal-600' },
   medical:  { accentFrom: 'from-purple-400', iconBg: 'bg-purple-50', iconColor: 'text-purple-500', pill: 'bg-purple-50 text-purple-600' },
   half_day: { accentFrom: 'from-orange-400', iconBg: 'bg-orange-50', iconColor: 'text-orange-500', pill: 'bg-orange-50 text-orange-600' },
+  late:     { accentFrom: 'from-amber-400',  iconBg: 'bg-amber-50',  iconColor: 'text-amber-500',  pill: 'bg-amber-50 text-amber-600' },
 } as const
 
 const TYPE_ICON: Record<LeaveType, React.ElementType> = {
@@ -59,6 +61,7 @@ const TYPE_ICON: Record<LeaveType, React.ElementType> = {
   on_duty: Calendar,
   medical: Calendar,
   half_day: Sunset,
+  late: Timer,
 }
 
 /** Short pill text for the header row, e.g. "3d" or "½d". */

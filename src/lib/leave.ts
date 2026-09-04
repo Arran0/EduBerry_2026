@@ -8,7 +8,7 @@ import { compressImageIfNeeded } from './imageCompression'
 // Types
 // ============================================
 
-export type LeaveType = 'casual' | 'medical' | 'on_duty' | 'half_day'
+export type LeaveType = 'casual' | 'medical' | 'on_duty' | 'half_day' | 'late'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 
 export interface LeaveApplication {
@@ -82,6 +82,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   casual: 'Casual Leave',
   medical: 'Medical Leave',
   half_day: 'Half Day Permit',
+  late: 'Late Permit',
 }
 
 /** Two-to-six character type codes for the list rows, where a full label would
@@ -91,6 +92,7 @@ export const LEAVE_TYPE_SHORT: Record<LeaveType, string> = {
   casual: 'CL',
   medical: 'ML',
   half_day: '½ Day',
+  late: 'Late',
 }
 
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
@@ -907,7 +909,7 @@ export async function deleteLeaveApplication(id: string): Promise<boolean> {
   return true
 }
 
-export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty' | 'half_day'>, number> = { casual: 12, medical: 15 }
+export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty' | 'half_day' | 'late'>, number> = { casual: 12, medical: 15 }
 
 /** Fetch leave applications for a student that overlap with a given month. */
 export async function fetchLeaveApplicationsForStudentByMonth(

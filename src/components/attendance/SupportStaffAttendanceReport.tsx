@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Avatar from '@/components/Avatar'
-import { Search, X, Loader2, HardHat, Umbrella, Ban } from 'lucide-react'
+import { Search, X, Loader2, HardHat, Umbrella, Ban, CircleSlash } from 'lucide-react'
 import {
   SupportStaff,
   SupportAttendanceRecord,
@@ -28,6 +28,7 @@ import {
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
 import { fetchStaffDetailsMap } from '@/lib/staffDetails'
+import { SECTION_LABEL } from '@/components/workspace/ui'
 
 // ============================================
 // The Support Staff tab of the staff attendance report.
@@ -44,9 +45,11 @@ import { fetchStaffDetailsMap } from '@/lib/staffDetails'
 //
 // Both are folded into one roster because from an admin's point of view they
 // are the same kind of task: nobody here can check themselves in, so every
-// row is set by hand. Statuses are deliberately restricted to the five this
-// tab offers (present/absent/late/half_day/on_leave) for both kinds — no WFH,
-// no exception, since neither concept applies to either group.
+// row is set by hand. The section mirrors AllStaffAttendanceReport's format —
+// the same Absent / Present / Irregular inline tabs, the same five manual
+// marks (P/A/Late/½/Exception), and the same rule for which tab a status
+// lands in. No WFH here (no punch to work from home from); Not Marked is a
+// block under the tabs rather than a tab of its own, same as the main report.
 //
 // An unmarked person is NOT derived as absent the way the school-staff report
 // derives it: a missing row means "not marked yet", not "away" — see
@@ -74,10 +77,10 @@ interface SectionPerson {
   avatar_url?: string | null
 }
 
-const QUICK_SET: SupportAttendanceStatus[] = ['present', 'absent', 'late', 'half_day', 'on_leave']
+const QUICK_SET: SupportAttendanceStatus[] = ['present', 'absent', 'late', 'half_day', 'e']
 
 const QUICK_SHORT: Record<SupportAttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'Late', half_day: '½', on_leave: 'OL',
+  present: 'P', absent: 'A', late: 'Late', half_day: '½', on_leave: 'OL', e: 'Exception',
 }
 
 const QUICK_ACTIVE: Record<SupportAttendanceStatus, string> = {
@@ -86,18 +89,22 @@ const QUICK_ACTIVE: Record<SupportAttendanceStatus, string> = {
   late:     'bg-amber-500 text-white border-amber-500',
   half_day: 'bg-orange-500 text-white border-orange-500',
   on_leave: 'bg-blue-600 text-white border-blue-600',
+  e:        'bg-violet-600 text-white border-violet-600',
 }
 
 // The only statuses this tab ever writes, for either kind of person — a
 // driver's staff_attendance_records row is only ever trusted here if its
-// status is one of these, so a stray wfh/e value (which this tab never
+// status is one of these, so a stray wfh value (which this tab never
 // writes, but nothing stops another admin screen from having) falls back to
 // "not marked" rather than needing a pill of its own.
-const SHARED_STATUSES = new Set<string>(['present', 'absent', 'late', 'half_day', 'on_leave'])
+const SHARED_STATUSES = new Set<string>(['present', 'absent', 'late', 'half_day', 'on_leave', 'e'])
 const asSupportStatus = (status: string): SupportAttendanceStatus | null =>
   SHARED_STATUSES.has(status) ? (status as SupportAttendanceStatus) : null
 
-type Tab = 'all' | 'present' | 'absent' | 'unmarked'
+// Inline tab (Absent / Present / Irregular) — matches AllStaffAttendanceReport:
+// on_leave counts as Absent, late counts as Present, half_day/exception are
+// the genuine irregularities. 'irregular' kept as the internal key.
+type Tab = 'absent' | 'present' | 'irregular'
 
 function monthStartOf(date: string) {
   return `${date.slice(0, 7)}-01`
@@ -144,7 +151,7 @@ function SupportRow({
           )}
           {mtd.marked_days > 0 && (
             <span
-              title={`This month: ${mtd.present} present, ${mtd.late} late, ${mtd.half_day} half day, ${mtd.absent} absent, ${mtd.on_leave} on leave across ${mtd.marked_days} marked day${mtd.marked_days === 1 ? '' : 's'}`}
+              title={`This month: ${mtd.present} present, ${mtd.late} late, ${mtd.half_day} half day, ${mtd.absent} absent, ${mtd.on_leave} on leave, ${mtd.e} exception across ${mtd.marked_days} marked day${mtd.marked_days === 1 ? '' : 's'}`}
               className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded ${
                 mtd.present_pct >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : mtd.present_pct >= 75 ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -170,7 +177,7 @@ function SupportRow({
       {canEdit && (
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {QUICK_SET.map(st => {
-            const isWordLabel = st === 'late' || st === 'on_leave'
+            const isWordLabel = st === 'late' || st === 'e'
             return (
               <button
                 key={st}
@@ -185,7 +192,9 @@ function SupportRow({
                     : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
                 }`}
               >
-                {QUICK_SHORT[st]}
+                {st === 'e'
+                  ? (<><span className="sm:hidden">Excep.</span><span className="hidden sm:inline">Exception</span></>)
+                  : QUICK_SHORT[st]}
               </button>
             )
           })}
@@ -203,6 +212,10 @@ function SupportRow({
   )
 }
 
+function RowList({ children }: { children: React.ReactNode }) {
+  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+}
+
 // ── Section ──────────────────────────────────────────────────────────────────
 
 export default function SupportStaffAttendanceReport({
@@ -216,7 +229,7 @@ export default function SupportStaffAttendanceReport({
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useState<Tab>('absent')
 
   const isFuture = date > todayStr
 
@@ -244,6 +257,9 @@ export default function SupportStaffAttendanceReport({
   }, [date])
 
   useEffect(() => { load() }, [load, refreshKey])
+
+  // Reset paging-adjacent input whenever the day changes, same as the main report.
+  useEffect(() => { setQuery('') }, [date])
 
   // One merged, alphabetical roster — from an admin's point of view these are
   // the same kind of task (nobody here can check in for themselves), so they
@@ -298,33 +314,46 @@ export default function SupportStaffAttendanceReport({
 
   const stats = useMemo(() => computeSupportDayStats(roster, dayRecords), [roster, dayRecords])
 
-  const tabRoster = useMemo(() => {
-    switch (tab) {
-      case 'present':
-        return roster.filter(p => {
-          const s = recordByStaff.get(p.id)?.status
-          return s === 'present' || s === 'late' || s === 'half_day'
-        })
-      case 'absent':
-        return roster.filter(p => {
-          const s = recordByStaff.get(p.id)?.status
-          return s === 'absent' || s === 'on_leave'
-        })
-      case 'unmarked':
-        return roster.filter(p => !recordByStaff.has(p.id))
-      default:
-        return roster
-    }
-  }, [tab, roster, recordByStaff])
-
-  const visible = useMemo(() => {
+  const filterByQuery = useCallback((people: SectionPerson[]) => {
     const q = query.trim().toLowerCase()
-    if (!q) return tabRoster
-    return tabRoster.filter(p =>
-      p.full_name?.toLowerCase().includes(q) ||
-      p.designation?.toLowerCase().includes(q)
+    if (!q) return people
+    return people.filter(p =>
+      p.full_name?.toLowerCase().includes(q) || p.designation?.toLowerCase().includes(q)
     )
-  }, [tabRoster, query])
+  }, [query])
+
+  // ── Classification — same rule the main staff report uses: on_leave counts
+  // as Absent, late counts as Present, half_day/exception are Irregular.
+  const absentRoster = useMemo(
+    () => roster.filter(p => {
+      const s = recordByStaff.get(p.id)?.status
+      return s === 'absent' || s === 'on_leave'
+    }),
+    [roster, recordByStaff],
+  )
+  const presentRoster = useMemo(
+    () => roster.filter(p => {
+      const s = recordByStaff.get(p.id)?.status
+      return s === 'present' || s === 'late'
+    }),
+    [roster, recordByStaff],
+  )
+  const irregularRoster = useMemo(
+    () => roster.filter(p => {
+      const s = recordByStaff.get(p.id)?.status
+      return s === 'half_day' || s === 'e'
+    }),
+    [roster, recordByStaff],
+  )
+  const notMarkedRoster = useMemo(
+    () => roster.filter(p => !recordByStaff.has(p.id)),
+    [roster, recordByStaff],
+  )
+
+  const filteredAbsent = useMemo(() => filterByQuery(absentRoster), [absentRoster, filterByQuery])
+  const filteredPresent = useMemo(() => filterByQuery(presentRoster), [presentRoster, filterByQuery])
+  const filteredIrregular = useMemo(() => filterByQuery(irregularRoster), [irregularRoster, filterByQuery])
+  const filteredNotMarked = useMemo(() => filterByQuery(notMarkedRoster), [notMarkedRoster, filterByQuery])
 
   const handleSet = async (id: string, status: SupportAttendanceStatus) => {
     const person = personById.get(id)
@@ -412,12 +441,12 @@ export default function SupportStaffAttendanceReport({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 border-b border-[#E4E4E7]">
+            {/* Inline tabs — pick one list at a time, same as the main staff report */}
+            <div className="grid grid-cols-3 border-b border-[#E4E4E7]">
               {([
-                { key: 'all' as const,      label: 'All',        count: roster.length,     color: 'border-lime-600 text-lime-700' },
-                { key: 'present' as const,  label: 'Present',    count: stats.present,     color: 'border-emerald-600 text-emerald-600' },
-                { key: 'absent' as const,   label: 'Absent',     count: stats.absent + stats.on_leave, color: 'border-red-600 text-red-600' },
-                { key: 'unmarked' as const, label: 'Not Marked', count: stats.not_marked,  color: 'border-[#71717A] text-[#52525B]' },
+                { key: 'absent' as const,    label: 'Absent',    count: absentRoster.length,    color: 'border-red-600 text-red-600' },
+                { key: 'present' as const,   label: 'Present',   count: presentRoster.length,   color: 'border-emerald-600 text-emerald-600' },
+                { key: 'irregular' as const, label: 'Irregular', count: irregularRoster.length, color: 'border-amber-500 text-amber-600' },
               ]).map(t => (
                 <button
                   key={t.key}
@@ -453,24 +482,100 @@ export default function SupportStaffAttendanceReport({
               </p>
             )}
 
-            {visible.length === 0 ? (
-              <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                {query ? `No support staff or drivers match "${query}".` : 'Nobody in this list for the day.'}
-              </p>
-            ) : (
-              <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
-                {visible.map(person => (
-                  <SupportRow
-                    key={person.id}
-                    person={person}
-                    record={recordByStaff.get(person.id)}
-                    monthRecords={monthByStaff.get(person.id) ?? []}
-                    saving={savingId === person.id}
-                    canEdit={canEdit}
-                    onSet={handleSet}
-                    onClear={handleClear}
-                  />
-                ))}
+            {/* ── Absent — on_leave + absent ── */}
+            {tab === 'absent' && (
+              filteredAbsent.length === 0 ? (
+                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                  {query ? `No absentees match "${query}".` : 'No one is marked absent for this day.'}
+                </p>
+              ) : (
+                <RowList>
+                  {filteredAbsent.map(person => (
+                    <SupportRow
+                      key={person.id}
+                      person={person}
+                      record={recordByStaff.get(person.id)}
+                      monthRecords={monthByStaff.get(person.id) ?? []}
+                      saving={savingId === person.id}
+                      canEdit={canEdit}
+                      onSet={handleSet}
+                      onClear={handleClear}
+                    />
+                  ))}
+                </RowList>
+              )
+            )}
+
+            {/* ── Present — late (auto-counts as present) + checked-in present ── */}
+            {tab === 'present' && (
+              filteredPresent.length === 0 ? (
+                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                  {query ? `No present staff match "${query}".` : dayOff ? 'No one checked in on this day off.' : 'No one has been marked present yet.'}
+                </p>
+              ) : (
+                <RowList>
+                  {filteredPresent.map(person => (
+                    <SupportRow
+                      key={person.id}
+                      person={person}
+                      record={recordByStaff.get(person.id)}
+                      monthRecords={monthByStaff.get(person.id) ?? []}
+                      saving={savingId === person.id}
+                      canEdit={canEdit}
+                      onSet={handleSet}
+                      onClear={handleClear}
+                    />
+                  ))}
+                </RowList>
+              )
+            )}
+
+            {/* ── Irregular — half_day, exception ── */}
+            {tab === 'irregular' && (
+              filteredIrregular.length === 0 ? (
+                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                  {query ? `No irregular attendance matches "${query}".` : 'No irregular attendance for this day.'}
+                </p>
+              ) : (
+                <RowList>
+                  {filteredIrregular.map(person => (
+                    <SupportRow
+                      key={person.id}
+                      person={person}
+                      record={recordByStaff.get(person.id)}
+                      monthRecords={monthByStaff.get(person.id) ?? []}
+                      saving={savingId === person.id}
+                      canEdit={canEdit}
+                      onSet={handleSet}
+                      onClear={handleClear}
+                    />
+                  ))}
+                </RowList>
+              )
+            )}
+
+            {/* ── Not marked ─────── */}
+            {filteredNotMarked.length > 0 && (
+              <div className="border-t border-[#E4E4E7] pt-4">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <CircleSlash size={13} className="text-[#A1A1AA]" />
+                  <p className={SECTION_LABEL}>Not Marked</p>
+                  <span className="text-xs text-[#A1A1AA]">({filteredNotMarked.length})</span>
+                </div>
+                <RowList>
+                  {filteredNotMarked.map(person => (
+                    <SupportRow
+                      key={person.id}
+                      person={person}
+                      record={undefined}
+                      monthRecords={monthByStaff.get(person.id) ?? []}
+                      saving={savingId === person.id}
+                      canEdit={canEdit}
+                      onSet={handleSet}
+                      onClear={handleClear}
+                    />
+                  ))}
+                </RowList>
               </div>
             )}
           </div>
