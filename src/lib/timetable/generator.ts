@@ -40,16 +40,23 @@ import type {
   CombinedClassInput,
   Weekday,
 } from './types'
+import { teacherIdsOf } from './types'
 import {
   buildConstraintIndex,
   cellKey,
-  limitApplies,
-  limitBucket,
+  limitBucketsFor,
+  placementTeachers,
   timeOffBlocked,
   effectiveMaxInARow,
   type ConstraintIndex,
   type LimitRule,
 } from './constraints'
+
+// Every teacher of a lesson-ish object, primary first and de-duped. Round 8
+// allows a period to be co-taught, so clash / time-off / limit checks must run
+// once per teacher instead of once per period.
+const teachersOf = (x: { teacherId: string | null; teacherIds?: string[] }): string[] =>
+  placementTeachers({ homeroomId: '', subjectId: '', teacherId: x.teacherId, teacherIds: x.teacherIds })
 
 // ── Utilities ────────────────────────────────────────────────
 
@@ -81,6 +88,7 @@ interface Block {
   homeroomId: string
   subjectId: string
   teacherId: string | null
+  teacherIds: string[] // every teacher, primary first (co-teaching)
   roomType: RoomType
   size: number
   maxPerDay: number
@@ -142,10 +150,10 @@ class SolveState {
     const cellMap = this.homeroomBusy.get(p.homeroomId)!
     if (!cellMap.has(key)) cellMap.set(key, new Set())
     cellMap.get(key)!.add(hrToken(p.groupId))
-    if (p.teacherId) {
-      if (!this.teacherBusy.has(p.teacherId)) this.teacherBusy.set(p.teacherId, new Set())
-      this.teacherBusy.get(p.teacherId)!.add(key)
-      const tk = `${p.teacherId}|${p.day}`
+    for (const t of teachersOf(p)) {
+      if (!this.teacherBusy.has(t)) this.teacherBusy.set(t, new Set())
+      this.teacherBusy.get(t)!.add(key)
+      const tk = `${t}|${p.day}`
       if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
       this.teacherDaySlots.get(tk)!.add(slotIdx)
     }
@@ -159,9 +167,10 @@ class SolveState {
     for (let r = 0; r < limits.length; r++) {
       const rule = limits[r]
       if (rule.kind !== 'max') continue
-      if (!limitApplies(rule, p)) continue
-      const bk = `${r}|${limitBucket(rule, p, p.day)}`
-      this.limitCounts.set(bk, (this.limitCounts.get(bk) ?? 0) + 1)
+      for (const bucket of limitBucketsFor(rule, p, p.day)) {
+        const bk = `${r}|${bucket}`
+        this.limitCounts.set(bk, (this.limitCounts.get(bk) ?? 0) + 1)
+      }
     }
     this.placements.push(p)
   }
@@ -171,9 +180,9 @@ class SolveState {
     if (idx >= 0) this.placements.splice(idx, 1)
     const key = cellKey(p.day, p.slotId)
     this.homeroomBusy.get(p.homeroomId)?.get(key)?.delete(hrToken(p.groupId))
-    if (p.teacherId) {
-      this.teacherBusy.get(p.teacherId)?.delete(key)
-      this.teacherDaySlots.get(`${p.teacherId}|${p.day}`)?.delete(slotIdx)
+    for (const t of teachersOf(p)) {
+      this.teacherBusy.get(t)?.delete(key)
+      this.teacherDaySlots.get(`${t}|${p.day}`)?.delete(slotIdx)
     }
     if (p.roomId) this.roomUsedAt.get(key)?.delete(p.roomId)
     const sk = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
@@ -183,9 +192,10 @@ class SolveState {
     for (let r = 0; r < limits.length; r++) {
       const rule = limits[r]
       if (rule.kind !== 'max') continue
-      if (!limitApplies(rule, p)) continue
-      const bk = `${r}|${limitBucket(rule, p, p.day)}`
-      this.limitCounts.set(bk, Math.max(0, (this.limitCounts.get(bk) ?? 0) - 1))
+      for (const bucket of limitBucketsFor(rule, p, p.day)) {
+        const bk = `${r}|${bucket}`
+        this.limitCounts.set(bk, Math.max(0, (this.limitCounts.get(bk) ?? 0) - 1))
+      }
     }
   }
 
@@ -200,7 +210,8 @@ class SolveState {
       const token = hrToken(m.groupId)
       const p: PlacedEntry = {
         homeroomId: hr, day, slotId, subjectId: unit.subjectId,
-        teacherId: unit.teacherId, roomId: unit.roomId, isLocked: false,
+        teacherId: unit.teacherId, teacherIds: unit.teacherIds,
+        roomId: unit.roomId, isLocked: false,
         groupId: m.groupId, splitKey: null, combinedKey,
       }
       if (!this.homeroomBusy.has(hr)) this.homeroomBusy.set(hr, new Map())
@@ -213,10 +224,10 @@ class SolveState {
       this.placements.push(p)
       made.push(p)
     }
-    if (unit.teacherId) {
-      if (!this.teacherBusy.has(unit.teacherId)) this.teacherBusy.set(unit.teacherId, new Set())
-      this.teacherBusy.get(unit.teacherId)!.add(key)
-      const tk = `${unit.teacherId}|${day}`
+    for (const t of teachersOf(unit)) {
+      if (!this.teacherBusy.has(t)) this.teacherBusy.set(t, new Set())
+      this.teacherBusy.get(t)!.add(key)
+      const tk = `${t}|${day}`
       if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
       this.teacherDaySlots.get(tk)!.add(slotIdx)
     }
@@ -233,6 +244,7 @@ interface CombinedUnit {
   combinedId: string
   subjectId: string
   teacherId: string | null
+  teacherIds: string[]
   roomId: string | null
   members: { homeroomId: string; groupId: string | null }[]
 }
@@ -253,7 +265,9 @@ interface BuildArgs {
 function rank(b: Block): number {
   let r = 0
   if (b.roomType !== 'classroom') r += 5
-  if (b.teacherId) r += 2
+  // Each extra teacher is one more calendar to dodge, so co-taught blocks are
+  // harder to place and go earlier.
+  r += teachersOf(b).length * 2
   r += (b.size - 1) * 3 // larger blocks are harder to place — do them first
   return r
 }
@@ -306,22 +320,31 @@ function scoreBlock(
 
   const keys: string[] = []
   const token = hrToken(block.groupId)
-  const tBusy = block.teacherId ? state.teacherBusy.get(block.teacherId) : undefined
+  const blockTeachers = teachersOf(block)
+  const busySets = blockTeachers.map((t) => state.teacherBusy.get(t))
 
   for (let j = start; j < start + size; j++) {
     const slotId = geo.slotIds[j]
     const key = cellKey(day, slotId)
     keys.push(key)
     if (!state.homeroomFree(block.homeroomId, key, token)) return null
-    if (tBusy?.has(key)) return null
-    if (timeOffBlocked(index.teacherTimeOff, block.teacherId, key)) return null
+    // Every teacher of a co-taught lesson has to be free and not timed off.
+    if (busySets.some((s) => s?.has(key))) return null
+    if (blockTeachers.length === 0) {
+      if (timeOffBlocked(index.teacherTimeOff, null, key)) return null
+    } else if (blockTeachers.some((t) => timeOffBlocked(index.teacherTimeOff, t, key))) {
+      return null
+    }
     if (timeOffBlocked(index.homeroomTimeOff, block.homeroomId, key)) return null
     if (timeOffBlocked(index.subjectTimeOff, block.subjectId, key)) return null
-    // Pinned cells are reserved for the homeroom's class teacher.
+    // Pinned cells are reserved for the homeroom's class teacher — who only has
+    // to be one of the lesson's teachers, not its only one.
     for (const pin of index.pins) {
-      if (pin.homeroomId === block.homeroomId && pin.key === key && pin.classTeacherId !== block.teacherId) {
-        return null
-      }
+      if (pin.homeroomId !== block.homeroomId || pin.key !== key) continue
+      const satisfied = pin.classTeacherId
+        ? blockTeachers.includes(pin.classTeacherId)
+        : blockTeachers.length === 0
+      if (!satisfied) return null
     }
   }
 
@@ -333,17 +356,17 @@ function scoreBlock(
   for (let r = 0; r < index.limits.length; r++) {
     const rule = index.limits[r]
     if (rule.kind !== 'max') continue
-    if (!limitApplies(rule, block)) continue
-    const bk = `${r}|${limitBucket(rule, block, day)}`
-    const current = state.limitCounts.get(bk) ?? 0
-    if (current + size > rule.value) return null
+    for (const bucket of limitBucketsFor(rule, block, day)) {
+      const current = state.limitCounts.get(`${r}|${bucket}`) ?? 0
+      if (current + size > rule.value) return null
+    }
   }
 
-  // Max-in-a-row (hard).
-  const maxRow = effectiveMaxInARow(index, block.teacherId)
-  if (maxRow != null && block.teacherId) {
-    const existing = state.teacherDaySlots.get(`${block.teacherId}|${day}`)
-    const union = new Set(existing ?? [])
+  // Max-in-a-row (hard) — checked for every teacher of the lesson.
+  for (const t of blockTeachers) {
+    const maxRow = effectiveMaxInARow(index, t)
+    if (maxRow == null) continue
+    const union = new Set(state.teacherDaySlots.get(`${t}|${day}`) ?? [])
     for (let j = start; j < start + size; j++) union.add(j)
     if (longestRun(union) > maxRow) return null
   }
@@ -380,6 +403,7 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
       slotId,
       subjectId: block.subjectId,
       teacherId: block.teacherId,
+      teacherIds: block.teacherIds,
       roomId: best.roomId,
       isLocked: false,
       groupId: block.groupId,
@@ -422,20 +446,22 @@ function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, star
   const { geo, index } = args
   const slotId = geo.slotIds[start]
   const key = cellKey(day, slotId)
-  if (unit.teacherId) {
-    if (state.teacherBusy.get(unit.teacherId)?.has(key)) return null
-    if (timeOffBlocked(index.teacherTimeOff, unit.teacherId, key)) return null
+  const unitTeachers = teachersOf(unit)
+  for (const t of unitTeachers) {
+    if (state.teacherBusy.get(t)?.has(key)) return null
+    if (timeOffBlocked(index.teacherTimeOff, t, key)) return null
   }
+  if (unitTeachers.length === 0 && timeOffBlocked(index.teacherTimeOff, null, key)) return null
   if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
   if (unit.roomId && state.roomUsedAt.get(key)?.has(unit.roomId)) return null
   for (const m of unit.members) {
     if (!state.homeroomFree(m.homeroomId, key, hrToken(m.groupId))) return null
     if (timeOffBlocked(index.homeroomTimeOff, m.homeroomId, key)) return null
   }
-  const maxRow = effectiveMaxInARow(index, unit.teacherId)
-  if (maxRow != null && unit.teacherId) {
-    const existing = state.teacherDaySlots.get(`${unit.teacherId}|${day}`)
-    const union = new Set(existing ?? [])
+  for (const t of unitTeachers) {
+    const maxRow = effectiveMaxInARow(index, t)
+    if (maxRow == null) continue
+    const union = new Set(state.teacherDaySlots.get(`${t}|${day}`) ?? [])
     union.add(start)
     if (longestRun(union) > maxRow) return null
   }
@@ -491,10 +517,11 @@ function softPenalty(
 
   const teacherDaySlots = new Map<string, Set<number>>()
   for (const p of placements) {
-    if (!p.teacherId) continue
-    const k = `${p.teacherId}|${p.day}`
-    if (!teacherDaySlots.has(k)) teacherDaySlots.set(k, new Set())
-    teacherDaySlots.get(k)!.add(slotOrder.get(p.slotId) ?? 0)
+    for (const t of teachersOf(p)) {
+      const k = `${t}|${p.day}`
+      if (!teacherDaySlots.has(k)) teacherDaySlots.set(k, new Set())
+      teacherDaySlots.get(k)!.add(slotOrder.get(p.slotId) ?? 0)
+    }
   }
   for (const set of teacherDaySlots.values()) {
     const idxs = [...set].sort((a, b) => a - b)
@@ -516,9 +543,9 @@ function minTargetShortfall(placements: PlacedEntry[], days: Weekday[], index: C
     if (rule.kind !== 'min') continue
     const buckets = new Map<string, number>()
     for (const p of placements) {
-      if (!limitApplies(rule, p)) continue
-      const key = limitBucket(rule, p, p.day)
-      buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      for (const key of limitBucketsFor(rule, p, p.day)) {
+        buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      }
     }
     if (rule.period === 'week') {
       for (const count of buckets.values()) if (count < rule.value) penalty += (rule.value - count) * 4
@@ -531,12 +558,19 @@ function minTargetShortfall(placements: PlacedEntry[], days: Weekday[], index: C
   return penalty
 }
 
-function unfilledPins(placements: PlacedEntry[], index: ConstraintIndex): number {
-  if (index.pins.length === 0) return 0
+// `homeroom__day__slot__teacher` for every (co-)teacher actually in a cell —
+// the lookup a class-teacher pin is checked against.
+function pinFillSet(placements: PlacedEntry[]): Set<string> {
   const filled = new Set<string>()
   for (const p of placements) {
-    if (p.teacherId) filled.add(`${p.homeroomId}__${p.day}__${p.slotId}__${p.teacherId}`)
+    for (const t of teachersOf(p)) filled.add(`${p.homeroomId}__${p.day}__${p.slotId}__${t}`)
   }
+  return filled
+}
+
+function unfilledPins(placements: PlacedEntry[], index: ConstraintIndex): number {
+  if (index.pins.length === 0) return 0
+  const filled = pinFillSet(placements)
   let n = 0
   for (const pin of index.pins) {
     const [day, slotId] = pin.key.split('__')
@@ -571,6 +605,7 @@ function localSearch(state: SolveState, args: BuildArgs, iterations: number): vo
       homeroomId: p.homeroomId,
       subjectId: p.subjectId,
       teacherId: p.teacherId,
+      teacherIds: teachersOf(p),
       roomType: roomTypeOf(p, args.roomsByType),
       size: 1,
       maxPerDay: Number.POSITIVE_INFINITY,
@@ -741,6 +776,7 @@ function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block
         homeroomId: req.homeroom_id,
         subjectId: req.subject_id,
         teacherId: req.teacher_id,
+        teacherIds: teacherIdsOf(req),
         roomType: req.room_type,
         size,
         maxPerDay: req.max_per_day,
@@ -771,6 +807,7 @@ function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): Comb
         combinedId: c.id,
         subjectId: c.subjectId,
         teacherId: c.teacherId,
+        teacherIds: teacherIdsOf({ teacherId: c.teacherId, teacherIds: c.teacherIds }),
         roomId: c.roomId,
         members: c.members,
       })
@@ -781,10 +818,7 @@ function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): Comb
 
 function pinsUnfilledList(placements: PlacedEntry[], index: ConstraintIndex): { homeroomId: string }[] {
   if (index.pins.length === 0) return []
-  const filled = new Set<string>()
-  for (const p of placements) {
-    if (p.teacherId) filled.add(`${p.homeroomId}__${p.day}__${p.slotId}__${p.teacherId}`)
-  }
+  const filled = pinFillSet(placements)
   const out: { homeroomId: string }[] = []
   for (const pin of index.pins) {
     const [day, slotId] = pin.key.split('__')
@@ -826,7 +860,8 @@ export function detectConflicts(
 
   for (const e of entries) {
     const key = cellKey(e.day, e.slotId)
-    if (e.teacherId) push(teacherAt, `${e.teacherId}|${key}`, e)
+    // A co-taught period books every one of its teachers at that cell.
+    for (const t of teachersOf(e)) push(teacherAt, `${t}|${key}`, e)
     if (e.roomId) push(roomAt, `${e.roomId}|${key}`, e)
     push(homeroomAt, `${e.homeroomId}|${key}`, e)
   }
@@ -881,11 +916,12 @@ export function detectConflicts(
 
   for (const e of entries) {
     const key = cellKey(e.day, e.slotId)
-    if (e.teacherId && timeOffBlocked(index.teacherTimeOff, e.teacherId, key)) {
+    for (const t of teachersOf(e)) {
+      if (!timeOffBlocked(index.teacherTimeOff, t, key)) continue
       conflicts.push({
         kind: 'time_off_violated',
         message: 'Teacher is scheduled during a period they marked unavailable.',
-        teacherId: e.teacherId, day: e.day, slotId: e.slotId,
+        teacherId: t, day: e.day, slotId: e.slotId,
       })
     }
     if (timeOffBlocked(index.homeroomTimeOff, e.homeroomId, key)) {
@@ -903,7 +939,10 @@ export function detectConflicts(
       })
     }
     for (const pin of index.pins) {
-      if (pin.homeroomId === e.homeroomId && pin.key === key && pin.classTeacherId && pin.classTeacherId !== e.teacherId) {
+      if (
+        pin.homeroomId === e.homeroomId && pin.key === key && pin.classTeacherId &&
+        !teachersOf(e).includes(pin.classTeacherId)
+      ) {
         conflicts.push({
           kind: 'time_off_violated',
           message: 'A pinned period is filled by someone other than the class teacher.',
@@ -933,7 +972,7 @@ export function conflictCellKeys(
   const roomAt = new Map<string, PlacedEntry[]>()
   for (const e of entries) {
     const k = cellKey(e.day, e.slotId)
-    if (e.teacherId) push(teacherAt, `${e.teacherId}|${k}`, e)
+    for (const t of teachersOf(e)) push(teacherAt, `${t}|${k}`, e)
     if (e.roomId) push(roomAt, `${e.roomId}|${k}`, e)
   }
   const mark = (e: PlacedEntry) => keys.add(`${e.homeroomId}__${e.day}__${e.slotId}`)
@@ -944,12 +983,16 @@ export function conflictCellKeys(
   mergeLegacyUnavailability(index, unavailability)
   for (const e of entries) {
     const key = cellKey(e.day, e.slotId)
-    if (e.teacherId && timeOffBlocked(index.teacherTimeOff, e.teacherId, key)) mark(e)
+    const eTeachers = teachersOf(e)
+    if (eTeachers.some((t) => timeOffBlocked(index.teacherTimeOff, t, key))) mark(e)
     else if (timeOffBlocked(index.homeroomTimeOff, e.homeroomId, key)) mark(e)
     else if (e.subjectId && timeOffBlocked(index.subjectTimeOff, e.subjectId, key)) mark(e)
     else {
       for (const pin of index.pins) {
-        if (pin.homeroomId === e.homeroomId && pin.key === key && pin.classTeacherId && pin.classTeacherId !== e.teacherId) {
+        if (
+          pin.homeroomId === e.homeroomId && pin.key === key && pin.classTeacherId &&
+          !eTeachers.includes(pin.classTeacherId)
+        ) {
           mark(e)
           break
         }

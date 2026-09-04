@@ -15,6 +15,8 @@ import type {
   CombinedClass, CombinedClassInput, Weekday, TimetableStatus,
 } from '@/lib/timetable'
 import { generateTimetable, detectConflicts } from '@/lib/timetable/generator'
+import { teacherIdsOf, fetchGroupsForHomerooms } from '@/lib/timetable'
+import type { HomeroomGroup } from '@/lib/timetable'
 import { computeHealth } from '@/lib/timetable/health'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
 import HealthPanel from '../HealthPanel'
@@ -35,6 +37,7 @@ const toPlaced = (e: TimetableEntry): PlacedEntry => ({
   slotId: e.slot_id,
   subjectId: e.subject_id ?? '',
   teacherId: e.teacher_id,
+  teacherIds: teacherIdsOf(e),
   roomId: e.room_id,
   isLocked: e.is_locked,
   groupId: e.group_id ?? null,
@@ -53,6 +56,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [teachers, setTeachers] = useState<UserProfile[]>([])
+  const [groups, setGroups] = useState<HomeroomGroup[]>([])
 
   const [timetable, setTimetable] = useState<Timetable | null>(null)
   const [entries, setEntries] = useState<PlacedEntry[]>([])
@@ -90,6 +94,8 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     setSubjects(subs)
     setHomerooms(hrs)
     setTeachers(profiles.filter((p) => isStaffRole(p.role)))
+    // Group names for the split-lesson badges in both grid editors.
+    setGroups(await fetchGroupsForHomerooms(hrs.map((h) => h.id)))
 
     // Adopt the most recent timetable version (draft preferred) and its entries.
     const existing = timetables[0] ?? null
@@ -136,6 +142,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
           id: c.id,
           subjectId: c.subject_id as string,
           teacherId: c.teacher_id,
+          teacherIds: teacherIdsOf(c),
           roomId: c.room_id,
           periodsPerWeek: c.periods_per_week,
           members: (c.members ?? []).map((m) => ({ homeroomId: m.homeroom_id, groupId: m.group_id })),
@@ -162,6 +169,11 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       subjectName: (id) => sName.get(id) ?? 'Subject',
     })
   }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, homerooms, teachers, subjects])
+
+  const groupName = useCallback(
+    (groupId: string) => groups.find((g) => g.id === groupId)?.name,
+    [groups],
+  )
 
   const homeroomOptions: SmartOption[] = useMemo(
     () => scheduledHomerooms.map((h) => ({ value: h.id, label: h.name })),
@@ -203,40 +215,70 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
 
   const clearUnlocked = () => setEntries((prev) => prev.filter((e) => e.isLocked))
 
-  // ── Cell editing for the selected homeroom ────────────────
-  const setCell = (
-    day: Weekday, slotId: string, subjectId: string, teacherId: string | null, roomId: string | null,
+  // ── Cell editing (shared by the class view and the master grid) ──
+  // A target is one lesson layer of one cell: a homeroom's cell holds the
+  // whole-class lesson (groupId null) plus any parallel split-group lessons,
+  // and each is edited independently. Combined lessons are never targeted here.
+  const isTarget = (
+    e: PlacedEntry, homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+  ) =>
+    !e.combinedKey && e.homeroomId === homeroomId && e.day === day && e.slotId === slotId &&
+    (e.groupId ?? null) === groupId
+
+  const setCellEntry = (
+    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+    subjectId: string, teacherIds: string[], roomId: string | null,
   ) => {
-    // The single-class editor edits only the whole-class layer (group_id null),
-    // leaving any parallel split-group lessons in the cell untouched.
-    const isWhole = (e: PlacedEntry) => !e.groupId
     setEntries((prev) => {
-      const existing = prev.find(
-        (e) => isWhole(e) && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId,
-      )
-      const rest = prev.filter(
-        (e) => !(isWhole(e) && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId),
-      )
+      const existing = prev.find((e) => isTarget(e, homeroomId, day, slotId, groupId))
+      const rest = prev.filter((e) => !isTarget(e, homeroomId, day, slotId, groupId))
       return [
         ...rest,
-        { homeroomId: selectedHomeroomId, day, slotId, subjectId, teacherId, roomId, isLocked: existing?.isLocked ?? false, groupId: null, splitKey: null, combinedKey: null },
+        {
+          homeroomId, day, slotId, subjectId,
+          teacherId: teacherIds[0] ?? null,
+          teacherIds,
+          roomId,
+          isLocked: existing?.isLocked ?? false,
+          groupId,
+          splitKey: groupId ? `${homeroomId}__${day}__${slotId}` : null,
+          combinedKey: null,
+        },
       ]
     })
   }
 
-  const clearCell = (day: Weekday, slotId: string) =>
-    setEntries((prev) =>
-      prev.filter((e) => !(!e.groupId && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId)),
-    )
+  const clearCellEntry = (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) =>
+    setEntries((prev) => prev.filter((e) => !isTarget(e, homeroomId, day, slotId, groupId)))
 
-  const toggleLock = (day: Weekday, slotId: string) =>
-    setEntries((prev) =>
-      prev.map((e) =>
-        !e.groupId && e.homeroomId === selectedHomeroomId && e.day === day && e.slotId === slotId
+  // Pinning fixes a lesson to its period: the generator treats pinned cells as
+  // given and builds the rest of the week around them. A combined lesson pins
+  // every member class together.
+  const togglePin = (target: PlacedEntry) =>
+    setEntries((prev) => {
+      if (target.combinedKey) {
+        const next = !target.isLocked
+        return prev.map((e) => (e.combinedKey === target.combinedKey ? { ...e, isLocked: next } : e))
+      }
+      return prev.map((e) =>
+        isTarget(e, target.homeroomId, target.day, target.slotId, target.groupId ?? null)
           ? { ...e, isLocked: !e.isLocked }
           : e,
-      ),
+      )
+    })
+
+  // Readable reasons a given cell is flagged — shown in the slot details modal.
+  const cellConflictMessages = (homeroomId: string, day: Weekday, slotId: string): string[] => {
+    const here = entries.filter(
+      (e) => e.homeroomId === homeroomId && e.day === day && e.slotId === slotId,
     )
+    const teacherHere = new Set(here.flatMap((e) => teacherIdsOf(e)))
+    const msgs = liveConflicts
+      .filter((c) => c.day === day && c.slotId === slotId)
+      .filter((c) => c.homeroomId === homeroomId || (c.teacherId ? teacherHere.has(c.teacherId) : false))
+      .map((c) => c.message)
+    return [...new Set(msgs)]
+  }
 
   // ── Persistence ───────────────────────────────────────────
   const resolvedName = () => timetableName.trim() || config.name
@@ -308,8 +350,12 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       .filter((e) => e.homeroomId === selectedHomeroomId)
       .map((e) => ({
         id: '', timetable_id: '', homeroom_id: e.homeroomId, day: e.day, slot_id: e.slotId,
-        subject_id: e.subjectId, teacher_id: e.teacherId, room_id: e.roomId, is_locked: e.isLocked,
+        subject_id: e.subjectId, teacher_id: e.teacherId, teacher_ids: teacherIdsOf(e),
+        room_id: e.roomId, is_locked: e.isLocked,
         teacher_name: e.teacherId ? teacherById.get(e.teacherId)?.full_name ?? null : null,
+        teacher_names: teacherIdsOf(e)
+          .map((id) => teacherById.get(id)?.full_name)
+          .filter((n): n is string => !!n),
         created_at: '', updated_at: '',
         subject: e.subjectId ? subjectById.get(e.subjectId) : undefined,
         teacher: e.teacherId ? teacherById.get(e.teacherId) ?? undefined : undefined,
@@ -456,7 +502,9 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
             </>
           )}
           {view === 'master' && (
-            <p className="text-xs text-[#71717A] flex-1">Drag a lesson to another period. Split &amp; combined lessons move as units; conflicts highlight in red.</p>
+            <p className="text-xs text-[#71717A] flex-1">
+              Drag a lesson to another period, click one for details or to pin it. Split &amp; combined lessons move as units; conflicts highlight in red.
+            </p>
           )}
         </div>
 
@@ -466,6 +514,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
               days={config.working_days}
               slots={slots}
               homeroomId={selectedHomeroomId}
+              homeroomName={scheduledHomerooms.find((h) => h.id === selectedHomeroomId)?.name ?? 'Class'}
               entries={entries}
               unavailability={unavailability}
               subjects={subjects}
@@ -473,9 +522,11 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
               rooms={rooms}
               constraints={constraints}
               homerooms={homeroomsLite}
-              onSetCell={setCell}
-              onClearCell={clearCell}
-              onToggleLock={toggleLock}
+              groupName={groupName}
+              cellConflicts={cellConflictMessages}
+              onSetCell={setCellEntry}
+              onClearCell={clearCellEntry}
+              onTogglePin={togglePin}
             />
           )
         ) : (
@@ -491,6 +542,11 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
             unavailability={unavailability}
             constraints={constraints}
             homeroomsLite={homeroomsLite}
+            groupName={groupName}
+            cellConflicts={cellConflictMessages}
+            onSetCell={setCellEntry}
+            onClearCell={clearCellEntry}
+            onTogglePin={togglePin}
           />
         )}
       </div>

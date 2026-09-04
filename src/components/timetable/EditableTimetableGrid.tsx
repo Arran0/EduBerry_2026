@@ -1,20 +1,20 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { Lock, Unlock, X, Coffee } from 'lucide-react'
+import { Pin, Coffee } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
-import { WEEKDAY_LABELS } from '@/lib/timetable'
+import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
 import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
-import { SmartSelect } from './ui'
-import type { SmartOption } from './ui'
+import SlotDetailsModal from './SlotDetailsModal'
 
 interface Props {
   days: Weekday[]
   slots: PeriodSlot[] // all slots incl. breaks, ordered by position
   homeroomId: string
+  homeroomName: string
   entries: PlacedEntry[] // ALL entries across homerooms (for cross-class conflict detection)
   unavailability: TeacherUnavailability[]
   subjects: Subject[]
@@ -22,18 +22,24 @@ interface Props {
   rooms: Room[]
   constraints?: TimetableConstraint[]
   homerooms?: HomeroomLite[]
-  onSetCell: (day: Weekday, slotId: string, subjectId: string, teacherId: string | null, roomId: string | null) => void
-  onClearCell: (day: Weekday, slotId: string) => void
-  onToggleLock: (day: Weekday, slotId: string) => void
+  groupName?: (groupId: string) => string | undefined
+  cellConflicts?: (homeroomId: string, day: Weekday, slotId: string) => string[]
+  onSetCell: (
+    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+    subjectId: string, teacherIds: string[], roomId: string | null,
+  ) => void
+  onClearCell: (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) => void
+  onTogglePin: (entry: PlacedEntry) => void
 }
 
 const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroomId}__${day}__${slotId}`
 
 export default function EditableTimetableGrid({
-  days, slots, homeroomId, entries, unavailability, subjects, teachers, rooms, constraints = [], homerooms = [],
-  onSetCell, onClearCell, onToggleLock,
+  days, slots, homeroomId, homeroomName, entries, unavailability, subjects, teachers, rooms,
+  constraints = [], homerooms = [], groupName, cellConflicts,
+  onSetCell, onClearCell, onTogglePin,
 }: Props) {
-  const [editing, setEditing] = useState<{ day: Weekday; slotId: string } | null>(null)
+  const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
 
   const conflicts = useMemo(
     () => conflictCellKeys(entries, unavailability, constraints, homerooms),
@@ -46,6 +52,18 @@ export default function EditableTimetableGrid({
     const m = new Map<string, PlacedEntry>()
     for (const e of entries) {
       if (e.homeroomId === homeroomId && !e.groupId) m.set(`${e.day}__${e.slotId}`, e)
+    }
+    return m
+  }, [entries, homeroomId])
+
+  // Everything in a cell, whole-class layer and split groups alike — what the
+  // details modal shows.
+  const allByCell = useMemo(() => {
+    const m = new Map<string, PlacedEntry[]>()
+    for (const e of entries) {
+      if (e.homeroomId !== homeroomId) continue
+      const k = `${e.day}__${e.slotId}`
+      m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
   }, [entries, homeroomId])
@@ -65,7 +83,14 @@ export default function EditableTimetableGrid({
   const teacherById = useMemo(() => new Map(teachers.map((t) => [t.id, t])), [teachers])
   const roomById = useMemo(() => new Map(rooms.map((r) => [r.id, r])), [rooms])
 
-  const editingEntry = editing ? byCell.get(`${editing.day}__${editing.slotId}`) ?? null : null
+  // Names of every teacher on a lesson — co-taught periods list them all.
+  const teacherLine = (entry: PlacedEntry) =>
+    teacherIdsOf(entry)
+      .map((id) => teacherById.get(id)?.full_name)
+      .filter((n): n is string => !!n)
+      .join(', ')
+
+  const openEntries = openCell ? allByCell.get(`${openCell.day}__${openCell.slot.id}`) ?? [] : []
 
   return (
     <div className="overflow-x-auto border border-[#D4D4D8] bg-white">
@@ -105,12 +130,13 @@ export default function EditableTimetableGrid({
                 const splits = splitCount.get(`${day}__${slot.id}`) ?? 0
                 const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
                 const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
-                const teacher = entry?.teacherId ? teacherById.get(entry.teacherId) : null
                 const room = entry?.roomId ? roomById.get(entry.roomId) : null
+                const names = entry ? teacherLine(entry) : ''
                 return (
                   <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
                     <button
-                      onClick={() => setEditing({ day, slotId: slot.id })}
+                      onClick={() => setOpenCell({ day, slot })}
+                      title={entry ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}` : 'Free period'}
                       className={`relative w-full h-10 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight transition-all ${
                         inConflict
                           ? 'ring-2 ring-inset ring-rose-400'
@@ -127,10 +153,10 @@ export default function EditableTimetableGrid({
                       {entry ? (
                         <>
                           <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
-                          {teacher && <div className="text-[#52525B] truncate">{teacher.full_name}</div>}
+                          {names && <div className="text-[#52525B] truncate">{names}</div>}
                           {room && <div className="text-[#A1A1AA] truncate hidden sm:block">{room.name}</div>}
                           {entry.isLocked && (
-                            <Lock size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
+                            <Pin size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
                           )}
                         </>
                       ) : splits > 0 ? (
@@ -147,110 +173,27 @@ export default function EditableTimetableGrid({
         </tbody>
       </table>
 
-      {editing && (
-        <CellEditor
-          entry={editingEntry}
+      {openCell && (
+        <SlotDetailsModal
+          target={{ homeroomId, homeroomName, day: openCell.day, slot: openCell.slot }}
+          entries={openEntries}
           subjects={subjects}
           teachers={teachers}
           rooms={rooms}
-          onClose={() => setEditing(null)}
-          onSave={(subjectId, teacherId, roomId) => {
-            onSetCell(editing.day, editing.slotId, subjectId, teacherId, roomId)
-            setEditing(null)
+          groupName={groupName}
+          conflicts={cellConflicts?.(homeroomId, openCell.day, openCell.slot.id) ?? []}
+          onClose={() => setOpenCell(null)}
+          onTogglePin={onTogglePin}
+          onSave={(groupId, subjectId, teacherIds, roomId) => {
+            onSetCell(homeroomId, openCell.day, openCell.slot.id, groupId, subjectId, teacherIds, roomId)
+            setOpenCell(null)
           }}
-          onClear={() => {
-            onClearCell(editing.day, editing.slotId)
-            setEditing(null)
+          onClear={(entry) => {
+            onClearCell(homeroomId, openCell.day, openCell.slot.id, entry.groupId ?? null)
+            setOpenCell(null)
           }}
-          onToggleLock={() => onToggleLock(editing.day, editing.slotId)}
         />
       )}
-    </div>
-  )
-}
-
-// ── Cell editor modal ────────────────────────────────────────
-
-function CellEditor({
-  entry, subjects, teachers, rooms, onClose, onSave, onClear, onToggleLock,
-}: {
-  entry: PlacedEntry | null
-  subjects: Subject[]
-  teachers: UserProfile[]
-  rooms: Room[]
-  onClose: () => void
-  onSave: (subjectId: string, teacherId: string | null, roomId: string | null) => void
-  onClear: () => void
-  onToggleLock: () => void
-}) {
-  const [subjectId, setSubjectId] = useState(entry?.subjectId ?? '')
-  const [teacherId, setTeacherId] = useState(entry?.teacherId ?? '')
-  const [roomId, setRoomId] = useState(entry?.roomId ?? '')
-
-  const subjectOptions: SmartOption[] = subjects.map((s) => ({
-    value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined,
-  }))
-  const teacherOptions: SmartOption[] = teachers.map((t) => ({
-    value: t.id, label: t.full_name, sublabel: t.email,
-  }))
-  const roomOptions: SmartOption[] = rooms.map((r) => ({ value: r.id, label: r.name }))
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="bg-white border border-[#D4D4D8] shadow-xl w-full max-w-sm p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-[#18181B]">Edit period</h3>
-          <button onClick={onClose} className="text-[#A1A1AA] hover:text-[#18181B]">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</span>
-            <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
-          </div>
-          <div>
-            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Teacher</span>
-            <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
-          </div>
-          <div>
-            <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Room</span>
-            <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="None" searchPlaceholder="Search rooms…" allowClear />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 mt-5">
-          {entry && (
-            <button
-              onClick={onToggleLock}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
-            >
-              {entry.isLocked ? <Unlock size={14} /> : <Lock size={14} />}
-              {entry.isLocked ? 'Unlock' : 'Lock'}
-            </button>
-          )}
-          {entry && (
-            <button
-              onClick={onClear}
-              className="px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"
-            >
-              Clear
-            </button>
-          )}
-          <div className="flex-1" />
-          <button
-            onClick={() => subjectId && onSave(subjectId, teacherId || null, roomId || null)}
-            disabled={!subjectId}
-            className="px-4 py-2 text-sm font-medium bg-[#27272A] text-[#F5F5F5] disabled:opacity-50 hover:bg-[#18181B] transition-colors"
-          >
-            Save
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

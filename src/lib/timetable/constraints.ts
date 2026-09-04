@@ -108,16 +108,31 @@ export function buildConstraintIndex(
   return idx
 }
 
-// A candidate placement, as far as constraints care.
+// A candidate placement, as far as constraints care. A period can be
+// co-taught, so `teacherIds` (primary first) is the authoritative list and
+// `teacherId` is only its head.
 export interface PlacementLite {
   homeroomId: string
   subjectId: string
   teacherId: string | null
+  teacherIds?: string[]
+}
+
+// Every teacher on a placement, primary included, de-duped.
+export function placementTeachers(p: PlacementLite): string[] {
+  const out: string[] = []
+  for (const id of [p.teacherId, ...(p.teacherIds ?? [])]) {
+    if (id && !out.includes(id)) out.push(id)
+  }
+  return out
 }
 
 export function limitApplies(rule: LimitRule, p: PlacementLite): boolean {
   if (rule.homeroomId && rule.homeroomId !== p.homeroomId) return false
-  if (rule.scope === 'teacher') return !!p.teacherId && (rule.scopeId === null || rule.scopeId === p.teacherId)
+  if (rule.scope === 'teacher') {
+    const teachers = placementTeachers(p)
+    return teachers.length > 0 && (rule.scopeId === null || teachers.includes(rule.scopeId))
+  }
   if (rule.scope === 'subject') return rule.scopeId === null || rule.scopeId === p.subjectId
   return rule.scopeId === null || rule.scopeId === p.homeroomId
 }
@@ -130,6 +145,24 @@ export function limitBucket(rule: LimitRule, p: PlacementLite, day: Weekday): st
   const hr = rule.homeroomId ? `|${rule.homeroomId}` : ''
   const d = rule.period === 'day' ? `|${day}` : ''
   return `${rule.scope}:${entity}${hr}${d}`
+}
+
+/**
+ * Every bucket a placement contributes to under one rule — empty when the rule
+ * doesn't apply. A co-taught period counts against EACH of its teachers, so a
+ * teacher-scoped rule yields one bucket per teacher; other scopes yield one.
+ */
+export function limitBucketsFor(rule: LimitRule, p: PlacementLite, day: Weekday): string[] {
+  if (!limitApplies(rule, p)) return []
+  const hr = rule.homeroomId ? `|${rule.homeroomId}` : ''
+  const d = rule.period === 'day' ? `|${day}` : ''
+  if (rule.scope === 'teacher') {
+    return placementTeachers(p)
+      .filter((t) => rule.scopeId === null || rule.scopeId === t)
+      .map((t) => `teacher:${t}${hr}${d}`)
+  }
+  const entity = rule.scope === 'subject' ? p.subjectId : p.homeroomId
+  return [`${rule.scope}:${entity}${hr}${d}`]
 }
 
 // True when the given entity is blocked at cellKey by a time-off (its own or an "all").

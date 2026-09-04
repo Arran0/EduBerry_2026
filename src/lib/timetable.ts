@@ -23,6 +23,7 @@ import type {
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'
+import { teacherIdsOf } from './timetable/types'
 
 // ============================================================
 // Subjects
@@ -305,7 +306,7 @@ export async function fetchRequirements(configId: string): Promise<Requirement[]
 
 export async function createRequirement(
   input: Pick<Requirement, 'config_id' | 'homeroom_id' | 'subject_id'> &
-    Partial<Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block' | 'group_id'>>,
+    Partial<Pick<Requirement, 'teacher_id' | 'teacher_ids' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block' | 'group_id'>>,
 ): Promise<Requirement | null> {
   const { data, error } = await supabase
     .from('timetable_requirements')
@@ -323,7 +324,7 @@ export async function createRequirement(
 export async function updateRequirement(
   id: string,
   patch: Partial<
-    Pick<Requirement, 'teacher_id' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block' | 'group_id'>
+    Pick<Requirement, 'teacher_id' | 'teacher_ids' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block' | 'group_id'>
   >,
 ): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').update(patch).eq('id', id)
@@ -576,7 +577,9 @@ export async function replaceEntries(
 
   // Resolve teacher display names (the caller — an admin — can read profiles)
   // so students who cannot read staff profiles still see the teacher per period.
-  const teacherIds = [...new Set(entries.map((e) => e.teacherId).filter(Boolean) as string[])]
+  // Co-taught periods carry every teacher in teacher_ids / teacher_names, with
+  // the primary duplicated into the legacy singular columns.
+  const teacherIds = [...new Set(entries.flatMap((e) => teacherIdsOf(e)))]
   const nameById = new Map<string, string>()
   if (teacherIds.length > 0) {
     const { data: profiles } = await supabase
@@ -586,20 +589,25 @@ export async function replaceEntries(
     for (const p of profiles ?? []) nameById.set(p.id, p.full_name)
   }
 
-  const rows = entries.map((e) => ({
+  const rows = entries.map((e) => {
+    const ids = teacherIdsOf(e)
+    return {
     timetable_id: timetableId,
     homeroom_id: e.homeroomId,
     day: e.day,
     slot_id: e.slotId,
     subject_id: e.subjectId || null,  // '' is not a valid UUID; coerce to null
-    teacher_id: e.teacherId,
-    teacher_name: e.teacherId ? nameById.get(e.teacherId) ?? null : null,
+    teacher_id: ids[0] ?? null,
+    teacher_ids: ids,
+    teacher_name: ids[0] ? nameById.get(ids[0]) ?? null : null,
+    teacher_names: ids.map((id) => nameById.get(id) ?? '').filter(Boolean),
     room_id: e.roomId,
     is_locked: e.isLocked,
     group_id: e.groupId ?? null,
     split_key: e.splitKey ?? null,
     combined_key: e.combinedKey ?? null,
-  }))
+    }
+  })
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
     console.error('replaceEntries (insert) error:', error.code, error.message, error.details, error.hint)
@@ -823,7 +831,9 @@ export async function fetchTimetableForStaff(teacherId: string): Promise<Timetab
     .from('timetable_entries')
     .select(ENTRY_SELECT)
     .in('timetable_id', publishedIds)
-    .eq('teacher_id', teacherId)
+    // Co-teaching: the period may list them in teacher_ids rather than as the
+    // primary teacher_id.
+    .or(`teacher_id.eq.${teacherId},teacher_ids.cs.{${teacherId}}`)
   if (eErr) {
     console.error('fetchTimetableForStaff (entries) error:', eErr)
     return []
@@ -892,6 +902,23 @@ export async function fetchGroupsForHomeroom(homeroomId: string): Promise<Homero
 
   if (error) {
     console.error('fetchGroupsForHomeroom error:', error)
+    return []
+  }
+  return (data ?? []) as HomeroomGroup[]
+}
+
+// Groups of several homerooms in one query — the grid editors need group names
+// for every scheduled class, not just one.
+export async function fetchGroupsForHomerooms(homeroomIds: string[]): Promise<HomeroomGroup[]> {
+  if (homeroomIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('timetable_homeroom_groups')
+    .select('*, subject:timetable_subjects(*)')
+    .in('homeroom_id', homeroomIds)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('fetchGroupsForHomerooms error:', error)
     return []
   }
   return (data ?? []) as HomeroomGroup[]
@@ -1089,17 +1116,20 @@ export async function createCombinedClass(input: {
   name: string
   subject_id: string | null
   teacher_id: string | null
+  teacher_ids?: string[]
   room_id: string | null
   periods_per_week: number
   members: { homeroomId: string; groupId: string | null }[]
 }): Promise<CombinedClass | null> {
+  const teacherIds = teacherIdsOf({ teacher_id: input.teacher_id, teacher_ids: input.teacher_ids ?? [] })
   const { data, error } = await supabase
     .from('timetable_combined_classes')
     .insert({
       config_id: input.config_id,
       name: input.name,
       subject_id: input.subject_id,
-      teacher_id: input.teacher_id,
+      teacher_id: teacherIds[0] ?? null,
+      teacher_ids: teacherIds,
       room_id: input.room_id,
       periods_per_week: input.periods_per_week,
     })

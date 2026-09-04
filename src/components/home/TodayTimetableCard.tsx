@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CalendarClock, ChevronRight } from 'lucide-react'
 import {
   fetchTimetableForStudent,
+  entryTeacherLabel,
   WEEKDAYS,
   type PeriodSlot,
   type TimetableEntry,
@@ -96,8 +97,8 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
                   <h4 className="font-semibold text-slate-800 text-sm truncate">
                     {entry?.subject?.name || slot.label || 'Period'}
                   </h4>
-                  {entry?.teacher_name && (
-                    <p className="text-[11px] text-slate-400 truncate">{entry.teacher_name}</p>
+                  {entry && entryTeacherLabel(entry) && (
+                    <p className="text-[11px] text-slate-400 truncate">{entryTeacherLabel(entry)}</p>
                   )}
                 </div>
               </div>

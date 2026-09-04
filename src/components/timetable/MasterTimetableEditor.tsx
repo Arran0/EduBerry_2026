@@ -1,14 +1,15 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
-import { Lock, Layers } from 'lucide-react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Pin, Layers, Maximize2, Minimize2, ZoomIn, ZoomOut, Scan } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
-import { WEEKDAY_LABELS } from '@/lib/timetable'
+import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
 import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
 } from '@/lib/timetable'
 import type { Homeroom } from '@/lib/homerooms'
 import type { UserProfile } from '@/lib/supabase'
+import SlotDetailsModal from './SlotDetailsModal'
 
 interface Props {
   days: Weekday[]
@@ -22,6 +23,14 @@ interface Props {
   unavailability: TeacherUnavailability[]
   constraints: TimetableConstraint[]
   homeroomsLite: HomeroomLite[]
+  groupName?: (groupId: string) => string | undefined
+  cellConflicts?: (homeroomId: string, day: Weekday, slotId: string) => string[]
+  onSetCell: (
+    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+    subjectId: string, teacherIds: string[], roomId: string | null,
+  ) => void
+  onClearCell: (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) => void
+  onTogglePin: (entry: PlacedEntry) => void
 }
 
 const cellId = (hr: string, day: Weekday, slotId: string) => `${hr}__${day}__${slotId}`
@@ -29,16 +38,77 @@ const cellId = (hr: string, day: Weekday, slotId: string) => `${hr}__${day}__${s
 const entryId = (e: PlacedEntry) =>
   `${e.homeroomId}__${e.day}__${e.slotId}__${e.groupId ?? ''}__${e.combinedKey ?? ''}`
 
+// Geometry at zoom 1. Everything else scales off these so the whole week can be
+// squeezed onto one screen (or blown up when there is room to spare).
+const BASE_CELL = 54 // px per period column
+const BASE_ROW = 34 // px per class row
+const BASE_LABEL = 112 // px for the sticky class-name column
+const MIN_ZOOM = 0.4
+const MAX_ZOOM = 1.6
+
 // aSc-style master grid: homeroom rows × (day → slot sub-columns). Drag a
-// lesson to another period; live-validated against clashes and constraints.
+// lesson to another period; click one for details, pinning and editing.
+// Live-validated against clashes and constraints.
 export default function MasterTimetableEditor({
   days, slots, homerooms, entries, onChange, subjects, teachers, rooms,
-  unavailability, constraints, homeroomsLite,
+  unavailability, constraints, homeroomsLite, groupName, cellConflicts,
+  onSetCell, onClearCell, onTogglePin,
 }: Props) {
   const teachingSlots = useMemo(() => slots.filter((s) => !s.is_break), [slots])
   const dragRef = useRef<PlacedEntry | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCell, setOverCell] = useState<string | null>(null)
+  const [open, setOpen] = useState<{ homeroom: Homeroom; day: Weekday; slot: PeriodSlot } | null>(null)
+
+  // ── Density ────────────────────────────────────────────────
+  // "Fit" keeps the entire week inside the viewport width; the +/− buttons
+  // switch to a manual zoom.
+  const [zoom, setZoom] = useState(1)
+  const [autoFit, setAutoFit] = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const naturalWidth = BASE_LABEL + days.length * teachingSlots.length * BASE_CELL
+
+  const recomputeFit = useCallback(() => {
+    const el = wrapRef.current
+    if (!el || naturalWidth === 0) return
+    const available = el.clientWidth - 2
+    if (available <= 0) return
+    setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, available / naturalWidth)))
+  }, [naturalWidth])
+
+  useLayoutEffect(() => {
+    if (!autoFit) return
+    recomputeFit()
+    const el = wrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => recomputeFit())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [autoFit, recomputeFit, fullscreen])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
+
+  const nudgeZoom = (delta: number) => {
+    setAutoFit(false)
+    setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((z + delta) * 100) / 100)))
+  }
+
+  const cellW = Math.round(BASE_CELL * zoom)
+  const rowH = Math.round(BASE_ROW * zoom)
+  const labelW = Math.round(BASE_LABEL * zoom)
+  const px = (n: number) => `${n}px`
+  // Below ~0.75 there is no room for a second line inside a cell.
+  const dense = zoom < 0.75
+  const fontMain = Math.max(7, Math.round(10 * zoom))
+  const fontSub = Math.max(6, Math.round(8.5 * zoom))
+  const fontHead = Math.max(7, Math.round(9.5 * zoom))
 
   const subjectById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
   const teacherById = useMemo(() => new Map(teachers.map((t) => [t.id, t])), [teachers])
@@ -104,19 +174,20 @@ export default function MasterTimetableEditor({
     )
   }
 
-  const toggleLock = (target: PlacedEntry) => {
-    const key = entryId(target)
-    onChange(entries.map((e) => (entryId(e) === key ? { ...e, isLocked: !e.isLocked } : e)))
-  }
+  const openEntries = open ? byCell.get(cellId(open.homeroom.id, open.day, open.slot.id)) ?? [] : []
 
-  return (
-    <div className="overflow-auto border border-[#D4D4D8] bg-white max-h-[72vh]">
-      <table className="border-collapse text-xs">
+  const grid = (
+    <div
+      ref={wrapRef}
+      className={`overflow-auto border border-[#D4D4D8] bg-white ${fullscreen ? 'flex-1 min-h-0' : 'max-h-[78vh]'}`}
+    >
+      <table className="border-collapse" style={{ fontSize: px(fontMain) }}>
         <thead>
           <tr className="bg-[#FAFAF9]">
             <th
               rowSpan={2}
-              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-1.5 sm:px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-widest text-[#525252] min-w-[5rem] sm:min-w-[7rem]"
+              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-1.5 py-1 text-left font-bold uppercase tracking-widest text-[#525252]"
+              style={{ width: px(labelW), minWidth: px(labelW), fontSize: px(fontHead) }}
             >
               Class
             </th>
@@ -124,10 +195,10 @@ export default function MasterTimetableEditor({
               <th
                 key={d}
                 colSpan={teachingSlots.length}
-                className="sticky top-0 z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-2 py-1 text-center text-[11px] font-semibold text-[#52525B]"
+                className="sticky top-0 z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-1 py-1 text-center font-semibold text-[#52525B]"
+                style={{ fontSize: px(fontHead) }}
               >
-                <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
-                <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
+                {dense ? WEEKDAY_LABELS[d].slice(0, 3) : WEEKDAY_LABELS[d]}
               </th>
             ))}
           </tr>
@@ -136,7 +207,13 @@ export default function MasterTimetableEditor({
               teachingSlots.map((s, i) => (
                 <th
                   key={`${d}-${s.id}`}
-                  className="sticky top-[26px] z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-0.5 sm:px-1 py-1 text-center text-[10px] font-medium text-[#71717A] min-w-[2.5rem] sm:min-w-[3.25rem]"
+                  className="sticky z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-0.5 py-0.5 text-center font-medium text-[#71717A]"
+                  style={{
+                    top: px(Math.round(20 * zoom)),
+                    width: px(cellW),
+                    minWidth: px(cellW),
+                    fontSize: px(fontSub),
+                  }}
                   title={s.label ?? undefined}
                 >
                   {i + 1}
@@ -148,7 +225,11 @@ export default function MasterTimetableEditor({
         <tbody>
           {homerooms.map((hr) => (
             <tr key={hr.id}>
-              <td className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-1.5 sm:px-2 py-1 font-medium text-[#18181B] whitespace-nowrap truncate max-w-[5rem] sm:max-w-none">
+              <td
+                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-1.5 py-0.5 font-medium text-[#18181B] whitespace-nowrap truncate"
+                style={{ width: px(labelW), maxWidth: px(labelW) }}
+                title={hr.name}
+              >
                 {hr.name}
               </td>
               {days.map((day) =>
@@ -166,14 +247,19 @@ export default function MasterTimetableEditor({
                       }}
                       onDragLeave={() => setOverCell((c) => (c === key ? null : c))}
                       onDrop={() => handleDrop(hr.id, day, slot.id)}
-                      className={`border-b border-l border-[#E4E4E7] p-0.5 align-top ${
+                      onClick={() => setOpen({ homeroom: hr, day, slot })}
+                      className={`border-b border-l border-[#E4E4E7] p-px align-top cursor-pointer ${
                         isOver ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : inConflict ? 'bg-rose-50' : ''
                       }`}
+                      style={{ width: px(cellW), minWidth: px(cellW) }}
                     >
-                      <div className="space-y-0.5 min-h-[2.25rem] w-[2.5rem] sm:w-[3.25rem]">
+                      <div className="space-y-px" style={{ minHeight: px(rowH) }}>
                         {cellEntries.map((entry) => {
                           const subj = entry.subjectId ? subjectById.get(entry.subjectId) : null
-                          const teacher = entry.teacherId ? teacherById.get(entry.teacherId) : null
+                          const ids = teacherIdsOf(entry)
+                          const names = ids
+                            .map((id) => teacherById.get(id)?.full_name)
+                            .filter((n): n is string => !!n)
                           const room = entry.roomId ? roomById.get(entry.roomId) : null
                           const eid = entryId(entry)
                           return (
@@ -189,8 +275,8 @@ export default function MasterTimetableEditor({
                                 setDragId(null)
                                 setOverCell(null)
                               }}
-                              title={`${subj?.name ?? 'Lesson'}${teacher ? ' · ' + teacher.full_name : ''}${room ? ' · ' + room.name : ''}`}
-                              className={`relative px-1 py-0.5 cursor-grab active:cursor-grabbing leading-tight ${
+                              title={`${subj?.name ?? 'Lesson'}${names.length ? ' · ' + names.join(', ') : ''}${room ? ' · ' + room.name : ''}${entry.isLocked ? ' · pinned' : ''}`}
+                              className={`relative px-0.5 cursor-grab active:cursor-grabbing leading-tight ${
                                 dragId === eid ? 'opacity-40' : ''
                               } ${inConflict ? 'ring-1 ring-inset ring-rose-400' : ''}`}
                               style={{
@@ -201,19 +287,20 @@ export default function MasterTimetableEditor({
                               <div className="font-semibold text-[#18181B] truncate">
                                 {subj?.code || subj?.name?.slice(0, 4) || '—'}
                               </div>
-                              {(entry.groupId || entry.combinedKey || entry.isLocked) && (
-                                <div className="flex items-center gap-0.5">
-                                  {entry.groupId && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" title="Split group" />}
-                                  {entry.combinedKey && <Layers size={9} className="text-indigo-500" />}
-                                  <button
-                                    onClick={() => toggleLock(entry)}
-                                    className={entry.isLocked ? 'text-[#52525B]' : 'text-[#C4C4C8] hover:text-[#52525B]'}
-                                    title={entry.isLocked ? 'Locked' : 'Lock'}
-                                  >
-                                    <Lock size={9} />
-                                  </button>
+                              {!dense && names.length > 0 && (
+                                <div className="text-[#52525B] truncate" style={{ fontSize: px(fontSub) }}>
+                                  {names.length > 1 ? `${shortName(names[0])} +${names.length - 1}` : shortName(names[0])}
                                 </div>
                               )}
+                              <div className="absolute top-0 right-0 flex items-center gap-px">
+                                {entry.groupId && (
+                                  <span className="w-1 h-1 rounded-full bg-indigo-400" title="Split group" />
+                                )}
+                                {entry.combinedKey && <Layers size={Math.max(7, Math.round(9 * zoom))} className="text-indigo-500" />}
+                                {entry.isLocked && (
+                                  <Pin size={Math.max(7, Math.round(9 * zoom))} className="text-[#27272A]" />
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -228,4 +315,89 @@ export default function MasterTimetableEditor({
       </table>
     </div>
   )
+
+  const toolbar = (
+    <div className="flex items-center gap-1.5 mb-2">
+      <button
+        onClick={() => { setAutoFit(true); recomputeFit() }}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border transition-colors ${
+          autoFit ? 'bg-[#27272A] text-white border-[#27272A]' : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
+        }`}
+        title="Shrink the grid so the whole week fits on screen"
+      >
+        <Scan size={13} /> Fit
+      </button>
+      <div className="inline-flex border border-[#D4D4D8]">
+        <button onClick={() => nudgeZoom(-0.1)} className="px-2 py-1.5 text-[#52525B] hover:bg-[#F5F5F5]" title="Zoom out">
+          <ZoomOut size={13} />
+        </button>
+        <span className="px-2 py-1.5 text-xs tabular-nums text-[#71717A] border-x border-[#D4D4D8] min-w-[3rem] text-center">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={() => nudgeZoom(0.1)} className="px-2 py-1.5 text-[#52525B] hover:bg-[#F5F5F5]" title="Zoom in">
+          <ZoomIn size={13} />
+        </button>
+      </div>
+      <button
+        onClick={() => setFullscreen((f) => !f)}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5] transition-colors"
+        title={fullscreen ? 'Leave full screen (Esc)' : 'Use the whole screen'}
+      >
+        {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        <span className="hidden sm:inline">{fullscreen ? 'Exit full screen' : 'Full screen'}</span>
+      </button>
+      {fullscreen && (
+        <span className="text-[11px] text-[#A1A1AA] hidden sm:inline ml-1">
+          {homerooms.length} classes × {days.length * teachingSlots.length} periods
+        </span>
+      )}
+    </div>
+  )
+
+  const modal = open && (
+    <SlotDetailsModal
+      target={{ homeroomId: open.homeroom.id, homeroomName: open.homeroom.name, day: open.day, slot: open.slot }}
+      entries={openEntries}
+      subjects={subjects}
+      teachers={teachers}
+      rooms={rooms}
+      groupName={groupName}
+      conflicts={cellConflicts?.(open.homeroom.id, open.day, open.slot.id) ?? []}
+      onClose={() => setOpen(null)}
+      onTogglePin={onTogglePin}
+      onSave={(groupId, subjectId, teacherIds, roomId) => {
+        onSetCell(open.homeroom.id, open.day, open.slot.id, groupId, subjectId, teacherIds, roomId)
+        setOpen(null)
+      }}
+      onClear={(entry) => {
+        onClearCell(open.homeroom.id, open.day, open.slot.id, entry.groupId ?? null)
+        setOpen(null)
+      }}
+    />
+  )
+
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white p-3 flex flex-col">
+        {toolbar}
+        {grid}
+        {modal}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {toolbar}
+      {grid}
+      {modal}
+    </div>
+  )
+}
+
+// "Priya Raman" → "P. Raman", so a name still reads inside a 50px cell.
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0]
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`
 }
