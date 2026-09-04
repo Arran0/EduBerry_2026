@@ -20,6 +20,7 @@ interface RecordRow {
   base_amount: number
   status: string
   staff_id: string
+  pay_by_cash: boolean
   staff: { full_name: string } | null
   items: { amount: number }[]
 }
@@ -85,10 +86,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, manual: true })
   }
 
-  // Only approved records are eligible for disbursement.
+  // Only approved records are eligible for disbursement. Rows marked paid by
+  // cash are dropped before the bank batch is built — that person isn't
+  // getting a bank transfer this cycle regardless of what's on file for them.
   const { data: records, error: recErr } = await admin
     .from('salary_records')
-    .select('id, base_amount, status, staff_id, staff:profiles!staff_id(full_name), items:salary_record_items(amount)')
+    .select('id, base_amount, status, staff_id, pay_by_cash, staff:profiles!staff_id(full_name), items:salary_record_items(amount)')
     .eq('cycle_id', cycle_id)
     .eq('status', 'approved')
   if (recErr) {
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Could not load records' }, { status: 500 })
   }
 
-  const rows = (records ?? []) as unknown as RecordRow[]
+  const rows = ((records ?? []) as unknown as RecordRow[]).filter(r => !r.pay_by_cash)
   if (rows.length === 0) {
     return NextResponse.json({ success: false, error: 'No approved records to disburse in this cycle' }, { status: 409 })
   }

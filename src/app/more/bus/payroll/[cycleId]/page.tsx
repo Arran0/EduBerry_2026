@@ -60,6 +60,9 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
     id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id, support_staff_id: null,
     base_amount: r.base_amount, status: r.status,
     payout_status: r.payout_status, payout_reference: r.payout_reference,
+    // This legacy driver-only cycle has no cash flag of its own — the unified
+    // Salary Manager cycle is where that lives.
+    pay_by_cash: false,
     notes: r.notes, created_at: r.created_at, updated_at: r.updated_at,
     working_days_override: r.working_days_override,
     leave_override: r.leave_override,

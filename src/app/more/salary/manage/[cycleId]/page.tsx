@@ -103,6 +103,7 @@ const GRID_COLS = [
   // one cell that actually needs it. At the sheet's floor every column is at
   // its minimum and the name truncates; past that, the growth goes here.
   'minmax(168px,2.8fr)',  // staff (chevron + avatar + name + statements & calendar icons)
+  '38px',                 // paid by cash
   'minmax(74px,1fr)',     // base
   'minmax(46px,0.66fr)',  // work days
   'minmax(44px,0.6fr)',   // leave
@@ -526,7 +527,8 @@ export default function SalaryCycleDetailPage() {
       if (teamMemberIds && !(r.staff_id && teamMemberIds.has(r.staff_id))) return false
       if (filters.pay === 'paid' && r.status !== 'paid') return false
       if (filters.pay === 'unpaid' && r.status === 'paid') return false
-      if (filters.noBank && bankMap[recordPersonId(r)]) return false
+      // A cash-marked row is never blocked on a bank account — it doesn't need one.
+      if (filters.noBank && (bankMap[recordPersonId(r)] || r.pay_by_cash)) return false
       if (filters.withLop) {
         const f = rowFigures(r)
         if (f.lopLateRs + f.lopLeaveRs + f.lopHalfDayRs <= 0) return false
@@ -742,13 +744,15 @@ export default function SalaryCycleDetailPage() {
   const downloadBankCsv = () => {
     if (!cycle) return
     setDisburseMsg(null)
-    const { fileName, rows, included, missingBank, notApproved } =
+    const { fileName, rows, included, missingBank, notApproved, cash } =
       buildBankDisbursementCsv(cycle, visibleRecords, bankMap)
 
     if (included === 0) {
       setDisburseMsg(
         notApproved === 0
-          ? 'No records with bank details on file to export. Add bank accounts first.'
+          ? cash > 0 && missingBank.length === 0
+            ? `Nothing to export: all ${cash} ${narrowed ? 'filtered ' : ''}record(s) are marked paid by cash.`
+            : 'No records with bank details on file to export. Add bank accounts first.'
           : !closed
             ? 'Nothing to export yet — lock the cycle first so its records are approved for payment.'
             : `Nothing to export: all ${notApproved} ${narrowed ? 'filtered ' : ''}record(s) are already marked paid.`,
@@ -759,7 +763,8 @@ export default function SalaryCycleDetailPage() {
     setDisburseMsg(
       `Exported ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.csv.` +
       (missingBank.length ? ` Skipped (no bank details): ${missingBank.join(', ')}.` : '') +
-      (notApproved > 0 ? ` Skipped ${notApproved} already-paid or unapproved record(s).` : ''),
+      (notApproved > 0 ? ` Skipped ${notApproved} already-paid or unapproved record(s).` : '') +
+      (cash > 0 ? ` Skipped ${cash} paid-by-cash record(s).` : ''),
     )
   }
 
@@ -906,6 +911,7 @@ export default function SalaryCycleDetailPage() {
                         <div className={`${GRID} flex-1 min-w-0 px-2.5 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
                           <span className={`${SHEET.headCell} text-center`} title="Sign-off on hand-edited rows">✓</span>
                           <span className={`${SHEET.headCell} pl-[42px]`}>Staff</span>
+                          <span className={`${SHEET.headCell} text-center`} title="Paid by cash — excluded from the bank CSV and automated payouts">Cash</span>
                           <span className={`${SHEET.headCell} text-right`}>Base</span>
                           <span className={`${SHEET.headCell} text-center`}>Days</span>
                           <span className={`${SHEET.headCell} text-center`}>Leave</span>
@@ -985,7 +991,7 @@ export default function SalaryCycleDetailPage() {
                                       {r.staff ? getDisplayRole(r.staff) : r.support_staff ? (r.support_staff.designation || 'Support Staff') : ''}
                                     </p>
                                   </div>
-                                  {!hasBank && (
+                                  {!hasBank && !r.pay_by_cash && (
                                     <span title="No bank account on file — this row can't be exported for disbursement"
                                       className="flex-shrink-0 text-[#BE123C]">
                                       <Landmark size={11} />
@@ -1014,6 +1020,18 @@ export default function SalaryCycleDetailPage() {
                                     <CalendarDays size={11} />
                                   </button>
                                 </div>
+                                <input
+                                  type="checkbox"
+                                  checked={r.pay_by_cash}
+                                  disabled={closed}
+                                  onClick={e => e.stopPropagation()}
+                                  onChange={e => saveOverride(r.id, { pay_by_cash: e.target.checked })}
+                                  title={r.pay_by_cash
+                                    ? 'Paid by cash this cycle — left out of the bank CSV and automated payouts'
+                                    : 'Mark paid by cash — leaves this person out of the bank CSV and automated payouts'}
+                                  aria-label={`Paid by cash for ${recordPersonName(r) || 'this row'}`}
+                                  className="w-3 h-3 justify-self-center accent-[#27272A] cursor-pointer disabled:cursor-default"
+                                />
                                 <EditableCell
                                   value={Number(r.base_amount) || 0} derived editable={!closed}
                                   format={formatINR} title="Base salary for this cycle"

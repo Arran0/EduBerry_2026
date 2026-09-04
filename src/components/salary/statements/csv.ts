@@ -53,6 +53,8 @@ export interface BankCsvResult {
   missingBank: string[]
   /** Rows dropped because they are not approved (already paid, or still draft). */
   notApproved: number
+  /** Rows dropped because they're marked paid by cash for this cycle. */
+  cash: number
 }
 
 export function buildBankDisbursementCsv(
@@ -68,9 +70,11 @@ export function buildBankDisbursementCsv(
   const rows: (string | number)[][] = [header]
   const missingBank: string[] = []
   let notApproved = 0
+  let cash = 0
   let slNo = 0
 
   for (const r of records) {
+    if (r.pay_by_cash) { cash += 1; continue }
     if (r.status !== 'approved') { notApproved += 1; continue }
     const bank = bankMap[recordPersonId(r)]
     if (!bank) { missingBank.push(recordPersonName(r) || recordPersonId(r)); continue }
@@ -94,5 +98,6 @@ export function buildBankDisbursementCsv(
     included: rows.length - 1,
     missingBank,
     notApproved,
+    cash,
   }
 }

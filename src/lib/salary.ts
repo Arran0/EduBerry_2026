@@ -59,6 +59,8 @@ export interface SalaryRecord {
   payout_status: string | null   // null | 'initiated' | 'processed' | 'failed'
   payout_reference: string | null
   notes: string | null
+  /** Paid in cash for this cycle — kept out of the bank CSV and automated payouts. */
+  pay_by_cash: boolean
   // Manual overrides of the derived pay cycle columns; null = use the derived value.
   working_days_override: number | null
   leave_override: number | null
@@ -109,6 +111,7 @@ export interface SalaryRecordOverrides {
   half_day_override?: number | null
   pf_amount_override?: number | null
   esi_amount_override?: number | null
+  pay_by_cash?: boolean
 }
 
 export interface StaffSalaryBase {
