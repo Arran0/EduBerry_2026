@@ -58,11 +58,16 @@ export type SupportStaffPatch = Partial<
 >
 
 /**
- * No WFH and no exception here: those describe a punch, and support staff
- * never punch. What is left is what an admin can actually observe of a
- * ground-level shift.
+ * No WFH here: it describes a punch, and support staff never punch. Exception
+ * is kept, though — it now covers the same "otherwise fine, but flag it"
+ * case an admin can mark for regular staff (e.g. a mid-day permission break),
+ * just recorded by hand instead of derived from a second check-in.
+ *
+ * `on_leave` has no button of its own any more (see QUICK_SET in
+ * SupportStaffAttendanceReport) but is kept in the type so older records
+ * still display correctly.
  */
-export type SupportAttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave'
+export type SupportAttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave' | 'e'
 
 export interface SupportAttendanceRecord {
   id: string
@@ -81,6 +86,7 @@ export const SUPPORT_ATTENDANCE_STATUS_LABELS: Record<SupportAttendanceStatus, s
   late: 'Late',
   half_day: 'Half Day',
   on_leave: 'On Leave',
+  e: 'Exception',
 }
 
 export const SUPPORT_ATTENDANCE_STATUS_PILL: Record<SupportAttendanceStatus, string> = {
@@ -89,10 +95,11 @@ export const SUPPORT_ATTENDANCE_STATUS_PILL: Record<SupportAttendanceStatus, str
   late:     'bg-amber-50 text-amber-700 border-amber-200',
   half_day: 'bg-orange-50 text-orange-700 border-orange-200',
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
+  e:        'bg-violet-50 text-violet-700 border-violet-200',
 }
 
 /** Statuses that count as the person having worked the day. */
-export const SUPPORT_PRESENT_STATUSES: SupportAttendanceStatus[] = ['present', 'late', 'half_day']
+export const SUPPORT_PRESENT_STATUSES: SupportAttendanceStatus[] = ['present', 'late', 'half_day', 'e']
 
 // ============================================
 // Roster
@@ -291,11 +298,12 @@ export async function clearSupportAttendance(
 
 export interface SupportDayStats {
   total: number
-  present: number     // present + late + half_day
+  present: number     // present + late + half_day + e
   absent: number
   late: number
   half_day: number
   on_leave: number
+  e: number
   not_marked: number
   present_pct: number
 }
@@ -320,7 +328,7 @@ export function computeSupportDayStats(
   const byStaff = new Map(records.map(r => [r.support_staff_id, r]))
   const stats: SupportDayStats = {
     total: roster.length,
-    present: 0, absent: 0, late: 0, half_day: 0, on_leave: 0,
+    present: 0, absent: 0, late: 0, half_day: 0, on_leave: 0, e: 0,
     not_marked: 0, present_pct: 0,
   }
   for (const person of roster) {
@@ -332,6 +340,7 @@ export function computeSupportDayStats(
       case 'half_day': stats.half_day++; stats.present++; break
       case 'absent': stats.absent++; break
       case 'on_leave': stats.on_leave++; break
+      case 'e': stats.e++; stats.present++; break
     }
   }
   stats.present_pct = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0
@@ -345,7 +354,8 @@ export interface SupportPersonStats {
   half_day: number
   absent: number
   on_leave: number
-  /** (present + late + ½·half_day) / (marked days − leave), over marked days only. */
+  e: number
+  /** (present + late + e + ½·half_day) / (marked days − leave), over marked days only. */
   present_pct: number
 }
 
@@ -364,7 +374,7 @@ export function computeSupportPersonStats(
 ): SupportPersonStats {
   const stats: SupportPersonStats = {
     marked_days: records.length,
-    present: 0, late: 0, half_day: 0, absent: 0, on_leave: 0, present_pct: 0,
+    present: 0, late: 0, half_day: 0, absent: 0, on_leave: 0, e: 0, present_pct: 0,
   }
   for (const r of records) {
     switch (r.status) {
@@ -373,10 +383,11 @@ export function computeSupportPersonStats(
       case 'half_day': stats.half_day++; break
       case 'absent': stats.absent++; break
       case 'on_leave': stats.on_leave++; break
+      case 'e': stats.e++; break
     }
   }
   const denominator = stats.marked_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.half_day * 0.5
+  const credited = stats.present + stats.late + stats.e + stats.half_day * 0.5
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }

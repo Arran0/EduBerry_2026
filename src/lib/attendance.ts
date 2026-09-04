@@ -710,9 +710,12 @@ export async function syncLeaveToStudentAttendance(
   if (memError || !memberships?.length) return
 
   // OD leave → Present (student is working, just off-site); half day → half
-  // day; casual/medical → Absent
+  // day; late permit → late; casual/medical → Absent
   const attendanceStatus: AttendanceStatus =
-    leaveType === 'on_duty' ? 'present' : leaveType === 'half_day' ? 'half_day' : 'absent'
+    leaveType === 'on_duty' ? 'present'
+      : leaveType === 'half_day' ? 'half_day'
+        : leaveType === 'late' ? 'late'
+          : 'absent'
 
   const dates = getDatesBetween(startDate, endDate)
   const rows: Record<string, unknown>[] = []
@@ -746,11 +749,14 @@ export async function syncLeaveToStaffAttendance(
   leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
-  // On Duty auto-marks Present, Half Day Permit auto-marks Half Day, and any
-  // other approved leave auto-marks Absent — status only ever lands on one of
-  // the five manual options (P/A/Late/½/Exception).
+  // On Duty auto-marks Present, Half Day Permit auto-marks Half Day, Late
+  // Permit auto-marks Late, and any other approved leave auto-marks Absent —
+  // status only ever lands on one of the five manual options (P/A/Late/½/Exception).
   const status: StaffAttendanceStatus =
-    leaveType === 'on_duty' ? 'present' : leaveType === 'half_day' ? 'half_day' : 'absent'
+    leaveType === 'on_duty' ? 'present'
+      : leaveType === 'half_day' ? 'half_day'
+        : leaveType === 'late' ? 'late'
+          : 'absent'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
