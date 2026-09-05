@@ -8,15 +8,17 @@
 // is the authoritative one: every debit and credit in order with a running
 // balance, which is what the reports are computed from.
 //
-// Round 3 fills the Concessions and Charges tabs; they are here now, saying so,
-// rather than appearing later and moving everything around.
+// The Concessions and Charges tabs show what has come off a bill and what has
+// been added to it after issue. Both are also lines on the invoice itself —
+// this is the same story told per-student rather than per-bill.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, Clock, Download, FileText, Loader2, Printer, Receipt, Scale, User,
+  ArrowLeft, BadgePercent, Clock, Download, FileText, Loader2, Printer, Receipt,
+  Scale, User,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -34,6 +36,13 @@ import {
   type FeeProfileRow, type InstrumentRow, type InvoiceLineRow, type InvoiceRow,
   type LedgerRow, type PaymentRow,
 } from '@/lib/fees/invoices'
+import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
+import {
+  fetchConcessions, fetchDiscountTypes, fetchFineCategories, fetchFines,
+  fetchLateFeeCharges, fetchScholarships,
+  type ConcessionRow, type DiscountTypeRow, type FineCategoryRow, type FineRow,
+  type LateFeeChargeRow, type ScholarshipRow,
+} from '@/lib/fees/charges'
 
 type Tab = 'invoices' | 'payments' | 'cheques' | 'ledger' | 'concessions' | 'charges'
 
@@ -65,7 +74,14 @@ function ProfileInner() {
   const [allocations, setAllocations] = useState<{ payment_id: string; invoice_id: string; amount: number }[]>([])
   const [instruments, setInstruments] = useState<InstrumentRow[]>([])
   const [ledger, setLedger] = useState<LedgerRow[]>([])
+  const [concessions, setConcessions] = useState<ConcessionRow[]>([])
+  const [discountTypes, setDiscountTypes] = useState<DiscountTypeRow[]>([])
+  const [scholarships, setScholarships] = useState<ScholarshipRow[]>([])
+  const [fines, setFines] = useState<FineRow[]>([])
+  const [fineCategories, setFineCategories] = useState<FineCategoryRow[]>([])
+  const [lateFees, setLateFees] = useState<LateFeeChargeRow[]>([])
   const [tab, setTab] = useState<Tab>('invoices')
+  const [applying, setApplying] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const showAmounts = !perms.amountsHidden
@@ -89,16 +105,24 @@ function ProfileInner() {
         })
       }
 
-      const [prof, inv, pay, instr, led] = await Promise.all([
+      const [prof, inv, pay, instr, led, conc, types, schols, fs, cats] = await Promise.all([
         fetchProfile(studentId, year.id),
         fetchInvoices({ academicYearId: year.id, studentId }),
         fetchPayments({ academicYearId: year.id, studentId }),
         fetchInstruments({ studentId }),
         fetchLedger(studentId, year.id),
+        fetchConcessions({ yearId: year.id, studentId }),
+        fetchDiscountTypes(year.id),
+        fetchScholarships(year.id),
+        fetchFines(year.id, studentId),
+        fetchFineCategories(),
       ])
       setProfile(prof); setInvoices(inv); setPayments(pay); setInstruments(instr); setLedger(led)
+      setConcessions(conc); setDiscountTypes(types); setScholarships(schols)
+      setFines(fs); setFineCategories(cats)
       setLines(await fetchInvoiceLines(inv.map(i => i.id)))
       setAllocations(await fetchAllocations(pay.map(p2 => p2.id)))
+      setLateFees(await fetchLateFeeCharges(inv.map(i => i.id)))
     } finally {
       setLoading(false)
     }
@@ -366,19 +390,140 @@ function ProfileInner() {
               </Panel>
             )}
 
-            {(tab === 'concessions' || tab === 'charges') && (
-              <div className={`${ADMIN.card} py-12 px-6 text-center`}>
-                <Receipt size={20} className="mx-auto text-[#D4D4D8] mb-2" />
-                <p className="text-sm text-[#71717A] max-w-md mx-auto">
-                  {tab === 'concessions'
-                    ? 'Discounts, scholarships and waivers arrive in Round 3. When they do, each one will be a named line on the bill it comes off, visible here and on the invoice.'
-                    : 'Fines and late fees arrive in Round 3. A bounced cheque’s bank charge already appears as a line on the bill it was paying.'}
-                </p>
-              </div>
+            {tab === 'concessions' && (
+              <>
+                {perms.can('fees.discount.apply') && (
+                  <div className="flex justify-end mb-3">
+                    <button onClick={() => setApplying(true)} className={ADMIN.ghostBtn}>
+                      <BadgePercent size={13} /> Apply a concession
+                    </button>
+                  </div>
+                )}
+                <Panel empty={concessions.length === 0
+                  ? 'No concessions for this student. Each one, when granted, is a named line on the bill it comes off.'
+                  : null}>
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#FAFAFA] text-[10px] uppercase tracking-widest text-[#A1A1AA]">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-bold">What</th>
+                        <th className="text-left px-4 py-2 font-bold">Asked</th>
+                        <th className="text-left px-4 py-2 font-bold">State</th>
+                        <th className="text-right px-4 py-2 font-bold">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {concessions.map(c => (
+                        <tr key={c.id} className="border-t border-[#F4F4F5]">
+                          <td className="px-4 py-2 text-[#27272A]">
+                            {discountTypes.find(t => t.id === c.type_id)?.name
+                              ?? scholarships.find(s => s.id === c.scholarship_id)?.name
+                              ?? (c.kind === 'waiver' ? 'Waiver' : 'Concession')}
+                            {c.reason && (
+                              <span className="block text-[11px] text-[#A1A1AA]">{c.reason}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-[#71717A]">{fmtDate(c.created_at.slice(0, 10))}</td>
+                          <td className="px-4 py-2">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
+                              c.status === 'applied'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : c.status === 'pending'
+                                  ? 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]'
+                                  : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
+                              {c.status === 'applied' ? 'On the bill'
+                                : c.status === 'pending' ? 'Waiting'
+                                : c.status === 'declined' ? 'Declined' : 'Removed'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right font-semibold text-emerald-700">
+                            −{inr(c.amount, showAmounts)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
+              </>
+            )}
+
+            {tab === 'charges' && (
+              <Panel empty={fines.length === 0 && lateFees.length === 0
+                ? 'Nothing has been added to this student’s bills since they were issued.'
+                : null}>
+                <table className="w-full text-sm">
+                  <thead className="bg-[#FAFAFA] text-[10px] uppercase tracking-widest text-[#A1A1AA]">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-bold">What</th>
+                      <th className="text-left px-4 py-2 font-bold">When</th>
+                      <th className="text-left px-4 py-2 font-bold">Bill</th>
+                      <th className="text-right px-4 py-2 font-bold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fines.map(f => (
+                      <tr key={f.id} className="border-t border-[#F4F4F5]">
+                        <td className="px-4 py-2 text-[#27272A]">
+                          {fineCategories.find(c => c.id === f.category_id)?.name ?? 'Fine'}
+                          {f.reason && <span className="block text-[11px] text-[#A1A1AA]">{f.reason}</span>}
+                        </td>
+                        <td className="px-4 py-2 text-[#71717A]">{fmtDate(f.created_at.slice(0, 10))}</td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-[#71717A]">
+                          {invoices.find(i => i.id === f.invoice_id)?.number ?? '—'}
+                        </td>
+                        <td className={`px-4 py-2 text-right font-semibold ${
+                          f.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
+                          {inr(f.amount, showAmounts)}
+                        </td>
+                      </tr>
+                    ))}
+                    {lateFees.map(c => (
+                      <tr key={c.id} className="border-t border-[#F4F4F5]">
+                        <td className="px-4 py-2 text-[#27272A]">
+                          Late fee
+                          <span className="block text-[11px] text-[#A1A1AA]">
+                            {c.days_late} days past due
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-[#71717A]">{fmtDate(c.as_of)}</td>
+                        <td className="px-4 py-2 font-mono text-[11px] text-[#71717A]">
+                          {invoices.find(i => i.id === c.invoice_id)?.number ?? '—'}
+                        </td>
+                        <td className={`px-4 py-2 text-right font-semibold ${
+                          c.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
+                          {inr(c.amount, showAmounts)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
             )}
           </>
         )}
       </div>
+
+      {applying && year && student && (
+        <ApplyConcessionSheet
+          yearId={year.id}
+          people={[{
+            ...(profile ?? {} as FeeProfileRow),
+            student_id: student.id,
+            full_name: student.full_name,
+            grade: student.grade,
+            section: student.section,
+            admission_no: student.admission_no,
+            billed: null, paid: null, outstanding: null,
+          }]}
+          invoices={invoices}
+          types={discountTypes}
+          scholarships={scholarships}
+          showAmounts={showAmounts}
+          canApprove={perms.canAny('fees.discount.approve', 'fees.waiver.approve')}
+          fixedStudentId={student.id}
+          onClose={() => setApplying(false)}
+          onDone={() => { setApplying(false); void load() }}
+        />
+      )}
     </div>
   )
 }

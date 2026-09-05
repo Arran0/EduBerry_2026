@@ -418,3 +418,39 @@ BEGIN
 END $$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- ── Grants ──────────────────────────────────────────────────────────────
+-- DROP and CREATE gave every function above a fresh PostgreSQL default, and
+-- that default is EXECUTE to PUBLIC. Without this block a deploy from these
+-- files leaves `fee_post_ledger` — which has no permission check of its own,
+-- because it is only ever called from inside `fee_collect` — reachable over
+-- /rest/v1/rpc by anyone with a session. REVOKE FROM PUBLIC first: revoking
+-- from anon and authenticated alone is a no-op while PUBLIC still holds it.
+
+-- Internal only. These are called by other fee functions, never by a client.
+REVOKE ALL ON FUNCTION public.fee_actor(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_log(TEXT, TEXT, UUID, UUID, UUID, JSONB, JSONB, TEXT, NUMERIC, UUID)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_post_ledger(UUID, UUID, TEXT, NUMERIC, NUMERIC, TEXT, UUID, TEXT, DATE, UUID)
+  FROM PUBLIC, anon, authenticated;
+
+-- Guarded: each checks the caller's permission itself, so `authenticated` is
+-- the right audience and `anon` is never.
+REVOKE ALL ON FUNCTION public.fee_actor_can(UUID, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_collect(UUID, UUID, NUMERIC, TEXT, JSONB, DATE, TEXT, TEXT, JSONB, TEXT, UUID)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_reverse_payment(UUID, TEXT, UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_apply_concession(UUID, TEXT, NUMERIC, UUID, UUID, UUID, TEXT, TEXT, UUID)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fee_decide_concession(UUID, BOOLEAN, TEXT, UUID)
+  FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.fee_actor_can(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fee_collect(UUID, UUID, NUMERIC, TEXT, JSONB, DATE, TEXT, TEXT, JSONB, TEXT, UUID)
+  TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fee_reverse_payment(UUID, TEXT, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fee_apply_concession(UUID, TEXT, NUMERIC, UUID, UUID, UUID, TEXT, TEXT, UUID)
+  TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fee_decide_concession(UUID, BOOLEAN, TEXT, UUID) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';

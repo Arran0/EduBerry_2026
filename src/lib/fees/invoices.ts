@@ -176,6 +176,25 @@ export async function fetchInvoices(filter: {
   return (data ?? []) as unknown as InvoiceRow[]
 }
 
+/**
+ * Every bill in the session that is still owed, oldest due date first.
+ *
+ * Its own function rather than `fetchInvoices` with a status filter because
+ * this is the query the collections and charges screens run against the whole
+ * school, and it needs a ceiling high enough for one — 500 would silently drop
+ * the tail of a nine-hundred-student list, and the number missing from a
+ * "who owes us money" screen is exactly the number nobody would notice.
+ */
+export async function fetchUnpaidInvoices(academicYearId: string): Promise<InvoiceRow[]> {
+  const { data, error } = await supabase.from('fee_invoices_v').select(INVOICE_COLS)
+    .eq('academic_year_id', academicYearId)
+    .in('status', ['pending', 'partly_paid', 'overdue'])
+    .order('due_date')
+    .limit(5000)
+  if (error) return emptyOnMissing(error, [])
+  return (data ?? []) as unknown as InvoiceRow[]
+}
+
 /** The bills a payment can be put against, oldest first. */
 export async function fetchOutstandingInvoices(
   studentId: string, academicYearId: string,

@@ -18,8 +18,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
-  BarChart3, ChevronRight, CreditCard, FileText, GraduationCap, Layers,
-  Loader2, Lock, Settings, Wallet,
+  BadgePercent, BarChart3, ChevronRight, CreditCard, FileText, GraduationCap,
+  Layers, Loader2, Lock, MessageSquare, Settings, Timer, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -61,6 +61,27 @@ const TOOLS: Tool[] = [
     href: '/more/fees/invoices',
     icon: FileText,
     needs: ['fees.profile.view'],
+  },
+  {
+    title: 'Collections',
+    description: 'Who owes what, sorted by most overdue. Remind one family, a class or everyone.',
+    href: '/more/fees/collections',
+    icon: MessageSquare,
+    needs: ['fees.reminder.send', 'fees.profile.view'],
+  },
+  {
+    title: 'Concessions',
+    description: 'Discounts, scholarships and waivers — and the queue of what needs approving.',
+    href: '/more/fees/concessions',
+    icon: BadgePercent,
+    needs: ['fees.discount.apply', 'fees.discount.approve', 'fees.scholarship.manage'],
+  },
+  {
+    title: 'Charges',
+    description: 'Late-fee rules and the nightly sweep, plus fines and who is exempt.',
+    href: '/more/fees/charges',
+    icon: Timer,
+    needs: ['fees.latefee.manage', 'fees.fine.apply'],
   },
   {
     title: 'Fee Configuration',
