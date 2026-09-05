@@ -18,13 +18,16 @@ interface ReportCardGroup {
 
 interface ReportCardsMiniListProps {
   userId: string
+  /** Reports whether the list ended up empty, once loaded — lets the home
+   *  carousel drop the slot entirely when there are no report cards yet. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Vertically scrollable list of buttons, one per released report card for
  *  the student's most recent academic year, each opening the full report
  *  card section on the academics page. Buttons are revealed a few at a time
  *  (see useAutoLoadMore) instead of rendering the whole list at once. */
-export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps) {
+export default function ReportCardsMiniList({ userId, onEmptyChange }: ReportCardsMiniListProps) {
   const [groups, setGroups] = useState<ReportCardGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [year, setYear] = useState<string | null>(null)
@@ -55,6 +58,8 @@ export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [userId])
+
+  useEffect(() => { if (!loading) onEmptyChange?.(groups.length === 0) }, [loading, groups, onEmptyChange])
 
   const { visibleCount, containerRef, handleScroll } = useAutoLoadMore({
     total: groups.length,

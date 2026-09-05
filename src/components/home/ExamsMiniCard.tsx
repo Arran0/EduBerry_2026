@@ -22,11 +22,14 @@ function formatWhen(ts: number): string {
 
 interface ExamsMiniCardProps {
   userId: string
+  /** Reports whether there's neither an upcoming exam nor a recent result,
+   *  once loaded — lets the home carousel drop the slot entirely. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Student exam snapshot: the next upcoming exam (highlighted if within ~10h)
  *  and the most recent released result. */
-export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
+export default function ExamsMiniCard({ userId, onEmptyChange }: ExamsMiniCardProps) {
   const [upcoming, setUpcoming] = useState<ExamStudentSummary | null>(null)
   const [latestResult, setLatestResult] = useState<ExamStudentSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,6 +59,8 @@ export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
 
   const upcomingTs = upcoming ? examTime(upcoming) : null
   const soon = upcomingTs !== null && (upcomingTs - Date.now()) < 10 * 3_600_000
+
+  useEffect(() => { if (!loading) onEmptyChange?.(!upcoming && !latestResult) }, [loading, upcoming, latestResult, onEmptyChange])
 
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">

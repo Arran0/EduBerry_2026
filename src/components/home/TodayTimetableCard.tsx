@@ -27,11 +27,14 @@ function formatTime(t: string | null): string {
 
 interface TodayTimetableCardProps {
   userId: string
+  /** Reports whether today has no periods, once loaded — lets the home
+   *  carousel drop the slot entirely on a day with nothing scheduled. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Compact view of the student's periods for today, opening the full
  *  timetable app on tap. */
-export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) {
+export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimetableCardProps) {
   const [periods, setPeriods] = useState<Period[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -63,6 +66,8 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
   }, [userId])
 
   const hasAny = periods && periods.some(p => p.entry?.subject_id)
+
+  useEffect(() => { if (!loading) onEmptyChange?.(!hasAny) }, [loading, hasAny, onEmptyChange])
 
   return (
     <Link href="/more/timetable">
