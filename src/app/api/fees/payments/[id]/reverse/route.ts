@@ -33,6 +33,7 @@ export async function POST(
   const { data, error } = await guard.db.rpc('fee_reverse_payment', {
     p_payment: params.id,
     p_reason: reason.trim(),
+    p_actor: guard.userId,
   })
   if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 })
 

@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
     p_notes: body.notes ?? null,
     p_instrument: body.instrument ?? null,
     p_status: null,
+    // Who is taking the money. The route holds the authenticated caller;
+    // the RPC has no JWT of its own because this is a service-role client, so
+    // without this the receipt would record no collector at all.
+    p_actor: guard.userId,
   })
 
   if (error) {
