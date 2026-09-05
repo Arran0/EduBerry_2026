@@ -15,7 +15,7 @@ adjusted and money chased, Round 4 is money explained.
 
 ### Status
 
-**Rounds 1 and 2 are delivered.**
+**All four rounds are delivered.**
 
 Round 1 — migrations `fee_r1_academic_years.sql`, `fee_r1_permissions.sql`,
 `fee_r1_config.sql`, `fee_r1_settings_audit.sql`; the engine in
@@ -64,7 +64,46 @@ out here rather than left to be discovered:
   revokes from PUBLIC first, then grants to exactly the roles that need it. Any
   later round adding a function must follow that order.
 
-Rounds 3 and 4 are not started.
+Round 3 — migrations `fee_r3_concessions.sql`, `fee_r3_charges.sql`,
+`fee_r3_actor_attribution.sql`, `fee_r3_messaging.sql`; `engine/latefee.ts`;
+`src/lib/whatsapp/{provider,metaCloud,secrets}.ts`, `src/lib/fees/charges.ts`;
+the WhatsApp webhook, the outbox drain, the reminder send and the tokenised
+`/pay/[token]`; and the three screens `/more/fees/{concessions,charges,collections}`,
+including the late-fee rule builder, which runs `computeLateFee` itself on every
+keystroke against a real bill from the school and blocks Save on
+`validateRule`'s errors.
+
+Round 4 — migrations `fee_r4_edge.sql` and `fee_r4_reporting.sql`;
+`src/lib/fees/reports.ts` with its whitelisted question builder; four API routes
+for refunds and carry-forward; the Collection Center at `/more/fees/reports`
+with its six tabs, the efficiency bar's session marker, the aging cliff, the
+defaulter heatmap and the year calendar; global search; the refund queue, the
+RTE register and the refund request on a student's own profile.
+
+Two defects were found and fixed while building these rounds, both worth
+naming because the shape of each recurs:
+
+- **Round 2 attributed nothing.** Every RPC read `auth.uid()` for the actor,
+  but the API routes hold a service-role client with no JWT, so `auth.uid()`
+  was NULL: every payment taken through `/api/fees/collect` recorded
+  `collected_by = NULL`. The same hole let a route call pass
+  `fee_requires('fees.discount.approve')` — true for service context by design
+  — and silently auto-approve every concession.
+  `fee_r3_actor_attribution.sql` threads an explicit `p_actor` through six
+  functions and drops the old signatures so PostgREST cannot pick the
+  unattributed overload. The rule: `fee_requires(key)` asks *may this call
+  proceed*; `fee_actor_can(actor, key)` asks *does this named human hold it*,
+  and only the second may gate an approval.
+- **That migration then shipped without grants.** DROP and CREATE reset each
+  function to PostgreSQL's default of EXECUTE to PUBLIC, so a deploy from the
+  migration files alone would have re-opened exactly the hole
+  `fee_r2_harden_grants.sql` closed. The live database was correct only because
+  the grants had been issued by hand. They are in the file now. Any migration
+  that recreates a function must re-issue its grants in the same file.
+
+269 tests pass, build clean, and every round's acceptance scenario was run
+against real data and then cleaned up — including the append-only tables, whose
+guards were suspended for that one deletion and put straight back.
 
 ---
 

@@ -1,0 +1,243 @@
+'use client'
+
+// The refund queue: request → approve → pay out.
+//
+// Three steps on one list, because the person who has to act next is not the
+// same person at each step and the list should say which of them is waiting.
+// The database refuses a self-approval, so the button is not the safeguard —
+// but hiding it from the requester saves them from finding out the hard way.
+
+import React, { useState } from 'react'
+import { Banknote, Check, Loader2, Undo2, X } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
+import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { useAuth } from '@/contexts/AuthContext'
+import { decideRefund, payRefund, type RefundRow } from '@/lib/fees/reports'
+
+const STATE_CHIP: Record<RefundRow['status'], string> = {
+  requested: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
+  approved:  'bg-sky-50 text-sky-700 border border-sky-200',
+  paid_out:  'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  declined:  'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
+  cancelled: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
+}
+
+const STATE_LABEL: Record<RefundRow['status'], string> = {
+  requested: 'Waiting', approved: 'Approved, not paid', paid_out: 'Paid out',
+  declined: 'Declined', cancelled: 'Cancelled',
+}
+
+const METHODS = [
+  ['bank_transfer', 'Bank transfer'], ['cash', 'Cash'], ['cheque', 'Cheque'],
+  ['upi', 'UPI'], ['adjustment', 'Adjustment against a bill'],
+] as const
+
+export default function RefundQueue({
+  rows, names, showAmounts, canDecide, onChanged,
+}: {
+  rows: RefundRow[]
+  names: Map<string, string>
+  showAmounts: boolean
+  canDecide: boolean
+  onChanged: () => Promise<void> | void
+}) {
+  const { user } = useAuth()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [paying, setPaying] = useState<RefundRow | null>(null)
+  const [declining, setDeclining] = useState<RefundRow | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const waiting = rows.filter(r => r.status === 'requested').length
+  const owed = rows.filter(r => r.status === 'approved')
+    .reduce((a, r) => a + Number(r.amount), 0)
+
+  const approve = async (row: RefundRow) => {
+    setBusy(row.id)
+    setError(null)
+    try {
+      await decideRefund(row.id, true)
+      await onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That approval did not go through.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className={ADMIN.card}>
+      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+        <h3 className={ADMIN.label}>Refunds</h3>
+        <span className="text-[11px] text-[#71717A]">
+          {waiting} waiting
+          {owed > 0 && ` · ${inr(owed, showAmounts)} approved but not yet paid`}
+        </span>
+      </div>
+
+      {error && <p className="px-4 py-2 text-xs text-rose-700 bg-rose-50">{error}</p>}
+
+      {rows.length === 0 ? (
+        <p className="px-4 py-8 text-sm text-[#A1A1AA]">
+          No refunds this session. One is raised from a student&rsquo;s profile when they have
+          overpaid or withdrawn.
+        </p>
+      ) : rows.map(r => {
+        const mine = r.requested_by !== null && r.requested_by === user?.id
+        return (
+          <div key={r.id}
+               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
+            <div className="flex-1 min-w-[190px]">
+              <div className="text-sm text-[#27272A]">
+                {names.get(r.student_id) ?? 'Student'}
+              </div>
+              <div className="text-[11px] text-[#A1A1AA]">
+                {r.reason}
+                {' · asked '}{fmtDate(r.requested_at.slice(0, 10))}
+                {r.paid_on ? ` · paid ${fmtDate(r.paid_on)}${r.reference ? ` · ${r.reference}` : ''}` : ''}
+              </div>
+            </div>
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
+              {STATE_LABEL[r.status]}
+            </span>
+            <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
+              {inr(r.amount, showAmounts)}
+            </span>
+
+            {canDecide && r.status === 'requested' && (
+              mine ? (
+                <span className="text-[11px] text-[#A1A1AA]">
+                  Yours — somebody else signs this off
+                </span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setDeclining(r)} className={ADMIN.ghostBtn}>
+                    <X size={13} /> Decline
+                  </button>
+                  <button onClick={() => void approve(r)} disabled={busy === r.id}
+                          className={ADMIN.darkBtn}>
+                    {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    Approve
+                  </button>
+                </div>
+              )
+            )}
+
+            {canDecide && r.status === 'approved' && (
+              <button onClick={() => setPaying(r)} className={ADMIN.darkBtn}>
+                <Banknote size={13} /> Pay out
+              </button>
+            )}
+          </div>
+        )
+      })}
+
+      {paying && (
+        <PayOutDialog
+          row={paying} showAmounts={showAmounts}
+          onClose={() => setPaying(null)}
+          onDone={async () => { setPaying(null); await onChanged() }}
+        />
+      )}
+
+      {declining && (
+        <DeclineDialog
+          row={declining} showAmounts={showAmounts}
+          onClose={() => setDeclining(null)}
+          onDone={async () => { setDeclining(null); await onChanged() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PayOutDialog({
+  row, showAmounts, onClose, onDone,
+}: {
+  row: RefundRow
+  showAmounts: boolean
+  onClose: () => void
+  onDone: () => Promise<void>
+}) {
+  const [method, setMethod] = useState<string>('bank_transfer')
+  const [reference, setReference] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <ModalShell onClose={onClose} sharp size="sm" title="Pay out this refund"
+                icon={<Banknote size={15} />} iconClassName="bg-emerald-50 text-emerald-700">
+      <p className="text-sm text-[#71717A] leading-relaxed">
+        {inr(row.amount, showAmounts)} leaves the school. It is posted to the family&rsquo;s ledger
+        as a debit, so their balance goes up by that much — which is what giving it back means.
+      </p>
+      <label className="block mt-3">
+        <span className={ADMIN.label}>How</span>
+        <select value={method} onChange={e => setMethod(e.target.value)}
+                className={`${ADMIN.inputPlain} mt-1`}>
+          {METHODS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+        </select>
+      </label>
+      <label className="block mt-3">
+        <span className={ADMIN.label}>Reference</span>
+        <input value={reference} onChange={e => setReference(e.target.value)}
+               placeholder="UTR, cheque number, or how it was handed over"
+               className={`${ADMIN.inputPlain} mt-1`} />
+      </label>
+      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
+      <div className="flex items-center justify-end gap-2 mt-4">
+        <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
+        <button
+          onClick={async () => {
+            setBusy(true); setError(null)
+            try { await payRefund(row.id, method, reference.trim() || undefined); await onDone() }
+            catch (e) { setError(e instanceof Error ? e.message : 'The pay-out did not go through.') }
+            finally { setBusy(false) }
+          }}
+          disabled={busy} className={`${ADMIN.darkBtn} px-4`}>
+          {busy && <Loader2 size={13} className="animate-spin" />} Pay out
+        </button>
+      </div>
+    </ModalShell>
+  )
+}
+
+function DeclineDialog({
+  row, showAmounts, onClose, onDone,
+}: {
+  row: RefundRow
+  showAmounts: boolean
+  onClose: () => void
+  onDone: () => Promise<void>
+}) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <ModalShell onClose={onClose} sharp size="sm" title="Decline this refund"
+                icon={<Undo2 size={15} />} iconClassName="bg-rose-50 text-rose-600">
+      <p className="text-sm text-[#71717A] leading-relaxed">
+        {inr(row.amount, showAmounts)}. Whoever asked for it will read your reason, so write it for
+        them rather than for the file.
+      </p>
+      <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+                placeholder="Why this is not being refunded"
+                className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
+      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
+      <div className="flex items-center justify-end gap-2 mt-4">
+        <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
+        <button
+          onClick={async () => {
+            if (note.trim().length < 3) { setError('A reason is required.'); return }
+            setBusy(true); setError(null)
+            try { await decideRefund(row.id, false, note.trim()); await onDone() }
+            catch (e) { setError(e instanceof Error ? e.message : 'That did not go through.') }
+            finally { setBusy(false) }
+          }}
+          disabled={busy} className={`${ADMIN.darkBtn} px-4`}>
+          {busy && <Loader2 size={13} className="animate-spin" />} Decline
+        </button>
+      </div>
+    </ModalShell>
+  )
+}

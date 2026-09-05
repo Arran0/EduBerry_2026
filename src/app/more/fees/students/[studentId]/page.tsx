@@ -18,7 +18,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, BadgePercent, Clock, Download, FileText, Loader2, Printer, Receipt,
-  Scale, User,
+  Scale, Undo2, User,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -37,6 +37,7 @@ import {
   type LedgerRow, type PaymentRow,
 } from '@/lib/fees/invoices'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
+import RequestRefundSheet from '@/components/fees/reports/RequestRefundSheet'
 import {
   fetchConcessions, fetchDiscountTypes, fetchFineCategories, fetchFines,
   fetchLateFeeCharges, fetchScholarships,
@@ -82,6 +83,7 @@ function ProfileInner() {
   const [lateFees, setLateFees] = useState<LateFeeChargeRow[]>([])
   const [tab, setTab] = useState<Tab>('invoices')
   const [applying, setApplying] = useState(false)
+  const [refunding, setRefunding] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const showAmounts = !perms.amountsHidden
@@ -196,6 +198,13 @@ function ProfileInner() {
               </p>
             </div>
           </div>
+          {perms.can('fees.collect') && profile && (
+            <button onClick={() => setRefunding(true)}
+                    className="flex items-center gap-1.5 bg-[#3F3F46] hover:bg-[#52525B] text-white
+                               text-xs font-semibold px-3 py-2 rounded-lg">
+              <Undo2 size={13} /> Refund
+            </button>
+          )}
           <YearScope tone="dark" />
         </div>
       </div>
@@ -522,6 +531,19 @@ function ProfileInner() {
           fixedStudentId={student.id}
           onClose={() => setApplying(false)}
           onDone={() => { setApplying(false); void load() }}
+        />
+      )}
+
+      {refunding && year && student && (
+        <RequestRefundSheet
+          studentId={student.id}
+          studentName={student.full_name}
+          yearId={year.id}
+          payments={payments}
+          stillOwing={totals.due}
+          showAmounts={showAmounts}
+          onClose={() => setRefunding(false)}
+          onDone={() => { setRefunding(false); void load() }}
         />
       )}
     </div>

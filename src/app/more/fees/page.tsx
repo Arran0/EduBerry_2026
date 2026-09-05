@@ -84,6 +84,13 @@ const TOOLS: Tool[] = [
     needs: ['fees.latefee.manage', 'fees.fine.apply'],
   },
   {
+    title: 'Collection Center',
+    description: 'Efficiency against the calendar, the aging cliff, defaulters by class, search.',
+    href: '/more/fees/reports',
+    icon: BarChart3,
+    needs: ['fees.reports.view'],
+  },
+  {
     title: 'Fee Configuration',
     description: 'The price list — heads, groups, per-grade structures and installments.',
     href: '/more/fees/config',
@@ -219,20 +226,6 @@ function FeesHub() {
           })}
         </div>
 
-        {perms.can('fees.reports.view') && (
-          <div className={`${ADMIN.card} p-4 flex items-start gap-3`}>
-            <div className="w-9 h-9 rounded-lg bg-[#F4F4F5] flex items-center justify-center flex-shrink-0">
-              <BarChart3 size={16} className="text-[#A1A1AA]" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-[#27272A]">Collection Center</div>
-              <p className="text-xs text-[#A1A1AA] mt-0.5 leading-relaxed">
-                Aging, defaulters by class, the collection heatmap and the audit trail arrive in
-                Round 4. Every figure it will show is already being recorded.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
