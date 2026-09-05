@@ -13,6 +13,61 @@ adjusted and money chased, Round 4 is money explained.
 
 ---
 
+### Status
+
+**Rounds 1 and 2 are delivered.**
+
+Round 1 — migrations `fee_r1_academic_years.sql`, `fee_r1_permissions.sql`,
+`fee_r1_config.sql`, `fee_r1_settings_audit.sql`; the engine in
+`src/lib/fees/engine/` (`money`, `words`, `dates`, `structure`, `proration`,
+`schedule`); `src/lib/academicYear.ts`, `src/contexts/AcademicYearContext.tsx`,
+`src/lib/fees/{permissions,config,settings,serverGuard}.ts`,
+`src/hooks/useFeePermissions.ts`; `FeeSettingsPanel` with six tabs at
+`/admin/fee-settings`, the price-list builder at `/more/fees/config`, and
+`/more/fees/settings` reduced to a redirect.
+
+Round 2 — migrations `fee_r2_profiles.sql`, `fee_r2_invoices.sql`,
+`fee_r2_payments.sql`, `fee_r2_ledger.sql`, `fee_r2_generate.sql`,
+`fee_r2_autogen_cron.sql`, `fee_r2_bus_merge.sql`, `fee_r2_harden_grants.sql`;
+`engine/allocate.ts`; six API routes under `src/app/api/fees/`;
+`src/lib/fees/invoices.ts`; the counter, students, profile, bills and hub
+screens, the invoice and A4/58 mm receipt documents, and the public
+`/verify/receipt/[token]`.
+
+231 tests pass (87 of them new), build clean. The acceptance scenario was run
+against real data and then cleaned up: 74 grade-5 bills at 40% of ₹27,000;
+₹4,000 cash leaves ₹6,800 partly paid; the QR scans VALID; reversal with a
+reason restores ₹10,800 and flips the QR to CANCELLED; ₹12,000 against a
+₹10,800 bill banks ₹1,200 as a credit; a post-dated cheque leaves the bill
+unpaid until it clears, then bounces it with a ₹350 charge added as a line.
+
+Three things inside these rounds were deliberately not finished, and are called
+out here rather than left to be discovered:
+
+- **The bus tables were not replaced by views.** The plan said transport would
+  fold in by swapping `bus_fees` / `bus_payments` for compatibility views. It
+  does not: `src/lib/bus.ts` writes to those tables in fifteen places and a view
+  is not updatable without INSTEAD OF triggers reproducing all of it. What
+  shipped instead is the ledger-level fold — transport heads in the price list,
+  an idempotent `fee_import_bus_ledger()`, and `fee_collection_all` so the
+  headline numbers already cover both. Porting the bus fee screens onto
+  invoices is outstanding, and until it happens a school using both gets two
+  bills.
+- **Online payment is not wired to the new invoices.** The four Razorpay and
+  UPI routes still target `school_fees`. Round 3's tokenised pay links replace
+  them; the student view says so rather than showing a Pay button that fails.
+- **A security defect Round 1 shipped and Round 2 fixed.** `REVOKE EXECUTE …
+  FROM anon, authenticated` does nothing while PostgreSQL's default grant to
+  PUBLIC stands, so every fee function was reachable over `/rest/v1/rpc` —
+  including `fee_post_ledger`, which has no internal permission check because it
+  is only ever called from inside `fee_collect`. `fee_r2_harden_grants.sql`
+  revokes from PUBLIC first, then grants to exactly the roles that need it. Any
+  later round adding a function must follow that order.
+
+Rounds 3 and 4 are not started.
+
+---
+
 ## Where we start (current state)
 
 **The module is switched off.** `src/app/more/fees/page.tsx:44` exports a
