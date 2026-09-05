@@ -88,7 +88,7 @@ export default function AudiencePicker({
   const total = value.homerooms.length + value.students.length
 
   const toggleBtn = (active: boolean) =>
-    `inline-flex items-center gap-1.5 h-8 px-3 border text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors ${
+    `inline-flex items-center shrink-0 whitespace-nowrap gap-1.5 h-8 px-2.5 sm:px-3 border text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors ${
       active
         ? 'bg-[#18181B] border-[#18181B] text-white'
         : 'bg-white border-[#E4E1D8] text-[#8A8578] hover:text-[#18181B] hover:border-[#B8983C]'
@@ -96,11 +96,11 @@ export default function AudiencePicker({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]">
           <Users size={13} /> Participants
         </h3>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => { setShowHrSearch(p => !p); setHrQuery(''); setHrResults([]) }}
