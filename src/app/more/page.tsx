@@ -150,8 +150,10 @@ export default function MorePage() {
       icon: <CalendarRange size={22} />,
     },
     {
-      title: 'Fee Manager',
-      description: 'View fee structure, payment history, and make payments',
+      title: 'Fees',
+      description: isStaff
+        ? 'The counter, bills, student accounts and the price list'
+        : 'What you owe, what you have paid, and every receipt',
       href: '/more/fees',
       icon: <CreditCard size={22} />,
     },
