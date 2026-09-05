@@ -197,6 +197,19 @@ export function isMissingRelation(error: { code?: string; message?: string } | n
     || /does not exist|schema cache/i.test(error.message ?? '')
 }
 
+/**
+ * Bearer token for our own API routes.
+ *
+ * Every route under /api authenticates the caller from this header rather than
+ * a cookie — see src/lib/serverAuth.ts. Lived in push.ts until the fee module
+ * needed it too; one copy, so a route can never be called with a header shaped
+ * slightly differently.
+ */
+export async function authHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
+
 export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver' | 'smartboard'
 
 export interface UserProfile {
