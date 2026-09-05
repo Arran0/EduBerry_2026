@@ -284,7 +284,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     return (
       <div className="text-center py-12">
         <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-500">Loading assessments...</p>
+        <p className="text-sm text-slate-600">Loading assessments...</p>
       </div>
     )
   }
@@ -292,20 +292,20 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   return (
     <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-amber-100 rounded-xl">
             <ClipboardList size={16} className="text-amber-600" />
           </div>
           <div>
             <h2 className="font-semibold text-slate-800 text-sm">Assessments</h2>
-            <p className="text-xs text-slate-400">{assessments.length} total</p>
+            <p className="text-xs text-slate-500">{assessments.length} total</p>
           </div>
         </div>
         {isStaff && (
           <button
             onClick={() => setShowNewForm(!showNewForm)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold transition-all shadow-lg shadow-amber-500/25 active:scale-95 flex-shrink-0"
           >
             <Plus size={13} /> New Assessment
           </button>
@@ -320,16 +320,16 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreate}
-            className="glass rounded-2xl p-4 space-y-3 border border-amber-100"
+            className="glass mx-2 sm:mx-0 rounded-2xl p-4 space-y-3 border border-amber-100"
           >
             <div className="flex items-center gap-2 mb-1">
               <Plus size={14} className="text-amber-600" />
               <span className="text-sm font-semibold text-slate-700">New Assessment</span>
             </div>
             <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-1 mb-1">
                 <Bookmark size={11} /> Report Card Title
-                <span className="text-slate-400 normal-case font-normal">(optional)</span>
+                <span className="text-slate-500 normal-case font-normal">(optional)</span>
               </label>
               <ReportCardTitlePicker
                 value={newReportCardTitle}
@@ -371,7 +371,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 />
               </div>
               <div className="flex-1" />
-              <button type="button" onClick={() => setShowNewForm(false)} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+              <button type="button" onClick={() => setShowNewForm(false)} className="text-sm text-slate-600 hover:text-slate-900 px-2">Cancel</button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
@@ -384,12 +384,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
       {/* Empty state */}
       {assessments.length === 0 && (
-        <div className="glass rounded-2xl p-10 text-center">
+        <div className="glass mx-2 sm:mx-0 rounded-2xl p-10 text-center">
           <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <ClipboardList size={28} className="text-amber-300" />
           </div>
-          <p className="text-slate-600 font-medium mb-1">No assessments yet</p>
-          <p className="text-slate-400 text-sm">{isStaff ? 'Create the first assessment above.' : 'Your teacher hasn\'t added any assessments yet.'}</p>
+          <p className="text-slate-700 font-semibold mb-1">No assessments yet</p>
+          <p className="text-slate-600 text-sm">{isStaff ? 'Create the first assessment above.' : 'Your teacher hasn\'t added any assessments yet.'}</p>
         </div>
       )}
 
@@ -452,7 +452,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                       marksheetSort === 'marks'
                         ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                     title="Sort by marks"
                   >
@@ -473,7 +473,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                       marksheetSort === 'name'
                         ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                     title="Sort by name"
                   >
@@ -485,7 +485,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
                   {/* Max marks — one value for the whole assessment, editable
                       inline; never overridable per student. */}
-                  <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
+                  <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-700">
                     {editingMaxMarks ? (
                       <>
                         <span className="whitespace-nowrap">Max</span>
@@ -527,10 +527,21 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   >
                     <Download size={13} /> Export
                   </button>
+
+                  {/* Save is repeated here so a long sheet can be saved without
+                      scrolling all the way back down. */}
+                  <button
+                    onClick={() => handleSaveMarks(showMarksheet)}
+                    disabled={saving || hasInvalidMarks}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold shadow-md shadow-amber-500/25 active:scale-95 transition-all disabled:opacity-60 disabled:shadow-none"
+                    title="Save marks"
+                  >
+                    <Save size={13} /> {saving ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
               )}
                 {students.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-6">No students in this classroom</p>
+                  <p className="text-sm text-slate-500 text-center py-6">No students in this classroom</p>
                 ) : (
                   (() => {
                     const sortedStudents = [...students].sort((a, b) => {
@@ -560,7 +571,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     <div className="overflow-x-auto px-5 pt-2.5 pb-1">
                       <table className="w-full text-xs border-collapse">
                         <thead>
-                          <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400 font-bold">
+                          <tr className="text-left text-[10px] uppercase tracking-wide text-slate-600 font-bold">
                             <th className="py-1.5 pr-2 w-7 font-bold">#</th>
                             <th className="py-1.5 pr-2 font-bold">Student</th>
                             <th className="py-1.5 px-2 text-center w-28 font-bold">Marks</th>
@@ -580,7 +591,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                 key={student.user_id}
                                 className={`border-b border-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-amber-50/40`}
                               >
-                                <td className="py-1 pr-2 text-slate-300 tabular-nums align-middle">{idx + 1}</td>
+                                <td className="py-1 pr-2 text-slate-500 tabular-nums align-middle">{idx + 1}</td>
                                 <td className="py-1 pr-2 align-middle">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={22} userId={student.user_id} />
@@ -609,7 +620,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                           : 'border-slate-200 focus:ring-amber-400/50'
                                       }`}
                                     />
-                                    <span className="text-slate-300">/{assessmentMaxMarks}</span>
+                                    <span className="text-slate-500">/{assessmentMaxMarks}</span>
                                   </div>
                                 </td>
                                 <td className="py-1 px-2 text-center align-middle">
@@ -621,7 +632,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                       pct >= 60 ? 'bg-amber-100 text-amber-700' :
                                       'bg-red-100 text-red-700'
                                     }`}>{pct}%</span>
-                                  ) : <span className="text-slate-300">—</span>}
+                                  ) : <span className="text-slate-400">—</span>}
                                 </td>
                                 <td className="py-1 pl-2 text-center align-middle">
                                   <button
@@ -737,10 +748,10 @@ function AssessmentCard({
               </span>
             </div>
             {assessment.description && (
-              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{assessment.description}</p>
+              <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{assessment.description}</p>
             )}
             {assessment.date && (
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+              <p className="text-xs text-slate-600 mt-1 flex items-center gap-1">
                 <Calendar size={11} />
                 {new Date(assessment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
@@ -751,7 +762,7 @@ function AssessmentCard({
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex items-baseline gap-1 px-3 py-1.5 bg-white rounded-xl border border-slate-200 shadow-sm">
                   <span className="text-lg font-bold text-slate-800">{myMark.is_absent ? 'AB' : myMark.marks ?? '—'}</span>
-                  {!myMark.is_absent && <span className="text-xs text-slate-400">/ {myMark.max_marks}</span>}
+                  {!myMark.is_absent && <span className="text-xs text-slate-500">/ {myMark.max_marks}</span>}
                 </div>
                 {pct != null && (
                   <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
@@ -765,7 +776,7 @@ function AssessmentCard({
               </div>
             )}
             {isStudent && !myMark && (
-              <p className="text-xs text-slate-400 mt-2 italic">Marks not yet available</p>
+              <p className="text-xs text-slate-500 mt-2 italic">Marks not yet available</p>
             )}
           </div>
 
@@ -842,7 +853,7 @@ function AssessmentCard({
                   />
                 </div>
                 <div className="flex-1" />
-                <button onClick={onCancelEdit} className="text-sm text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+                <button onClick={onCancelEdit} className="text-sm text-slate-600 hover:text-slate-900 px-2">Cancel</button>
                 <button
                   onClick={onSaveEdit}
                   disabled={editSaving || !editTitle.trim() || !editMaxMarks.trim() || parseFloat(editMaxMarks) <= 0}

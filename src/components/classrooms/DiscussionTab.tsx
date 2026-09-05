@@ -403,20 +403,20 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-2.5 mb-4">
+      <div className="flex items-center gap-2.5 mb-4 px-3 sm:px-0">
         <div className="p-2 bg-teal-100 rounded-xl">
           <MessageSquare size={16} className="text-teal-600" />
         </div>
         <div>
           <h2 className="font-semibold text-slate-800 text-sm leading-tight">Discussion</h2>
-          <p className="text-xs text-slate-400 leading-tight">
+          <p className="text-xs text-slate-500 leading-tight">
             {messages.length} {messages.length === 1 ? 'message' : 'messages'}
           </p>
         </div>
       </div>
 
       {/* ── Chat stream ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl sm:shadow-sm">
         <div className="px-2.5 sm:px-3 py-3">
 
           {/* Empty state */}
@@ -425,8 +425,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mb-4">
                 <MessageSquare size={28} className="text-teal-300" />
               </div>
-              <p className="text-slate-600 font-medium mb-1">No messages yet</p>
-              <p className="text-slate-400 text-sm">Start the conversation — share a note, file or link.</p>
+              <p className="text-slate-700 font-semibold mb-1">No messages yet</p>
+              <p className="text-slate-600 text-sm">Start the conversation — share a note, file or link.</p>
             </div>
           )}
 
@@ -442,7 +442,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 {showDayDivider && (
                   <div className="flex items-center gap-3 px-2 my-3 select-none">
                     <div className="flex-1 h-px bg-slate-100" />
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
                       {dayLabel(first.created_at)}
                     </span>
                     <div className="flex-1 h-px bg-slate-100" />
@@ -462,9 +462,9 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-slate-800 leading-tight">
                         {group.user?.full_name || 'Unknown'}
-                        {isMine && <span className="ml-1.5 text-[10px] font-medium text-teal-500">you</span>}
+                        {isMine && <span className="ml-1.5 text-[10px] font-semibold text-teal-600">you</span>}
                       </span>
-                      <span className="text-[11px] text-slate-400">{fullStamp(first.created_at)}</span>
+                      <span className="text-[11px] text-slate-500">{fullStamp(first.created_at)}</span>
                     </div>
 
                     {/* Stacked messages in this group */}

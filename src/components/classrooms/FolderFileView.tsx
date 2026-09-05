@@ -23,6 +23,7 @@ import {
 import { UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
+import { FieldLabel, ToggleCard, PointsPicker, INPUT_CLASS } from '@/components/classrooms/WorkFormKit'
 
 interface FolderFileViewProps {
   classroomId: string
@@ -119,7 +120,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
         as="div"
         value={folder}
         onDragEnd={onDragEnd}
-        className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
+        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white sm:shadow-sm"
         whileDrag={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, scale: 1.01 }}
       >
         {children}
@@ -127,7 +128,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
     )
   }
   return (
-    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white sm:shadow-sm">
       {children}
     </div>
   )
@@ -540,7 +541,7 @@ export default function FolderFileView({
     return (
       <div className="text-center py-12">
         <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-500">Loading content...</p>
+        <p className="text-sm text-slate-600">Loading content...</p>
       </div>
     )
   }
@@ -548,20 +549,20 @@ export default function FolderFileView({
   return (
     <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-xl bg-slate-100">
             <Folder size={16} className="text-slate-600" />
           </div>
           <div>
             <h2 className="font-semibold text-slate-800 text-sm">Content</h2>
-            <p className="text-xs text-slate-400">{folders.length} folder{folders.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-slate-500">{folders.length} folder{folders.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
         {canManage && (
           <button
             onClick={() => setShowNewFolder(!showNewFolder)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-colors shadow-sm bg-slate-700 hover:bg-slate-900"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg shadow-slate-900/20 bg-slate-800 hover:bg-slate-900 active:scale-95 flex-shrink-0"
           >
             <Plus size={13} /> New Folder
           </button>
@@ -576,7 +577,7 @@ export default function FolderFileView({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreateFolder}
-            className="rounded-2xl p-4 space-y-3 overflow-hidden border bg-slate-50 border-slate-200"
+            className="mx-2 sm:mx-0 rounded-2xl p-4 space-y-3 overflow-hidden border bg-slate-50 border-slate-200"
           >
             <p className="text-xs font-semibold text-slate-600">New Folder</p>
             <input
@@ -593,7 +594,7 @@ export default function FolderFileView({
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none bg-white"
             />
             <div className="flex items-center gap-2 justify-end">
-              <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+              <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2">Cancel</button>
               <button type="submit" disabled={!newFolderTitle.trim()}
                 className="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-slate-700 hover:bg-slate-900"
               >Create Folder</button>
@@ -604,12 +605,12 @@ export default function FolderFileView({
 
       {/* Folders List */}
       {folders.length === 0 ? (
-        <div className="rounded-2xl bg-white border border-slate-100 p-10 text-center">
+        <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl p-10 text-center">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-slate-100">
-            <Folder size={26} className="text-slate-400" />
+            <Folder size={26} className="text-slate-500" />
           </div>
-          <p className="text-slate-600 font-medium text-sm mb-1">No folders yet</p>
-          <p className="text-slate-400 text-xs">
+          <p className="text-slate-700 font-semibold text-sm mb-1">No folders yet</p>
+          <p className="text-slate-600 text-xs">
             {canManage ? 'Create the first content folder above.' : 'No content has been added yet.'}
           </p>
         </div>
@@ -637,7 +638,7 @@ export default function FolderFileView({
                       <span className="font-semibold text-slate-800 text-sm">{folder.title}</span>
                     </div>
                     {folder.description && (
-                      <p className="text-xs text-slate-500 truncate mt-0.5">{folder.description}</p>
+                      <p className="text-xs text-slate-600 truncate mt-0.5">{folder.description}</p>
                     )}
                     {isStudent && summary && (
                       <div className="flex items-center gap-2 mt-1">
@@ -647,7 +648,7 @@ export default function FolderFileView({
                             style={{ width: summary.total > 0 ? `${Math.round((summary.completed / summary.total) * 100)}%` : '0%' }}
                           />
                         </div>
-                        <span className="text-[10px] text-slate-400">{summary.completed}/{summary.total}</span>
+                        <span className="text-[10px] font-semibold text-slate-600">{summary.completed}/{summary.total}</span>
                       </div>
                     )}
                   </div>
@@ -749,9 +750,9 @@ export default function FolderFileView({
                                 className="overflow-hidden mb-3"
                               >
                                 {files.length === 0 ? (
-                                  <p className="text-xs text-slate-400 pb-2">No files in this folder yet.</p>
+                                  <p className="text-xs text-slate-600 pb-2">No files in this folder yet.</p>
                                 ) : students.length === 0 ? (
-                                  <p className="text-xs text-slate-400 pb-2">No students enrolled.</p>
+                                  <p className="text-xs text-slate-600 pb-2">No students enrolled.</p>
                                 ) : (
                                   <div className="space-y-1.5 bg-slate-50 rounded-xl p-3">
                                     {students.map(s => {
@@ -799,7 +800,7 @@ export default function FolderFileView({
 
                         {/* File List */}
                         {files.length === 0 && (
-                          <p className="text-xs text-slate-400 text-center py-4 italic">No classwork in this folder yet</p>
+                          <p className="text-xs text-slate-600 text-center py-4 italic">No classwork in this folder yet</p>
                         )}
 
                         <div className="space-y-2">
@@ -850,7 +851,7 @@ export default function FolderFileView({
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className={`text-sm font-semibold ${
-                                      status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                                      status === 'completed' ? 'line-through text-slate-500' : 'text-slate-800'
                                     }`}>
                                       {file.title}
                                     </span>
@@ -1023,7 +1024,7 @@ export default function FolderFileView({
                 {submitFile ? submitFile.name : 'Or upload a file (image, document…)'}
               </span>
               {submitFile && (
-                <span className="text-xs text-slate-400">{(submitFile.size / 1024 / 1024).toFixed(1)} MB</span>
+                <span className="text-xs text-slate-600">{(submitFile.size / 1024 / 1024).toFixed(1)} MB</span>
               )}
               <input type="file" className="hidden" onChange={e => setSubmitFile(e.target.files?.[0] || null)} />
             </label>
@@ -1058,12 +1059,12 @@ export default function FolderFileView({
                       <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500" /> Completed</span>
                     </>
                   )}
-                  <span className="text-slate-400 ml-auto">Click status to change</span>
+                  <span className="text-slate-600 ml-auto">Click status to change</span>
                 </div>
               )}
 
               {students.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">No students in this classroom</p>
+                <p className="text-sm text-slate-600 text-center py-6">No students in this classroom</p>
               ) : (
                 <div className="space-y-2">
                   {students.map(member => {
@@ -1081,7 +1082,7 @@ export default function FolderFileView({
                           {sub ? (
                             <p className="text-xs text-slate-500">Submitted</p>
                           ) : (
-                            <p className="text-xs text-slate-400">No submission</p>
+                            <p className="text-xs text-slate-500">No submission</p>
                           )}
                         </div>
                         {sub && (
@@ -1186,153 +1187,141 @@ export default function FolderFileView({
             subtitle={folders.find(f => f.id === showNewFile)?.title}
             icon={<Plus size={16} />}
             iconClassName="bg-indigo-100 text-indigo-600"
-            bodyClassName="space-y-3"
+            bodyClassName="space-y-4 bg-slate-50/60"
             footer={
-              <div className="flex justify-end gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(null); resetNewFileForm() }}
-                  className="text-sm font-medium text-slate-500 hover:text-slate-700 px-4 py-2 rounded-full hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-white px-5 py-2 rounded-full transition-all disabled:opacity-50 disabled:shadow-none bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] shadow-lg shadow-indigo-600/25"
+                  className="flex-1 inline-flex items-center justify-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-full transition-all disabled:opacity-50 disabled:shadow-none bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-lg shadow-indigo-600/30"
                   disabled={!newFileTitle.trim() || uploadingFile}
                 >
-                  <Plus size={14} />
+                  <Plus size={15} />
                   {uploadingFile ? 'Uploading…' : 'Add Classwork'}
                 </button>
               </div>
             }
           >
-              <input
-                type="text" value={newFileTitle}
-                onChange={e => setNewFileTitle(e.target.value)}
-                placeholder="Classwork title"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-                autoFocus
-              />
-              <textarea
-                value={newFileDesc}
-                onChange={e => setNewFileDesc(e.target.value)}
-                placeholder="Description (optional)" rows={2}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
-              />
+              <div>
+                <FieldLabel>Title</FieldLabel>
+                <input
+                  type="text" value={newFileTitle}
+                  onChange={e => setNewFileTitle(e.target.value)}
+                  placeholder="e.g. Worksheet 3 — fractions"
+                  className={INPUT_CLASS}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <FieldLabel hint="(optional)">Description</FieldLabel>
+                <textarea
+                  value={newFileDesc}
+                  onChange={e => setNewFileDesc(e.target.value)}
+                  placeholder="Extra instructions for students…" rows={2}
+                  className={`${INPUT_CLASS} resize-none`}
+                />
+              </div>
 
               {/* Due date */}
-              <div className="flex flex-col gap-0.5">
+              <div>
+                <FieldLabel>Due date</FieldLabel>
                 <input type="date" value={newFileDue}
                   onChange={e => { setNewFileDue(e.target.value); setNewFileDueError(false) }}
-                  className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${newFileDueError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-indigo-400/50'}`}
+                  className={`${INPUT_CLASS} ${newFileDueError ? '!border-red-400 focus:!ring-red-500/10' : ''}`}
                   required
                 />
                 {newFileDueError && (
-                  <span className="text-[11px] text-red-500 font-medium px-1">Due date is required</span>
+                  <span className="block text-[11px] text-red-600 font-semibold mt-1">Due date is required</span>
                 )}
               </div>
 
               {/* Toggles */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={newFileRequiresCheck} onChange={e => setNewFileRequiresCheck(e.target.checked)} className="rounded" />
-                  <ShieldCheck size={14} className={newFileRequiresCheck ? 'text-green-600' : 'text-slate-400'} />
-                  Needs staff check
-                </label>
-                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={newFileRequiresSubmission} onChange={e => setNewFileRequiresSubmission(e.target.checked)} className="rounded" />
-                  <Send size={14} className={newFileRequiresSubmission ? 'text-indigo-600' : 'text-slate-400'} />
-                  Needs submission
-                </label>
-              </div>
-
-              {/* Edu Points */}
               <div>
-                <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
-                  <Star size={12} className="text-amber-500" /> Edu Points
-                  <span className="text-slate-400 font-normal">— awarded on completion</span>
-                </p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setNewFileEduPoints(n)}
-                      className={`min-w-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        newFileEduPoints === n
-                          ? 'bg-amber-500 text-white border-amber-500'
-                          : 'text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    max={999}
-                    value={newFileEduPoints > 5 ? newFileEduPoints : ''}
-                    onChange={e => setNewFileEduPoints(Math.max(0, Math.min(999, Math.round(Number(e.target.value) || 0))))}
-                    placeholder="Custom"
-                    className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                <FieldLabel>Requirements</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  <ToggleCard
+                    checked={newFileRequiresCheck}
+                    onChange={setNewFileRequiresCheck}
+                    icon={<ShieldCheck size={16} />}
+                    label="Needs staff check"
+                    description="Staff confirm before it counts as done"
+                    activeClass="border-emerald-400 bg-emerald-50/70"
+                  />
+                  <ToggleCard
+                    checked={newFileRequiresSubmission}
+                    onChange={setNewFileRequiresSubmission}
+                    icon={<Send size={16} />}
+                    label="Needs submission"
+                    description="Students attach a note or file"
                   />
                 </div>
               </div>
 
+              {/* Edu Points */}
+              <PointsPicker
+                value={newFileEduPoints}
+                custom={newFileEduPoints > 5 ? String(newFileEduPoints) : ''}
+                onPreset={n => setNewFileEduPoints(n)}
+                onCustom={v => setNewFileEduPoints(Math.max(0, Math.min(999, Math.round(Number(v) || 0))))}
+              />
+
               {/* Attachment */}
               <div>
-                <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
-                  <Paperclip size={12} /> Attachment (optional)
-                </p>
+                <FieldLabel icon={<Paperclip size={12} />} hint="(optional)">Attachment</FieldLabel>
                 {newFileAttachmentMode === 'none' ? (
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('youtube')}
-                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-red-400 hover:text-red-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
                     >
-                      <Youtube size={13} /> YouTube
+                      <Youtube size={16} /> YouTube
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('link')}
-                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                     >
-                      <Link2 size={13} /> Link
+                      <Link2 size={16} /> Link
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('upload')}
-                      className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
                     >
-                      <Upload size={13} /> Doc / Image
+                      <Upload size={16} /> Doc / Image
                     </button>
                   </div>
                 ) : newFileAttachmentMode === 'youtube' ? (
                   <div className="flex items-center gap-2">
-                    <Youtube size={14} className="text-red-500 flex-shrink-0" />
+                    <Youtube size={15} className="text-red-500 flex-shrink-0" />
                     <input
                       type="url" value={newFileYoutubeUrl}
                       onChange={e => setNewFileYoutubeUrl(e.target.value)}
                       placeholder="https://youtube.com/watch?v=..."
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                      className={`flex-1 ${INPUT_CLASS}`}
                     />
-                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileYoutubeUrl('') }} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
-                      <X size={14} />
+                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileYoutubeUrl('') }} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0">
+                      <X size={15} />
                     </button>
                   </div>
                 ) : newFileAttachmentMode === 'link' ? (
                   <div className="flex items-center gap-2">
-                    <Link2 size={14} className="text-blue-500 flex-shrink-0" />
+                    <Link2 size={15} className="text-blue-500 flex-shrink-0" />
                     <input
                       type="url" value={newFileLinkUrl}
                       onChange={e => setNewFileLinkUrl(e.target.value)}
                       placeholder="https://example.com/resource"
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                      className={`flex-1 ${INPUT_CLASS}`}
                     />
-                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileLinkUrl('') }} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
-                      <X size={14} />
+                    <button type="button" onClick={() => { setNewFileAttachmentMode('none'); setNewFileLinkUrl('') }} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0">
+                      <X size={15} />
                     </button>
                   </div>
                 ) : (
@@ -1344,25 +1333,27 @@ export default function FolderFileView({
                       className="hidden"
                     />
                     {newFileUpload ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-                        <FileText size={14} className="text-indigo-500 flex-shrink-0" />
-                        <span className="flex-1 min-w-0 text-sm text-indigo-600 truncate">{newFileUpload.name}</span>
-                        <button type="button" onClick={() => { setNewFileUpload(null); setNewFileAttachmentMode('none') }} className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0">
-                          <X size={14} />
+                      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                        <FileText size={15} className="text-indigo-500 flex-shrink-0" />
+                        <span className="flex-1 min-w-0 text-sm font-medium text-indigo-700 truncate">{newFileUpload.name}</span>
+                        <button type="button" onClick={() => { setNewFileUpload(null); setNewFileAttachmentMode('none') }} className="p-1 text-slate-500 hover:text-rose-600 flex-shrink-0">
+                          <X size={15} />
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full"
-                      >
-                        <Upload size={14} />
-                        {uploadingFile ? 'Uploading…' : 'Choose file (max 20 MB)'}
-                        <span className="ml-auto">
-                          <X size={14} className="text-slate-300 hover:text-rose-500" onClick={e => { e.stopPropagation(); setNewFileAttachmentMode('none') }} />
-                        </span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <Upload size={15} />
+                          {uploadingFile ? 'Uploading…' : 'Choose file (max 20 MB)'}
+                        </button>
+                        <button type="button" onClick={() => setNewFileAttachmentMode('none')} className="p-2 text-slate-500 hover:text-rose-600 flex-shrink-0">
+                          <X size={15} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
