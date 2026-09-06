@@ -343,6 +343,21 @@ export default function HomePage() {
   // built before the strip settles, avoiding a visible resnap).
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
+  // Whether announcements have resolved yet — hides the slot outright once
+  // loaded empty, rather than showing its "No announcements yet" placeholder.
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false)
+  // Student-only mini cards fetch their own data; each reports back whether it
+  // ended up empty so its slot can be dropped from the carousel entirely
+  // instead of showing an empty-state placeholder. Default to "has content"
+  // until told otherwise, so a slot isn't hidden before its own fetch resolves.
+  const [schoolWorkEmpty, setSchoolWorkEmpty] = useState(false)
+  const [assessmentsEmpty, setAssessmentsEmpty] = useState(false)
+  const [reportCardsEmpty, setReportCardsEmpty] = useState(false)
+  const [timetableEmpty, setTimetableEmpty] = useState(false)
+  const [examsEmpty, setExamsEmpty] = useState(false)
+  // Team names for a coordinator's "Your team" subtitle on the admin
+  // attendance card (mirrors the roster loadAttendanceCounts scopes to).
+  const [coordinatorTeamNames, setCoordinatorTeamNames] = useState<string[]>([])
   const [notifItems, setNotifItems] = useState<NotifItem[]>([])
   const [notifLoading, setNotifLoading] = useState(true)
   // More unread rows behind the ones listed, and whether a page is in flight.
@@ -446,6 +461,8 @@ export default function HomePage() {
       setAnnouncements(data)
     } catch (err) {
       console.error('Failed to load announcements for home:', err)
+    } finally {
+      setAnnouncementsLoaded(true)
     }
   }, [user, profile])
 
@@ -480,6 +497,7 @@ export default function HomePage() {
     let staffIds: string[] | null = null
     if (isCoordinator) {
       const rosters = await fetchMyTeamRosters(user.id)
+      setCoordinatorTeamNames(rosters.map(r => r.name))
       const team = mergeTeamRosters(rosters).filter(m => !m.attendance_hidden && !m.is_banned)
       staffIds = [...new Set([user.id, ...team.map(m => m.id)])]
     }
@@ -554,6 +572,31 @@ export default function HomePage() {
   // (e.g. Attendance) that then gets shoved aside once notifications load.
   const showNotifSlot = notifLoading || notifItems.length > 0
 
+  // Student-only mini cards: shown until their own fetch reports back empty
+  // (see the onEmptyChange props wired up below).
+  const showSchoolWork = !schoolWorkEmpty
+  const showAssessments = !assessmentsEmpty
+  const showReportCards = !reportCardsEmpty
+  const showTimetable = !timetableEmpty
+  const showExams = !examsEmpty
+
+  // Announcements: reserved while loading (unknown yet), dropped once loaded
+  // with nothing to show instead of rendering the "No announcements" placeholder.
+  const showAnnouncements = !announcementsLoaded || announcements.length > 0
+
+  // Attendance-viewer summary: reserved while attendanceCounts is still
+  // loading (null), dropped only once loaded and every count across both
+  // student and staff tallies is zero.
+  const showAttendanceViewerCard = !attendanceCounts || (
+    attendanceCounts.students.present + attendanceCounts.students.absent + attendanceCounts.students.exception +
+    attendanceCounts.staff.present + attendanceCounts.staff.absent + attendanceCounts.staff.exception
+  ) > 0
+
+  const hasFeesSummaryData = (s: HomeFeesSummary | null) =>
+    !s || s.collected > 0 || s.outstanding > 0 || s.todayCollection > 0 || s.studentsWithDues > 0
+  const showFees = hasFeesSummaryData(schoolFeesSummary)
+  const showBusFees = hasFeesSummaryData(busFeesSummary)
+
   // The slot list per role. Its ORDER must match the DOM order of the rendered
   // slots below (each slot is one containerW-wide flex child; dragX*index picks
   // it), so conditional slots are gated by the same flags in both places.
@@ -562,18 +605,32 @@ export default function HomePage() {
       const v: AdminCardView[] = []
       if (hasOverdueFees) v.push('overdue-fees')
       if (showNotifSlot) v.push('notifications')
-      v.push('calendar', 'assessments', 'report-cards', 'timetable', 'exams', 'announcements')
+      if (showSchoolWork) v.push('calendar')
+      if (showAssessments) v.push('assessments')
+      if (showReportCards) v.push('report-cards')
+      if (showTimetable) v.push('timetable')
+      if (showExams) v.push('exams')
+      if (showAnnouncements) v.push('announcements')
       return v
     }
     const v: AdminCardView[] = []
     if (showNotifSlot) v.push('notifications')
-    v.push(isAttendanceViewer ? 'attendance' : 'teacher-attendance')
+    if (isAttendanceViewer) {
+      if (showAttendanceViewerCard) v.push('attendance')
+    } else {
+      v.push('teacher-attendance')
+    }
     if (showTaskCalendar) v.push('task-calendar')
     if (hasGradingQueue) v.push('grading')
-    if (isAdmin) v.push('fees', 'bus-fees')
-    v.push('announcements')
+    if (isAdmin && showFees) v.push('fees')
+    if (isAdmin && showBusFees) v.push('bus-fees')
+    if (showAnnouncements) v.push('announcements')
     return v
-  }, [isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, showNotifSlot])
+  }, [
+    isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, showNotifSlot,
+    showSchoolWork, showAssessments, showReportCards, showTimetable, showExams, showAnnouncements,
+    showAttendanceViewerCard, showFees, showBusFees,
+  ])
 
   // When the slot list changes (role resolved, or a conditional card appears/
   // disappears), keep the carousel coherent: before the user has interacted,
@@ -1246,7 +1303,7 @@ export default function HomePage() {
                     )}
 
                     {/* ── Slot: Attendance (attendance viewers only) ── */}
-                    {isAttendanceViewer && (
+                    {isAttendanceViewer && showAttendanceViewerCard && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1254,10 +1311,10 @@ export default function HomePage() {
                         chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
                         eyebrow="Today"
                         title="Attendance"
-                        subtitle={isCoordinator ? 'Your team' : undefined}
+                        subtitle={isCoordinator ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team') : undefined}
                         action={
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                               <span className="text-[10px] font-semibold text-emerald-700">Live</span>
                             </div>
@@ -1265,8 +1322,8 @@ export default function HomePage() {
                           </div>
                         }
                       />
-                      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden mx-4">
-                        <div className="px-4 pt-3 pb-2 border-b border-white/25">
+                      <div className="pro-card h-[260px] overflow-hidden mx-4">
+                        <div className="px-4 pt-3 pb-2 border-b border-slate-200">
                           <div className="flex items-center justify-between mb-2.5">
                             <div className="flex items-center gap-1.5">
                               <Users size={12} className="text-slate-500" />
@@ -1277,17 +1334,17 @@ export default function HomePage() {
                             </Link>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
-                            <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                            <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
                               <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
                               <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
                             </Link>
-                            <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                            <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
                               <XCircle size={13} className="text-red-400 mb-1" />
                               <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
                             </Link>
-                            <Link href="/more/attendance#student-irregular" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                            <Link href="/more/attendance#student-irregular" className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                               <AlertTriangle size={12} className="text-amber-400 mb-1" />
                               <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
@@ -1305,17 +1362,17 @@ export default function HomePage() {
                             </Link>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
-                            <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                            <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
                               <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
                               <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
                             </Link>
-                            <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                            <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
                               <XCircle size={13} className="text-red-400 mb-1" />
                               <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
                             </Link>
-                            <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                            <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
                               <AlertTriangle size={12} className="text-amber-400 mb-1" />
                               <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
                               <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
@@ -1381,8 +1438,8 @@ export default function HomePage() {
                     </div>
                     )}
 
-                    {/* ── Slot: School Work Calendar (students only) ── */}
-                    {isStudent && user && (
+                    {/* ── Slot: School Work Calendar (students only, hidden once known empty) ── */}
+                    {isStudent && user && showSchoolWork && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1393,14 +1450,14 @@ export default function HomePage() {
                         action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
                       />
                       <div className="mx-4">
-                        <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />
+                        <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onEmptyChange={setSchoolWorkEmpty} />
                       </div>
                       </div>
                     </div>
                     )}
 
-                    {/* ── Slot: Latest Assessments (students only) ── */}
-                    {isStudent && user && (
+                    {/* ── Slot: Latest Assessments (students only, hidden once known empty) ── */}
+                    {isStudent && user && showAssessments && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1410,14 +1467,14 @@ export default function HomePage() {
                         title="Assessments"
                       />
                       <div className="mx-4">
-                        <LatestAssessmentsMiniList classrooms={classrooms} />
+                        <LatestAssessmentsMiniList classrooms={classrooms} onEmptyChange={setAssessmentsEmpty} />
                       </div>
                       </div>
                     </div>
                     )}
 
-                    {/* ── Slot: Report Cards (students only) ── */}
-                    {isStudent && user && (
+                    {/* ── Slot: Report Cards (students only, hidden once known empty) ── */}
+                    {isStudent && user && showReportCards && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1428,14 +1485,14 @@ export default function HomePage() {
                         action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
                       />
                       <div className="mx-4">
-                        <ReportCardsMiniList userId={user.id} />
+                        <ReportCardsMiniList userId={user.id} onEmptyChange={setReportCardsEmpty} />
                       </div>
                       </div>
                     </div>
                     )}
 
-                    {/* ── Slot: Today's Timetable (students only) ── */}
-                    {isStudent && user && (
+                    {/* ── Slot: Today's Timetable (students only, hidden once known empty) ── */}
+                    {isStudent && user && showTimetable && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1446,14 +1503,14 @@ export default function HomePage() {
                         action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
                       />
                       <div className="mx-4">
-                        <TodayTimetableCard userId={user.id} />
+                        <TodayTimetableCard userId={user.id} onEmptyChange={setTimetableEmpty} />
                       </div>
                       </div>
                     </div>
                     )}
 
-                    {/* ── Slot: Exams (students only) ── */}
-                    {isStudent && user && (
+                    {/* ── Slot: Exams (students only, hidden once known empty) ── */}
+                    {isStudent && user && showExams && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1464,15 +1521,14 @@ export default function HomePage() {
                         action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
                       />
                       <div className="mx-4">
-                        <ExamsMiniCard userId={user.id} />
+                        <ExamsMiniCard userId={user.id} onEmptyChange={setExamsEmpty} />
                       </div>
                       </div>
                     </div>
                     )}
 
-                    {/* ── Slots: Fee Manager + Bus Fees (admin only) ── */}
-                    {isAdmin && (
-                      <>
+                    {/* ── Slot: Fee Manager (admin only, hidden once all-zero) ── */}
+                    {isAdmin && showFees && (
                         <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           <SectionHeading
@@ -1482,24 +1538,24 @@ export default function HomePage() {
                             title="Fee Manager"
                             action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
                           />
-                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center mx-4">
+                          <div className="pro-card h-[260px] p-4 flex items-center mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
-                              <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
                                 <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
                               </Link>
-                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                                 <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
                               </Link>
-                              <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
                                 <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
                               </Link>
-                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                                 <Users size={15} className="text-[#A1A1AA] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
@@ -1508,7 +1564,10 @@ export default function HomePage() {
                           </div>
                           </div>
                         </div>
+                    )}
 
+                    {/* ── Slot: Bus Fees (admin only, hidden once all-zero) ── */}
+                    {isAdmin && showBusFees && (
                         <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           <SectionHeading
@@ -1518,24 +1577,24 @@ export default function HomePage() {
                             title="Bus Fees"
                             action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
                           />
-                          <div className="glass-card rounded-[1.4rem] h-[260px] p-4 flex items-center mx-4">
+                          <div className="pro-card h-[260px] p-4 flex items-center mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
-                              <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
                                 <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
                               </Link>
-                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                                 <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
                               </Link>
-                              <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
                                 <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
                               </Link>
-                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 rounded-xl bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
                                 <Users size={15} className="text-[#A1A1AA] mb-1.5" />
                                 <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
                                 <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
@@ -1544,10 +1603,10 @@ export default function HomePage() {
                           </div>
                           </div>
                         </div>
-                      </>
                     )}
 
-                    {/* ── Slot: Announcements ── */}
+                    {/* ── Slot: Announcements (hidden once loaded empty) ── */}
+                    {showAnnouncements && (
                     <div style={{ width: containerW || '100%', flexShrink: 0 }}>
                       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <SectionHeading
@@ -1562,6 +1621,7 @@ export default function HomePage() {
                       </div>
                       </div>
                     </div>
+                    )}
 
                   </>)}
                   </motion.div>
