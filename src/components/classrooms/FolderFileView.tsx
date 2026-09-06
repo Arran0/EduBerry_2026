@@ -7,7 +7,7 @@ import {
   Folder, File, Plus, Trash2, ChevronRight, ChevronDown,
   X, Circle, CircleDot, CheckCircle2, Users, Link2, FileText,
   Youtube, Upload, BarChart2, ExternalLink, Play, Edit3, Check, Eye, Star,
-  GripVertical, ShieldCheck, Send, Paperclip, Loader2,
+  GripVertical, ShieldCheck, Send, Paperclip, Loader2, User,
 } from 'lucide-react'
 import {
   ClassroomFolder, ClassroomFile, FileProgress, FileSubmission,
@@ -17,6 +17,7 @@ import {
   updateFileProgress, fetchFileProgress, fetchProgressForStudent,
   fetchProgressForFiles,
   submitWork, fetchSubmissions, fetchStudentSubmissionsForFiles, fetchStudentMembers,
+  fetchProfilesByIds,
   ClassroomMember,
   extractYouTubeEmbedUrl, uploadClassroomFile, uploadSubmissionFile,
 } from '@/lib/classrooms'
@@ -120,7 +121,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
         as="div"
         value={folder}
         onDragEnd={onDragEnd}
-        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white sm:shadow-sm"
+        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-300 bg-white sm:shadow-sm"
         whileDrag={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, scale: 1.01 }}
       >
         {children}
@@ -128,7 +129,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
     )
   }
   return (
-    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white sm:shadow-sm">
+    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-300 bg-white sm:shadow-sm">
       {children}
     </div>
   )
@@ -152,6 +153,9 @@ export default function FolderFileView({
   const [studentProgress,   setStudentProgress]   = useState<Record<string, FileStatus>>({})
   const [studentSubmissions,setStudentSubmissions]= useState<Record<string, FileSubmission>>({})
   const [loading,           setLoading]           = useState(true)
+  // File creators, keyed by user id — shown on each file row when there's
+  // room, so students can see who set the classwork.
+  const [creators,          setCreators]          = useState<Record<string, UserProfile>>({})
 
   // Staff per-folder progress
   const [students,              setStudents]              = useState<(ClassroomMember & { user: UserProfile })[]>([])
@@ -223,6 +227,7 @@ export default function FolderFileView({
   const loadFiles = async (folderId: string) => {
     const files = await fetchFilesForFolder(folderId)
     setFolderFiles(prev => ({ ...prev, [folderId]: files }))
+    fetchProfilesByIds(files.map(f => f.created_by)).then(map => setCreators(prev => ({ ...prev, ...map })))
 
     if (files.length === 0) return
 
@@ -822,7 +827,7 @@ export default function FolderFileView({
                           return (
                             <div
                               key={file.id}
-                              className={`bg-white rounded-xl border border-l-4 border-slate-100 shadow-sm hover:shadow-md transition-all group ${accentClass}`}
+                              className={`bg-white rounded-xl border border-l-4 border-slate-300 shadow-sm hover:shadow-md transition-all group ${accentClass}`}
                             >
                               <div className="flex items-start gap-3 px-3 py-2.5">
                                 {/* Student: Status Toggle */}
@@ -880,6 +885,11 @@ export default function FolderFileView({
                                       }`}>
                                         <Star size={9} className={isStudent && status === 'completed' ? 'fill-current' : ''} />
                                         {isStudent && status === 'completed' ? `+${file.edu_points} EP` : `${file.edu_points} EP`}
+                                      </span>
+                                    )}
+                                    {creators[file.created_by] && (
+                                      <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+                                        <User size={9} /> {creators[file.created_by].full_name}
                                       </span>
                                     )}
                                   </div>
@@ -951,17 +961,17 @@ export default function FolderFileView({
                                     </span>
                                   )}
                                   {isStaff && (
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-0.5">
                                       <button
                                         onClick={() => handleShowTracking(file.id)}
-                                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                                        className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                                         title="Student tracking"
                                       >
                                         <Users size={13} />
                                       </button>
                                       <button
                                         onClick={() => handleDeleteFile(file.id, folder.id)}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                                       >
                                         <Trash2 size={13} />
                                       </button>
@@ -1037,7 +1047,7 @@ export default function FolderFileView({
         {showTracking && (
           <ModalShell
             onClose={() => setShowTracking(null)}
-            size="lg"
+            size="2xl"
             title="Student Tracking"
             subtitle={trackingData.file?.title}
             icon={<Users size={15} />}
@@ -1066,7 +1076,7 @@ export default function FolderFileView({
               {students.length === 0 ? (
                 <p className="text-sm text-slate-600 text-center py-6">No students in this classroom</p>
               ) : (
-                <div className="space-y-2">
+                <div className="grid sm:grid-cols-2 gap-2">
                   {students.map(member => {
                     const prog   = trackingData.progress.find(p => p.student_id === member.user_id)
                     const sub    = trackingData.submissions.find(s => s.student_id === member.user_id)

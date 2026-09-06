@@ -28,6 +28,7 @@ import {
 } from '@/lib/classrooms'
 import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
+import { pickClassroomBannerPalette } from '@/lib/classroomPalette'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
@@ -96,7 +97,10 @@ function ClassroomDetailPageContent() {
     if (t && (TAB_VALUES as string[]).includes(t)) setActiveTab(t as Tab)
   }, [searchParams])
 
-  // Gradient from-purple-500 via-blue-600 to-cyan-500 is always dark → null = white text
+  // Each classroom gets a stable, friendly gradient palette (hashed from its
+  // id) instead of every classroom sharing one fixed purple/blue/cyan combo.
+  const palette = classroom ? pickClassroomBannerPalette(classroom.id) : null
+
   useEffect(() => {
     if (!classroom) return
     setBannerReady(false)
@@ -107,7 +111,8 @@ function ClassroomDetailPageContent() {
       img.onerror = () => setBannerReady(true)
       img.src = classroom.banner_url
     } else {
-      const gradLum = (hexToLuminance('#a855f7') + hexToLuminance('#2563eb') + hexToLuminance('#06b6d4')) / 3
+      const p = pickClassroomBannerPalette(classroom.id)
+      const gradLum = (hexToLuminance(p.hexFrom) + hexToLuminance(p.hexVia) + hexToLuminance(p.hexTo)) / 3
       setBannerLum(gradLum)
       setBannerReady(true)
     }
@@ -182,8 +187,8 @@ function ClassroomDetailPageContent() {
                   transition={{ type: 'spring', stiffness: 45, damping: 14 }}
                   className="relative overflow-hidden"
                 >
-              {/* Background: banner image or gradient */}
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-blue-600 to-cyan-500">
+              {/* Background: banner image or this classroom's gradient palette */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${palette!.bannerGradient}`}>
                 {classroom.banner_url && (
                   <img
                     src={classroom.banner_url}
@@ -196,8 +201,8 @@ function ClassroomDetailPageContent() {
               {/* Decorative glow orbs (visible on the gradient banner) */}
               {!classroom.banner_url && (
                 <>
-                  <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-cyan-300/30 blur-3xl pointer-events-none" />
-                  <div className="absolute -bottom-20 left-1/4 w-72 h-72 rounded-full bg-fuchsia-400/25 blur-3xl pointer-events-none" />
+                  <div className={`absolute -top-16 -right-10 w-64 h-64 rounded-full ${palette!.orbA} blur-3xl pointer-events-none`} />
+                  <div className={`absolute -bottom-20 left-1/4 w-72 h-72 rounded-full ${palette!.orbB} blur-3xl pointer-events-none`} />
                 </>
               )}
 
@@ -236,7 +241,7 @@ function ClassroomDetailPageContent() {
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : 'bg-gradient-to-br from-purple-500 to-blue-600'} overflow-hidden`}>
+                    <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : `bg-gradient-to-br ${palette!.avatarGradient}`} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (

@@ -5,14 +5,14 @@ import { AnimatePresence } from 'framer-motion'
 import {
   Plus, Loader2, Star, ShieldCheck, Send, ChevronLeft, ChevronRight,
   Users, FileText, ExternalLink, Link2, BookOpen, Paperclip, Circle,
-  CircleDot, CheckCircle2, CalendarDays, Upload, Youtube, Clock,
+  CircleDot, CheckCircle2, CalendarDays, Upload, Youtube, Clock, User,
 } from 'lucide-react'
-import { UserRole } from '@/lib/supabase'
+import { UserRole, UserProfile } from '@/lib/supabase'
 import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
   FileStatus, FileProgress,
   fetchAllFilesForClassroom, fetchProgressForStudent,
-  fetchFileProgress, updateFileProgress,
+  fetchFileProgress, updateFileProgress, fetchProfilesByIds,
 } from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
@@ -165,6 +165,10 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   const [fileTrackingData, setFileTrackingData]   = useState<FileProgress[]>([])
   const [loadingTracking, setLoadingTracking]     = useState(false)
 
+  // Homework/classwork creators, keyed by user id — shown on each item when
+  // there's room, so students can see who set the work.
+  const [creators, setCreators] = useState<Record<string, UserProfile>>({})
+
   // ── Load data ──────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true)
@@ -174,6 +178,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
     ])
     setTasks(hwData)
     setFiles(cwData)
+    fetchProfilesByIds([...hwData.map(t => t.created_by), ...cwData.map(f => f.created_by)]).then(setCreators)
 
     if (isStudent) {
       const [hwComp, cwProg] = await Promise.all([
@@ -264,6 +269,199 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
 
   const goToToday = () => { setWeekStart(getWeekStart(new Date())); setSelectedDay(today) }
 
+  // ── Item renderers ────────────────────────────────────────────────────────
+  // Shared by the phone agenda list and the desktop per-day columns below, so
+  // both surfaces stay in sync: `compact` swaps the full wrapped-title row for
+  // a narrower stacked card (used for a desktop column that isn't the
+  // expanded day), but neither ever truncates a title — unlike the old grid
+  // of chips, everything just wraps onto another line instead of cutting off.
+  const renderHwItem = (task: SmartboardTask, compact: boolean) => {
+    const status    = hwCompletionMap[task.id]?.status ?? 'not_done'
+    const completed = hwIsCompleted(status, task.require_check)
+    const creatorName = task.created_by ? creators[task.created_by]?.full_name : null
+
+    if (compact) {
+      return (
+        <button
+          key={task.id}
+          onClick={() => canManage ? setEditTask(task) : setDetailTask(task)}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${HW_STATUS_BORDER[status]}`}
+        >
+          <div className="flex items-start gap-1">
+            {isStudent && (
+              <button
+                onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+                className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+                disabled={savingHwId === task.id}
+                aria-label="Change status"
+              >
+                {savingHwId === task.id
+                  ? <Loader2 size={12} className="animate-spin text-slate-500" />
+                  : hwStatusIcon(status, task.require_check)}
+              </button>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold leading-tight ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                {task.title}
+              </p>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-700">HW</span>
+                {task.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+                    <Star size={8} /> {task.edu_points}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </button>
+      )
+    }
+
+    return (
+      <div
+        key={task.id}
+        onClick={() => canManage ? setEditTask(task) : setDetailTask(task)}
+        className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
+      >
+        <span className="self-stretch w-1 rounded-full bg-purple-400 flex-shrink-0" />
+        {isStudent && (
+          <button
+            onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+            className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+            disabled={savingHwId === task.id}
+            aria-label="Change status"
+          >
+            {savingHwId === task.id
+              ? <Loader2 size={16} className="animate-spin text-slate-500" />
+              : hwStatusIcon(status, task.require_check)}
+          </button>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold leading-snug ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+            {task.title}
+          </p>
+          {task.description && (
+            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
+          )}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
+            {task.timing && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-600">
+                <Clock size={10} /> {task.timing}
+              </span>
+            )}
+            {task.edu_points > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
+                <Star size={10} /> {task.edu_points} EP
+              </span>
+            )}
+            {task.require_check && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700">
+                <ShieldCheck size={10} /> Verified
+              </span>
+            )}
+            {creatorName && (
+              <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+                <User size={9} /> {creatorName}
+              </span>
+            )}
+          </div>
+        </div>
+        <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
+      </div>
+    )
+  }
+
+  const renderCwItem = (file: WorkFile, compact: boolean) => {
+    const status    = cwProgressMap[file.id] ?? 'not_done'
+    const completed = status === 'completed'
+    const creatorName = file.created_by ? creators[file.created_by]?.full_name : null
+
+    if (compact) {
+      return (
+        <button
+          key={file.id}
+          onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${CW_STATUS_BORDER[status]}`}
+        >
+          <div className="flex items-start gap-1">
+            {isStudent && (
+              <button
+                onClick={e => { e.stopPropagation(); setSavingCwId(file.id); cycleCwStatus(file) }}
+                className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+                disabled={savingCwId === file.id}
+                aria-label="Change status"
+              >
+                {savingCwId === file.id
+                  ? <Loader2 size={12} className="animate-spin text-slate-500" />
+                  : cwStatusIcon(status)}
+              </button>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold leading-tight ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                {file.title}
+              </p>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-cyan-100 text-cyan-700">CW</span>
+                {file.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+                    <Star size={8} /> {file.edu_points}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </button>
+      )
+    }
+
+    return (
+      <div
+        key={file.id}
+        onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
+        className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
+      >
+        <span className="self-stretch w-1 rounded-full bg-cyan-400 flex-shrink-0" />
+        {isStudent && (
+          <button
+            onClick={e => { e.stopPropagation(); setSavingCwId(file.id); cycleCwStatus(file) }}
+            className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+            disabled={savingCwId === file.id}
+            aria-label="Change status"
+          >
+            {savingCwId === file.id
+              ? <Loader2 size={16} className="animate-spin text-slate-500" />
+              : cwStatusIcon(status)}
+          </button>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold leading-snug ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+            {file.title}
+          </p>
+          {file.description && (
+            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{file.description}</p>
+          )}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CLASSWORK</span>
+            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">{file.folder.title}</span>
+            {file.edu_points > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
+                <Star size={10} /> {file.edu_points} EP
+              </span>
+            )}
+            {creatorName && (
+              <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+                <User size={9} /> {creatorName}
+              </span>
+            )}
+          </div>
+        </div>
+        <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
+      </div>
+    )
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -320,13 +518,17 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         )}
       </AnimatePresence>
 
-      {/* ── Calendar: compact week picker + full-width schedule ───────────────
-           Chips inside seven narrow grid cells truncated every title, so the
-           week is now a date picker and the day's items are listed below it at
-           full width — nothing gets cut off. Runs edge-to-edge on phones. ── */}
-      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl sm:shadow-sm overflow-hidden">
+      {/* ── Calendar ────────────────────────────────────────────────────────────
+           Phones (and tablets, up to `lg`) get a compact week picker over a
+           full-width schedule list, since seven narrow grid columns truncated
+           every title. Desktop has the room for all seven days side by side,
+           so it shows a column per day instead — the selected day's column
+           expands to 4x width with the same full row design as the phone
+           agenda, and every other column narrows to a compact wrapped card
+           (never truncated) rather than the old cut-off chips. ── */}
+      <div className="bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden">
 
-        {/* Week navigation */}
+        {/* Week navigation — shared by both layouts */}
         <div className="flex items-center gap-2 px-2 py-2.5 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600">
           <button
             onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
@@ -354,167 +556,147 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
           </button>
         </div>
 
-        {/* Day picker */}
-        <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
+        {/* ── Phone/tablet: day picker + agenda list ── */}
+        <div className="lg:hidden">
+          {/* Day picker */}
+          <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
+            {weekDays.map((day, i) => {
+              const isToday    = isSameDay(day, today)
+              const isActive   = isSameDay(day, activeDay)
+              const total      = hwForDay(day).length + cwForDay(day).length
+              return (
+                <button
+                  key={day.toISOString()}
+                  onClick={() => setSelectedDay(day)}
+                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-gradient-to-b from-violet-500 to-purple-600 text-white shadow-md shadow-purple-600/25'
+                      : isToday
+                        ? 'bg-white ring-1 ring-violet-300 text-violet-700 hover:bg-violet-50'
+                        : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/80' : 'text-slate-500'}`}>
+                    {DAY_NAMES[i]}
+                  </span>
+                  <span className="text-[15px] font-bold leading-none">{day.getDate()}</span>
+                  <span className="h-1.5 flex items-center gap-0.5">
+                    {total > 0 && Array.from({ length: Math.min(total, 3) }).map((_, d) => (
+                      <span
+                        key={d}
+                        className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : 'bg-violet-400'}`}
+                      />
+                    ))}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Selected day heading */}
+          <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-slate-800 truncate">
+              {activeDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+              {isSameDay(activeDay, today) && (
+                <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-violet-600">Today</span>
+              )}
+            </h3>
+            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
+              {agendaCount} scheduled
+            </span>
+          </div>
+
+          {/* Schedule list — full width rows, titles wrap instead of truncating */}
+          <div className="divide-y divide-slate-100">
+            {agendaCount === 0 && (
+              <p className="px-4 py-7 text-center text-sm text-slate-500">Nothing scheduled for this day.</p>
+            )}
+            {agendaHw.map(task => renderHwItem(task, false))}
+            {agendaCw.map(file => renderCwItem(file, false))}
+          </div>
+
+          {/* Quick add for the selected day (staff only) */}
+          {canManage && (
+            <button
+              onClick={() => { setNewHwDate(formatDate(activeDay)); setShowForm(true) }}
+              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-semibold text-violet-700 bg-violet-50/60 hover:bg-violet-100 border-t border-slate-100 transition-colors"
+            >
+              <Plus size={14} /> Add homework for {activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </button>
+          )}
+        </div>
+
+        {/* ── Desktop: seven columns, the active day expanded to 4x width ── */}
+        <div className="hidden lg:flex">
           {weekDays.map((day, i) => {
             const isToday    = isSameDay(day, today)
-            const isActive   = isSameDay(day, activeDay)
-            const total      = hwForDay(day).length + cwForDay(day).length
+            const isExpanded = isSameDay(day, activeDay)
+            const isLastCol  = i === 6
+            const dayHw      = hwForDay(day)
+            const dayCw      = cwForDay(day)
+            const total      = dayHw.length + dayCw.length
+
             return (
-              <button
+              <div
                 key={day.toISOString()}
-                onClick={() => setSelectedDay(day)}
-                className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-all active:scale-95 ${
-                  isActive
-                    ? 'bg-gradient-to-b from-violet-500 to-purple-600 text-white shadow-md shadow-purple-600/25'
-                    : isToday
-                      ? 'bg-white ring-1 ring-violet-300 text-violet-700 hover:bg-violet-50'
-                      : 'text-slate-700 hover:bg-white'
-                }`}
+                style={{ flex: isExpanded ? '4 4 0%' : '1 1 0%', transition: 'flex 320ms ease' }}
+                className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
               >
-                <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/80' : 'text-slate-500'}`}>
-                  {DAY_NAMES[i]}
-                </span>
-                <span className="text-[15px] font-bold leading-none">{day.getDate()}</span>
-                <span className="h-1.5 flex items-center gap-0.5">
-                  {total > 0 && Array.from({ length: Math.min(total, 3) }).map((_, d) => (
-                    <span
-                      key={d}
-                      className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : 'bg-violet-400'}`}
-                    />
-                  ))}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Selected day heading */}
-        <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800 truncate">
-            {activeDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-            {isSameDay(activeDay, today) && (
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-violet-600">Today</span>
-            )}
-          </h3>
-          <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
-            {agendaCount} scheduled
-          </span>
-        </div>
-
-        {/* Schedule list — full width rows, titles wrap instead of truncating */}
-        <div className="divide-y divide-slate-100">
-          {agendaCount === 0 && (
-            <p className="px-4 py-7 text-center text-sm text-slate-500">Nothing scheduled for this day.</p>
-          )}
-
-          {agendaHw.map(task => {
-            const status    = hwCompletionMap[task.id]?.status ?? 'not_done'
-            const completed = hwIsCompleted(status, task.require_check)
-            return (
-              <div
-                key={task.id}
-                onClick={() => canManage ? setEditTask(task) : setDetailTask(task)}
-                className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
-              >
-                <span className="self-stretch w-1 rounded-full bg-purple-400 flex-shrink-0" />
-                {isStudent && (
-                  <button
-                    onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
-                    className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
-                    disabled={savingHwId === task.id}
-                    aria-label="Change status"
-                  >
-                    {savingHwId === task.id
-                      ? <Loader2 size={16} className="animate-spin text-slate-500" />
-                      : hwStatusIcon(status, task.require_check)}
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold leading-snug ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
-                    {task.title}
+                {/* Day header — click to expand this day */}
+                <button
+                  onClick={() => setSelectedDay(day)}
+                  className={`px-2 py-2.5 text-center border-b transition-all ${
+                    isExpanded
+                      ? 'bg-gradient-to-b from-violet-500 to-purple-600 border-purple-600'
+                      : isToday
+                        ? 'bg-violet-50 border-slate-200 hover:bg-violet-100'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : isToday ? 'text-violet-600' : 'text-slate-500'}`}>
+                    {DAY_NAMES[i]}
                   </p>
-                  {task.description && (
-                    <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
-                    {task.timing && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-600">
-                        <Clock size={10} /> {task.timing}
-                      </span>
-                    )}
-                    {task.edu_points > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
-                        <Star size={10} /> {task.edu_points} EP
-                      </span>
-                    )}
-                    {task.require_check && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700">
-                        <ShieldCheck size={10} /> Verified
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
-              </div>
-            )
-          })}
-
-          {agendaCw.map(file => {
-            const status    = cwProgressMap[file.id] ?? 'not_done'
-            const completed = status === 'completed'
-            return (
-              <div
-                key={file.id}
-                onClick={() => canManage ? setEditClasswork(file) : setDetailFile(file)}
-                className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
-              >
-                <span className="self-stretch w-1 rounded-full bg-cyan-400 flex-shrink-0" />
-                {isStudent && (
-                  <button
-                    onClick={e => { e.stopPropagation(); setSavingCwId(file.id); cycleCwStatus(file) }}
-                    className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
-                    disabled={savingCwId === file.id}
-                    aria-label="Change status"
-                  >
-                    {savingCwId === file.id
-                      ? <Loader2 size={16} className="animate-spin text-slate-500" />
-                      : cwStatusIcon(status)}
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold leading-snug ${completed ? 'line-through text-slate-500' : 'text-slate-800'}`}>
-                    {file.title}
+                  <p className={`font-bold leading-tight ${isExpanded ? 'text-lg text-white' : 'text-sm text-slate-700'}`}>
+                    {day.getDate()}
+                    {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
                   </p>
-                  {file.description && (
-                    <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{file.description}</p>
+                  {total > 0 && !isExpanded && (
+                    <span className="mt-0.5 inline-flex h-1.5 items-center gap-0.5">
+                      {Array.from({ length: Math.min(total, 3) }).map((_, d) => (
+                        <span key={d} className="w-1 h-1 rounded-full bg-violet-400" />
+                      ))}
+                    </span>
                   )}
-                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CLASSWORK</span>
-                    <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">{file.folder.title}</span>
-                    {file.edu_points > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
-                        <Star size={10} /> {file.edu_points} EP
-                      </span>
-                    )}
-                  </div>
+                  {isExpanded && (
+                    <span className="text-[10px] font-medium text-white/80">{total} scheduled</span>
+                  )}
+                </button>
+
+                {/* Day content */}
+                <div className={`flex-1 overflow-y-auto p-1.5 space-y-1.5 ${isExpanded ? 'max-h-[32rem] divide-y divide-slate-100 !space-y-0 !p-0' : 'max-h-[32rem] bg-slate-50/30'}`}>
+                  {total === 0 && (
+                    <p className={`text-slate-500 text-center ${isExpanded ? 'py-7 text-sm' : 'py-4 text-[10px]'}`}>
+                      {isExpanded ? 'Nothing scheduled for this day.' : '—'}
+                    </p>
+                  )}
+                  {dayHw.map(task => renderHwItem(task, !isExpanded))}
+                  {dayCw.map(file => renderCwItem(file, !isExpanded))}
+                  {canManage && (
+                    <button
+                      onClick={() => { setNewHwDate(formatDate(day)); setShowForm(true) }}
+                      className={`w-full flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50/50 transition-colors ${
+                        isExpanded ? 'py-2.5 text-xs font-semibold m-1.5' : 'py-1'
+                      }`}
+                      title="Add homework for this day"
+                    >
+                      <Plus size={isExpanded ? 13 : 12} /> {isExpanded ? 'Add homework' : null}
+                    </button>
+                  )}
                 </div>
-                <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
               </div>
             )
           })}
         </div>
-
-        {/* Quick add for the selected day (staff only) */}
-        {canManage && (
-          <button
-            onClick={() => { setNewHwDate(formatDate(activeDay)); setShowForm(true) }}
-            className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-semibold text-violet-700 bg-violet-50/60 hover:bg-violet-100 border-t border-slate-100 transition-colors"
-          >
-            <Plus size={14} /> Add homework for {activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-          </button>
-        )}
       </div>
 
       {/* ── Empty state ──────────────────────────────────────────────────────── */}
@@ -825,12 +1007,12 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         {trackingFileId && (
           <ModalShell
             onClose={() => { setTrackingFileId(null); setFileTrackingData([]) }}
-            size="sm"
+            size="2xl"
             zClass="z-[60]"
             title="Student progress"
             icon={<Users size={15} />}
             iconClassName="bg-indigo-100 text-indigo-600"
-            bodyClassName="divide-y divide-slate-50 !px-2 !py-1"
+            bodyClassName="!px-3 !py-2"
           >
             {loadingTracking ? (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-500 py-8">
@@ -839,22 +1021,24 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             ) : fileTrackingData.length === 0 ? (
               <p className="text-xs text-slate-500 py-8 px-4 text-center">No student progress recorded yet.</p>
             ) : (
-              fileTrackingData.map(p => (
-                <div key={p.student_id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={30} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {fileTrackingData.map(p => (
+                  <div key={p.student_id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50">
+                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={30} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize flex-shrink-0 ${
+                      p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
+                        : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
+                        : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {p.status.replace('_', ' ')}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${
-                    p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
-                      : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
-                      : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {p.status.replace('_', ' ')}
-                  </span>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </ModalShell>
         )}

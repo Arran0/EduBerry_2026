@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X, User } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
-  upsertAssessmentMark, fetchAssessmentMarks, fetchStudentMembers,
+  upsertAssessmentMark, fetchAssessmentMarks, fetchStudentMembers, fetchProfilesByIds,
   ClassroomMember, ClassroomWithDetails,
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
@@ -29,6 +29,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [marks, setMarks] = useState<Record<string, { marks: string; isAbsent: boolean }>>({})
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
   const [saving, setSaving] = useState(false)
+  // Assessment creators, keyed by id — shown on the assessment's card and in
+  // the marksheet header so staff can see who set it up.
+  const [creators, setCreators] = useState<Record<string, UserProfile>>({})
   const [marksheetSort, setMarksheetSort] = useState<'name' | 'marks'>('name')
   const [marksheetSortDir, setMarksheetSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -67,6 +70,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     const data = await fetchAssessments(classroomId)
     setAssessments(data)
     setLoading(false)
+    fetchProfilesByIds(data.map(a => a.created_by)).then(setCreators)
   }, [classroomId])
 
   useEffect(() => { loadAssessments() }, [loadAssessments])
@@ -89,6 +93,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
     if (result) {
       setAssessments((prev) => [result, ...prev])
+      setCreators(prev => prev[userId] ? prev : {
+        ...prev,
+        ...(classroom.members.find(m => m.user_id === userId)?.user
+          ? { [userId]: classroom.members.find(m => m.user_id === userId)!.user! }
+          : {}),
+      })
       setNewTitle('')
       setNewDesc('')
       setNewDate('')
@@ -402,6 +412,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               isStudent={isStudent}
               isStaff={isStaff}
               userId={userId}
+              creatorName={creators[assessment.created_by]?.full_name ?? null}
               myMark={studentMarks[assessment.id]}
               editingId={editingId}
               editTitle={editTitle}
@@ -432,7 +443,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             onClose={() => setShowMarksheet(null)}
             size="2xl"
             title="Marksheet"
-            subtitle={assessments.find(a => a.id === showMarksheet)?.title}
+            subtitle={(() => {
+              const a = assessments.find(a => a.id === showMarksheet)
+              if (!a) return undefined
+              const creatorName = creators[a.created_by]?.full_name
+              return creatorName ? `${a.title} · Created by ${creatorName}` : a.title
+            })()}
             icon={<Award size={16} />}
             iconClassName="bg-amber-100 text-amber-600"
             bodyClassName="!pt-0 !px-0"
@@ -686,6 +702,7 @@ interface AssessmentCardProps {
   isStudent: boolean
   isStaff: boolean
   userId: string
+  creatorName: string | null
   myMark?: AssessmentMark
   editingId: string | null
   editTitle: string
@@ -707,7 +724,7 @@ interface AssessmentCardProps {
 }
 
 function AssessmentCard({
-  assessment, isStudent, isStaff, userId, myMark,
+  assessment, isStudent, isStaff, userId, creatorName, myMark,
   editingId, editTitle, editDesc, editDate, editReportCardTitle, editMaxMarks, editSaving,
   onEdit, onDelete, onMarksheet,
   onEditTitleChange, onEditDescChange, onEditDateChange,
@@ -722,8 +739,8 @@ function AssessmentCard({
 
   return (
     <div
-      className={`glass rounded-2xl border border-slate-100 transition-all ${
-        isStaff && !isEditing ? 'cursor-pointer hover:shadow-md' : ''
+      className={`bg-white border-y sm:border sm:rounded-2xl border-slate-300 sm:shadow-sm transition-all ${
+        isStaff && !isEditing ? 'cursor-pointer hover:shadow-md hover:border-slate-400' : ''
       }`}
       onClick={isStaff && !isEditing ? () => onMarksheet(assessment.id) : undefined}
     >
@@ -746,6 +763,11 @@ function AssessmentCard({
               <span className="inline-flex items-center text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-semibold">
                 Max {assessment.max_marks}
               </span>
+              {creatorName && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
+                  <User size={9} /> {creatorName}
+                </span>
+              )}
             </div>
             {assessment.description && (
               <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{assessment.description}</p>

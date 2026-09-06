@@ -1247,6 +1247,23 @@ export async function fetchStudentMembers(classroomId: string): Promise<(Classro
     .filter((m: ClassroomMember & { user?: UserProfile }) => m.user) as (ClassroomMember & { user: UserProfile })[]
 }
 
+// Batch-fetch profiles for a set of ids (e.g. the `created_by` of a page's
+// folders/files/assessments) and return them keyed by id, so callers can look
+// up "created by" names without one round trip per row.
+export async function fetchProfilesByIds(ids: (string | null | undefined)[]): Promise<Record<string, UserProfile>> {
+  const uniqueIds = [...new Set(ids.filter((id): id is string => !!id))]
+  if (uniqueIds.length === 0) return {}
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('*')
+    .in('id', uniqueIds)
+
+  const map: Record<string, UserProfile> = {}
+  for (const p of (data ?? []) as UserProfile[]) map[p.id] = p
+  return map
+}
+
 // Fetch all files across all folders for a classroom (for student dashboard calendar)
 export async function fetchAllFilesForClassroom(classroomId: string): Promise<(ClassroomFile & { folder: ClassroomFolder })[]> {
   const { data: folders, error: fErr } = await supabase

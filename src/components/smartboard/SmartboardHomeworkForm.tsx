@@ -441,7 +441,7 @@ export default function SmartboardHomeworkForm({
       {/* Student tracking modal */}
       {showTracking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowTracking(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-xl w-full sm:max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
               <Users size={15} className="text-indigo-500" />
               <p className="text-sm font-semibold text-slate-700 flex-1">Student progress</p>
@@ -452,34 +452,36 @@ export default function SmartboardHomeworkForm({
                 <X size={16} />
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+            <div className="overflow-y-auto flex-1 p-2">
               {loadingMembers ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500 py-6 px-4"><Loader2 size={13} className="animate-spin" /> Loading…</div>
               ) : completions.length === 0 ? (
                 <p className="text-xs text-slate-500 py-6 px-4 text-center">No students.</p>
               ) : (
-                completions.map(c => (
-                  <div key={c.student_id} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={26} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
-                      {c.submission && (
-                        <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
-                          {/^https?:\/\//.test(c.submission) ? <Link2 size={10} /> : <FileText size={10} />}
-                          {c.submission}
-                        </p>
-                      )}
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {completions.map(c => (
+                    <div key={c.student_id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50">
+                      <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={26} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
+                        {c.submission && (
+                          <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
+                            {/^https?:\/\//.test(c.submission) ? <Link2 size={10} /> : <FileText size={10} />}
+                            {c.submission}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button" onClick={() => cycleStatus(c)}
+                        className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-1 rounded flex-shrink-0 ${STATUS_META[c.status].chip}`}
+                        title="Tap to change status"
+                      >
+                        {STATUS_META[c.status].icon}
+                        {STATUS_META[c.status].label}
+                      </button>
                     </div>
-                    <button
-                      type="button" onClick={() => cycleStatus(c)}
-                      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-1 rounded ${STATUS_META[c.status].chip}`}
-                      title="Tap to change status"
-                    >
-                      {STATUS_META[c.status].icon}
-                      {STATUS_META[c.status].label}
-                    </button>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
