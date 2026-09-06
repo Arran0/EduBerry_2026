@@ -6,6 +6,7 @@ import {
   fetchTimetableForStaff,
   fetchTimetableForStudent,
   fetchTimetableForHomeroom,
+  entryTeacherLabel,
 } from '@/lib/timetable'
 import type { TimetableViewData, TimetableEntry } from '@/lib/timetable'
 import { fetchAllHomerooms } from '@/lib/homerooms'
@@ -69,7 +70,7 @@ export default function PersonTimetableModal({ kind, id, name, onClose }: Props)
   // The secondary line under each subject depends on whose view this is.
   const secondary = (e: TimetableEntry): string | null => {
     if (kind === 'teacher') return homeroomNames.get(e.homeroom_id) ?? 'Class'
-    return e.teacher_name ?? e.teacher?.full_name ?? null
+    return entryTeacherLabel(e)
   }
 
   const Icon = KIND_ICON[kind]

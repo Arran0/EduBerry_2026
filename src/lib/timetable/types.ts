@@ -98,7 +98,10 @@ export interface Requirement {
   config_id: string
   homeroom_id: string
   subject_id: string
+  // Primary teacher (kept for every legacy query); teacher_ids carries the
+  // full co-teaching list, primary first. Round 8.
   teacher_id: string | null
+  teacher_ids: string[] | null
   periods_per_week: number
   room_type: RoomType
   max_per_day: number
@@ -116,6 +119,47 @@ export interface Requirement {
   subject?: Subject
   teacher?: UserProfile
   group?: HomeroomGroup
+}
+
+/**
+ * Every teacher attached to a lesson-ish record, primary first and de-duped.
+ * Round 8 introduced co-teaching: `teacher_ids` / `teacherIds` is the list and
+ * the singular field stays as the primary, so both shapes have to be merged
+ * wherever teachers are read.
+ */
+export function teacherIdsOf(
+  x:
+    | { teacher_id?: string | null; teacher_ids?: string[] | null }
+    | { teacherId?: string | null; teacherIds?: string[] | null },
+): string[] {
+  const rec = x as {
+    teacher_id?: string | null
+    teacher_ids?: string[] | null
+    teacherId?: string | null
+    teacherIds?: string[] | null
+  }
+  const primary = rec.teacher_id ?? rec.teacherId ?? null
+  const list = rec.teacher_ids ?? rec.teacherIds ?? []
+  const out: string[] = []
+  for (const id of [primary, ...list]) {
+    if (id && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+/**
+ * The teacher line to print under a lesson: every teacher of a co-taught
+ * period, falling back to the denormalised single name and then to the joined
+ * profile. Null when nobody is assigned.
+ */
+export function entryTeacherLabel(e: {
+  teacher_names?: string[] | null
+  teacher_name?: string | null
+  teacher?: { full_name?: string | null } | null
+}): string | null {
+  const names = (e.teacher_names ?? []).filter(Boolean)
+  if (names.length > 0) return names.join(', ')
+  return e.teacher_name ?? e.teacher?.full_name ?? null
 }
 
 export interface TeacherUnavailability {
@@ -187,11 +231,14 @@ export interface TimetableEntry {
   slot_id: string
   subject_id: string | null
   teacher_id: string | null
+  // Co-teaching (Round 8): every teacher of this period, primary first.
+  teacher_ids: string[] | null
   room_id: string | null
   is_locked: boolean
-  // Denormalized teacher display name so students (who cannot read staff
+  // Denormalized teacher display name(s) so students (who cannot read staff
   // profiles via RLS) still see who teaches each period.
   teacher_name: string | null
+  teacher_names: string[] | null
   // Split classes (Round 5). group_id null → whole-class lesson; otherwise
   // this is one parallel group's lesson. split_key ties the parallel entries
   // that share one homeroom cell together. combined_key (Round 6) ties the
@@ -248,6 +295,7 @@ export interface CombinedClass {
   name: string
   subject_id: string | null
   teacher_id: string | null
+  teacher_ids: string[] | null
   room_id: string | null
   periods_per_week: number
   created_by: string | null
@@ -276,6 +324,7 @@ export interface CombinedClassInput {
   id: string
   subjectId: string
   teacherId: string | null
+  teacherIds: string[]
   roomId: string | null
   periodsPerWeek: number
   members: { homeroomId: string; groupId: string | null }[]
@@ -292,6 +341,7 @@ export interface LessonUnit {
   homeroomId: string
   subjectId: string
   teacherId: string | null
+  teacherIds: string[]
   roomType: RoomType
   maxPerDay: number
 }
@@ -314,7 +364,9 @@ export interface PlacedEntry {
   day: Weekday
   slotId: string
   subjectId: string
+  // Primary teacher; teacherIds holds every teacher of the period (Round 8).
   teacherId: string | null
+  teacherIds?: string[]
   roomId: string | null
   isLocked: boolean
   // Split classes (Round 5) / combined classes (Round 6).

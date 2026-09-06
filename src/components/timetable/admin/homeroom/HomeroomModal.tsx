@@ -7,11 +7,11 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import {
-  fetchSubjects, fetchRooms, fetchPeriodSlots, fetchRequirements, fetchConstraints,
+  fetchSubjects, fetchRooms, fetchPeriodSlots, fetchRequirements, fetchConstraints, teacherIdsOf,
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
   addGroupMemberByEmail, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
-  addConstraint, deleteConstraint, ROOM_TYPE_LABELS,
+  addConstraint, deleteConstraint, requirementError, ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, Subject, Room, PeriodSlot, Requirement, TimetableConstraint,
@@ -25,12 +25,13 @@ import { fetchAllProfiles } from '@/lib/admin'
 import { isStaffRole } from '@/lib/supabase'
 import type { UserProfile } from '@/lib/supabase'
 import useDebounce from '@/hooks/useDebounce'
-import { INPUT, BTN_PRIMARY, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
+import { INPUT, BTN_PRIMARY, SECTION_LABEL, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
 import type { SegItem, SmartOption } from '../../ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import NameLink from '../../NameLink'
 import { TimeOffGrid } from '../constraintAtoms'
 import { ColorPicker } from '../colorPicker'
+import MultiTeacherSelect from '../../MultiTeacherSelect'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
 
@@ -592,6 +593,107 @@ function GroupCard({
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
+// ── Weekly slot budget ───────────────────────────────────────
+// How much of a class's week the requirements already claim. Parallel split
+// groups share one period, so a group's periods count once for the class: the
+// class-level cost of the groups is the busiest group's total.
+
+interface WeeklyBudget {
+  total: number // teaching periods in the week (days × teaching slots)
+  timeOff: number // periods the class is kept free by a time-off constraint
+  available: number // total − timeOff: what can actually be scheduled
+  wholeClass: number // periods claimed by whole-class requirements + combined
+  groupPeak: number // periods claimed by the busiest split group
+  filled: number // wholeClass + groupPeak
+  free: number // available − filled (never below 0)
+  over: boolean // requirements ask for more than the week has
+  perGroup: { id: string; name: string; color: string | null; periods: number }[]
+}
+
+function weeklyBudget({
+  config, homeroom, slots, constraints, requirements, combined, groups,
+}: {
+  config: TimetableConfig
+  homeroom: Homeroom
+  slots: PeriodSlot[] // teaching slots only
+  constraints: TimetableConstraint[]
+  requirements: Requirement[]
+  combined: CombinedClass[]
+  groups: HomeroomGroup[]
+}): WeeklyBudget {
+  const total = config.working_days.length * slots.length
+  const timeOff = constraints.filter(
+    (c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === homeroom.id,
+  ).length
+
+  const byGroup = new Map<string, number>()
+  let wholeClass = 0
+  for (const r of requirements) {
+    if (r.group_id) byGroup.set(r.group_id, (byGroup.get(r.group_id) ?? 0) + r.periods_per_week)
+    else wholeClass += r.periods_per_week
+  }
+  for (const c of combined) {
+    const mine = (c.members ?? []).filter((m) => m.homeroom_id === homeroom.id)
+    for (const m of mine) {
+      if (m.group_id) byGroup.set(m.group_id, (byGroup.get(m.group_id) ?? 0) + c.periods_per_week)
+      else wholeClass += c.periods_per_week
+    }
+  }
+
+  const perGroup = groups
+    .map((g) => ({ id: g.id, name: g.name, color: g.color, periods: byGroup.get(g.id) ?? 0 }))
+    .filter((g) => g.periods > 0)
+    .sort((a, b) => b.periods - a.periods)
+  // Groups outside this homeroom's own list (deleted, or another class's) still count.
+  const groupPeak = Math.max(0, ...[...byGroup.values()])
+
+  const filled = wholeClass + groupPeak
+  const available = Math.max(0, total - timeOff)
+  return {
+    total, timeOff, available, wholeClass, groupPeak, filled,
+    free: Math.max(0, available - filled),
+    over: filled > available,
+    perGroup,
+  }
+}
+
+function SlotMeter({ budget }: { budget: WeeklyBudget }) {
+  if (budget.total === 0) return null
+  // The denominator is what the class can actually be taught in: periods marked
+  // as time off are taken out of the week, not counted as unfilled.
+  const pct = budget.available === 0 ? 0 : Math.min(100, (budget.filled / budget.available) * 100)
+  const tone = budget.over ? 'bg-rose-500' : pct >= 90 ? 'bg-amber-500' : 'bg-emerald-600'
+  return (
+    <div className="w-40 sm:w-52">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className={SECTION_LABEL}>Slots filled</span>
+        <span className={`text-sm font-semibold tabular-nums ${budget.over ? 'text-rose-600' : 'text-[#18181B]'}`}>
+          {budget.filled}
+          <span className="text-[#A1A1AA] font-normal">/{budget.available}</span>
+        </span>
+      </div>
+      <div className="h-1.5 bg-[#E4E4E7] mt-1.5" title={`${budget.filled} of ${budget.available} teachable periods claimed`}>
+        <div className={`h-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[11px] text-[#71717A] mt-1 leading-snug">
+        {budget.wholeClass} whole-class
+        {budget.groupPeak > 0 && ` · ${budget.groupPeak} group`}
+        {budget.timeOff > 0 && <span className="text-rose-500"> · {budget.timeOff} off</span>}
+        {budget.over && <span className="text-rose-600 font-medium"> · over capacity</span>}
+      </p>
+      {budget.perGroup.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {budget.perGroup.map((g) => (
+            <span key={g.id} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 text-white" style={{ background: g.color ?? '#6366f1' }}>
+              {g.name} {g.periods}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RequirementsPanel({
   config, homeroom, subjects, teachers, rooms, homerooms,
 }: {
@@ -605,11 +707,13 @@ function RequirementsPanel({
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [combined, setCombined] = useState<CombinedClass[]>([])
   const [groups, setGroups] = useState<HomeroomGroup[]>([])
+  const [slots, setSlots] = useState<PeriodSlot[]>([])
+  const [constraints, setConstraints] = useState<TimetableConstraint[]>([])
   const [loading, setLoading] = useState(true)
 
   // Form
   const [subjectId, setSubjectId] = useState('')
-  const [teacherId, setTeacherId] = useState('')
+  const [teacherIds, setTeacherIds] = useState<string[]>([])
   const [groupId, setGroupId] = useState('')
   const [perWeek, setPerWeek] = useState('5')
   const [maxPerDay, setMaxPerDay] = useState('1')
@@ -626,14 +730,18 @@ function RequirementsPanel({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [reqs, cmb, g] = await Promise.all([
+    const [reqs, cmb, g, sl, cons] = await Promise.all([
       fetchRequirements(config.id),
       fetchCombinedClasses(config.id),
       fetchGroupsForHomeroom(homeroom.id),
+      fetchPeriodSlots(config.id),
+      fetchConstraints(config.id),
     ])
     setRequirements(reqs.filter((r) => r.homeroom_id === homeroom.id))
     setCombined(cmb.filter((c) => (c.members ?? []).some((m) => m.homeroom_id === homeroom.id)))
     setGroups(g)
+    setSlots(sl.filter((s) => !s.is_break))
+    setConstraints(cons)
     setLoading(false)
   }, [config.id, homeroom.id])
 
@@ -643,10 +751,12 @@ function RequirementsPanel({
   const subjectName = (id: string | null) => (id ? subjects.find((s) => s.id === id)?.name ?? '—' : '—')
   const subjectColor = (id: string) => subjects.find((s) => s.id === id)?.color ?? '#94a3b8'
   const teacherName = (id: string | null) => (id ? teachers.find((t) => t.id === id)?.full_name ?? 'Unknown' : 'Unassigned')
+  // Every teacher of a requirement / combined lesson, primary first.
+  const teacherLabel = (ids: string[]) =>
+    ids.length === 0 ? 'Unassigned' : ids.map((id) => teacherName(id)).join(', ')
   const homeroomName = (id: string) => homerooms.find((h) => h.id === id)?.name ?? '—'
 
   const subjectOptions: SmartOption[] = useMemo(() => subjects.map((s) => ({ value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined })), [subjects])
-  const teacherOptions: SmartOption[] = useMemo(() => teachers.map((t) => ({ value: t.id, label: t.full_name, sublabel: t.email })), [teachers])
   const roomOptions: SmartOption[] = useMemo(() => rooms.map((r) => ({ value: r.id, label: r.name })), [rooms])
   const extraOptions: SmartOption[] = useMemo(
     () => homerooms.filter((h) => h.id !== homeroom.id && !extraMembers.some((m) => m.homeroomId === h.id)).map((h) => ({ value: h.id, label: h.name })),
@@ -705,7 +815,8 @@ function RequirementsPanel({
         config_id: config.id,
         name: combinedName.trim() || `${homeroomName(homeroom.id)} ${subjectName(subjectId)}`,
         subject_id: subjectId,
-        teacher_id: teacherId || null,
+        teacher_id: teacherIds[0] ?? null,
+        teacher_ids: teacherIds,
         room_id: roomId || null,
         periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
         members,
@@ -718,7 +829,8 @@ function RequirementsPanel({
         config_id: config.id,
         homeroom_id: homeroom.id,
         subject_id: subjectId,
-        teacher_id: teacherId || null,
+        teacher_id: teacherIds[0] ?? null,
+        teacher_ids: teacherIds,
         periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
         room_type: roomType,
         max_per_day: Math.max(1, parseInt(maxPerDay, 10) || 1),
@@ -727,16 +839,21 @@ function RequirementsPanel({
         group_id: groupId || null,
       })
       setAdding(false)
-      if (created) { resetForm(); load() } else setError('Could not add — this class may already have that subject.')
+      if (created) { resetForm(); load() }
+      else setError(requirementError() ?? 'Could not add this requirement.')
     }
   }
 
   const resetForm = () => {
-    setSubjectId(''); setTeacherId(''); setGroupId(''); setBlockSize('1')
+    setSubjectId(''); setTeacherIds([]); setGroupId(''); setBlockSize('1')
     setIsCombined(false); setCombinedName(''); setRoomId(''); setExtraMembers([])
   }
 
   const liveProblem = requirementProblem()
+  const budget = useMemo(
+    () => weeklyBudget({ config, homeroom, slots, constraints, requirements, combined, groups }),
+    [config, homeroom, slots, constraints, requirements, combined, groups],
+  )
 
   return (
     <div>
@@ -746,7 +863,8 @@ function RequirementsPanel({
             <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
             <span>
               This homeroom is split into groups. For split subjects, add one requirement <strong>per group</strong> with
-              matching periods/week so the parallel groups schedule into the same slots. A whole-class requirement ignores the split.
+              matching periods/week so the parallel groups schedule into the same slots — each group can have its own set of
+              teachers. A whole-class requirement ignores the split.
             </span>
           </div>
         )}
@@ -754,8 +872,14 @@ function RequirementsPanel({
           <Field label="Subject">
             <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
           </Field>
-          <Field label="Teacher">
-            <SmartSelect options={teacherOptions} value={teacherId} onChange={setTeacherId} placeholder="Unassigned" searchPlaceholder="Search staff…" allowClear />
+          <Field label="Teachers">
+            <MultiTeacherSelect
+              teachers={teachers}
+              value={teacherIds}
+              onChange={setTeacherIds}
+              placeholder="Add a teacher…"
+              emptyLabel="Unassigned — add one or more teachers."
+            />
           </Field>
           {!isCombined && groups.length > 0 && (
             <Field label="Group (split class)">
@@ -867,7 +991,17 @@ function RequirementsPanel({
         </button>
       </Section>
 
-      <Section title="This homeroom's schedule">
+      <Section
+        title="This homeroom's schedule"
+        hint={
+          budget.total === 0
+            ? 'Add teaching period slots (Configuration) to see how much of the week is filled.'
+            : `${budget.free} of the week's ${budget.available} teachable periods still free${
+                budget.timeOff > 0 ? ` (${budget.total} in the week, ${budget.timeOff} marked time off)` : ''
+              }. Parallel group lessons share a period, so groups count once.`
+        }
+        right={<SlotMeter budget={budget} />}
+      >
         {loading ? (
           <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
         ) : requirements.length === 0 && combined.length === 0 ? (
@@ -881,7 +1015,9 @@ function RequirementsPanel({
                 {r.group && (
                   <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }}>{r.group.name}</span>
                 )}
-                <span className="text-[#71717A] hidden sm:inline truncate max-w-[7rem]">{teacherName(r.teacher_id)}</span>
+                <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(r))}>
+                  {teacherLabel(teacherIdsOf(r))}
+                </span>
                 <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{r.periods_per_week}/wk</span>
                 <button onClick={async () => { await deleteRequirement(r.id); load() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
               </div>
@@ -892,6 +1028,9 @@ function RequirementsPanel({
                 <span className="font-medium text-[#18181B] flex-shrink-0">{c.name}</span>
                 <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">
                   {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
+                </span>
+                <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(c))}>
+                  {teacherLabel(teacherIdsOf(c))}
                 </span>
                 <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{c.periods_per_week}/wk</span>
                 <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>

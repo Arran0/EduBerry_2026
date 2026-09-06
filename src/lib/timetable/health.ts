@@ -10,8 +10,9 @@ import type {
 } from './types'
 import { detectConflicts } from './generator'
 import {
-  buildConstraintIndex, cellKey, timeOffBlocked, limitApplies, limitBucket, effectiveMaxInARow,
+  buildConstraintIndex, cellKey, timeOffBlocked, limitBucketsFor,
 } from './constraints'
+import { teacherIdsOf } from './types'
 
 export interface HealthComponent {
   key: string
@@ -113,10 +114,14 @@ export function computeHealth(input: HealthInput): HealthReport {
   for (const rule of index.limits) {
     const buckets = new Map<string, number>()
     for (const e of entries) {
-      const p = { homeroomId: e.homeroomId, subjectId: e.subjectId, teacherId: e.teacherId }
-      if (!limitApplies(rule, p)) continue
-      const key = limitBucket(rule, p, e.day)
-      buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      const p = {
+        homeroomId: e.homeroomId, subjectId: e.subjectId,
+        teacherId: e.teacherId, teacherIds: teacherIdsOf(e),
+      }
+      // A co-taught period counts against each of its teachers.
+      for (const key of limitBucketsFor(rule, p, e.day)) {
+        buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      }
     }
     for (const count of buckets.values()) {
       constraintChecks++
@@ -130,7 +135,9 @@ export function computeHealth(input: HealthInput): HealthReport {
 
   // pins
   const filled = new Set<string>()
-  for (const e of entries) if (e.teacherId) filled.add(`${e.homeroomId}__${e.day}__${e.slotId}__${e.teacherId}`)
+  for (const e of entries) {
+    for (const t of teacherIdsOf(e)) filled.add(`${e.homeroomId}__${e.day}__${e.slotId}__${t}`)
+  }
   for (const pin of index.pins) {
     constraintChecks++
     const [day, slotId] = pin.key.split('__')
@@ -145,10 +152,11 @@ export function computeHealth(input: HealthInput): HealthReport {
   // ── 4. Teacher idle gaps ─────────────────────────────────────
   const tSlots = new Map<string, Set<number>>()
   for (const e of entries) {
-    if (!e.teacherId) continue
-    const k = `${e.teacherId}|${e.day}`
-    if (!tSlots.has(k)) tSlots.set(k, new Set())
-    tSlots.get(k)!.add(slotOrder.get(e.slotId) ?? 0)
+    for (const t of teacherIdsOf(e)) {
+      const k = `${t}|${e.day}`
+      if (!tSlots.has(k)) tSlots.set(k, new Set())
+      tSlots.get(k)!.add(slotOrder.get(e.slotId) ?? 0)
+    }
   }
   let gaps = 0
   const gapByTeacher = new Map<string, number>()
