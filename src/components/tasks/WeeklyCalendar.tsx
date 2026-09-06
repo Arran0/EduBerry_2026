@@ -245,9 +245,28 @@ export default function WeeklyCalendar({
   const overdueLoadedRef = useRef(false)
   const bonusLoadedRef = useRef(false)
   // Horizontal-scroll container + the expanded (wide) column, so phones open with
-  // the focal column — today by default — already in view.
+  // the focal column — today by default — already in view (this matters most on
+  // Fri/Sat/Sun, which sit past the first four columns visible without scrolling).
   const gridScrollRef = useRef<HTMLDivElement>(null)
-  const expandedColRef = useRef<HTMLButtonElement>(null)
+  // A callback ref rather than a plain effect: the grid lives behind
+  // AnimatePresence mode="wait", which defers mounting it until the loading
+  // skeleton's exit animation finishes. An effect keyed off `loading` fires as
+  // soon as that state flips — before the grid (and its ref) exist in the DOM —
+  // so it would silently no-op. A callback ref instead runs exactly when the
+  // expanded column's button is actually committed, whether that's on first
+  // mount, after switching which day is expanded, or after a week navigation.
+  const scrollExpandedIntoView = useCallback((colEl: HTMLButtonElement) => {
+    requestAnimationFrame(() => {
+      const container = gridScrollRef.current
+      if (!container || !colEl.isConnected) return
+      if (container.scrollWidth <= container.clientWidth) return // fully visible
+      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
+    })
+  }, [])
+  const expandedColRef = useCallback((node: HTMLButtonElement | null) => {
+    if (node) scrollExpandedIntoView(node)
+  }, [scrollExpandedIntoView])
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
@@ -335,22 +354,6 @@ export default function WeeklyCalendar({
     })
     return () => { cancelled = true }
   }, [])
-
-  // On phones the 7-day grid overflows horizontally; bring the expanded (wider)
-  // column — today by default — into view once the grid has rendered so the user
-  // doesn't have to scroll right to find it. No-op on desktop where everything fits.
-  useEffect(() => {
-    if (loading) return
-    const id = requestAnimationFrame(() => {
-      const container = gridScrollRef.current
-      const colEl = expandedColRef.current
-      if (!container || !colEl) return
-      if (container.scrollWidth <= container.clientWidth) return // fully visible
-      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
-      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [loading, weekStart, expandedDay])
 
   // Re-trigger a focus jump when the parent requests one for the same calendar
   // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
