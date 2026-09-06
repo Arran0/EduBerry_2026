@@ -327,6 +327,19 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
+/* Professional surface — a crisper, square-cornered material for staff/admin
+   -only home cards (attendance, ledgers, grading, tasks), set apart from the
+   frosted rounded glass-card used for student-facing/shared cards. Solid
+   near-white ground, a hairline slate border and a tighter shadow read as
+   "reporting tool" rather than "consumer app". */
+.pro-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 10px 24px -16px rgba(15, 23, 42, 0.28);
+}
+
 /* Spring-like pressable — subtle lift on hover, crisp tap feedback. */
 .pressable {
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1),

@@ -49,12 +49,15 @@ interface MiniWeekCalendarProps {
   itemsByDay: Map<string, MiniCalendarItem[]>
   loading: boolean
   accent?: keyof typeof ACCENTS
+  /** Staff-only surfaces (e.g. the task calendar) render on the square-cornered
+   *  pro-card material instead of the student-facing frosted glass-card. */
+  sharp?: boolean
 }
 
 /** The shared week-strip UI for the home carousel's mini calendars: today's
  *  column starts expanded (3x wide-card / 6x narrow-card), clicking another day
  *  swaps which column is expanded; unexpanded columns preview item titles. */
-export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet' }: MiniWeekCalendarProps) {
+export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet', sharp = false }: MiniWeekCalendarProps) {
   const c = ACCENTS[accent]
   const rootRef = useRef<HTMLDivElement>(null)
   const [isNarrow, setIsNarrow] = useState(true)
@@ -75,7 +78,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
 
   return (
-    <div ref={rootRef} className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div ref={rootRef} className={`${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} h-[260px] overflow-hidden flex flex-col`}>
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />
@@ -96,7 +99,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
                 key={key}
                 onClick={() => setExpandedDate(day)}
                 style={{ flex: isExpanded ? expandRatio : 1, transition: 'flex 0.35s ease', minWidth: 0 }}
-                className={`flex flex-col cursor-pointer select-none ${!isLast ? 'border-r border-white/25' : ''} ${isToday ? c.todayBg : ''}`}
+                className={`flex flex-col cursor-pointer select-none ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
               >
                 <div className={`px-1 py-2 text-center flex-shrink-0 transition-colors duration-300 ${isExpanded ? c.headBg : ''}`}>
                   <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{DAY_LETTERS[i]}</p>
@@ -109,7 +112,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
                     dayItems.map(item => (
                       <div
                         key={item.id}
-                        className={`flex items-center gap-1 px-1.5 py-1 rounded-lg text-[10px] leading-tight ${item.done ? 'bg-emerald-50 text-emerald-700' : 'bg-white/60 text-slate-600'}`}
+                        className={`flex items-center gap-1 px-1.5 py-1 text-[10px] leading-tight ${sharp ? '' : 'rounded-lg'} ${item.done ? 'bg-emerald-50 text-emerald-700' : (sharp ? 'bg-slate-100 text-slate-600' : 'bg-white/60 text-slate-600')}`}
                       >
                         {item.done
                           ? <CheckCircle2 size={10} className="flex-shrink-0 text-emerald-500" />

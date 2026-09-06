@@ -24,11 +24,14 @@ function formatDate(dateStr: string | null): string {
 
 interface LatestAssessmentsMiniListProps {
   classrooms: ClassroomWithDetails[]
+  /** Reports whether the list ended up empty, once loaded — lets the home
+   *  carousel drop the slot entirely when there's nothing to show. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** The 5 most recently released assessments across a student's classrooms,
  *  each a button leading to that classroom's assessments tab. */
-export default function LatestAssessmentsMiniList({ classrooms }: LatestAssessmentsMiniListProps) {
+export default function LatestAssessmentsMiniList({ classrooms, onEmptyChange }: LatestAssessmentsMiniListProps) {
   const [items, setItems] = useState<MiniAssessment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -57,6 +60,8 @@ export default function LatestAssessmentsMiniList({ classrooms }: LatestAssessme
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [classrooms])
+
+  useEffect(() => { if (!loading) onEmptyChange?.(items.length === 0) }, [loading, items, onEmptyChange])
 
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
