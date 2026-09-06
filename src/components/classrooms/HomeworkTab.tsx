@@ -362,7 +362,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               </span>
             )}
             {creatorName && (
-              <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500">
                 <User size={9} /> {creatorName}
               </span>
             )}
@@ -451,7 +451,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
               </span>
             )}
             {creatorName && (
-              <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500">
                 <User size={9} /> {creatorName}
               </span>
             )}
@@ -483,8 +483,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="p-2 rounded-xl bg-violet-100">
-            <CalendarDays size={16} className="text-violet-600" />
+          <div className="p-2 rounded-xl bg-[var(--page-primary-light,#cffafe)]">
+            <CalendarDays size={16} className="text-[var(--page-primary-dark,#0891b2)]" />
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-slate-800 text-sm">Classroom Calendar</h2>
@@ -496,7 +496,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         {canManage && (
           <button
             onClick={() => { setNewHwDate(''); setShowForm(v => !v); setDetailTask(null); setDetailFile(null) }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg shadow-purple-600/25 bg-purple-600 hover:bg-purple-700 active:scale-95 flex-shrink-0"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0"
+            style={{ background: 'var(--page-primary, #06b6d4)' }}
           >
             <Plus size={13} /> New Homework
           </button>
@@ -529,7 +530,10 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       <div className="bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden">
 
         {/* Week navigation — shared by both layouts */}
-        <div className="flex items-center gap-2 px-2 py-2.5 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600">
+        <div
+          className="flex items-center gap-2 px-2 py-2.5"
+          style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
+        >
           <button
             onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
             className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
@@ -570,11 +574,22 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   onClick={() => setSelectedDay(day)}
                   className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-all active:scale-95 ${
                     isActive
-                      ? 'bg-gradient-to-b from-violet-500 to-purple-600 text-white shadow-md shadow-purple-600/25'
+                      ? 'text-white shadow-md'
                       : isToday
-                        ? 'bg-white ring-1 ring-violet-300 text-violet-700 hover:bg-violet-50'
+                        ? 'hover:brightness-95'
                         : 'text-slate-700 hover:bg-white'
                   }`}
+                  style={
+                    isActive
+                      ? { background: 'linear-gradient(to bottom, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }
+                      : isToday
+                        ? {
+                            color: 'var(--page-primary, #06b6d4)',
+                            background: 'var(--page-primary-light, #cffafe)',
+                            boxShadow: 'inset 0 0 0 1px var(--page-primary, #06b6d4)',
+                          }
+                        : undefined
+                  }
                 >
                   <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/80' : 'text-slate-500'}`}>
                     {DAY_NAMES[i]}
@@ -584,7 +599,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     {total > 0 && Array.from({ length: Math.min(total, 3) }).map((_, d) => (
                       <span
                         key={d}
-                        className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : 'bg-violet-400'}`}
+                        className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : ''}`}
+                        style={isActive ? undefined : { background: 'var(--page-primary, #06b6d4)' }}
                       />
                     ))}
                   </span>
@@ -598,7 +614,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             <h3 className="text-sm font-bold text-slate-800 truncate">
               {activeDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
               {isSameDay(activeDay, today) && (
-                <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-violet-600">Today</span>
+                <span className="ml-2 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--page-primary, #06b6d4)' }}>Today</span>
               )}
             </h3>
             <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
@@ -619,7 +635,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
           {canManage && (
             <button
               onClick={() => { setNewHwDate(formatDate(activeDay)); setShowForm(true) }}
-              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-semibold text-violet-700 bg-violet-50/60 hover:bg-violet-100 border-t border-slate-100 transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-semibold hover:brightness-95 border-t border-slate-100 transition-all"
+              style={{ color: 'var(--page-primary-dark, #0891b2)', background: 'var(--page-primary-light, #cffafe)' }}
             >
               <Plus size={14} /> Add homework for {activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </button>
@@ -647,13 +664,20 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   onClick={() => setSelectedDay(day)}
                   className={`px-2 py-2.5 text-center border-b transition-all ${
                     isExpanded
-                      ? 'bg-gradient-to-b from-violet-500 to-purple-600 border-purple-600'
+                      ? 'border-transparent'
                       : isToday
-                        ? 'bg-violet-50 border-slate-200 hover:bg-violet-100'
+                        ? 'border-slate-200 hover:brightness-95'
                         : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
                   }`}
+                  style={
+                    isExpanded
+                      ? { background: 'linear-gradient(to bottom, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }
+                      : isToday
+                        ? { background: 'var(--page-primary-light, #cffafe)' }
+                        : undefined
+                  }
                 >
-                  <p className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : isToday ? 'text-violet-600' : 'text-slate-500'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : 'text-slate-500'}`} style={!isExpanded && isToday ? { color: 'var(--page-primary, #06b6d4)' } : undefined}>
                     {DAY_NAMES[i]}
                   </p>
                   <p className={`font-bold leading-tight ${isExpanded ? 'text-lg text-white' : 'text-sm text-slate-700'}`}>
@@ -663,7 +687,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   {total > 0 && !isExpanded && (
                     <span className="mt-0.5 inline-flex h-1.5 items-center gap-0.5">
                       {Array.from({ length: Math.min(total, 3) }).map((_, d) => (
-                        <span key={d} className="w-1 h-1 rounded-full bg-violet-400" />
+                        <span key={d} className="w-1 h-1 rounded-full" style={{ background: 'var(--page-primary, #06b6d4)' }} />
                       ))}
                     </span>
                   )}
@@ -684,7 +708,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   {canManage && (
                     <button
                       onClick={() => { setNewHwDate(formatDate(day)); setShowForm(true) }}
-                      className={`w-full flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50/50 transition-colors ${
+                      className={`w-full flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 hover:border-[var(--page-primary,#06b6d4)] hover:text-[var(--page-primary,#06b6d4)] hover:bg-[var(--page-primary-light,#cffafe)] transition-colors ${
                         isExpanded ? 'py-2.5 text-xs font-semibold m-1.5' : 'py-1'
                       }`}
                       title="Add homework for this day"
@@ -702,8 +726,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── Empty state ──────────────────────────────────────────────────────── */}
       {tasks.length === 0 && files.length === 0 && (
         <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl p-10 text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-violet-50">
-            <CalendarDays size={26} className="text-violet-400" />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--page-primary-light, #cffafe)' }}>
+            <CalendarDays size={26} style={{ color: 'var(--page-primary, #06b6d4)' }} />
           </div>
           <p className="text-slate-700 font-semibold text-sm mb-1">No items yet</p>
           <p className="text-slate-600 text-xs">
@@ -1021,14 +1045,12 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             ) : fileTrackingData.length === 0 ? (
               <p className="text-xs text-slate-500 py-8 px-4 text-center">No student progress recorded yet.</p>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-2">
+              <div className="grid sm:grid-cols-2 sm:gap-x-3">
                 {fileTrackingData.map(p => (
-                  <div key={p.student_id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50">
-                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={30} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize flex-shrink-0 ${
+                  <div key={p.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
+                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={22} />
+                    <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize flex-shrink-0 ${
                       p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
                         : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
                         : p.status === 'partial' ? 'bg-orange-100 text-orange-600'

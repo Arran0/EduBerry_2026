@@ -146,7 +146,7 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
         }
       />
 
-      <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-4 bg-slate-50/60">
+      <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3 space-y-3 bg-slate-50/60">
 
       <div>
         <FieldLabel>Title</FieldLabel>
@@ -208,16 +208,16 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
         {attachMode === 'none' ? (
           <div className="grid grid-cols-3 gap-2">
             <button type="button" onClick={() => setAttachMode('youtube')}
-              className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors">
-              <Youtube size={16} /> YouTube
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors">
+              <Youtube size={14} /> YouTube
             </button>
             <button type="button" onClick={() => setAttachMode('link')}
-              className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
-              <ExternalLink size={16} /> Link
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
+              <ExternalLink size={14} /> Link
             </button>
             <button type="button" onClick={() => setAttachMode('upload')}
-              className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
-              <Upload size={16} /> Doc / Image
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+              <Upload size={14} /> Doc / Image
             </button>
           </div>
         ) : attachMode === 'youtube' ? (
@@ -246,7 +246,7 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
         ) : (
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => fileInputRef.current?.click()}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
               {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
               {uploading ? 'Uploading…' : 'Choose file (max 20 MB)'}
             </button>

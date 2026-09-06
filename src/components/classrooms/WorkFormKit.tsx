@@ -13,7 +13,7 @@ import { Star } from 'lucide-react'
  */
 
 export const INPUT_CLASS =
-  'w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm ' +
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm ' +
   'focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 transition-all'
 
 export type Accent = 'indigo' | 'purple' | 'cyan'
@@ -41,13 +41,13 @@ export function FormHeader({
   actions?: React.ReactNode
 }) {
   return (
-    <div className={`flex items-center gap-3 px-4 sm:px-5 py-3.5 bg-gradient-to-r ${ACCENT_HEADER[accent]}`}>
-      <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white flex-shrink-0">
+    <div className={`flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5 bg-gradient-to-r ${ACCENT_HEADER[accent]}`}>
+      <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-white flex-shrink-0 [&>svg]:w-[15px] [&>svg]:h-[15px]">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[15px] font-bold text-white leading-tight truncate">{title}</p>
-        {subtitle && <p className="text-[11px] text-white/80 truncate mt-0.5">{subtitle}</p>}
+        <p className="text-[13px] font-bold text-white leading-tight truncate">{title}</p>
+        {subtitle && <p className="text-[10px] text-white/80 truncate mt-0.5">{subtitle}</p>}
       </div>
       {actions}
     </div>
@@ -70,7 +70,7 @@ export function HeaderAction({
       title={title}
       aria-label={title}
       disabled={disabled}
-      className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-white/85 hover:text-white hover:bg-white/20 active:scale-90 transition-all disabled:opacity-50"
+      className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full text-white/85 hover:text-white hover:bg-white/20 active:scale-90 transition-all disabled:opacity-50 [&>svg]:w-[15px] [&>svg]:h-[15px]"
     >
       {children}
     </button>
@@ -84,7 +84,7 @@ export function FieldLabel({ icon, children, hint }: {
   hint?: string
 }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600 flex items-center gap-1.5 mb-1.5">
+    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 flex items-center gap-1.5 mb-1">
       {icon}
       {children}
       {hint && <span className="normal-case font-medium tracking-normal text-slate-500">{hint}</span>}
@@ -92,9 +92,12 @@ export function FieldLabel({ icon, children, hint }: {
   )
 }
 
-/** A checkbox rendered as a full tappable card — far easier to hit on a phone. */
+/** A checkbox rendered as a compact tappable pill — bigger hit target than a
+ *  native checkbox, but a single line (the full description moves to the
+ *  title tooltip) so a row of these stays sleek instead of stacking two
+ *  card-height blocks. */
 export function ToggleCard({
-  checked, onChange, icon, label, description, activeClass = 'border-indigo-400 bg-indigo-50/70',
+  checked, onChange, icon, label, description, activeClass = 'border-indigo-400 bg-indigo-50/70 text-indigo-700',
 }: {
   checked: boolean
   onChange: (v: boolean) => void
@@ -108,15 +111,13 @@ export function ToggleCard({
       type="button"
       onClick={() => onChange(!checked)}
       aria-pressed={checked}
-      className={`flex-1 min-w-[9rem] flex items-start gap-2.5 text-left px-3 py-2.5 rounded-xl border-2 transition-all active:scale-[0.98] ${
-        checked ? activeClass : 'border-slate-200 bg-white hover:border-slate-300'
+      title={description}
+      className={`flex-1 min-w-[8rem] flex items-center gap-1.5 text-left px-2.5 py-2 rounded-lg border transition-all active:scale-[0.98] text-xs font-semibold [&_svg]:w-[14px] [&_svg]:h-[14px] ${
+        checked ? activeClass : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
       }`}
     >
-      <span className={`mt-0.5 flex-shrink-0 ${checked ? 'text-indigo-600' : 'text-slate-500'}`}>{icon}</span>
-      <span className="min-w-0">
-        <span className={`block text-xs font-bold ${checked ? 'text-slate-900' : 'text-slate-700'}`}>{label}</span>
-        <span className="block text-[10px] text-slate-600 leading-snug mt-0.5">{description}</span>
-      </span>
+      <span className={`flex-shrink-0 flex ${checked ? '' : 'text-slate-500'}`}>{icon}</span>
+      {label}
     </button>
   )
 }
@@ -135,15 +136,15 @@ export function PointsPicker({
       <FieldLabel icon={<Star size={12} className="text-amber-500" />} hint="— awarded on completion">
         Edu Points
       </FieldLabel>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1">
         {[1, 2, 3, 4, 5].map(n => (
           <button
             key={n}
             type="button"
             onClick={() => onPreset(n)}
-            className={`min-w-[38px] px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all active:scale-95 ${
+            className={`min-w-[30px] px-2 py-1.5 rounded-lg text-xs font-bold border transition-all active:scale-95 ${
               value === n && custom === ''
-                ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30'
+                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                 : 'text-slate-700 border-slate-200 bg-white hover:border-amber-300 hover:bg-amber-50'
             }`}
           >
@@ -157,7 +158,7 @@ export function PointsPicker({
           value={custom}
           onChange={e => onCustom(e.target.value)}
           placeholder="Custom"
-          className={`w-24 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all focus:outline-none focus:ring-4 focus:ring-amber-500/10 ${
+          className={`w-20 px-2 py-1.5 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-4 focus:ring-amber-500/10 ${
             custom !== ''
               ? 'bg-amber-500 text-white border-amber-500 placeholder-amber-100'
               : 'text-slate-700 border-slate-200 bg-white placeholder:text-slate-400'
@@ -179,18 +180,18 @@ export function FormFooter({
   disabled?: boolean
 }) {
   return (
-    <div className="sticky bottom-0 flex items-center gap-2 px-4 sm:px-5 py-3 border-t border-slate-100 bg-white/95 backdrop-blur-xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="sticky bottom-0 flex items-center gap-2 px-3.5 sm:px-4 py-2 border-t border-slate-100 bg-white/95 backdrop-blur-xl pb-[max(0.625rem,env(safe-area-inset-bottom))]">
       <button
         type="button"
         onClick={onCancel}
-        className="px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+        className="px-3.5 py-2 rounded-full text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
       >
         Cancel
       </button>
       <button
         type="submit"
         disabled={disabled}
-        className={`flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 disabled:shadow-none ${ACCENT_BUTTON[accent]}`}
+        className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white shadow-md transition-all active:scale-[0.98] disabled:opacity-50 disabled:shadow-none [&_svg]:w-[14px] [&_svg]:h-[14px] ${ACCENT_BUTTON[accent]}`}
       >
         {submitIcon}
         {submitLabel}

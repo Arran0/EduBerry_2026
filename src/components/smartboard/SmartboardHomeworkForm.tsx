@@ -256,7 +256,7 @@ export default function SmartboardHomeworkForm({
           }
         />
 
-        <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-4 bg-slate-50/60">
+        <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3 space-y-3 bg-slate-50/60">
 
         <div>
           <FieldLabel>Title</FieldLabel>
@@ -278,7 +278,7 @@ export default function SmartboardHomeworkForm({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
           <div>
             <FieldLabel>Due date</FieldLabel>
             <input type="date" value={dueDate}
@@ -349,23 +349,23 @@ export default function SmartboardHomeworkForm({
               <button
                 type="button"
                 onClick={() => setAttachMode('youtube')}
-                className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
               >
-                <Youtube size={16} /> YouTube
+                <Youtube size={14} /> YouTube
               </button>
               <button
                 type="button"
                 onClick={() => setAttachMode('link')}
-                className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
               >
-                <ExternalLink size={16} /> Link
+                <ExternalLink size={14} /> Link
               </button>
               <button
                 type="button"
                 onClick={() => setAttachMode('upload')}
-                className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
               >
-                <Upload size={16} /> Doc / Image
+                <Upload size={14} /> Doc / Image
               </button>
             </div>
           ) : attachMode === 'youtube' ? (
@@ -415,7 +415,7 @@ export default function SmartboardHomeworkForm({
             <div className="flex items-center gap-2">
               <button
                 type="button" onClick={() => fileInputRef.current?.click()}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
               >
                 {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                 {uploading ? 'Uploading…' : 'Choose file (max 20 MB)'}
@@ -458,22 +458,22 @@ export default function SmartboardHomeworkForm({
               ) : completions.length === 0 ? (
                 <p className="text-xs text-slate-500 py-6 px-4 text-center">No students.</p>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-2">
+                <div className="grid sm:grid-cols-2 sm:gap-x-3">
                   {completions.map(c => (
-                    <div key={c.student_id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50">
-                      <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={26} />
+                    <div key={c.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
+                      <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={22} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
+                        <p className="text-xs font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
                         {c.submission && (
-                          <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
-                            {/^https?:\/\//.test(c.submission) ? <Link2 size={10} /> : <FileText size={10} />}
+                          <p className="text-[10px] text-slate-500 truncate flex items-center gap-0.5">
+                            {/^https?:\/\//.test(c.submission) ? <Link2 size={9} /> : <FileText size={9} />}
                             {c.submission}
                           </p>
                         )}
                       </div>
                       <button
                         type="button" onClick={() => cycleStatus(c)}
-                        className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-1 rounded flex-shrink-0 ${STATUS_META[c.status].chip}`}
+                        className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 [&_svg]:w-3 [&_svg]:h-3 ${STATUS_META[c.status].chip}`}
                         title="Tap to change status"
                       >
                         {STATUS_META[c.status].icon}

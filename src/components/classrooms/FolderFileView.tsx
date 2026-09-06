@@ -888,7 +888,7 @@ export default function FolderFileView({
                                       </span>
                                     )}
                                     {creators[file.created_by] && (
-                                      <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500">
                                         <User size={9} /> {creators[file.created_by].full_name}
                                       </span>
                                     )}
@@ -1076,7 +1076,7 @@ export default function FolderFileView({
               {students.length === 0 ? (
                 <p className="text-sm text-slate-600 text-center py-6">No students in this classroom</p>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-2">
+                <div className="grid sm:grid-cols-2 sm:gap-x-3">
                   {students.map(member => {
                     const prog   = trackingData.progress.find(p => p.student_id === member.user_id)
                     const sub    = trackingData.submissions.find(s => s.student_id === member.user_id)
@@ -1085,23 +1085,19 @@ export default function FolderFileView({
                     const requiresCheck = trackingData.file?.requires_check || false
 
                     return (
-                      <div key={member.user_id} className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 flex-wrap">
-                        <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={32} userId={member.user_id} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-700 truncate">{member.user.full_name}</p>
-                          {sub ? (
-                            <p className="text-xs text-slate-500">Submitted</p>
-                          ) : (
-                            <p className="text-xs text-slate-500">No submission</p>
-                          )}
-                        </div>
+                      <div key={member.user_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
+                        <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={22} userId={member.user_id} />
+                        <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 truncate">
+                          {member.user.full_name}
+                          {sub && <span className="ml-1 text-slate-400 font-normal">· submitted</span>}
+                        </p>
                         {sub && (
                           <button
                             onClick={() => setExpandedSub({ name: member.user.full_name, sub })}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-600 text-xs font-medium transition-colors shadow-sm ring-1 ring-slate-900/[0.05]"
+                            className="p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0"
                             title="View submission"
                           >
-                            <Eye size={12} /> View
+                            <Eye size={12} />
                           </button>
                         )}
                         <button
@@ -1109,11 +1105,11 @@ export default function FolderFileView({
                             showTracking!, member.user_id, status, requiresCheck
                           )}
                           disabled={isUpdating}
-                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${STATUS_BG[status]} hover:opacity-80 disabled:opacity-50`}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold transition-all flex-shrink-0 [&_svg]:w-3 [&_svg]:h-3 ${STATUS_BG[status]} hover:opacity-80 disabled:opacity-50`}
                           title="Click to change status"
                         >
                           {isUpdating
-                            ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ? <span className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
                             : STATUS_ICON[status]
                           }
                           {STATUS_LABEL[status]}
@@ -1197,7 +1193,7 @@ export default function FolderFileView({
             subtitle={folders.find(f => f.id === showNewFile)?.title}
             icon={<Plus size={16} />}
             iconClassName="bg-indigo-100 text-indigo-600"
-            bodyClassName="space-y-4 bg-slate-50/60"
+            bodyClassName="space-y-3 bg-slate-50/60 !py-3"
             footer={
               <div className="flex items-center gap-2">
                 <button
@@ -1289,23 +1285,23 @@ export default function FolderFileView({
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('youtube')}
-                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
                     >
-                      <Youtube size={16} /> YouTube
+                      <Youtube size={14} /> YouTube
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('link')}
-                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                     >
-                      <Link2 size={16} /> Link
+                      <Link2 size={14} /> Link
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewFileAttachmentMode('upload')}
-                      className="flex flex-col items-center justify-center gap-1 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-[11px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                      className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
                     >
-                      <Upload size={16} /> Doc / Image
+                      <Upload size={14} /> Doc / Image
                     </button>
                   </div>
                 ) : newFileAttachmentMode === 'youtube' ? (
@@ -1355,7 +1351,7 @@ export default function FolderFileView({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="flex-1 flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
                         >
                           <Upload size={15} />
                           {uploadingFile ? 'Uploading…' : 'Choose file (max 20 MB)'}
