@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Pin, Layers, Maximize2, Minimize2, ZoomIn, ZoomOut, Scan } from 'lucide-react'
+import { Pin, Layers, Maximize2, Minimize2, ZoomIn, ZoomOut, Scan, Ban } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
+import { buildConstraintIndex, cellKey, timeOffBlocked } from '@/lib/timetable/constraints'
+import { TIME_OFF_FILL } from './EditableTimetableGrid'
 import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
 import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
@@ -118,6 +120,15 @@ export default function MasterTimetableEditor({
     () => conflictCellKeys(entries, unavailability, constraints, homeroomsLite),
     [entries, unavailability, constraints, homeroomsLite],
   )
+
+  // Periods a class is kept free (Homeroom → Time off) are drawn as closed, so
+  // the gaps the generator leaves on purpose read differently from real gaps.
+  const constraintIndex = useMemo(
+    () => buildConstraintIndex(constraints, homeroomsLite),
+    [constraints, homeroomsLite],
+  )
+  const isTimeOff = (homeroomId: string, day: Weekday, slotId: string) =>
+    timeOffBlocked(constraintIndex.homeroomTimeOff, homeroomId, cellKey(day, slotId))
 
   const byCell = useMemo(() => {
     const m = new Map<string, PlacedEntry[]>()
@@ -238,6 +249,7 @@ export default function MasterTimetableEditor({
                   const cellEntries = byCell.get(key) ?? []
                   const inConflict = conflicts.has(key)
                   const isOver = overCell === key
+                  const off = isTimeOff(hr.id, day, slot.id)
                   return (
                     <td
                       key={key}
@@ -248,12 +260,22 @@ export default function MasterTimetableEditor({
                       onDragLeave={() => setOverCell((c) => (c === key ? null : c))}
                       onDrop={() => handleDrop(hr.id, day, slot.id)}
                       onClick={() => setOpen({ homeroom: hr, day, slot })}
+                      title={off && cellEntries.length === 0 ? `${hr.name} — time off` : undefined}
                       className={`border-b border-l border-[#E4E4E7] p-px align-top cursor-pointer ${
                         isOver ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : inConflict ? 'bg-rose-50' : ''
                       }`}
-                      style={{ width: px(cellW), minWidth: px(cellW) }}
+                      style={{
+                        width: px(cellW),
+                        minWidth: px(cellW),
+                        ...(off && !isOver && !inConflict ? { backgroundImage: TIME_OFF_FILL } : {}),
+                      }}
                     >
                       <div className="space-y-px" style={{ minHeight: px(rowH) }}>
+                        {off && cellEntries.length === 0 && (
+                          <div className="flex items-center justify-center text-rose-300" style={{ height: px(rowH) }}>
+                            <Ban size={Math.max(8, Math.round(11 * zoom))} />
+                          </div>
+                        )}
                         {cellEntries.map((entry) => {
                           const subj = entry.subjectId ? subjectById.get(entry.subjectId) : null
                           const ids = teacherIdsOf(entry)
@@ -363,6 +385,7 @@ export default function MasterTimetableEditor({
       rooms={rooms}
       groupName={groupName}
       conflicts={cellConflicts?.(open.homeroom.id, open.day, open.slot.id) ?? []}
+      timeOff={isTimeOff(open.homeroom.id, open.day, open.slot.id)}
       onClose={() => setOpen(null)}
       onTogglePin={onTogglePin}
       onSave={(groupId, subjectId, teacherIds, roomId) => {

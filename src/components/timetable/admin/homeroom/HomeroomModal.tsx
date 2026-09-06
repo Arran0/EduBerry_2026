@@ -11,7 +11,7 @@ import {
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
   addGroupMemberByEmail, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
-  addConstraint, deleteConstraint, ROOM_TYPE_LABELS,
+  addConstraint, deleteConstraint, requirementError, ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, Subject, Room, PeriodSlot, Requirement, TimetableConstraint,
@@ -601,6 +601,7 @@ const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'oth
 interface WeeklyBudget {
   total: number // teaching periods in the week (days × teaching slots)
   timeOff: number // periods the class is kept free by a time-off constraint
+  available: number // total − timeOff: what can actually be scheduled
   wholeClass: number // periods claimed by whole-class requirements + combined
   groupPeak: number // periods claimed by the busiest split group
   filled: number // wholeClass + groupPeak
@@ -649,7 +650,7 @@ function weeklyBudget({
   const filled = wholeClass + groupPeak
   const available = Math.max(0, total - timeOff)
   return {
-    total, timeOff, wholeClass, groupPeak, filled,
+    total, timeOff, available, wholeClass, groupPeak, filled,
     free: Math.max(0, available - filled),
     over: filled > available,
     perGroup,
@@ -658,8 +659,9 @@ function weeklyBudget({
 
 function SlotMeter({ budget }: { budget: WeeklyBudget }) {
   if (budget.total === 0) return null
-  const available = Math.max(0, budget.total - budget.timeOff)
-  const pct = available === 0 ? 0 : Math.min(100, (budget.filled / available) * 100)
+  // The denominator is what the class can actually be taught in: periods marked
+  // as time off are taken out of the week, not counted as unfilled.
+  const pct = budget.available === 0 ? 0 : Math.min(100, (budget.filled / budget.available) * 100)
   const tone = budget.over ? 'bg-rose-500' : pct >= 90 ? 'bg-amber-500' : 'bg-emerald-600'
   return (
     <div className="w-40 sm:w-52">
@@ -667,15 +669,16 @@ function SlotMeter({ budget }: { budget: WeeklyBudget }) {
         <span className={SECTION_LABEL}>Slots filled</span>
         <span className={`text-sm font-semibold tabular-nums ${budget.over ? 'text-rose-600' : 'text-[#18181B]'}`}>
           {budget.filled}
-          <span className="text-[#A1A1AA] font-normal">/{budget.total}</span>
+          <span className="text-[#A1A1AA] font-normal">/{budget.available}</span>
         </span>
       </div>
-      <div className="h-1.5 bg-[#E4E4E7] mt-1.5" title={`${budget.filled} of ${available} available periods claimed`}>
+      <div className="h-1.5 bg-[#E4E4E7] mt-1.5" title={`${budget.filled} of ${budget.available} teachable periods claimed`}>
         <div className={`h-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
       </div>
       <p className="text-[11px] text-[#71717A] mt-1 leading-snug">
         {budget.wholeClass} whole-class
         {budget.groupPeak > 0 && ` · ${budget.groupPeak} group`}
+        {budget.timeOff > 0 && <span className="text-rose-500"> · {budget.timeOff} off</span>}
         {budget.over && <span className="text-rose-600 font-medium"> · over capacity</span>}
       </p>
       {budget.perGroup.length > 0 && (
@@ -836,7 +839,8 @@ function RequirementsPanel({
         group_id: groupId || null,
       })
       setAdding(false)
-      if (created) { resetForm(); load() } else setError('Could not add — this class may already have that subject.')
+      if (created) { resetForm(); load() }
+      else setError(requirementError() ?? 'Could not add this requirement.')
     }
   }
 
@@ -992,7 +996,9 @@ function RequirementsPanel({
         hint={
           budget.total === 0
             ? 'Add teaching period slots (Configuration) to see how much of the week is filled.'
-            : `${budget.free} of ${budget.total} weekly periods still free${budget.timeOff > 0 ? ` · ${budget.timeOff} kept free as time off` : ''}. Parallel group lessons share a period, so groups count once.`
+            : `${budget.free} of the week's ${budget.available} teachable periods still free${
+                budget.timeOff > 0 ? ` (${budget.total} in the week, ${budget.timeOff} marked time off)` : ''
+              }. Parallel group lessons share a period, so groups count once.`
         }
         right={<SlotMeter budget={budget} />}
       >

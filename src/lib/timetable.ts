@@ -316,10 +316,22 @@ export async function createRequirement(
 
   if (error) {
     console.error('createRequirement error:', error)
+    lastRequirementError =
+      // 23505 = the (config, homeroom, subject, group) unique index.
+      error.code === '23505'
+        ? 'This class already has that subject for the same group — delete the existing requirement first.'
+        : `${error.message}${error.hint ? ` (${error.hint})` : ''}`
     return null
   }
+  lastRequirementError = null
   return data
 }
+
+// Why the last createRequirement failed, so the form can show the real reason
+// (a duplicate, a stale PostgREST schema cache, an RLS refusal) instead of
+// always blaming a duplicate subject.
+let lastRequirementError: string | null = null
+export const requirementError = () => lastRequirementError
 
 export async function updateRequirement(
   id: string,
@@ -1094,8 +1106,10 @@ export async function fetchClassroomStudentsInHomeroom(
 // Combined classes (Round 6)
 // ============================================================
 
+// `teacher:` names its foreign key explicitly: the table also has created_by →
+// profiles, and an unqualified embed is ambiguous (PostgREST PGRST201).
 const COMBINED_SELECT =
-  '*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), room:timetable_rooms(*), members:timetable_combined_members(*, group:timetable_homeroom_groups(*))'
+  '*, subject:timetable_subjects(*), teacher:profiles!timetable_combined_classes_teacher_id_fkey(id, full_name, avatar_url, role), room:timetable_rooms(*), members:timetable_combined_members(*, group:timetable_homeroom_groups(*))'
 
 export async function fetchCombinedClasses(configId: string): Promise<CombinedClass[]> {
   const { data, error } = await supabase

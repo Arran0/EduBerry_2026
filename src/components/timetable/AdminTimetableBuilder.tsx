@@ -109,7 +109,7 @@ export default function AdminTimetableBuilder() {
       </div>
 
       {/* Master grid canvas — always visible. */}
-      <div className="p-4 sm:p-5">
+      <div className="p-2 sm:p-4">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-[#A1A1AA]">
             <Loader2 className="animate-spin" size={22} />
@@ -140,7 +140,7 @@ export default function AdminTimetableBuilder() {
         onClose={closeModal}
         title={currentBtn?.label ?? ''}
         icon={currentBtn?.icon}
-        size="xl"
+        size="2xl"
         fullHeight
       >
         {openModal === 'config' && (

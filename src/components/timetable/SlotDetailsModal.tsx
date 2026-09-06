@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import {
-  X, Pin, PinOff, Layers, Users, DoorOpen, Clock, GraduationCap, AlertTriangle, Trash2, Pencil,
+  X, Pin, PinOff, Layers, Users, DoorOpen, Clock, GraduationCap, AlertTriangle, Trash2, Pencil, Ban,
 } from 'lucide-react'
 import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
 import type { PlacedEntry, PeriodSlot, Subject, Room, Weekday } from '@/lib/timetable'
@@ -29,6 +29,8 @@ interface Props {
   groupName?: (groupId: string) => string | undefined
   /** Human-readable reasons this cell is flagged, if any. */
   conflicts?: string[]
+  /** This class is marked time off in this period (Homeroom → Time off). */
+  timeOff?: boolean
   onClose: () => void
   onTogglePin: (entry: PlacedEntry) => void
   onSave: (groupId: string | null, subjectId: string, teacherIds: string[], roomId: string | null) => void
@@ -45,7 +47,7 @@ const entryKey = (e: PlacedEntry) =>
  * in the master grid or the class-wise timetable.
  */
 export default function SlotDetailsModal({
-  target, entries, subjects, teachers, rooms, groupName, conflicts = [],
+  target, entries, subjects, teachers, rooms, groupName, conflicts = [], timeOff = false,
   onClose, onTogglePin, onSave, onClear,
 }: Props) {
   const { homeroomName, day, slot } = target
@@ -107,6 +109,15 @@ export default function SlotDetailsModal({
         </div>
 
         <div className="p-5 space-y-4">
+          {timeOff && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+              <Ban size={13} className="flex-shrink-0 mt-0.5" />
+              <span>
+                This class is marked <strong>time off</strong> in this period — the generator keeps it free.
+                Change it under Homeroom → Time off.
+              </span>
+            </div>
+          )}
           {conflicts.length > 0 && (
             <div className="px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800 space-y-1">
               {conflicts.map((c, i) => (
@@ -120,7 +131,7 @@ export default function SlotDetailsModal({
 
           {/* What is scheduled here */}
           {entries.length === 0 ? (
-            <p className="text-sm text-[#A1A1AA]">This period is free.</p>
+            <p className="text-sm text-[#A1A1AA]">{timeOff ? 'Kept free as time off.' : 'This period is free.'}</p>
           ) : (
             <div className="space-y-2">
               {entries.map((entry) => {

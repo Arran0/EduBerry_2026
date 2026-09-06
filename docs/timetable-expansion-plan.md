@@ -465,4 +465,12 @@ score; zero hard violations required for a "green" band.
   lesson pins all its member classes together.
 - **Master grid density.** Fit-to-width (auto, via ResizeObserver), manual
   zoom and a full-screen mode, so a whole school week fits on one screen.
+- **Follow-ups.** The admin builder runs on a much wider shell (`max-w-[112rem]`)
+  with a `2xl` entity modal, so the dense master grid gets the screen. The slot
+  counter's denominator is the *teachable* week (total − time off). Clicking a
+  period in the left column of any time-off grid toggles that period for the
+  whole week, and time-off periods are hatched in both the master grid and the
+  class-wise timetable (and called out in the slot details). `fetchCombinedClasses`
+  names its `teacher_id` foreign key explicitly — the table also has
+  `created_by → profiles`, which made the embed ambiguous (PGRST201).
 

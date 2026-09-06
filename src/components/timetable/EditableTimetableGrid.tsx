@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { Pin, Coffee } from 'lucide-react'
+import { Pin, Coffee, Ban } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
+import { buildConstraintIndex, cellKey, timeOffBlocked } from '@/lib/timetable/constraints'
 import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
 import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
@@ -34,6 +35,10 @@ interface Props {
 
 const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroomId}__${day}__${slotId}`
 
+// Diagonal hatch marking a period the class is kept free.
+export const TIME_OFF_FILL =
+  'repeating-linear-gradient(45deg, #fff1f2, #fff1f2 4px, #ffe4e6 4px, #ffe4e6 8px)'
+
 export default function EditableTimetableGrid({
   days, slots, homeroomId, homeroomName, entries, unavailability, subjects, teachers, rooms,
   constraints = [], homerooms = [], groupName, cellConflicts,
@@ -45,6 +50,12 @@ export default function EditableTimetableGrid({
     () => conflictCellKeys(entries, unavailability, constraints, homerooms),
     [entries, unavailability, constraints, homerooms],
   )
+
+  // Periods this class is kept free (Homeroom → Time off). The generator never
+  // schedules them, so the grid shows them as closed rather than empty.
+  const constraintIndex = useMemo(() => buildConstraintIndex(constraints, homerooms), [constraints, homerooms])
+  const isTimeOff = (day: Weekday, slotId: string) =>
+    timeOffBlocked(constraintIndex.homeroomTimeOff, homeroomId, cellKey(day, slotId))
 
   // The whole-class entry per cell (the editable layer). Parallel split-group
   // lessons are counted separately and shown as a badge.
@@ -128,6 +139,7 @@ export default function EditableTimetableGrid({
                 }
                 const entry = byCell.get(`${day}__${slot.id}`)
                 const splits = splitCount.get(`${day}__${slot.id}`) ?? 0
+                const off = isTimeOff(day, slot.id)
                 const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
                 const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
                 const room = entry?.roomId ? roomById.get(entry.roomId) : null
@@ -136,18 +148,26 @@ export default function EditableTimetableGrid({
                   <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
                     <button
                       onClick={() => setOpenCell({ day, slot })}
-                      title={entry ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}` : 'Free period'}
+                      title={
+                        entry
+                          ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${off ? ' · marked time off' : ''}`
+                          : off ? 'Time off — this class is kept free' : 'Free period'
+                      }
                       className={`relative w-full h-10 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight transition-all ${
                         inConflict
                           ? 'ring-2 ring-inset ring-rose-400'
                           : entry
                             ? 'hover:brightness-95'
-                            : 'border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A]'
+                            : off
+                              ? 'border border-rose-200 text-rose-400 hover:border-rose-300'
+                              : 'border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A]'
                       }`}
                       style={
                         entry
                           ? { background: (subj?.color ?? '#52525B') + '1f', borderLeft: `3px solid ${subj?.color ?? '#52525B'}` }
-                          : undefined
+                          : off
+                            ? { background: TIME_OFF_FILL }
+                            : undefined
                       }
                     >
                       {entry ? (
@@ -158,9 +178,14 @@ export default function EditableTimetableGrid({
                           {entry.isLocked && (
                             <Pin size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
                           )}
+                          {off && <Ban size={10} className="absolute bottom-0.5 right-0.5 text-rose-500" />}
                         </>
                       ) : splits > 0 ? (
                         <span className="block text-center leading-[2.25rem] sm:leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
+                      ) : off ? (
+                        <span className="flex items-center justify-center gap-1 h-full text-rose-400">
+                          <Ban size={11} /> <span className="hidden sm:inline">Off</span>
+                        </span>
                       ) : (
                         <span className="block text-center leading-[2.25rem] sm:leading-[3rem]">+</span>
                       )}
@@ -182,6 +207,7 @@ export default function EditableTimetableGrid({
           rooms={rooms}
           groupName={groupName}
           conflicts={cellConflicts?.(homeroomId, openCell.day, openCell.slot.id) ?? []}
+          timeOff={isTimeOff(openCell.day, openCell.slot.id)}
           onClose={() => setOpenCell(null)}
           onTogglePin={onTogglePin}
           onSave={(groupId, subjectId, teacherIds, roomId) => {
