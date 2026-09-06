@@ -53,19 +53,27 @@ const MIN_ZOOM = 0.4
 const MAX_ZOOM = 1.6
 
 /**
- * "Grade 10 · Sec A" for the second line of a class label — omitted when the
- * homeroom's own name already carries the same grade and section (the common
- * case, e.g. "Grade 10 A"), so the column stays one line where it can.
+ * The compact class label for a grid row: "G:3A 26-27" — grade + section and
+ * the short academic year. Full names ("Grade 3 Section A 2026-2027") cost the
+ * lesson columns far too much width in a grid this dense; the homeroom's real
+ * name stays on the row's tooltip and in the slot details.
  */
-function gradeSectionLine(hr: Homeroom): string | null {
-  const bits: string[] = []
-  if (hr.grade != null) bits.push(`Grade ${hr.grade}`)
-  if (hr.section) bits.push(`Sec ${hr.section}`)
-  if (bits.length === 0) return null
-  const flat = hr.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const inName = `${hr.grade ?? ''}${hr.section ?? ''}`.toLowerCase().replace(/[^a-z0-9]/g, '')
-  if (inName && flat.includes(inName)) return null
-  return bits.join(' · ')
+function classLabel(hr: Homeroom): string {
+  const core =
+    hr.grade != null
+      ? `G:${hr.grade}${(hr.section ?? '').toUpperCase()}`
+      : hr.name
+  const year = shortYear(hr.academic_year)
+  return year ? `${core} ${year}` : core
+}
+
+// "2026-2027" / "2026-27" / "2026/27" → "26-27". Anything unparseable is
+// dropped rather than printed at full length.
+function shortYear(year: string | null): string | null {
+  if (!year) return null
+  const m = year.match(/(\d{4})\s*[-/–]\s*(\d{2,4})/)
+  if (!m) return null
+  return `${m[1].slice(-2)}-${m[2].slice(-2)}`
 }
 
 // aSc-style master grid: homeroom rows × (day → slot sub-columns). Drag a
@@ -262,16 +270,11 @@ export default function MasterTimetableEditor({
           {homerooms.map((hr) => (
             <tr key={hr.id}>
               <td
-                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-2 py-0.5 whitespace-nowrap leading-tight"
+                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-2 py-0.5 whitespace-nowrap leading-tight font-medium text-[#18181B] tabular-nums"
                 style={{ fontSize: px(LABEL_FONT) }}
                 title={hr.name}
               >
-                <div className="font-medium text-[#18181B]">{hr.name}</div>
-                {gradeSectionLine(hr) && (
-                  <div className="text-[#A1A1AA]" style={{ fontSize: px(LABEL_FONT - 2) }}>
-                    {gradeSectionLine(hr)}
-                  </div>
-                )}
+                {classLabel(hr)}
               </td>
               {days.map((day) =>
                 teachingSlots.map((slot) => {
@@ -410,7 +413,7 @@ export default function MasterTimetableEditor({
     <SlotDetailsModal
       target={{
         homeroomId: open.homeroom.id,
-        homeroomName: [open.homeroom.name, gradeSectionLine(open.homeroom)].filter(Boolean).join(' · '),
+        homeroomName: open.homeroom.name,
         day: open.day,
         slot: open.slot,
       }}
