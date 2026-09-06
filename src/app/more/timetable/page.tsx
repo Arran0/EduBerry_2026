@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -19,7 +18,6 @@ const MAX_W_ADMIN = 'max-w-[112rem]'
 const MAX_W_VIEWER = 'max-w-7xl'
 
 export default function TimetablePage() {
-  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
@@ -44,7 +42,6 @@ export default function TimetablePage() {
           }
           isAdmin={isAdmin}
           maxWidth={MAX_W}
-          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 

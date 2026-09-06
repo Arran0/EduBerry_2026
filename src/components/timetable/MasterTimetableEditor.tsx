@@ -44,9 +44,29 @@ const entryId = (e: PlacedEntry) =>
 // squeezed onto one screen (or blown up when there is room to spare).
 const BASE_CELL = 54 // px per period column
 const BASE_ROW = 34 // px per class row
-const BASE_LABEL = 112 // px for the sticky class-name column
+// The class column is NOT zoomed: a clipped class name makes the grid unusable,
+// so it keeps a readable font and sizes itself to its longest label, and the
+// period columns get whatever width is left over.
+const LABEL_FONT = 11
+const FALLBACK_LABEL = 128
 const MIN_ZOOM = 0.4
 const MAX_ZOOM = 1.6
+
+/**
+ * "Grade 10 · Sec A" for the second line of a class label — omitted when the
+ * homeroom's own name already carries the same grade and section (the common
+ * case, e.g. "Grade 10 A"), so the column stays one line where it can.
+ */
+function gradeSectionLine(hr: Homeroom): string | null {
+  const bits: string[] = []
+  if (hr.grade != null) bits.push(`Grade ${hr.grade}`)
+  if (hr.section) bits.push(`Sec ${hr.section}`)
+  if (bits.length === 0) return null
+  const flat = hr.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const inName = `${hr.grade ?? ''}${hr.section ?? ''}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (inName && flat.includes(inName)) return null
+  return bits.join(' · ')
+}
 
 // aSc-style master grid: homeroom rows × (day → slot sub-columns). Drag a
 // lesson to another period; click one for details, pinning and editing.
@@ -69,16 +89,21 @@ export default function MasterTimetableEditor({
   const [autoFit, setAutoFit] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLTableCellElement>(null)
 
-  const naturalWidth = BASE_LABEL + days.length * teachingSlots.length * BASE_CELL
+  const periodsWidth = days.length * teachingSlots.length * BASE_CELL
 
   const recomputeFit = useCallback(() => {
     const el = wrapRef.current
-    if (!el || naturalWidth === 0) return
-    const available = el.clientWidth - 2
+    if (!el || periodsWidth === 0) return
+    // The class column auto-sizes to its longest name at a fixed font, so it is
+    // measured rather than assumed: the period columns get the rest of the row.
+    const measured = labelRef.current?.getBoundingClientRect().width
+    const label = measured && measured > 0 ? Math.ceil(measured) : FALLBACK_LABEL
+    const available = el.clientWidth - label - 2
     if (available <= 0) return
-    setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, available / naturalWidth)))
-  }, [naturalWidth])
+    setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, available / periodsWidth)))
+  }, [periodsWidth])
 
   useLayoutEffect(() => {
     if (!autoFit) return
@@ -88,7 +113,7 @@ export default function MasterTimetableEditor({
     const ro = new ResizeObserver(() => recomputeFit())
     ro.observe(el)
     return () => ro.disconnect()
-  }, [autoFit, recomputeFit, fullscreen])
+  }, [autoFit, recomputeFit, fullscreen, homerooms])
 
   useEffect(() => {
     if (!fullscreen) return
@@ -104,7 +129,6 @@ export default function MasterTimetableEditor({
 
   const cellW = Math.round(BASE_CELL * zoom)
   const rowH = Math.round(BASE_ROW * zoom)
-  const labelW = Math.round(BASE_LABEL * zoom)
   const px = (n: number) => `${n}px`
   // Below ~0.75 there is no room for a second line inside a cell.
   const dense = zoom < 0.75
@@ -196,9 +220,10 @@ export default function MasterTimetableEditor({
         <thead>
           <tr className="bg-[#FAFAF9]">
             <th
+              ref={labelRef}
               rowSpan={2}
-              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-1.5 py-1 text-left font-bold uppercase tracking-widest text-[#525252]"
-              style={{ width: px(labelW), minWidth: px(labelW), fontSize: px(fontHead) }}
+              className="sticky left-0 top-0 z-30 bg-[#FAFAF9] border-b border-r border-[#E4E4E7] px-2 py-1 text-left font-bold uppercase tracking-widest text-[#525252] whitespace-nowrap"
+              style={{ fontSize: px(fontHead) }}
             >
               Class
             </th>
@@ -237,11 +262,16 @@ export default function MasterTimetableEditor({
           {homerooms.map((hr) => (
             <tr key={hr.id}>
               <td
-                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-1.5 py-0.5 font-medium text-[#18181B] whitespace-nowrap truncate"
-                style={{ width: px(labelW), maxWidth: px(labelW) }}
+                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-2 py-0.5 whitespace-nowrap leading-tight"
+                style={{ fontSize: px(LABEL_FONT) }}
                 title={hr.name}
               >
-                {hr.name}
+                <div className="font-medium text-[#18181B]">{hr.name}</div>
+                {gradeSectionLine(hr) && (
+                  <div className="text-[#A1A1AA]" style={{ fontSize: px(LABEL_FONT - 2) }}>
+                    {gradeSectionLine(hr)}
+                  </div>
+                )}
               </td>
               {days.map((day) =>
                 teachingSlots.map((slot) => {
@@ -378,7 +408,12 @@ export default function MasterTimetableEditor({
 
   const modal = open && (
     <SlotDetailsModal
-      target={{ homeroomId: open.homeroom.id, homeroomName: open.homeroom.name, day: open.day, slot: open.slot }}
+      target={{
+        homeroomId: open.homeroom.id,
+        homeroomName: [open.homeroom.name, gradeSectionLine(open.homeroom)].filter(Boolean).join(' · '),
+        day: open.day,
+        slot: open.slot,
+      }}
       entries={openEntries}
       subjects={subjects}
       teachers={teachers}
