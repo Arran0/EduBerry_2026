@@ -684,13 +684,6 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     {day.getDate()}
                     {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
                   </p>
-                  {total > 0 && !isExpanded && (
-                    <span className="mt-0.5 inline-flex h-1.5 items-center gap-0.5">
-                      {Array.from({ length: Math.min(total, 3) }).map((_, d) => (
-                        <span key={d} className="w-1 h-1 rounded-full" style={{ background: 'var(--page-primary, #06b6d4)' }} />
-                      ))}
-                    </span>
-                  )}
                   {isExpanded && (
                     <span className="text-[10px] font-medium text-white/80">{total} scheduled</span>
                   )}

@@ -158,7 +158,7 @@ export function PointsPicker({
           value={custom}
           onChange={e => onCustom(e.target.value)}
           placeholder="Custom"
-          className={`w-20 px-2 py-1.5 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-4 focus:ring-amber-500/10 ${
+          className={`w-24 px-2 py-1.5 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-4 focus:ring-amber-500/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
             custom !== ''
               ? 'bg-amber-500 text-white border-amber-500 placeholder-amber-100'
               : 'text-slate-700 border-slate-200 bg-white placeholder:text-slate-400'
