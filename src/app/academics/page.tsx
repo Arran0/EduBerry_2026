@@ -20,7 +20,9 @@ import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
+import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
+const HomeroomWorkCalendar = dynamic(() => import('@/components/academics/HomeroomWorkCalendar'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
 import { fetchStreak } from '@/lib/gamification'
@@ -186,6 +188,11 @@ export default function AcademicsPage() {
   const isAdmin     = profile?.role === 'admin'
   const isPrincipal = profile?.role === 'principal'
 
+  // Homerooms this account is the class teacher of — null until the lookup
+  // resolves, so the "no classrooms → go home" redirect below can wait for it.
+  const [homerooms, setHomerooms] = useState<Homeroom[] | null>(null)
+  const isClassTeacher = !isStudent && (homerooms?.length ?? 0) > 0
+
   // Whether admin/principal accounts want the Classrooms section on the home page too.
   const [showOnHome, setShowOnHomeState] = useState(false)
   useEffect(() => {
@@ -229,10 +236,21 @@ export default function AcademicsPage() {
 
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
 
-  // Accounts not enrolled in any classroom don't get an Academics page.
   useEffect(() => {
-    if (!loading && classrooms.length === 0) router.push('/home')
-  }, [loading, classrooms, router])
+    if (!user || !profile) return
+    if (profile.role === 'student') { setHomerooms([]); return }
+    let alive = true
+    fetchHomeroomsForClassTeacher(user.id).then(hrs => { if (alive) setHomerooms(hrs) })
+    return () => { alive = false }
+  }, [user, profile])
+
+  // Accounts with neither a classroom nor a homeroom of their own don't get an
+  // Academics page — a class teacher keeps it for their homeroom calendar.
+  useEffect(() => {
+    if (!loading && homerooms !== null && classrooms.length === 0 && homerooms.length === 0) {
+      router.push('/home')
+    }
+  }, [loading, classrooms, homerooms, router])
 
   useEffect(() => {
     fetchAcademicsBannerConfig().then(cfg => {
@@ -289,7 +307,7 @@ export default function AcademicsPage() {
     : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
 
   if (!user || !profile) return null
-  if (!loading && classrooms.length === 0) return null
+  if (!loading && classrooms.length === 0 && (homerooms?.length ?? 0) === 0) return null
 
   return (
     <ProtectedLayout>
@@ -590,8 +608,9 @@ export default function AcademicsPage() {
             </section>
           )}
 
-          {/* School Work Calendar — students only */}
-          {isStudent && (
+          {/* School Work Calendar — a student's own work across their
+              classrooms, or, for a class teacher, their homeroom's homework. */}
+          {(isStudent || isClassTeacher) && (
             <section>
               <SectionHeading
                 icon={CalendarDays}
@@ -601,8 +620,10 @@ export default function AcademicsPage() {
               <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
                 {loading ? (
                   <p className="text-sm text-slate-500">Loading…</p>
-                ) : (
+                ) : isStudent ? (
                   <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+                ) : (
+                  <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
                 )}
               </div>
             </section>

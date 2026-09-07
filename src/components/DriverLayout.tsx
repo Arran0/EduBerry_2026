@@ -91,7 +91,7 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
       {/* Slim driver header (no app Navbar) */}
       <header className={`sticky top-0 z-30 backdrop-blur-xl border-b border-slate-200 shadow-sm transition-colors duration-300 ${scrolled ? 'bg-white/60' : 'bg-white'}`}>
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -118,7 +118,7 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
       </header>
 
       {/* key remounts page content after a long background period (matches ProtectedLayout) */}
-      <main key={dataRefreshKey} className="max-w-3xl mx-auto px-4 py-5">
+      <main key={dataRefreshKey} className="w-full max-w-3xl mx-auto px-4 py-5 flex-1">
         {children}
       </main>
       <Footer />

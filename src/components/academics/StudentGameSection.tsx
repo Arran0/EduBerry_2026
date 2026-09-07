@@ -244,7 +244,7 @@ function RisingParticles() {
 /* ─────────────────────────────── cover card ─────────────────────────────── */
 
 function CoverCard({
-  pos, spacingMV, index, isActive, cardW, cardH, brief, first, onSelect,
+  pos, spacingMV, index, isActive, cardW, cardH, brief,
 }: {
   pos: MotionValue<number>
   spacingMV: MotionValue<number>
@@ -253,8 +253,6 @@ function CoverCard({
   cardW: number
   cardH: number
   brief: Brief
-  first: string
-  onSelect: () => void
 }) {
   const x = useTransform([pos, spacingMV], (v: number[]) => (index - v[0]) * v[1])
   const dist = useTransform(pos, p => Math.min(Math.abs(index - p), 1))
@@ -269,8 +267,10 @@ function CoverCard({
   const showRankUp = brief.improved && ranked
 
   return (
+    /* Taps are handled by the carousel wrapper, not here: it owns pointer
+       capture for dragging, and a captured pointer delivers its click to the
+       capture target rather than to the card under the finger. */
     <motion.div
-      onClick={onSelect}
       style={{
         x, scale, opacity, zIndex, filter: blur,
         width: cardW, height: cardH,
@@ -369,11 +369,17 @@ function CoverCard({
 
 /* ─────────────────────────────── carousel ─────────────────────────────── */
 
+/** Movement (px) past which a gesture counts as a swipe rather than a tap. */
+const TAP_SLOP = 8
+/** Swipe speed (px/ms) that carries the strip one card further than the nearest. */
+const FLICK_VELOCITY = 0.35
+
 /**
  * Presentational coverflow: shows three cards at a time — a magnified, bright
- * centre flanked by two dimmed, scaled-down neighbours — that the student can
- * drag through. Auto-advances right every 5s. Pure props, no data fetching, so
- * it can be previewed in isolation.
+ * centre flanked by two dimmed, scaled-down neighbours. Tapping a card slides
+ * the strip so that card becomes the centre, and dragging/flicking moves it
+ * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
+ * so it can be previewed in isolation.
  */
 export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: string }) {
   const [active, setActive] = useState(0)
@@ -389,6 +395,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   // drag state
   const draggingRef = useRef(false)
   const startXRef = useRef(0)
+  const startTRef = useRef(0)
+  const lastXRef = useRef(0)
   const basePosRef = useRef(0)
   const movedRef = useRef(false)
 
@@ -430,6 +438,12 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     animate(pos, clamped, { type: 'spring', stiffness: 300, damping: 22, mass: 0.85 })
   }, [n, pos])
 
+  /** Like `go`, but stops at the ends instead of wrapping — gestures should
+   *  never jump the whole strip back to the other side. */
+  const goClamped = useCallback((target: number) => {
+    go(Math.max(0, Math.min(n - 1, target)))
+  }, [go, n])
+
   // Auto-advance one card to the right every 5 seconds (paused while dragging).
   useEffect(() => {
     if (n <= 1) return
@@ -445,6 +459,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     draggingRef.current = true
     movedRef.current = false
     startXRef.current = e.clientX
+    lastXRef.current = e.clientX
+    startTRef.current = performance.now()
     basePosRef.current = pos.get()
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }, [n, pos])
@@ -453,7 +469,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     if (!draggingRef.current) return
     const sp = spacingMV.get() || 1
     const dx = e.clientX - startXRef.current
-    if (Math.abs(dx) > 8) movedRef.current = true
+    if (Math.abs(dx) > TAP_SLOP) movedRef.current = true
+    lastXRef.current = e.clientX
     let p = basePosRef.current - dx / sp
     // rubber-band past the ends
     if (p < 0) p = p * 0.32
@@ -461,17 +478,40 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     pos.set(p)
   }, [n, pos, spacingMV])
 
-  const endDrag = useCallback(() => {
+  /** Pointer released: either a tap on a card, or the end of a swipe. */
+  const endDrag = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return
     draggingRef.current = false
-    go(Math.round(Math.max(0, Math.min(n - 1, pos.get()))))
-  }, [n, pos, go])
+    const sp = spacingMV.get() || 1
 
-  // Tap a side card to focus it — but ignore the click that trails a drag.
-  const selectCard = useCallback((i: number) => {
-    if (movedRef.current) { movedRef.current = false; return }
-    go(i)
-  }, [go])
+    // Tap — cards sit at (index - pos) × spacing from the centre, so the card
+    // under the finger is pos + (offset from centre) / spacing. Tapping the
+    // card on the left therefore slides the strip right, and vice versa.
+    if (!movedRef.current) {
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const offset = e.clientX - (rect.left + rect.width / 2)
+      goClamped(Math.round(pos.get() + offset / sp))
+      return
+    }
+
+    // Swipe — settle on the nearest card, but let a quick flick carry one
+    // further in the direction of travel so short, fast swipes still advance.
+    const totalDx  = lastXRef.current - startXRef.current
+    const velocity = Math.abs(totalDx) / Math.max(1, performance.now() - startTRef.current)
+    const nearest  = Math.round(pos.get())
+    if (velocity < FLICK_VELOCITY || totalDx === 0) { goClamped(nearest); return }
+    // Dragging left (negative dx) advances the strip, dragging right rewinds it.
+    const flick = Math.round(basePosRef.current) + (totalDx < 0 ? 1 : -1)
+    goClamped(totalDx < 0 ? Math.max(nearest, flick) : Math.min(nearest, flick))
+  }, [pos, spacingMV, goClamped])
+
+  /** The gesture was taken away (system scroll, etc.) — just settle. */
+  const cancelDrag = useCallback(() => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    goClamped(Math.round(pos.get()))
+  }, [pos, goClamped])
 
   if (n === 0) {
     return (
@@ -496,8 +536,7 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onPointerLeave={endDrag}
+          onPointerCancel={cancelDrag}
         >
           {briefs.map((b, i) => (
             <CoverCard
@@ -509,8 +548,6 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
               cardW={cardW}
               cardH={cardH}
               brief={b}
-              first={first}
-              onSelect={() => selectCard(i)}
             />
           ))}
         </div>

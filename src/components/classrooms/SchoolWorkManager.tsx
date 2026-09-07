@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, Circle, CircleDot, CheckCircle2,
+  ChevronRight, Circle, CircleDot, CheckCircle2,
   AlertTriangle, Clock, ChevronDown, X, BookOpen, Folder,
-  FileText, ExternalLink, Link2, Upload, CalendarDays, Star, Loader2, Send, ShieldCheck,
+  FileText, ExternalLink, Link2, CalendarDays, Star, Loader2, Send, ShieldCheck,
 } from 'lucide-react'
 import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
@@ -19,6 +19,9 @@ import {
   getNextSmartboardStatus,
   upsertTaskCompletion,
 } from '@/lib/smartboard'
+import WorkWeekCalendar, {
+  CalendarViewMode, ROUNDED_CARD, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
+} from '@/components/calendar/WorkWeekCalendar'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,13 @@ interface WorkItem extends ClassroomFile {
   classroomId: string
   classroomTitle: string
 }
+
+/** One dated row on the calendar — classroom work, or homeroom homework. */
+type CalendarEntry =
+  | { kind: 'cw'; item: WorkItem }
+  | { kind: 'hw'; task: StudentHomeroomTask }
+
+const NO_ENTRIES: CalendarEntry[] = []
 
 // ─── Unified visual status ────────────────────────────────────────────────────
 // Both FileStatus and SmartboardTaskStatus map to this for consistent styling.
@@ -96,36 +106,7 @@ function hwEarned(
   return true
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  const day = d.getDay()
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
-  return d
-}
-
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + n)
-  return d
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
-}
-
-function parseDate(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
+// ─── Status helpers ───────────────────────────────────────────────────────────
 
 function getNextStatus(current: FileStatus, requiresCheck: boolean): FileStatus {
   const cycle: FileStatus[] = requiresCheck
@@ -160,27 +141,38 @@ function EduPointsBadge({
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
+/** Mirrors the WorkWeekCalendar shell: gradient week bar, view toggle, day
+ *  picker and a few agenda rows. */
 function CalendarSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      {/* Week nav */}
-      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
-        <div className="w-7 h-7 bg-slate-200 rounded-lg" />
-        <div className="w-32 h-4 bg-slate-200 rounded" />
-        <div className="w-7 h-7 bg-slate-200 rounded-lg" />
-      </div>
-      {/* Calendar grid */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white">
-        <div className="flex min-w-[560px]">
+      <div className="bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden">
+        {/* Week bar */}
+        <div className="flex items-center justify-between gap-2 px-3 py-3 bg-slate-200/70">
+          <div className="w-6 h-6 bg-white/60 rounded-full" />
+          <div className="w-32 h-4 bg-white/60 rounded" />
+          <div className="w-6 h-6 bg-white/60 rounded-full" />
+        </div>
+        {/* Toggle row */}
+        <div className="flex items-center justify-between px-2.5 py-2 bg-slate-50 border-b border-slate-200">
+          <div className="w-32 h-6 bg-slate-200 rounded-full" />
+          <div className="w-16 h-3 bg-slate-200 rounded" />
+        </div>
+        {/* Day picker */}
+        <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
           {Array.from({ length: 7 }, (_, i) => (
-            <div key={i} className={`flex-1 ${i < 6 ? 'border-r border-slate-100' : ''}`}>
-              <div className="px-1.5 py-2.5 border-b border-slate-100 bg-slate-50 text-center space-y-1.5">
-                <div className="w-6 h-2 bg-slate-200 rounded mx-auto" />
-                <div className="w-5 h-4 bg-slate-200 rounded mx-auto" />
-              </div>
-              <div className="p-1 space-y-1 min-h-[96px]">
-                {i % 3 === 0 && <div className="w-full h-8 bg-slate-100 rounded-lg" />}
-                {i % 4 === 1 && <div className="w-full h-8 bg-slate-100 rounded-lg" />}
+            <div key={i} className="h-11 bg-slate-200/70 rounded-xl" />
+          ))}
+        </div>
+        {/* Agenda rows */}
+        <div className="divide-y divide-slate-100">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="flex items-start gap-3 px-4 py-3">
+              <div className="w-1 self-stretch bg-slate-200 rounded-full" />
+              <div className="w-3.5 h-3.5 bg-slate-200 rounded-full mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3.5 bg-slate-100 rounded w-2/3" />
+                <div className="h-2.5 bg-slate-100 rounded w-1/3" />
               </div>
             </div>
           ))}
@@ -210,6 +202,8 @@ interface SchoolWorkManagerProps {
 }
 
 const LIST_LIMIT = 5
+/** How far either side of today homework is loaded in one go. */
+const WINDOW_DAYS = 180
 
 export default function SchoolWorkManager({
   classrooms, userId,
@@ -225,6 +219,8 @@ export default function SchoolWorkManager({
   const [showMoreUndated, setShowMoreUndated] = useState(false)
   const [detailItem, setDetailItem] = useState<WorkItem | null>(null)
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  // Phone-only layout: one day at a time (default) or the whole week stacked.
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('daily')
 
   const [homeworkItems, setHomeworkItems] = useState<StudentHomeroomTask[]>([])
   const [hwSavingId, setHwSavingId]       = useState<string | null>(null)
@@ -259,11 +255,13 @@ export default function SchoolWorkManager({
   const loadHomework = useCallback(async () => {
     setHwLoading(true)
     const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const start = new Date(now); start.setDate(start.getDate() - 14)
-    const end   = new Date(now); end.setDate(end.getDate() + 90)
-    const data = await fetchStudentHomeroomTasks(userId, fmt(start), fmt(end))
+    // Wide enough either side of today that stepping through weeks keeps
+    // finding homework without a refetch.
+    const data = await fetchStudentHomeroomTasks(
+      userId,
+      formatDate(addDays(now, -WINDOW_DAYS)),
+      formatDate(addDays(now, WINDOW_DAYS)),
+    )
     setHomeworkItems(data)
     setHwLoading(false)
   }, [userId])
@@ -308,12 +306,28 @@ export default function SchoolWorkManager({
 
   // ── Computed ─────────────────────────────────────────────────────────────────
 
-  const today   = new Date(); today.setHours(0, 0, 0, 0)
-  const weekEnd = addDays(weekStart, 6)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const today = new Date(); today.setHours(0, 0, 0, 0)
 
-  const getFilesForDay  = (day: Date) => workItems.filter(f => f.due_date && isSameDay(parseDate(f.due_date), day))
-  const getHwForDay     = (day: Date) => homeworkItems.filter(t => t.due_date && isSameDay(parseDate(t.due_date), day))
+  // Bucket every dated item by day up front, so the calendar's repeated
+  // per-day lookups (pickers, counts, columns) are map reads rather than a
+  // fresh scan of both lists each time.
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, CalendarEntry[]>()
+    const push = (due: string, entry: CalendarEntry) => {
+      const key = formatDate(parseDate(due))
+      const bucket = map.get(key)
+      if (bucket) bucket.push(entry)
+      else map.set(key, [entry])
+    }
+    for (const item of workItems) if (item.due_date) push(item.due_date, { kind: 'cw', item })
+    for (const task of homeworkItems) if (task.due_date) push(task.due_date, { kind: 'hw', task })
+    return map
+  }, [workItems, homeworkItems])
+
+  const entriesForDay = useCallback(
+    (day: Date) => entriesByDay.get(formatDate(day)) ?? NO_ENTRIES,
+    [entriesByDay],
+  )
 
   const overdueItems = workItems.filter(f =>
     f.due_date && parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') !== 'completed'
@@ -328,10 +342,161 @@ export default function SchoolWorkManager({
     !t.due_date && !hwIsCompleted(t.my_status, t.require_check)
   )
 
-  const weekLabel = (() => {
-    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    return `${fmt(weekStart)} – ${fmt(weekEnd)}`
-  })()
+  // ── Item renderers ───────────────────────────────────────────────────────────
+  // Shared by the phone agenda and the desktop per-day columns, so both stay in
+  // sync: `compact` swaps the full wrapped-title row for a narrower stacked
+  // card (used for a desktop column that isn't the expanded day). Neither ever
+  // truncates a title — it wraps onto another line instead.
+
+  const renderCwItem = (item: WorkItem, compact: boolean) => {
+    const status = progressMap[item.id] || 'not_done'
+    const vs     = fileVS(status)
+    const earned = fileEarned(status, item.due_date, today)
+
+    if (compact) {
+      return (
+        <button
+          onClick={() => setDetailItem(item)}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${VSTATUS_BORDER[vs]}`}
+        >
+          <div className="flex items-start gap-1">
+            <button
+              onClick={e => { e.stopPropagation(); handleToggle(item) }}
+              className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+              aria-label="Change status"
+            >
+              {VSTATUS_ICON[vs]}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold leading-tight ${vs === 'done' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                {item.title}
+              </p>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-cyan-100 text-cyan-700">CW</span>
+                {item.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+                    <Star size={8} /> {item.edu_points}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </button>
+      )
+    }
+
+    return (
+      <div
+        onClick={() => setDetailItem(item)}
+        className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
+      >
+        <span className="self-stretch w-1 rounded-full bg-cyan-400 flex-shrink-0" />
+        <button
+          onClick={e => { e.stopPropagation(); handleToggle(item) }}
+          className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+          aria-label="Change status"
+        >
+          {VSTATUS_ICON[vs]}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold leading-snug ${vs === 'done' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+            {item.title}
+          </p>
+          {item.description && (
+            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{item.description}</p>
+          )}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CLASSWORK</span>
+            {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={earned} />}
+            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">{item.classroomTitle}</span>
+          </div>
+        </div>
+        <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
+      </div>
+    )
+  }
+
+  const renderHwItem = (task: StudentHomeroomTask, compact: boolean) => {
+    const vs     = hwVS(task.my_status, task.require_check)
+    const earned = hwEarned(task.my_status, task.require_check, task.due_date, today)
+    const saving = hwSavingId === task.id
+
+    if (compact) {
+      return (
+        <button
+          onClick={() => setDetailHomework(task)}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${VSTATUS_BORDER[vs]}`}
+        >
+          <div className="flex items-start gap-1">
+            <button
+              onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+              className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+              disabled={saving}
+              aria-label="Change status"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin text-slate-500" /> : VSTATUS_ICON[vs]}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className={`font-semibold leading-tight ${vs === 'done' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                {task.title}
+              </p>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="inline-block px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-700">HW</span>
+                {task.edu_points > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700">
+                    <Star size={8} /> {task.edu_points}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </button>
+      )
+    }
+
+    return (
+      <div
+        onClick={() => setDetailHomework(task)}
+        className="flex items-start gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 active:bg-slate-100 transition-colors"
+      >
+        <span className="self-stretch w-1 rounded-full bg-purple-400 flex-shrink-0" />
+        <button
+          onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
+          className="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+          disabled={saving}
+          aria-label="Change status"
+        >
+          {saving ? <Loader2 size={16} className="animate-spin text-slate-500" /> : VSTATUS_ICON[vs]}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold leading-snug ${vs === 'done' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+            {task.title}
+          </p>
+          {task.description && (
+            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
+          )}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
+            {task.timing && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-600">
+                <Clock size={10} /> {task.timing}
+              </span>
+            )}
+            {task.edu_points > 0 && <EduPointsBadge points={task.edu_points} earned={earned} />}
+            {task.require_check && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700">
+                <ShieldCheck size={10} /> Verified
+              </span>
+            )}
+            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">
+              {task.classroom_title ?? task.homeroom_name}
+            </span>
+          </div>
+        </div>
+        <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
+      </div>
+    )
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -349,241 +514,32 @@ export default function SchoolWorkManager({
     )
   }
 
-  const todayHeaderBg = { background: `linear-gradient(to bottom, ${themeGradFrom}, ${themeGradTo})` }
-  const todayBodyBg   = { backgroundColor: `${themeGradFrom}18` }  // ~10% opacity tint
+  const calendarTheme = themeFromGradient(themeGradFrom, themeGradTo)
 
   return (
     <div className="space-y-4">
 
-      {/* ── Week Navigation ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
-        <button
-          onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
-          className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
-          aria-label="Previous week"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <p className="text-xs font-semibold text-slate-600">{weekLabel}</p>
-        <button
-          onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null) }}
-          className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-500 transition-all"
-          aria-label="Next week"
-        >
-          <ChevronRight size={16} />
-        </button>
-      </div>
-
-      {/* ── Weekly Calendar ──────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm bg-white"
-      >
-        <div className="flex min-w-[560px]">
-          {weekDays.map((day, i) => {
-            const isToday    = isSameDay(day, today)
-            const isSelected = selectedDay ? isSameDay(day, selectedDay) : false
-            const dayFiles   = getFilesForDay(day)
-            const dayHw      = getHwForDay(day)
-            const isLastCol  = i === 6
-            const isWeekend  = i >= 5
-
-            return (
-              <div
-                key={day.toISOString()}
-                style={{ flex: isSelected ? 2 : 1, transition: 'flex 0.3s ease', minWidth: 0 }}
-                className={`flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''} ${isWeekend && !isSelected && !isToday ? 'bg-slate-50/50' : ''}`}
-              >
-                {/* Day header */}
-                <div
-                  onClick={() => setSelectedDay(prev => prev && isSameDay(prev, day) ? null : day)}
-                  className="px-1.5 py-2.5 text-center border-b border-slate-100 cursor-pointer select-none transition-colors"
-                  style={
-                    isToday ? todayHeaderBg
-                    : isSelected ? { background: 'linear-gradient(to bottom, #7c3aed, #6d28d9)' }
-                    : isWeekend ? {}
-                    : {}
-                  }
-                >
-                  <p className={`text-[10px] font-bold uppercase tracking-wide ${
-                    isSelected ? 'text-violet-100'
-                    : isToday  ? 'text-white/80'
-                    : isWeekend ? 'text-slate-400'
-                    : 'text-slate-400'
-                  }`}>
-                    {DAY_NAMES[i]}
-                  </p>
-                  <p className={`text-sm font-bold leading-tight ${
-                    isSelected || isToday ? 'text-white' : 'text-slate-700'
-                  }`}>
-                    {day.getDate()}
-                  </p>
-                  {/* No task count badge */}
-                </div>
-
-                {/* Day content */}
-                <div
-                  className={`p-1 space-y-1 flex-1 min-h-[96px] ${isSelected ? 'bg-violet-50/30' : ''}`}
-                  style={isToday && !isSelected ? todayBodyBg : {}}
-                >
-                  {dayFiles.map(item => {
-                    const status = progressMap[item.id] || 'not_done'
-                    const vs     = fileVS(status)
-                    const earned = fileEarned(status, item.due_date, today)
-                    return (
-                      <div
-                        key={item.id}
-                        className={`w-full text-[11px] p-1.5 rounded-lg border transition-all cursor-pointer ${VSTATUS_BORDER[vs]}`}
-                      >
-                        <div className="flex items-start gap-1">
-                          <button
-                            onClick={e => { e.stopPropagation(); handleToggle(item) }}
-                            className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
-                            title="Tap to cycle status"
-                          >
-                            {VSTATUS_ICON[vs]}
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); setDetailItem(item) }}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <p className={`font-medium leading-tight ${isSelected ? '' : 'truncate'} ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                              {item.title}
-                            </p>
-                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={earned} />}
-                              <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
-                                {item.classroomTitle}
-                              </span>
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {dayHw.map(task => {
-                    const vs     = hwVS(task.my_status, task.require_check)
-                    const earned = hwEarned(task.my_status, task.require_check, task.due_date, today)
-                    return (
-                      <div
-                        key={task.id}
-                        className={`w-full text-[11px] p-1.5 rounded-lg border transition-all ${VSTATUS_BORDER[vs]}`}
-                      >
-                        <div className="flex items-start gap-1">
-                          <button
-                            onClick={e => { e.stopPropagation(); cycleHwStatus(task) }}
-                            className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
-                            title="Tap to cycle status"
-                            disabled={hwSavingId === task.id}
-                          >
-                            {hwSavingId === task.id
-                              ? <Loader2 size={14} className="animate-spin text-slate-400" />
-                              : VSTATUS_ICON[vs]}
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); setDetailHomework(task) }}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <p className={`font-medium leading-tight ${isSelected ? '' : 'truncate'} ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              {task.edu_points > 0 && <EduPointsBadge points={task.edu_points} earned={earned} />}
-                              <span className={`text-slate-400 text-[10px] ${isSelected ? '' : 'truncate'}`}>
-                                {task.classroom_title ?? task.homeroom_name}
-                              </span>
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </motion.div>
-
-      {/* ── Selected Day Panel ───────────────────────────────────────────────── */}
-      <AnimatePresence initial={false}>
-        {selectedDay && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="rounded-2xl border border-violet-100 bg-violet-50/40 overflow-hidden"
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-violet-100">
-              <div className="flex items-center gap-2">
-                <CalendarDays size={14} className="text-violet-500" />
-                <h3 className="text-sm font-semibold text-violet-700">
-                  {selectedDay.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-                </h3>
-                <span className="text-xs text-violet-400 font-medium">
-                  {(getFilesForDay(selectedDay).length + getHwForDay(selectedDay).length) === 0
-                    ? 'No tasks'
-                    : `${getFilesForDay(selectedDay).length + getHwForDay(selectedDay).length} task${(getFilesForDay(selectedDay).length + getHwForDay(selectedDay).length) !== 1 ? 's' : ''}`}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedDay(null)}
-                className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-100 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {getFilesForDay(selectedDay).length === 0 && getHwForDay(selectedDay).length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle2 size={24} className="text-violet-200 mx-auto mb-2" />
-                <p className="text-sm text-violet-400">No tasks due on this day.</p>
-              </div>
-            ) : (
-              <div className="px-1 py-1">
-                {getFilesForDay(selectedDay).map(item => {
-                  const status = progressMap[item.id] || 'not_done'
-                  const vs     = fileVS(status)
-                  return (
-                    <div key={item.id} className="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors hover:bg-slate-50">
-                      <button onClick={() => handleToggle(item)} className="flex-shrink-0 hover:scale-110 transition-transform">
-                        {VSTATUS_ICON[vs]}
-                      </button>
-                      <button onClick={() => setDetailItem(item)} className="flex-1 min-w-0 text-left">
-                        <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{item.title}</p>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                          {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={fileEarned(status, item.due_date, today)} />}
-                          <span className="truncate">{item.classroomTitle}</span>
-                        </div>
-                      </button>
-                    </div>
-                  )
-                })}
-                {getHwForDay(selectedDay).map(task => {
-                  const vs = hwVS(task.my_status, task.require_check)
-                  return (
-                    <div key={task.id} className="flex items-center gap-3 py-2.5 px-3 rounded-xl transition-colors hover:bg-slate-50">
-                      <button onClick={() => cycleHwStatus(task)} className="flex-shrink-0 hover:scale-110 transition-transform" disabled={hwSavingId === task.id}>
-                        {hwSavingId === task.id ? <Loader2 size={14} className="animate-spin text-slate-400" /> : VSTATUS_ICON[vs]}
-                      </button>
-                      <button onClick={() => setDetailHomework(task)} className="flex-1 min-w-0 text-left">
-                        <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.title}</p>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                          {task.edu_points > 0 && <EduPointsBadge points={task.edu_points} earned={hwEarned(task.my_status, task.require_check, task.due_date, today)} />}
-                          <span className="truncate">{task.classroom_title ?? task.homeroom_name}</span>
-                        </div>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Calendar ──────────────────────────────────────────────────────────
+           The same week calendar the classroom Calendar tab uses: on phones a
+           Daily (default) / Weekly toggle over a full-width agenda, on desktop
+           seven columns with the selected day expanded. Themed with the
+           admin-set academics banner colours. ── */}
+      <WorkWeekCalendar<CalendarEntry>
+        weekStart={weekStart}
+        onWeekStartChange={setWeekStart}
+        selectedDay={selectedDay}
+        onSelectDay={setSelectedDay}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        itemsForDay={entriesForDay}
+        itemKey={entry => entry.kind === 'hw' ? entry.task.id : entry.item.id}
+        renderItem={(entry, compact) => entry.kind === 'hw'
+          ? renderHwItem(entry.task, compact)
+          : renderCwItem(entry.item, compact)}
+        emptyDayLabel="Nothing due on this day."
+        theme={calendarTheme}
+        rootClassName={ROUNDED_CARD}
+      />
 
       {/* ── Overdue Tasks ────────────────────────────────────────────────────── */}
       {(overdueItems.length > 0 || overdueHomework.length > 0) && (

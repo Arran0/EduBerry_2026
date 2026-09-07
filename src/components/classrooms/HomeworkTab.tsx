@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Plus, Loader2, Star, ShieldCheck, Send, ChevronLeft, ChevronRight,
+  Plus, Loader2, Star, ShieldCheck, Send, ChevronRight,
   Users, FileText, ExternalLink, Link2, BookOpen, Paperclip, Circle,
   CircleDot, CheckCircle2, CalendarDays, Upload, Youtube, Clock, User,
 } from 'lucide-react'
@@ -18,6 +18,9 @@ import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkFo
 import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
+import WorkWeekCalendar, {
+  CalendarViewMode, formatDate, getWeekStart, parseDate,
+} from '@/components/calendar/WorkWeekCalendar'
 import {
   SmartboardTask,
   SmartboardTaskStatus,
@@ -31,43 +34,12 @@ import {
 
 type WorkFile = ClassroomFile & { folder: ClassroomFolder }
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
+/** One dated row on the calendar — homework or a classwork file. */
+type CalendarEntry =
+  | { kind: 'hw'; task: SmartboardTask }
+  | { kind: 'cw'; file: WorkFile }
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  const day = d.getDay()
-  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
-  return d
-}
-
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + n)
-  return d
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
-}
-
-function parseDate(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-function formatDate(date: Date): string {
-  const yy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
-}
+const NO_ENTRIES: CalendarEntry[] = []
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
@@ -150,9 +122,11 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [showForm, setShowForm]   = useState(false)
   const [newHwDate, setNewHwDate] = useState('')
-  // The day column shown expanded (2x width). Defaults to today; clicking any
+  // The day column shown expanded (4x width). Defaults to today; clicking any
   // day header expands that day instead.
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  // Phone-only layout: one day at a time (default) or the whole week stacked.
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('daily')
 
   // Modals
   const [detailTask, setDetailTask]     = useState<SmartboardTask | null>(null)
@@ -242,32 +216,29 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   }
 
   // ── Calendar helpers ───────────────────────────────────────────────────────
-  const today   = new Date(); today.setHours(0, 0, 0, 0)
-  const weekEnd = addDays(weekStart, 6)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  // Bucket every dated item by day up front, so the calendar's repeated
+  // per-day lookups (pickers, counts, columns) are map reads rather than a
+  // fresh scan of both lists each time.
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, CalendarEntry[]>()
+    const push = (due: string, entry: CalendarEntry) => {
+      const key = formatDate(parseDate(due))
+      const bucket = map.get(key)
+      if (bucket) bucket.push(entry)
+      else map.set(key, [entry])
+    }
+    for (const task of tasks) if (task.due_date) push(task.due_date, { kind: 'hw', task })
+    for (const file of files) if (file.due_date) push(file.due_date, { kind: 'cw', file })
+    return map
+  }, [tasks, files])
 
-  const hwForDay  = (day: Date) => tasks.filter(t => t.due_date && isSameDay(parseDate(t.due_date), day))
-  const cwForDay  = (day: Date) => files.filter(f => f.due_date && isSameDay(parseDate(f.due_date), day))
+  const entriesForDay = useCallback(
+    (day: Date) => entriesByDay.get(formatDate(day)) ?? NO_ENTRIES,
+    [entriesByDay],
+  )
 
   const undatedHw = tasks.filter(t => !t.due_date)
   const undatedCw = files.filter(f => !f.due_date)
-
-  const weekLabel = (() => {
-    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    return `${fmt(weekStart)} – ${fmt(weekEnd)}`
-  })()
-
-  // The agenda always has a concrete day; the picker defaults to today when the
-  // shown week contains it, otherwise to the first day of that week.
-  const activeDay = selectedDay ?? (
-    today >= weekStart && today <= weekEnd ? today : weekStart
-  )
-  const agendaHw = hwForDay(activeDay)
-  const agendaCw = cwForDay(activeDay)
-  const agendaCount = agendaHw.length + agendaCw.length
-  const weekCount = weekDays.reduce((n, d) => n + hwForDay(d).length + cwForDay(d).length, 0)
-
-  const goToToday = () => { setWeekStart(getWeekStart(new Date())); setSelectedDay(today) }
 
   // ── Item renderers ────────────────────────────────────────────────────────
   // Shared by the phone agenda list and the desktop per-day columns below, so
@@ -519,202 +490,25 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         )}
       </AnimatePresence>
 
-      {/* ── Calendar ────────────────────────────────────────────────────────────
-           Phones (and tablets, up to `lg`) get a compact week picker over a
-           full-width schedule list, since seven narrow grid columns truncated
-           every title. Desktop has the room for all seven days side by side,
-           so it shows a column per day instead — the selected day's column
-           expands to 4x width with the same full row design as the phone
-           agenda, and every other column narrows to a compact wrapped card
-           (never truncated) rather than the old cut-off chips. ── */}
-      <div className="bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden">
-
-        {/* Week navigation — shared by both layouts */}
-        <div
-          className="flex items-center gap-2 px-2 py-2.5"
-          style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
-        >
-          <button
-            onClick={() => { setWeekStart(addDays(weekStart, -7)); setSelectedDay(null) }}
-            className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
-            aria-label="Previous week"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            onClick={goToToday}
-            className="flex-1 min-w-0 text-center leading-tight"
-            title="Jump to this week"
-          >
-            <span className="block text-sm font-bold text-white truncate">{weekLabel}</span>
-            <span className="block text-[10px] font-medium text-white/80">
-              {weekCount} item{weekCount !== 1 ? 's' : ''} this week · tap for today
-            </span>
-          </button>
-          <button
-            onClick={() => { setWeekStart(addDays(weekStart, 7)); setSelectedDay(null) }}
-            className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
-            aria-label="Next week"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        {/* ── Phone/tablet: day picker + agenda list ── */}
-        <div className="lg:hidden">
-          {/* Day picker */}
-          <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
-            {weekDays.map((day, i) => {
-              const isToday    = isSameDay(day, today)
-              const isActive   = isSameDay(day, activeDay)
-              const total      = hwForDay(day).length + cwForDay(day).length
-              return (
-                <button
-                  key={day.toISOString()}
-                  onClick={() => setSelectedDay(day)}
-                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-all active:scale-95 ${
-                    isActive
-                      ? 'text-white shadow-md'
-                      : isToday
-                        ? 'hover:brightness-95'
-                        : 'text-slate-700 hover:bg-white'
-                  }`}
-                  style={
-                    isActive
-                      ? { background: 'linear-gradient(to bottom, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }
-                      : isToday
-                        ? {
-                            color: 'var(--page-primary, #06b6d4)',
-                            background: 'var(--page-primary-light, #cffafe)',
-                            boxShadow: 'inset 0 0 0 1px var(--page-primary, #06b6d4)',
-                          }
-                        : undefined
-                  }
-                >
-                  <span className={`text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/80' : 'text-slate-500'}`}>
-                    {DAY_NAMES[i]}
-                  </span>
-                  <span className="text-[15px] font-bold leading-none">{day.getDate()}</span>
-                  <span className="h-1.5 flex items-center gap-0.5">
-                    {total > 0 && Array.from({ length: Math.min(total, 3) }).map((_, d) => (
-                      <span
-                        key={d}
-                        className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : ''}`}
-                        style={isActive ? undefined : { background: 'var(--page-primary, #06b6d4)' }}
-                      />
-                    ))}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Selected day heading */}
-          <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-800 truncate">
-              {activeDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-              {isSameDay(activeDay, today) && (
-                <span className="ml-2 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--page-primary, #06b6d4)' }}>Today</span>
-              )}
-            </h3>
-            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
-              {agendaCount} scheduled
-            </span>
-          </div>
-
-          {/* Schedule list — full width rows, titles wrap instead of truncating */}
-          <div className="divide-y divide-slate-100">
-            {agendaCount === 0 && (
-              <p className="px-4 py-7 text-center text-sm text-slate-500">Nothing scheduled for this day.</p>
-            )}
-            {agendaHw.map(task => renderHwItem(task, false))}
-            {agendaCw.map(file => renderCwItem(file, false))}
-          </div>
-
-          {/* Quick add for the selected day (staff only) */}
-          {canManage && (
-            <button
-              onClick={() => { setNewHwDate(formatDate(activeDay)); setShowForm(true) }}
-              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-semibold hover:brightness-95 border-t border-slate-100 transition-all"
-              style={{ color: 'var(--page-primary-dark, #0891b2)', background: 'var(--page-primary-light, #cffafe)' }}
-            >
-              <Plus size={14} /> Add homework for {activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-            </button>
-          )}
-        </div>
-
-        {/* ── Desktop: seven columns, the active day expanded to 4x width ── */}
-        <div className="hidden lg:flex">
-          {weekDays.map((day, i) => {
-            const isToday    = isSameDay(day, today)
-            const isExpanded = isSameDay(day, activeDay)
-            const isLastCol  = i === 6
-            const dayHw      = hwForDay(day)
-            const dayCw      = cwForDay(day)
-            const total      = dayHw.length + dayCw.length
-
-            return (
-              <div
-                key={day.toISOString()}
-                style={{ flex: isExpanded ? '4 4 0%' : '1 1 0%', transition: 'flex 320ms ease' }}
-                className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
-              >
-                {/* Day header — click to expand this day */}
-                <button
-                  onClick={() => setSelectedDay(day)}
-                  className={`px-2 py-2.5 text-center border-b transition-all ${
-                    isExpanded
-                      ? 'border-transparent'
-                      : isToday
-                        ? 'border-slate-200 hover:brightness-95'
-                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                  }`}
-                  style={
-                    isExpanded
-                      ? { background: 'linear-gradient(to bottom, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }
-                      : isToday
-                        ? { background: 'var(--page-primary-light, #cffafe)' }
-                        : undefined
-                  }
-                >
-                  <p className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : 'text-slate-500'}`} style={!isExpanded && isToday ? { color: 'var(--page-primary, #06b6d4)' } : undefined}>
-                    {DAY_NAMES[i]}
-                  </p>
-                  <p className={`font-bold leading-tight ${isExpanded ? 'text-lg text-white' : 'text-sm text-slate-700'}`}>
-                    {day.getDate()}
-                    {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
-                  </p>
-                  {isExpanded && (
-                    <span className="text-[10px] font-medium text-white/80">{total} scheduled</span>
-                  )}
-                </button>
-
-                {/* Day content */}
-                <div className={`flex-1 overflow-y-auto p-1.5 space-y-1.5 ${isExpanded ? 'max-h-[32rem] divide-y divide-slate-100 !space-y-0 !p-0' : 'max-h-[32rem] bg-slate-50/30'}`}>
-                  {total === 0 && (
-                    <p className={`text-slate-500 text-center ${isExpanded ? 'py-7 text-sm' : 'py-4 text-[10px]'}`}>
-                      {isExpanded ? 'Nothing scheduled for this day.' : '—'}
-                    </p>
-                  )}
-                  {dayHw.map(task => renderHwItem(task, !isExpanded))}
-                  {dayCw.map(file => renderCwItem(file, !isExpanded))}
-                  {canManage && (
-                    <button
-                      onClick={() => { setNewHwDate(formatDate(day)); setShowForm(true) }}
-                      className={`w-full flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 hover:border-[var(--page-primary,#06b6d4)] hover:text-[var(--page-primary,#06b6d4)] hover:bg-[var(--page-primary-light,#cffafe)] transition-colors ${
-                        isExpanded ? 'py-2.5 text-xs font-semibold m-1.5' : 'py-1'
-                      }`}
-                      title="Add homework for this day"
-                    >
-                      <Plus size={isExpanded ? 13 : 12} /> {isExpanded ? 'Add homework' : null}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* ── Calendar ──────────────────────────────────────────────────────────
+           The shared week calendar: on phones a Daily (default) / Weekly
+           toggle over a full-width agenda, on desktop seven columns with the
+           selected day expanded. See WorkWeekCalendar. ── */}
+      <WorkWeekCalendar<CalendarEntry>
+        weekStart={weekStart}
+        onWeekStartChange={setWeekStart}
+        selectedDay={selectedDay}
+        onSelectDay={setSelectedDay}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        itemsForDay={entriesForDay}
+        itemKey={entry => entry.kind === 'hw' ? entry.task.id : entry.file.id}
+        renderItem={(entry, compact) => entry.kind === 'hw'
+          ? renderHwItem(entry.task, compact)
+          : renderCwItem(entry.file, compact)}
+        onAddForDay={canManage ? day => { setNewHwDate(formatDate(day)); setShowForm(true) } : undefined}
+        addNoun="homework"
+      />
 
       {/* ── Empty state ──────────────────────────────────────────────────────── */}
       {tasks.length === 0 && files.length === 0 && (

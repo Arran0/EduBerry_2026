@@ -53,8 +53,12 @@ interface SmartboardHomeworkFormProps {
   homeroomId?: string | null
   /** Fixed classroom (the Homework tab). */
   classroomId?: string | null
-  /** Selectable classrooms (the board's weekly calendar). */
-  classrooms?: Classroom[]
+  /** Selectable classrooms (the board's weekly calendar, a homeroom calendar). */
+  classrooms?: Pick<Classroom, 'id' | 'title'>[]
+  /** Wording for the picker's "not mapped to a classroom" option. */
+  noClassroomLabel?: string
+  /** Explainer shown under the classroom picker. */
+  classroomHint?: string
   defaultTitle?: string
   defaultDueDate?: string
   /** Heading shown at the top of the box. */
@@ -74,6 +78,7 @@ interface SmartboardHomeworkFormProps {
  */
 export default function SmartboardHomeworkForm({
   createdBy, homeroomId, classroomId, classrooms,
+  noClassroomLabel = 'No classroom', classroomHint,
   defaultTitle = '', defaultDueDate = '', heading,
   task, onCancel, onCreated, onUpdated, onDeleted,
 }: SmartboardHomeworkFormProps) {
@@ -303,9 +308,12 @@ export default function SmartboardHomeworkForm({
                 onChange={e => setSelectedClassroom(e.target.value)}
                 className={INPUT_CLASS}
               >
-                <option value="">No classroom</option>
+                <option value="">{noClassroomLabel}</option>
                 {classrooms!.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
+              {classroomHint && (
+                <span className="block text-[11px] text-slate-500 mt-1 leading-snug">{classroomHint}</span>
+              )}
             </div>
           )}
         </div>

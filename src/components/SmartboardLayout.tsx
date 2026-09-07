@@ -101,7 +101,7 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
       {/* Slim board header (no app Navbar) */}
       <header className={`sticky top-0 z-30 backdrop-blur-xl border-b border-slate-200 shadow-sm transition-colors duration-300 ${scrolled ? 'bg-white/60' : 'bg-white'}`}>
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -149,7 +149,7 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
       </header>
 
       {/* key remounts page content after a long background period (matches ProtectedLayout) */}
-      <main key={dataRefreshKey} className="max-w-6xl mx-auto">
+      <main key={dataRefreshKey} className="w-full max-w-6xl mx-auto flex-1">
         {children}
       </main>
       <Footer />

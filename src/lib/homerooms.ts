@@ -323,6 +323,56 @@ export async function removeHomeroomMember(homeroomId: string, studentId: string
   return true
 }
 
+/**
+ * Every classroom that holds at least one student of these homerooms — the set
+ * a class teacher may map homework onto from the homeroom calendar. Returns
+ * plain classroom rows (id + title are what the pickers need), sorted by title.
+ */
+export async function fetchClassroomsHoldingHomeroomStudents(
+  homeroomIds: string[],
+): Promise<{ id: string; title: string }[]> {
+  if (homeroomIds.length === 0) return []
+
+  const { data: members, error: memErr } = await supabase
+    .from('homeroom_members')
+    .select('student_id')
+    .in('homeroom_id', homeroomIds)
+
+  if (memErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents members error:', memErr)
+    return []
+  }
+
+  const studentIds = [...new Set((members ?? []).map((m: { student_id: string }) => m.student_id))]
+  if (studentIds.length === 0) return []
+
+  const { data: enrolments, error: enrErr } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .in('user_id', studentIds)
+    .eq('role', 'student')
+
+  if (enrErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents enrolments error:', enrErr)
+    return []
+  }
+
+  const classroomIds = [...new Set((enrolments ?? []).map((e: { classroom_id: string }) => e.classroom_id))]
+  if (classroomIds.length === 0) return []
+
+  const { data: classrooms, error: clsErr } = await supabase
+    .from('classrooms')
+    .select('id, title')
+    .in('id', classroomIds)
+    .order('title', { ascending: true })
+
+  if (clsErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents classrooms error:', clsErr)
+    return []
+  }
+  return (classrooms ?? []) as { id: string; title: string }[]
+}
+
 // ============================================
 // Display Helpers
 // ============================================
