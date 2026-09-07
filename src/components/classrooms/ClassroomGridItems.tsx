@@ -18,6 +18,10 @@ interface ClassroomGridItemsProps {
   items: ClassroomGridItem[] | null
   skeletonCount: number
   heightClass: string
+  /** CSS width (e.g. from `classroomItemWidth`) applied to every slot — the
+   *  parent grid is a `flex flex-wrap justify-center` row, not CSS Grid, so
+   *  a trailing partial row centres instead of hugging the left edge. */
+  itemWidth: string
   showTeacher?: boolean
   navigatingId: string | null
   onNavigate: (id: string) => void
@@ -37,7 +41,7 @@ interface ClassroomGridItemsProps {
  * themselves as the real grid closes in around them.
  */
 export default function ClassroomGridItems({
-  items, skeletonCount, heightClass, showTeacher, navigatingId, onNavigate,
+  items, skeletonCount, heightClass, itemWidth, showTeacher, navigatingId, onNavigate,
 }: ClassroomGridItemsProps) {
   const count = items ? items.length : skeletonCount
 
@@ -47,6 +51,7 @@ export default function ClassroomGridItems({
         <motion.div
           key={`slot-${i}`}
           layout
+          style={{ width: itemWidth, flexGrow: 0, flexShrink: 0 }}
           exit={{ scale: 0, opacity: 0 }}
           transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         >
