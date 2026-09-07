@@ -27,6 +27,7 @@ import {
 import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
+import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 
 // ─── Grade colour palette — green → yellow → orange → red ────────────────────
 function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
@@ -81,26 +82,90 @@ interface ReportCardsSectionProps {
   isStudent: boolean
 }
 
+/** Breathing room left between a focused field and the top of the keyboard. */
+const KEYBOARD_GAP = 12
+
 function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectionProps) {
   const [expanded, setExpanded] = useState(false)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
   const sectionRef = useRef<HTMLElement>(null)
   const searchParams = useSearchParams()
+  const { open: keyboardOpen } = useKeyboardInset()
 
   useEffect(() => {
     fetchBranding().then(setBranding).catch(() => {})
   }, [])
 
-  // Deep-link support, e.g. /academics?section=reportcards — opens the panel
-  // and scrolls it into view.
+  // Deep-link support, e.g. /academics?section=reportcards — opens the panel;
+  // the reveal effect below scrolls it into view like a tap on View does.
   useEffect(() => {
     if (searchParams.get('section') !== 'reportcards') return
     setExpanded(true)
-    sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [searchParams])
 
+  // Opening the panel brings it into view. The section's own scroll-margin
+  // keeps its header clear of the sticky navbar, and `block: 'start'` targets
+  // the header — which doesn't move as the panel springs open below it, so one
+  // scroll is enough for the whole animation.
+  useEffect(() => {
+    if (!expanded) return
+    const raf = requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [expanded])
+
+  /**
+   * The app runs with `interactiveWidget: 'resizes-visual'`, so the soft
+   * keyboard shrinks only the visual viewport — the layout viewport keeps its
+   * full height and `scrollIntoView` can't tell that a field is hidden behind
+   * the keyboard. Measure the overlap against the visual viewport instead and
+   * scroll by exactly that much.
+   */
+  const liftFocusedAboveKeyboard = useCallback(() => {
+    const vv = window.visualViewport
+    const el = document.activeElement as HTMLElement | null
+    if (!vv || !el || !sectionRef.current?.contains(el)) return
+    // Visual-viewport bottom edge in layout coords = the top of the keyboard.
+    const overlap = el.getBoundingClientRect().bottom + KEYBOARD_GAP - (vv.offsetTop + vv.height)
+    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'smooth' })
+  }, [])
+
+  // The staff search field autofocuses as the panel opens, so the keyboard
+  // arrives before any focusin listener below could be attached — catch that
+  // case when the keyboard itself reports open. The delay lets both the reveal
+  // scroll above and the keyboard's own animation settle, so the overlap is
+  // measured against final geometry rather than a frame mid-flight.
+  useEffect(() => {
+    if (!expanded || !keyboardOpen) return
+    const t = window.setTimeout(liftFocusedAboveKeyboard, 420)
+    return () => window.clearTimeout(t)
+  }, [expanded, keyboardOpen, liftFocusedAboveKeyboard])
+
+  // Fields focused later (remarks, filters) get the same treatment, once the
+  // keyboard has finished animating in.
+  useEffect(() => {
+    const section = sectionRef.current
+    if (!section || !expanded) return
+    let t = 0
+    const onFocusIn = () => {
+      window.clearTimeout(t)
+      t = window.setTimeout(liftFocusedAboveKeyboard, 320)
+    }
+    section.addEventListener('focusin', onFocusIn)
+    return () => {
+      window.clearTimeout(t)
+      section.removeEventListener('focusin', onFocusIn)
+    }
+  }, [expanded, liftFocusedAboveKeyboard])
+
   return (
-    <section ref={sectionRef} id="report-cards">
+    <section
+      ref={sectionRef}
+      id="report-cards"
+      // Clears the sticky navbar (h-16 plus the notch inset) when scrolled to.
+      style={{ scrollMarginTop: 'calc(4rem + env(safe-area-inset-top) + 0.75rem)' }}
+    >
       {/* ── Section header — mirrors the other academics headers exactly ── */}
       <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
         <div className="flex items-center gap-3 min-w-0">
@@ -162,6 +227,15 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Scroll room for the keyboard. This panel is the last thing on the
+          page, so without it there is nothing left to scroll and the fields at
+          the bottom stay pinned under the keyboard. `--keyboard-inset` is
+          rewritten every viewport frame (see useKeyboardInset), so the spacer
+          tracks the keyboard's open/close animation with no re-render. */}
+      {expanded && (
+        <div aria-hidden style={{ height: 'var(--keyboard-inset, 0px)' }} />
+      )}
     </section>
   )
 }
