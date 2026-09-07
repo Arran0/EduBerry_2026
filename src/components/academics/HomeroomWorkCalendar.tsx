@@ -9,14 +9,14 @@ import {
 import { Homeroom, fetchClassroomsHoldingHomeroomStudents } from '@/lib/homerooms'
 import { SmartboardTask, fetchHomeroomCalendarTasks } from '@/lib/smartboard'
 import { Classroom } from '@/lib/classrooms'
-
-/** Only the fields the picker and row labels need. */
-type MappableClassroom = Pick<Classroom, 'id' | 'title'>
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import ModalShell from '@/components/ui/ModalShell'
 import WorkWeekCalendar, {
-  CalendarViewMode, ROUNDED_CARD, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
+  CalendarViewMode, BLEED_CARD_INSET, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
+
+/** Only the fields the picker and row labels need. */
+type MappableClassroom = Pick<Classroom, 'id' | 'title'>
 
 const NO_TASKS: SmartboardTask[] = []
 
@@ -34,11 +34,13 @@ interface HomeroomWorkCalendarProps {
 }
 
 /**
- * The class teacher's side of the School Work Calendar: the homework set for
- * their homeroom, laid out with the same week calendar students and classrooms
- * see. New homework can be mapped onto any classroom that holds homeroom
- * students, which scopes it to that classroom's students — leave it on the
- * whole homeroom to reach everyone.
+ * The class teacher's side of the School Work Calendar: the homework their
+ * homeroom students carry, laid out with the same week calendar the students
+ * and classrooms see.
+ *
+ * Every homework is mapped onto a classroom — one of those holding at least one
+ * homeroom student. That classroom decides both where the homework shows up
+ * (its own Calendar tab) and who sees it: only students enrolled there.
  */
 export default function HomeroomWorkCalendar({
   userId, homerooms,
@@ -193,7 +195,10 @@ export default function HomeroomWorkCalendar({
   if (!activeHomeroom) return null
 
   const theme = themeFromGradient(themeGradFrom, themeGradTo)
-  const classroomHint = 'Only students enrolled in the chosen classroom see this homework. Leave it on the whole homeroom to reach every student.'
+  const classroomHint = 'The homework appears in this classroom, and only its students see it on their calendars.'
+  // Every homework is mapped to a classroom, so with none on offer (no homeroom
+  // student is enrolled anywhere yet) there is nothing to create against.
+  const canCreate = classrooms.length > 0
 
   const upsertTask = (task: SmartboardTask) =>
     setTasks(prev => prev.some(t => t.id === task.id)
@@ -230,15 +235,24 @@ export default function HomeroomWorkCalendar({
         )}
         <button
           onClick={() => { setNewHwDate(''); setShowForm(true) }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0"
+          disabled={!canCreate}
+          title={canCreate ? undefined : 'No classroom yet holds a student from this homeroom'}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 disabled:cursor-not-allowed"
           style={{ background: themeGradFrom }}
         >
           <Plus size={13} /> New Homework
         </button>
       </div>
 
+      {!loading && !canCreate && (
+        <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          Homework is set against a classroom, and no classroom holds a student from{' '}
+          <span className="font-semibold text-slate-700">{activeHomeroom.name}</span> yet.
+        </p>
+      )}
+
       {loading ? (
-        <div className="rounded-2xl border border-slate-100 bg-white p-8 text-center">
+        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-slate-100 bg-white p-8 text-center">
           <div className="spinner mx-auto mb-3" />
           <p className="text-sm text-slate-500">Loading homeroom calendar…</p>
         </div>
@@ -254,15 +268,15 @@ export default function HomeroomWorkCalendar({
             itemsForDay={tasksForDay}
             itemKey={task => task.id}
             renderItem={renderTask}
-            onAddForDay={day => { setNewHwDate(formatDate(day)); setShowForm(true) }}
+            onAddForDay={canCreate ? day => { setNewHwDate(formatDate(day)); setShowForm(true) } : undefined}
             addNoun="homework"
             emptyDayLabel="No homework set for this day."
             theme={theme}
-            rootClassName={ROUNDED_CARD}
+            rootClassName={BLEED_CARD_INSET}
           />
 
           {tasks.length === 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
+            <div className="-mx-4 sm:mx-0 bg-white border-y sm:border sm:rounded-2xl border-slate-200 p-10 text-center">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: theme.primaryLight }}>
                 <CalendarDays size={26} style={{ color: theme.primary }} />
               </div>
@@ -274,7 +288,7 @@ export default function HomeroomWorkCalendar({
           )}
 
           {undated.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="-mx-4 sm:mx-0 bg-white border-y sm:border sm:rounded-2xl border-slate-200 overflow-hidden">
               <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
                 <BookOpen size={13} className="text-slate-500" />
                 <h3 className="text-sm font-semibold text-slate-700">No Due Date</h3>
@@ -298,7 +312,7 @@ export default function HomeroomWorkCalendar({
               createdBy={userId}
               homeroomId={activeHomeroom.id}
               classrooms={classrooms}
-              noClassroomLabel={`Whole homeroom — ${activeHomeroom.name}`}
+              requireClassroom
               classroomHint={classroomHint}
               defaultDueDate={newHwDate}
               onCancel={() => { setShowForm(false); setNewHwDate('') }}
@@ -378,7 +392,7 @@ export default function HomeroomWorkCalendar({
               createdBy={userId}
               homeroomId={activeHomeroom.id}
               classrooms={classrooms}
-              noClassroomLabel={`Whole homeroom — ${activeHomeroom.name}`}
+              requireClassroom
               classroomHint={classroomHint}
               task={editTask}
               onCancel={() => setEditTask(null)}

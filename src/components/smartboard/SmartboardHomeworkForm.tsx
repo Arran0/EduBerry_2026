@@ -55,10 +55,11 @@ interface SmartboardHomeworkFormProps {
   classroomId?: string | null
   /** Selectable classrooms (the board's weekly calendar, a homeroom calendar). */
   classrooms?: Pick<Classroom, 'id' | 'title'>[]
-  /** Wording for the picker's "not mapped to a classroom" option. */
-  noClassroomLabel?: string
   /** Explainer shown under the classroom picker. */
   classroomHint?: string
+  /** Drops the "no classroom" option — the homework must name one. Used by the
+   *  class teacher's homeroom calendar, where a classroom decides who sees it. */
+  requireClassroom?: boolean
   defaultTitle?: string
   defaultDueDate?: string
   /** Heading shown at the top of the box. */
@@ -78,7 +79,7 @@ interface SmartboardHomeworkFormProps {
  */
 export default function SmartboardHomeworkForm({
   createdBy, homeroomId, classroomId, classrooms,
-  noClassroomLabel = 'No classroom', classroomHint,
+  classroomHint, requireClassroom = false,
   defaultTitle = '', defaultDueDate = '', heading,
   task, onCancel, onCreated, onUpdated, onDeleted,
 }: SmartboardHomeworkFormProps) {
@@ -87,7 +88,12 @@ export default function SmartboardHomeworkForm({
   const [description, setDescription] = useState(task?.description ?? '')
   const [dueDate, setDueDate] = useState(task?.due_date ?? defaultDueDate)
   const [timing, setTiming] = useState(task?.timing ?? '')
-  const [selectedClassroom, setSelectedClassroom] = useState(task?.classroom_id ?? classroomId ?? '')
+  // When a classroom is mandatory, a new homework starts on the first one
+  // offered; an older unmapped task being edited stays blank so the teacher has
+  // to choose deliberately.
+  const [selectedClassroom, setSelectedClassroom] = useState(
+    task?.classroom_id ?? classroomId ?? (requireClassroom && !task ? classrooms?.[0]?.id ?? '' : ''),
+  )
   const [requireCheck, setRequireCheck] = useState(task?.require_check ?? false)
   const [requiresSubmission, setRequiresSubmission] = useState(task?.requires_submission ?? false)
   const [eduPoints, setEduPoints] = useState(task?.edu_points ?? 1)
@@ -108,6 +114,7 @@ export default function SmartboardHomeworkForm({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dueDateError, setDueDateError] = useState(false)
+  const [classroomError, setClassroomError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Tracking modal (edit mode only)
@@ -175,6 +182,8 @@ export default function SmartboardHomeworkForm({
     if (!title.trim() || saving) return
     if (!dueDate) { setDueDateError(true); return }
     setDueDateError(false)
+    if (requireClassroom && !effectiveClassroom) { setClassroomError(true); return }
+    setClassroomError(false)
     setSaving(true)
 
     const customPoints = bonusPoints !== '' ? Number(bonusPoints) : null
@@ -305,12 +314,18 @@ export default function SmartboardHomeworkForm({
               <FieldLabel>Classroom</FieldLabel>
               <select
                 value={selectedClassroom}
-                onChange={e => setSelectedClassroom(e.target.value)}
-                className={INPUT_CLASS}
+                onChange={e => { setSelectedClassroom(e.target.value); setClassroomError(false) }}
+                className={`${INPUT_CLASS} ${classroomError ? '!border-red-400 focus:!ring-red-500/10' : ''}`}
+                required={requireClassroom}
               >
-                <option value="">{noClassroomLabel}</option>
+                {requireClassroom
+                  ? !selectedClassroom && <option value="" disabled>Choose a classroom…</option>
+                  : <option value="">No classroom</option>}
                 {classrooms!.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
+              {classroomError && (
+                <span className="block text-[11px] text-red-600 font-semibold mt-1">Pick the classroom this homework belongs to</span>
+              )}
               {classroomHint && (
                 <span className="block text-[11px] text-slate-500 mt-1 leading-snug">{classroomHint}</span>
               )}

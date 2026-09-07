@@ -617,15 +617,15 @@ export default function AcademicsPage() {
                 chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
                 title="School Work Calendar"
               />
-              <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
-                {loading ? (
-                  <p className="text-sm text-slate-500">Loading…</p>
-                ) : isStudent ? (
-                  <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
-                ) : (
-                  <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
-                )}
-              </div>
+              {/* No card wrapper — the calendar brings its own chrome and runs
+                  edge-to-edge on phones (it cancels this container's gutter). */}
+              {loading ? (
+                <p className="text-sm text-slate-500">Loading…</p>
+              ) : isStudent ? (
+                <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+              ) : (
+                <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+              )}
             </section>
           )}
 

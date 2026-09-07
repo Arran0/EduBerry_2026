@@ -20,7 +20,7 @@ import {
   upsertTaskCompletion,
 } from '@/lib/smartboard'
 import WorkWeekCalendar, {
-  CalendarViewMode, ROUNDED_CARD, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
+  CalendarViewMode, BLEED_CARD_INSET, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function EduPointsBadge({
 function CalendarSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden">
+      <div className={BLEED_CARD_INSET}>
         {/* Week bar */}
         <div className="flex items-center justify-between gap-2 px-3 py-3 bg-slate-200/70">
           <div className="w-6 h-6 bg-white/60 rounded-full" />
@@ -538,12 +538,12 @@ export default function SchoolWorkManager({
           : renderCwItem(entry.item, compact)}
         emptyDayLabel="Nothing due on this day."
         theme={calendarTheme}
-        rootClassName={ROUNDED_CARD}
+        rootClassName={BLEED_CARD_INSET}
       />
 
       {/* ── Overdue Tasks ────────────────────────────────────────────────────── */}
       {(overdueItems.length > 0 || overdueHomework.length > 0) && (
-        <div className="rounded-2xl border border-red-100 bg-red-50/40 overflow-hidden">
+        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-red-100 bg-red-50/40 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-red-100">
             <AlertTriangle size={14} className="text-red-500" />
             <h3 className="text-sm font-semibold text-red-700">Overdue</h3>
@@ -619,7 +619,7 @@ export default function SchoolWorkManager({
 
       {/* ── Undated Tasks ────────────────────────────────────────────────────── */}
       {(undatedItems.length > 0 || undatedHomework.length > 0) && (
-        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden">
+        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-slate-100 bg-white overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
             <Clock size={14} className="text-slate-400" />
             <h3 className="text-sm font-semibold text-slate-600">No Due Date</h3>

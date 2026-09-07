@@ -101,15 +101,17 @@ interface WorkWeekCalendarProps<T> {
   emptyDayLabel?: string
   theme?: CalendarTheme
   /** Chrome for the outer card. The default runs edge-to-edge on phones (only
-   *  top/bottom borders) for a full-bleed page; pass ROUNDED_CARD when the
-   *  calendar sits inside a padded card of its own. */
+   *  top/bottom borders) for a full-bleed page; pass BLEED_CARD_INSET when the
+   *  page keeps a gutter the calendar should break out of. */
   rootClassName?: string
 }
 
-/** Full-bleed on phones, rounded card from `lg` up — the page-level default. */
+/** Full-bleed on phones, rounded card from `lg` up — for a page whose own
+ *  container already drops its gutter on phones (the classroom tabs). */
 export const BLEED_CARD = 'bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden'
-/** Rounded and bordered at every width, for use inside an existing card. */
-export const ROUNDED_CARD = 'bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden'
+/** Full-bleed on phones by cancelling a 1rem page gutter, rounded card from
+ *  `sm` up — for a page that keeps its padding at every width (academics). */
+export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-0 sm:border sm:rounded-2xl sm:shadow-sm overflow-hidden'
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -347,9 +349,9 @@ export default function WorkWeekCalendar<T>({
                     </span>
                   </button>
 
-                  {items.length === 0 ? (
-                    <p className="px-4 py-3 text-center text-xs text-slate-400">Nothing scheduled.</p>
-                  ) : (
+                  {/* No "nothing scheduled" filler — the header's count says
+                      so, and the add button follows it directly. */}
+                  {items.length > 0 && (
                     <div className="divide-y divide-slate-100">
                       {items.map(item => (
                         <React.Fragment key={itemKey(item)}>{renderItem(item, false)}</React.Fragment>
@@ -378,7 +380,9 @@ export default function WorkWeekCalendar<T>({
               style={{ flex: isExpanded ? '4 4 0%' : '1 1 0%', transition: 'flex 320ms ease' }}
               className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
             >
-              {/* Day header — click to expand this day */}
+              {/* Day header — click to expand this day. Every column renders
+                  the same three lines at the same sizes, so expanding one day
+                  never leaves the header row ragged. */}
               <button
                 onClick={() => onSelectDay(day)}
                 className={`px-2 py-2.5 text-center border-b transition-all ${
@@ -402,21 +406,22 @@ export default function WorkWeekCalendar<T>({
                 >
                   {DAY_NAMES[i]}
                 </p>
-                <p className={`font-bold leading-tight ${isExpanded ? 'text-lg text-white' : 'text-sm text-slate-700'}`}>
+                <p className={`text-sm font-bold leading-tight ${isExpanded ? 'text-white' : 'text-slate-700'}`}>
                   {day.getDate()}
                   {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
                 </p>
-                {isExpanded && (
-                  <span className="text-[10px] font-medium text-white/80">{items.length} scheduled</span>
-                )}
+                <span className={`block text-[10px] font-medium leading-tight ${isExpanded ? 'text-white/80' : 'text-slate-400'}`}>
+                  {isExpanded ? `${items.length} scheduled` : items.length}
+                </span>
               </button>
 
               {/* Day content */}
               <div className={`flex-1 overflow-y-auto max-h-[32rem] ${isExpanded ? 'divide-y divide-slate-100' : 'p-1.5 space-y-1.5 bg-slate-50/30'}`}>
-                {items.length === 0 && (
-                  <p className={`text-slate-500 text-center ${isExpanded ? 'py-7 text-sm' : 'py-4 text-[10px]'}`}>
-                    {isExpanded ? emptyDayLabel : '—'}
-                  </p>
+                {/* An empty narrow column says nothing — its header already
+                    shows a count of 0, so the add button sits straight under
+                    the header instead of below a placeholder dash. */}
+                {items.length === 0 && isExpanded && (
+                  <p className="text-slate-500 text-center py-7 text-sm">{emptyDayLabel}</p>
                 )}
                 {items.map(item => (
                   <React.Fragment key={itemKey(item)}>{renderItem(item, !isExpanded)}</React.Fragment>
