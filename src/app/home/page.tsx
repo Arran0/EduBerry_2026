@@ -25,7 +25,6 @@ import {
   Bus,
   FileText,
   LayoutGrid,
-  Image as ImageIcon,
   Shield,
   BarChart3,
   Users,
@@ -325,10 +324,7 @@ export default function HomePage() {
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
-  const [moreAppsImage, setMoreAppsImage] = useState('')
-  const [editingMoreAppsBg, setEditingMoreAppsBg] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
-  const [appsLum, setAppsLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
   const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
@@ -399,8 +395,6 @@ export default function HomePage() {
           setBannerReady(true)
         }
       })
-    supabase.from('site_settings').select('value').eq('key', 'more_apps_bg').single()
-      .then(({ data }) => { if (data?.value) { try { const v = JSON.parse(data.value); if (v.imageUrl) setMoreAppsImage(v.imageUrl) } catch {} } })
   }, [])
 
   useEffect(() => {
@@ -410,32 +404,6 @@ export default function HomePage() {
       setBannerLum(null)
     }
   }, [welcomeBanner])
-
-  useEffect(() => {
-    if (moreAppsImage) {
-      sampleImageLuminance(moreAppsImage, 1.0).then(setAppsLum)
-    } else {
-      setAppsLum(null)
-    }
-  }, [moreAppsImage])
-
-  const handleMoreAppsBgUpload = async (file: File) => {
-    const compressed = await compressImageIfNeeded(file)
-    const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const path = `site/more_apps_bg_${Date.now()}_${safeName}`
-    const { data, error } = await supabase.storage.from('classroom-files').upload(path, compressed, { upsert: true, cacheControl: '31536000' })
-    if (error) { alert('Upload failed: ' + error.message); return }
-    const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
-    setMoreAppsImage(publicUrl)
-    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: publicUrl }) }, { onConflict: 'key' })
-    setEditingMoreAppsBg(false)
-  }
-
-  const removeMoreAppsImage = async () => {
-    setMoreAppsImage('')
-    await supabase.from('site_settings').upsert({ key: 'more_apps_bg', value: JSON.stringify({ imageUrl: '' }) }, { onConflict: 'key' })
-    setEditingMoreAppsBg(false)
-  }
 
   const handleBannerUpload = async (file: File) => {
     const compressed = await compressImageIfNeeded(file)
@@ -964,8 +932,6 @@ export default function HomePage() {
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
   const bannerOnDark = bannerLum !== null && bannerLum < 0.4
-  // appsLum===null means default light gradient → dark text
-  const appsOnDark = appsLum !== null && appsLum < 0.4
 
   interface AppEntry {
     key: string
@@ -1735,53 +1701,10 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* ── More Apps (full-bleed) ── */}
+          {/* ── More Apps (full-bleed). Background is a fixed white, matching
+              the sticky footer below — no custom background image here. ── */}
           <motion.div variants={itemVariants}>
-            <div
-              className="relative w-full overflow-hidden"
-              style={moreAppsImage ? {} : { background: 'linear-gradient(160deg, #ffffff 0%, #f4f6fb 100%)' }}
-            >
-              {/* Custom background image */}
-              {moreAppsImage && (
-                <img src={moreAppsImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              )}
-
-              {/* Admin: pencil pinned top-right */}
-              {isAdmin && (
-                <button
-                  onClick={() => setEditingMoreAppsBg(p => !p)}
-                  className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm flex items-center justify-center transition-all"
-                >
-                  <Pencil size={13} className="text-white" />
-                </button>
-              )}
-
-              {/* Admin: inline editor bar */}
-              {isAdmin && editingMoreAppsBg && (
-                <div className="relative z-10 bg-black/20 backdrop-blur-md border-b border-white/15 px-4 sm:px-6 lg:px-8 py-3">
-                  <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2.5">
-                    <label className="flex items-center gap-1.5 px-4 py-1.5 bg-white/25 hover:bg-white/40 text-white text-[11px] font-semibold rounded-full cursor-pointer border border-white/30 transition-colors">
-                      <ImageIcon size={12} /> Upload photo
-                      <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleMoreAppsBgUpload(f) }} />
-                    </label>
-                    {moreAppsImage && (
-                      <button
-                        onClick={removeMoreAppsImage}
-                        className="px-4 py-1.5 bg-white/15 hover:bg-white/25 text-white/80 text-[11px] rounded-full border border-white/20 transition-colors"
-                      >
-                        Remove photo
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setEditingMoreAppsBg(false)}
-                      className="ml-auto px-4 py-1.5 text-white/70 hover:text-white text-[11px] font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              )}
-
+            <div className="relative w-full overflow-hidden bg-white">
               {/* Content */}
               <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
                 <SectionHeading
@@ -1789,7 +1712,6 @@ export default function HomePage() {
                   chipClass="bg-gradient-to-br from-sky-500 to-indigo-600"
                   eyebrow="Shortcuts"
                   title="More Apps"
-                  dark={appsOnDark}
                 />
 
                 <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
@@ -1827,18 +1749,6 @@ export default function HomePage() {
 
         </motion.div>
       </div>
-      <footer className="relative pt-4 pb-4 text-center text-xs text-slate-400 border-t border-slate-100 bg-white">
-        {/* white pseudo-fill — covers the bottom padding gap so the page gradient doesn't bleed through */}
-        <span className="pointer-events-none absolute inset-x-0 top-full bg-white" style={{ height: 'calc(4rem + env(safe-area-inset-bottom))' }} aria-hidden />
-        Powered by{' '}
-        <a href="https://edzee.org/" target="_blank" rel="noopener noreferrer" className="font-medium text-slate-500 hover:text-slate-700 transition-colors">Edzee</a>
-        <span className="mx-2 text-slate-300">·</span>
-        <a href="https://edzee.org/terms" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Terms</a>
-        <span className="mx-2 text-slate-300">·</span>
-        <a href="https://edzee.org/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Privacy</a>
-        <span className="mx-2 text-slate-300">·</span>
-        <a href="https://edzee.org/cookies" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Cookies</a>
-      </footer>
 
       {/* Opens an OD/Leave notification's application in place — the same
           compact popup the Staff Attendance app uses, without leaving Home.

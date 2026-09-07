@@ -6,6 +6,7 @@ import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
+import Footer from '@/components/Footer'
 import LeaveNotificationsListener from '@/components/notifications/LeaveNotificationsListener'
 import AttendancePunchPrompt from '@/components/attendance/AttendancePunchPrompt'
 
@@ -162,6 +163,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
       */}
       <main key={dataRefreshKey} className="md:pb-0" style={{ paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom)))' }}>
         {children}
+        <Footer />
       </main>
     </>
   )
