@@ -245,9 +245,11 @@ export default function HomeroomWorkCalendar({
       </div>
 
       {!loading && !canCreate && (
-        <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-          Homework is set against a classroom, and no classroom holds a student from{' '}
-          <span className="font-semibold text-slate-700">{activeHomeroom.name}</span> yet.
+        <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
+          Homework is set against a classroom, and none could be found holding a student from{' '}
+          <span className="font-semibold text-slate-700">{activeHomeroom.name}</span>. Check that
+          its students are enrolled in their classrooms, and that your admin has applied the latest
+          database update.
         </p>
       )}
 

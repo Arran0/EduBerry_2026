@@ -327,11 +327,48 @@ export async function removeHomeroomMember(homeroomId: string, studentId: string
  * Every classroom that holds at least one student of these homerooms — the set
  * a class teacher may map homework onto from the homeroom calendar. Returns
  * plain classroom rows (id + title are what the pickers need), sorted by title.
+ *
+ * This runs through the `get_homeroom_classrooms` RPC because the join is
+ * invisible to a class teacher from the client: `classroom_members` and
+ * `classrooms` are only selectable for classrooms you belong to, created, or
+ * coordinate, and a class teacher is none of those for the classes their
+ * students attend with other teachers. The RPC is SECURITY DEFINER and checks
+ * the caller owns the homeroom (see
+ * supabase-migrations/add_homeroom_classrooms_rpc.sql).
+ *
+ * Until that migration is applied the RPC is missing, so we fall back to the
+ * direct queries — correct for admins and principals, and for the classrooms a
+ * teacher created themselves, which is all RLS would have allowed anyway.
  */
 export async function fetchClassroomsHoldingHomeroomStudents(
   homeroomIds: string[],
 ): Promise<{ id: string; title: string }[]> {
   if (homeroomIds.length === 0) return []
+
+  const viaRpc = await Promise.all(
+    homeroomIds.map(id => supabase.rpc('get_homeroom_classrooms', { p_homeroom_id: id })),
+  )
+
+  // PGRST202 = the function isn't deployed yet; anything else is a real error
+  // worth surfacing rather than silently degrading.
+  const missingRpc = viaRpc.some(r => r.error?.code === 'PGRST202')
+  if (!missingRpc) {
+    const byId = new Map<string, { id: string; title: string }>()
+    for (const res of viaRpc) {
+      if (res.error) {
+        console.error('fetchClassroomsHoldingHomeroomStudents rpc error:', res.error)
+        continue
+      }
+      for (const row of (res.data ?? []) as { id: string; title: string }[]) byId.set(row.id, row)
+    }
+    return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
+  }
+
+  console.warn(
+    'get_homeroom_classrooms RPC not found — falling back to direct queries. ' +
+    'Apply supabase-migrations/add_homeroom_classrooms_rpc.sql so class teachers ' +
+    'can see the classrooms their homeroom students attend.',
+  )
 
   const { data: members, error: memErr } = await supabase
     .from('homeroom_members')
