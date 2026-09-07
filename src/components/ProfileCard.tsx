@@ -311,7 +311,9 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   // Everyone can see staff contact buttons
                   const canSeeStaffActions = !isStudentProfile
                   const showAcademicRecord = canSeeStudentActions
-                  const showTaskCalendar = canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
+                  // Drivers don't use the task manager — they're routed straight to
+                  // /driver and never see it — so their profile card skips this button.
+                  const showTaskCalendar = canSeeStaffActions && !isDriverProfile && hasCalendarAccess(viewerProfile, targetProfile)
                   const showAttendanceBtn = isStudentProfile
                     ? canSeeStudentActions
                     : canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)

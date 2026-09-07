@@ -1173,7 +1173,9 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned)
+  return (data ?? []).filter(r =>
+    r.staff && !r.staff.attendance_hidden && !r.staff.is_banned && STAFF_ROLES.includes(r.staff.role)
+  )
 }
 
 /** Student attendance status values for the given homerooms on a date. Used

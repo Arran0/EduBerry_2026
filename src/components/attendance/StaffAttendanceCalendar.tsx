@@ -105,11 +105,20 @@ interface Props {
   /** Stretch to fill the parent's height (day cells grow) instead of sizing to
    *  content. Used when the calendar shares a matched-height row with the report. */
   fill?: boolean
+  /**
+   * Overrides how the month's records are fetched, in place of the default
+   * fetchMyStaffAttendance(staffId, ...) — for a person whose attendance
+   * doesn't live in staff_attendance_records (ground support staff, whose
+   * rows live in support_staff_attendance and get adapted into this shape
+   * by the caller). Leave apps are skipped for these — support staff have
+   * no leave_applications rows to look up.
+   */
+  fetchRecords?: (staffId: string, year: number, month: number) => Promise<StaffAttendanceRecord[]>
 }
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode, refreshKey = 0, initialYear, initialMonth,
-  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false,
+  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false, fetchRecords,
 }: Props) {
   // Server clock in the school's timezone — "today" decides which days can turn
   // Absent, so it is not read off the device. The device date stands in only
@@ -157,17 +166,17 @@ export default function StaffAttendanceCalendar({
   const load = useCallback(async () => {
     setLoading(true)
     const [recs, hols, nonWorking, apps] = await Promise.all([
-      fetchMyStaffAttendance(staffId, year, month),
+      (fetchRecords ?? fetchMyStaffAttendance)(staffId, year, month),
       fetchHolidays(year, month),
       fetchNonWorkingDays(year, month),
-      fetchLeaveApplicationsForApplicant(staffId),
+      fetchRecords ? Promise.resolve([]) : fetchLeaveApplicationsForApplicant(staffId),
     ])
     setRecords(recs)
     setHolidays(hols)
     setNonWorkingDays(nonWorking)
     setLeaveApps(apps)
     setLoading(false)
-  }, [staffId, year, month])
+  }, [staffId, year, month, fetchRecords])
 
   useEffect(() => { load() }, [load, refreshKey])
 
