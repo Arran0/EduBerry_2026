@@ -107,8 +107,10 @@ export function SalaryRegisterDoc({ branding, cycle, records }: {
   const rows = records.map(r => {
     const adj = adjustments(r)
     return {
-      name: r.staff?.full_name ?? r.support_staff?.full_name ?? '—',
-      role: r.staff ? capitalize(r.staff.role) : r.support_staff ? 'Support Staff' : '—',
+      // A deleted account still owes its row a name — the one frozen when
+      // this cycle was locked (see freezeCycleRecordSnapshots).
+      name: r.staff?.full_name ?? r.support_staff?.full_name ?? r.person_name_snapshot ?? '—',
+      role: r.staff ? capitalize(r.staff.role) : r.support_staff ? 'Support Staff' : (r.person_role_snapshot ? capitalize(r.person_role_snapshot) : '—'),
       base: pdfINR(Number(r.base_amount)),
       adj: adj === 0 ? '—' : (adj > 0 ? '+' : '') + pdfINR(Math.abs(adj)).replace('Rs. ', '') + (adj < 0 ? ' (-)' : ''),
       net: pdfINR(salaryNet(r)),

@@ -49,6 +49,11 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
     half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
+    // Legacy driver-only cycles predate lock-time snapshotting — see the
+    // matching adapter in app/more/bus/payroll/[cycleId]/page.tsx.
+    person_name_snapshot: null, person_role_snapshot: null,
+    working_days_snapshot: null, leave_snapshot: null, late_snapshot: null, half_day_snapshot: null,
+    bonus_points_snapshot: null,
     items: r.items, cycle: (r.cycle as unknown as SalaryCycle) ?? null,
   }
 }

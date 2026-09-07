@@ -70,6 +70,12 @@ function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
     half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
+    // This legacy driver-only cycle predates lock-time snapshotting (see
+    // src/lib/salary.ts) — its own driver_payroll_records table has no such
+    // columns, so a locked cycle here still recomputes live as it always has.
+    person_name_snapshot: null, person_role_snapshot: null,
+    working_days_snapshot: null, leave_snapshot: null, late_snapshot: null, half_day_snapshot: null,
+    bonus_points_snapshot: null,
     items: r.items, staff: r.driver ?? null,
   }
 }

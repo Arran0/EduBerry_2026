@@ -37,6 +37,7 @@ import {
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
   recordPersonId, recordPersonName, recordPersonLeft, recordPersonKind,
   generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle,
+  freezeCycleRecordSnapshots, CycleRecordSnapshot,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
@@ -229,12 +230,20 @@ export default function SalaryCycleDetailPage() {
     // A cycle is generated for everyone on the roster at the time it was run,
     // so months later it still carries rows for people who have since resigned
     // (staff/driver) or left (support staff) — and for anyone an admin has
-    // hidden from the salary app. Neither should be paid, and neither should be
-    // counted in the month's totals, so they come out here rather than being
-    // left for the eye to skip. The rows stay in the database; they are simply
-    // not this sheet's business.
+    // hidden from the salary app. While the cycle is still OPEN, neither
+    // should be paid nor counted in the month's totals, so they come out here
+    // rather than being left for the eye to skip — the rows stay in the
+    // database; they are simply not this sheet's business yet.
+    //
+    // A CLOSED cycle is history: it must show every record exactly as it was
+    // at the moment it was locked, whether the person behind it has since
+    // resigned, been banned, changed role, or been deleted outright. So this
+    // exclusion — and the roster sync above — only ever apply to an open
+    // cycle; a closed one is never filtered.
     const hidden = new Set(hiddenIds)
-    const recs = cycleRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
+    const recs = c && c.status === 'closed'
+      ? cycleRecs
+      : cycleRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
     setExcludedCount(cycleRecs.length - recs.length)
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
@@ -327,6 +336,7 @@ export default function SalaryCycleDetailPage() {
   const computedRows = useMemo(() => {
     const out: Record<string, RowComputed> = {}
     if (!cycle) return out
+    const closed = cycle.status === 'closed'
     // Non-working days shrink the payable days for everyone (whole-school
     // rows only, same as holidays' is_default-only scope for payroll);
     // holidays no longer do — see computeMonthlyStats for the same rule on
@@ -341,15 +351,30 @@ export default function SalaryCycleDetailPage() {
     for (const r of records) {
       const personId = recordPersonId(r)
       const base = baseMap[personId]
-      const derived = computeStaffAttendanceStats(
-        personId, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
-        schoolToday ?? undefined, grace,
-      )
-      // A hand-typed override wins over the derived figure; null falls back to it.
-      const workingDays = r.working_days_override ?? calendarDays
-      const leaveCount = r.leave_override ?? derived.leaveCount
-      const lateCount = r.late_override ?? derived.lateCount
-      const halfDayCount = r.half_day_override ?? derived.halfDayCount
+      // A closed cycle whose lock already froze every one of these counts
+      // (see closeCycle's freezeCycleRecordSnapshots call) has no business
+      // re-deriving them from *today's* attendance, holidays or grace
+      // settings — that would let a change made after the lock quietly move
+      // a figure that was supposed to be fixed. Only fall back to a live
+      // derive when a count was never frozen: an open cycle (still a live
+      // preview by design), or a cycle closed before this snapshotting
+      // existed.
+      const frozen = closed
+        && r.working_days_snapshot != null && r.leave_snapshot != null
+        && r.late_snapshot != null && r.half_day_snapshot != null
+      const derived = frozen
+        ? { leaveCount: 0, lateCount: 0, halfDayCount: 0 }
+        : computeStaffAttendanceStats(
+            personId, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+            schoolToday ?? undefined, grace,
+          )
+      // A hand-typed override wins outright (it's an explicit correction,
+      // made and re-affirmed by an admin); next the value frozen at lock
+      // time; only then the live derive.
+      const workingDays = r.working_days_override ?? r.working_days_snapshot ?? calendarDays
+      const leaveCount = r.leave_override ?? r.leave_snapshot ?? derived.leaveCount
+      const lateCount = r.late_override ?? r.late_snapshot ?? derived.lateCount
+      const halfDayCount = r.half_day_override ?? r.half_day_snapshot ?? derived.halfDayCount
 
       const row = computePayrollRow({
         baseAmount: Number(r.base_amount) || 0,
@@ -369,7 +394,8 @@ export default function SalaryCycleDetailPage() {
         lopHalfDayRs: Math.round(row.lopFromHalfDay * row.salaryPerDay),
         pf: r.pf_amount_override ?? row.pf,
         esi: r.esi_amount_override ?? row.esi,
-        bonusPoints: bonusPoints[personId] ?? 0, bonusAmount: bonusAmounts[personId] ?? 0,
+        bonusPoints: (closed && r.bonus_points_snapshot != null) ? r.bonus_points_snapshot : (bonusPoints[personId] ?? 0),
+        bonusAmount: bonusAmounts[personId] ?? 0,
       }
     }
     return out
@@ -657,6 +683,7 @@ export default function SalaryCycleDetailPage() {
     if (!del.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${del.error}`); return }
 
     const items: { record_id: string; label: string; amount: number }[] = []
+    const snapshots: CycleRecordSnapshot[] = []
     for (const r of records) {
       const c = computedRows[r.id]
       if (!c) continue
@@ -666,9 +693,29 @@ export default function SalaryCycleDetailPage() {
       if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
       if (c.lopHalfDayRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopHalfDay, amount: -c.lopHalfDayRs })
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
+
+      // Freeze who this record is for and its attendance-derived counts, so
+      // once locked nothing about this row recomputes again — see
+      // computedRows and load()'s roster filter for the read side of this.
+      // A field the admin had already hand-overridden is left out: that
+      // value is already fixed and typing it into the snapshot too would
+      // just duplicate it.
+      snapshots.push({
+        id: r.id,
+        person_name_snapshot: recordPersonName(r) || null,
+        person_role_snapshot: r.support_staff_id ? 'support' : (r.staff?.role ?? r.person_role_snapshot ?? null),
+        ...(r.working_days_override == null ? { working_days_snapshot: c.workingDays } : {}),
+        ...(r.leave_override == null ? { leave_snapshot: c.leaveCount } : {}),
+        ...(r.late_override == null ? { late_snapshot: c.lateCount } : {}),
+        ...(r.half_day_override == null ? { half_day_snapshot: c.halfDayCount } : {}),
+        bonus_points_snapshot: c.bonusPoints,
+      })
     }
     const ins = await bulkInsertSalaryItems(items)
     if (!ins.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${ins.error}`); return }
+
+    const snap = await freezeCycleRecordSnapshots(snapshots)
+    if (!snap.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${snap.error}`); return }
 
     const st = await bulkSetSalaryRecordStatus(recordIds, 'approved')
     if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
@@ -936,7 +983,11 @@ export default function SalaryCycleDetailPage() {
                           ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role }
                           : r.support_staff
                             ? { full_name: r.support_staff.full_name, email: null, role: r.support_staff.designation || 'Support Staff' }
-                            : undefined
+                            // Account deleted since this cycle was locked — the name/role
+                            // frozen at lock time is all a payslip can still say about them.
+                            : r.person_name_snapshot
+                              ? { full_name: r.person_name_snapshot, email: null, role: r.person_role_snapshot || '' }
+                              : undefined
                         const key = `payslip-${r.id}`
                         const open = expanded.has(r.id)
                         const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
@@ -988,7 +1039,15 @@ export default function SalaryCycleDetailPage() {
                                   <div className="min-w-0 flex-1 leading-tight">
                                     <p className="text-[11px] font-semibold text-[#18181B] truncate">{recordPersonName(r) || 'Staff'}</p>
                                     <p className="text-[9px] text-[#71717A] truncate">
-                                      {r.staff ? getDisplayRole(r.staff) : r.support_staff ? (r.support_staff.designation || 'Support Staff') : ''}
+                                      {r.staff
+                                        ? getDisplayRole(r.staff)
+                                        : r.support_staff
+                                          ? (r.support_staff.designation || 'Support Staff')
+                                          // Profile/support-staff row is gone (account deleted) — the role
+                                          // frozen at lock time is all that's left to describe them.
+                                          : r.person_role_snapshot
+                                            ? `${r.person_role_snapshot.charAt(0).toUpperCase()}${r.person_role_snapshot.slice(1)} · Deleted`
+                                            : 'Deleted'}
                                     </p>
                                   </div>
                                   {!hasBank && !r.pay_by_cash && (

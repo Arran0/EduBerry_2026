@@ -547,28 +547,41 @@ export async function fetchMonthlyPayrollStats(
     fetchDriverCycleRecordsFor(driverCycles.map(c => c.id)),
   ])
 
-  // A cycle keeps its rows for whoever has since resigned (staff/driver) or
-  // left (support staff), and for anyone since hidden from the salary app —
-  // neither is on payroll any more. This has to match exactly what the cycle
-  // detail page itself excludes from its sheet (see its `load`) and what
-  // fetchCycleTallies excludes from the Pay Cycles list — mirroring
-  // recordPersonLeft in src/lib/salary.ts, against this module's narrower
-  // join shape — or this dashboard reports a different headcount for the
-  // same month than every other screen that reads the same records.
-  const left = (r: LeftJoin): boolean => {
+  // An OPEN cycle keeps its rows for whoever has since resigned (staff/driver),
+  // left (support staff), been deleted outright, or since been hidden from the
+  // salary app — neither is on payroll any more. This has to match exactly
+  // what the cycle detail page itself excludes from its sheet while open (see
+  // its `load`) and what fetchCycleTallies excludes from the Pay Cycles list —
+  // mirroring recordPersonLeft in src/lib/salary.ts, against this module's
+  // narrower join shape — or this dashboard reports a different headcount
+  // than every other screen that reads the same records.
+  //
+  // A CLOSED cycle is history and keeps every row regardless — same as both
+  // of those screens once locked, so a resignation, ban, role change or
+  // deleted account after the lock can never shrink a past month's headcount.
+  const left = (r: LeftJoin & { staff_id?: string | null; support_staff_id?: string | null }): boolean => {
     if (r.staff) return !!r.staff.is_banned
     if (r.support_staff) return !r.support_staff.is_active
+    // A profile-backed row (staff_id/support_staff_id present in the select)
+    // with neither joined side populated means the account was hard-deleted
+    // since — treat it the same as resigned/left. driver rows have no such
+    // fields in their select and always keep the legacy behavior below.
+    if ('staff_id' in r) return !r.staff_id && !r.support_staff_id
     return false
   }
-  const onRoster = <T extends LeftJoin & { person_id: string }>(r: T) =>
-    !left(r) && !ctx.hidden.has(r.person_id)
+  const closedCycleIds = new Set(
+    [...staffCycles, ...driverCycles].filter(c => c.status === 'closed').map(c => c.id),
+  )
+  const onRoster = <T extends LeftJoin & { person_id: string; cycle_id: string }>(r: T) =>
+    closedCycleIds.has(r.cycle_id) || (!left(r) && !ctx.hidden.has(r.person_id))
 
   // A staff-cycle row is for a profile (staff_id) or a support staff member
-  // (support_staff_id) — never both, never neither (see salary_records'
-  // person-check constraint) — so this is exactly recordPersonId's logic,
-  // just against the raw untyped row shape this module reads.
+  // (support_staff_id) — at most one, per salary_records' person-check
+  // constraint; a hard-deleted person's row now has neither — so this is
+  // exactly recordPersonId's logic, just against the raw untyped row shape
+  // this module reads.
   const onRosterStaffRows = staffRows
-    .map(r => ({ ...r, person_id: (r.staff_id ?? r.support_staff_id) as string }))
+    .map(r => ({ ...r, person_id: (r.staff_id ?? r.support_staff_id ?? '') as string }))
     .filter(onRoster)
   const onRosterDriverRows = driverRows.map(r => ({ ...r, person_id: r.driver_id })).filter(onRoster)
 

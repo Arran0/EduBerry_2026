@@ -68,6 +68,18 @@ export interface SalaryRecord {
   half_day_override: number | null
   pf_amount_override: number | null
   esi_amount_override: number | null
+  // Frozen once, when the cycle is locked (see freezeCycleRecordSnapshots) —
+  // "who this was for" and "what their attendance-derived counts were" at
+  // that moment, so a hard-deleted account, a later ban, a role change, or an
+  // attendance edit made after the lock can never move a closed cycle's
+  // figures. Null on an open record, or on one locked before this existed.
+  person_name_snapshot: string | null
+  person_role_snapshot: string | null
+  working_days_snapshot: number | null
+  leave_snapshot: number | null
+  late_snapshot: number | null
+  half_day_snapshot: number | null
+  bonus_points_snapshot: number | null
   created_at: string
   updated_at: string
   items?: SalaryRecordItem[]
@@ -79,27 +91,45 @@ export interface SalaryRecord {
 /** The id this record is actually about, whichever of the two is set. Every
  *  lookup keyed "by person" (base salary, bank account, attendance, bonus
  *  points) uses this — never staff_id directly, since a support-staff
- *  record's staff_id is null. */
+ *  record's staff_id is null. Empty for a record whose person was since
+ *  hard-deleted (both ids go null with them — see recordPersonLeft); such a
+ *  record still carries person_name_snapshot for display. */
 export function recordPersonId(r: Pick<SalaryRecord, 'staff_id' | 'support_staff_id'>): string {
   return r.staff_id ?? r.support_staff_id ?? ''
 }
 
-/** Display name regardless of which kind of person the record is for. */
-export function recordPersonName(r: Pick<SalaryRecord, 'staff' | 'support_staff'>): string {
-  return r.staff?.full_name ?? r.support_staff?.full_name ?? ''
+/** Display name regardless of which kind of person the record is for — falls
+ *  back to the name frozen at lock time once the profile/support-staff row
+ *  behind the record is gone. */
+export function recordPersonName(r: Pick<SalaryRecord, 'staff' | 'support_staff' | 'person_name_snapshot'>): string {
+  return r.staff?.full_name ?? r.support_staff?.full_name ?? r.person_name_snapshot ?? ''
 }
 
-/** True once the person has left — resigned staff/driver, or support staff marked inactive. */
-export function recordPersonLeft(r: Pick<SalaryRecord, 'staff' | 'support_staff'>): boolean {
+/**
+ * True once the person has left — resigned staff/driver, support staff
+ * marked inactive, or (staff_id and support_staff_id both null) the account
+ * was deleted outright. Only meaningful for deciding whether an OPEN cycle's
+ * roster still includes them; a CLOSED cycle keeps every record regardless
+ * of what this returns — see the cycle detail page's `load()`.
+ */
+export function recordPersonLeft(
+  r: Pick<SalaryRecord, 'staff' | 'support_staff' | 'staff_id' | 'support_staff_id'>,
+): boolean {
   if (r.staff) return !!r.staff.is_banned
   if (r.support_staff) return !r.support_staff.is_active
-  return false
+  return !r.staff_id && !r.support_staff_id
 }
 
-/** Which of the three rosters this record's person belongs to — for filtering the cycle sheet. */
-export function recordPersonKind(r: Pick<SalaryRecord, 'support_staff_id' | 'staff'>): 'staff' | 'driver' | 'support' {
+/** Which of the three rosters this record's person belongs to — for filtering the cycle sheet.
+ *  Falls back to the role frozen at lock time when the profile is gone. */
+export function recordPersonKind(
+  r: Pick<SalaryRecord, 'support_staff_id' | 'staff' | 'person_role_snapshot'>,
+): 'staff' | 'driver' | 'support' {
   if (r.support_staff_id) return 'support'
-  return r.staff?.role === 'driver' ? 'driver' : 'staff'
+  const role = r.staff?.role ?? r.person_role_snapshot
+  if (role === 'driver') return 'driver'
+  if (role === 'support') return 'support'
+  return 'staff'
 }
 
 /** The pay-cycle columns an admin may type over by hand. */
@@ -313,24 +343,29 @@ export interface CycleTally { total: number; paid: number }
 
 /**
  * Per-cycle record and paid-record counts, so the list can flag fully-disbursed
- * cycles. A cycle keeps its rows for whoever has since resigned (staff/driver)
- * or left (support staff), and for anyone since hidden from the salary app —
- * neither is on payroll any more, so neither is counted here, matching exactly
- * what the cycle detail page itself excludes from the sheet (see its `load`).
+ * cycles. An OPEN cycle keeps its rows out of this count for whoever has since
+ * resigned (staff/driver), left (support staff), been deleted outright, or
+ * since been hidden from the salary app — neither is on payroll any more,
+ * matching exactly what the cycle detail page itself excludes from the sheet
+ * while it's still open (see its `load`). A CLOSED cycle is history: every
+ * record it had at lock time counts, whatever has happened to the person
+ * since — matching the same page's behavior once locked.
  */
 export async function fetchCycleTallies(): Promise<Record<string, CycleTally>> {
   const [{ data, error }, hiddenIds] = await Promise.all([
     supabase
       .from('salary_records')
       .select('cycle_id, status, staff_id, support_staff_id, ' +
-        'staff:profiles!staff_id(is_banned), support_staff:support_staff!support_staff_id(is_active)'),
+        'staff:profiles!staff_id(is_banned), support_staff:support_staff!support_staff_id(is_active), ' +
+        'cycle:salary_cycles!cycle_id(status)'),
     fetchHiddenSalaryMemberIds(),
   ])
   if (error) { console.error('fetchCycleTallies failed:', error); return {} }
   const hidden = new Set(hiddenIds)
   const out: Record<string, CycleTally> = {}
-  for (const r of (data ?? []) as unknown as (Pick<SalaryRecord, 'cycle_id' | 'status' | 'staff_id' | 'support_staff_id' | 'staff' | 'support_staff'>)[]) {
-    if (recordPersonLeft(r) || hidden.has(recordPersonId(r))) continue
+  for (const r of (data ?? []) as unknown as (Pick<SalaryRecord, 'cycle_id' | 'status' | 'staff_id' | 'support_staff_id' | 'staff' | 'support_staff'> & { cycle: { status: SalaryCycleStatus } | null })[]) {
+    const closed = r.cycle?.status === 'closed'
+    if (!closed && (recordPersonLeft(r) || hidden.has(recordPersonId(r)))) continue
     const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
     t.total += 1
     if (r.status === 'paid') t.paid += 1
@@ -537,6 +572,41 @@ export async function updateSalaryRecordOverrides(
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('salary_records').update(patch).eq('id', recordId)
   if (error) { console.error('updateSalaryRecordOverrides failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/** One record's figures, frozen onto it the moment a cycle is locked — see freezeCycleRecordSnapshots. */
+export interface CycleRecordSnapshot {
+  id: string
+  person_name_snapshot: string | null
+  person_role_snapshot: string | null
+  /** Omitted for a field the admin had already hand-overridden before the lock — that value is already fixed. */
+  working_days_snapshot?: number
+  leave_snapshot?: number
+  late_snapshot?: number
+  half_day_snapshot?: number
+  bonus_points_snapshot: number
+}
+
+/**
+ * Freeze "who this was for" and the attendance-derived counts behind PF/ESI/LOP
+ * onto every record when a cycle is locked, alongside bulkInsertSalaryItems
+ * snapshotting the rupee amounts. Without this, a closed cycle's Working
+ * Days/Leave/Late/Half Day/bonus-point columns kept recomputing from
+ * whatever attendance, holidays and task points look like *today* — and a
+ * hard-deleted or since-renamed person's row went blank. One update per
+ * record (values differ per row, so this can't be a single bulk query), same
+ * as the other per-record loops in this module.
+ */
+export async function freezeCycleRecordSnapshots(
+  snapshots: CycleRecordSnapshot[],
+): Promise<{ success: boolean; error?: string }> {
+  if (snapshots.length === 0) return { success: true }
+  const results = await Promise.all(snapshots.map(({ id, ...patch }) =>
+    supabase.from('salary_records').update(patch).eq('id', id),
+  ))
+  const failed = results.find(r => r.error)
+  if (failed?.error) { console.error('freezeCycleRecordSnapshots failed:', failed.error); return { success: false, error: failed.error.message } }
   return { success: true }
 }
 
