@@ -96,6 +96,7 @@ export default function StudentProfileManagerPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [gradeFilter, setGradeFilter] = useState('all')
+  const [sectionFilter, setSectionFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sortBy, setSortBy] = useState<SortKey>('name_asc')
   const [showBulkImport, setShowBulkImport] = useState(false)
@@ -149,20 +150,28 @@ export default function StudentProfileManagerPage() {
     )
   })
 
-  // Counts for the grade filter dropdown — computed off the search-filtered
-  // set (not grade/status-filtered) so switching the grade filter never moves
-  // the numbers the admin is reading right before they click it.
+  // Counts for the grade/section filter dropdowns — computed off the
+  // search-filtered set (not grade/section/status-filtered) so switching one
+  // filter never moves the numbers the admin is reading right before they
+  // click it. Sections aren't a fixed list like grades are, so the dropdown
+  // only ever offers the ones actually in use, alphabetically.
   const gradeCounts: Record<string, number> = {}
+  const sectionCounts: Record<string, number> = {}
   for (const p of searchedProfiles) {
-    const key = String(p.grade ?? '')
-    if (key) gradeCounts[key] = (gradeCounts[key] ?? 0) + 1
+    const gradeKey = String(p.grade ?? '')
+    if (gradeKey) gradeCounts[gradeKey] = (gradeCounts[gradeKey] ?? 0) + 1
+    if (p.section) sectionCounts[p.section] = (sectionCounts[p.section] ?? 0) + 1
   }
+  const sectionFilterOptions = Object.keys(sectionCounts).sort()
 
   const matchesStatus = (isBanned: boolean) =>
     statusFilter === 'all' || (statusFilter === 'inactive' ? isBanned : !isBanned)
 
   const filteredProfiles = searchedProfiles
-    .filter(p => (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) && matchesStatus(!!p.is_banned))
+    .filter(p =>
+      (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) &&
+      (sectionFilter === 'all' || sectionFilter === (p.section ?? '')) &&
+      matchesStatus(!!p.is_banned))
     .sort((a, b) => {
       if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
       if (sortBy === 'grade') return (a.grade ?? 0) - (b.grade ?? 0) || (a.full_name ?? '').localeCompare(b.full_name ?? '')
@@ -170,8 +179,8 @@ export default function StudentProfileManagerPage() {
       return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
     })
 
-  const filtersActive = gradeFilter !== 'all' || statusFilter !== 'all'
-  const clearFilters = () => { setGradeFilter('all'); setStatusFilter('all') }
+  const filtersActive = gradeFilter !== 'all' || sectionFilter !== 'all' || statusFilter !== 'all'
+  const clearFilters = () => { setGradeFilter('all'); setSectionFilter('all'); setStatusFilter('all') }
 
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
@@ -321,8 +330,11 @@ export default function StudentProfileManagerPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap flex-shrink-0">
-                <div className="relative">
+              {/* flex-nowrap + overflow-x-auto rather than flex-wrap: these
+                  stay one line at every width, phone included — a row that
+                  scrolls sideways instead of one that wraps to a second row. */}
+              <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-hide w-full sm:w-auto min-w-0">
+                <div className="relative flex-shrink-0">
                   <Filter size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={gradeFilter}
@@ -338,16 +350,27 @@ export default function StudentProfileManagerPage() {
                 </div>
 
                 <select
+                  value={sectionFilter}
+                  onChange={e => setSectionFilter(e.target.value)}
+                  className="flex-shrink-0 px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="all">All Sections</option>
+                  {sectionFilterOptions.map(s => (
+                    <option key={s} value={s}>Section {s} ({sectionCounts[s]})</option>
+                  ))}
+                </select>
+
+                <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                  className="px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  className="flex-shrink-0 px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
                 >
                   <option value="all">All Statuses</option>
                   <option value="active">Active Only</option>
                   <option value="inactive">Banned Only</option>
                 </select>
 
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <ArrowUpDown size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={sortBy}
@@ -361,7 +384,7 @@ export default function StudentProfileManagerPage() {
                 {filtersActive && (
                   <button
                     onClick={clearFilters}
-                    className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                    className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
                   >
                     <X size={11} /> Clear
                   </button>

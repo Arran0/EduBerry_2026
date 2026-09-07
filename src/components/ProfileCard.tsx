@@ -226,7 +226,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
             <>
               {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
               <div
-                className="relative h-16 flex-shrink-0"
+                className="relative h-32 flex-shrink-0"
                 style={profileBannerUrl
                   ? { backgroundImage: `url(${profileBannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                   : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }

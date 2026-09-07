@@ -480,8 +480,11 @@ export default function StaffProfileManagerPage() {
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap flex-shrink-0">
-                <div className="relative">
+              {/* flex-nowrap + overflow-x-auto rather than flex-wrap: these
+                  stay one line at every width, phone included — a row that
+                  scrolls sideways instead of one that wraps to a second row. */}
+              <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-hide w-full sm:w-auto min-w-0">
+                <div className="relative flex-shrink-0">
                   <Filter size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={roleFilter}
@@ -499,14 +502,14 @@ export default function StaffProfileManagerPage() {
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                  className="px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  className="flex-shrink-0 px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
                 >
                   <option value="all">All Statuses</option>
                   <option value="active">Active Only</option>
                   <option value="inactive">Resignation Only</option>
                 </select>
 
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <ArrowUpDown size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={sortBy}
@@ -520,7 +523,7 @@ export default function StaffProfileManagerPage() {
                 {filtersActive && (
                   <button
                     onClick={clearFilters}
-                    className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                    className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
                   >
                     <X size={11} /> Clear
                   </button>
