@@ -7,7 +7,6 @@ import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
-import { useRouter } from 'next/navigation'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   Briefcase,
@@ -161,7 +160,6 @@ const itemVariants = {
 export default function StaffProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
   const { openProfileCard } = useProfileCard()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
@@ -443,7 +441,6 @@ export default function StaffProfileManagerPage() {
           title="Staff Profile Manager"
           subtitle="Manage all non-student staff with full CBSE HR records"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}
@@ -480,16 +477,17 @@ export default function StaffProfileManagerPage() {
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
               </div>
 
-              {/* flex-nowrap + overflow-x-auto rather than flex-wrap: these
-                  stay one line at every width, phone included — a row that
-                  scrolls sideways instead of one that wraps to a second row. */}
-              <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-hide w-full sm:w-auto min-w-0">
-                <div className="relative flex-shrink-0">
-                  <Filter size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+              {/* Every control shrinks to share the row rather than wrapping
+                  or scrolling — each is flex-1 with its own text truncated,
+                  so all of them stay readable-but-tight on one line even on
+                  a narrow phone. */}
+              <div className="flex items-center gap-1 flex-nowrap w-full sm:w-auto min-w-0">
+                <div className="relative flex-1 min-w-0">
+                  <Filter size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={roleFilter}
                     onChange={e => setRoleFilter(e.target.value)}
-                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
                   >
                     {ROLE_FILTER_OPTIONS.map(o => (
                       <option key={o.value} value={o.value}>
@@ -502,30 +500,31 @@ export default function StaffProfileManagerPage() {
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                  className="flex-shrink-0 px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  className="flex-1 min-w-0 px-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
                 >
                   <option value="all">All Statuses</option>
                   <option value="active">Active Only</option>
                   <option value="inactive">Resignation Only</option>
                 </select>
 
-                <div className="relative flex-shrink-0">
-                  <ArrowUpDown size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                <div className="relative flex-1 min-w-0">
+                  <ArrowUpDown size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                   <select
                     value={sortBy}
                     onChange={e => setSortBy(e.target.value as SortKey)}
-                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
                   >
-                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
 
                 {filtersActive && (
                   <button
                     onClick={clearFilters}
-                    className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                    aria-label="Clear filters"
+                    className="flex-shrink-0 flex items-center gap-1 px-1.5 py-1 text-[9px] sm:text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-md sm:rounded-lg transition-colors"
                   >
-                    <X size={11} /> Clear
+                    <X size={10} /> <span className="hidden sm:inline">Clear</span>
                   </button>
                 )}
               </div>
