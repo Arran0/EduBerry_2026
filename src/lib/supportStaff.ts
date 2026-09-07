@@ -43,8 +43,10 @@ export interface SupportStaff {
   bank_name: string | null
   ifsc_code: string | null
   notes: string | null
-  /** false = left the school. The row stays so past attendance still has a name. */
+  /** false = resigned from the school. The row stays so past attendance still has a name. */
   is_active: boolean
+  /** When is_active was last set false — see setSupportStaffActive. Null while active, or on a resignation recorded before this column existed. */
+  resigned_at: string | null
   /** Excluded from the attendance list, counts and statistics. */
   attendance_hidden: boolean
   created_by?: string | null
@@ -109,7 +111,7 @@ const SUPPORT_STAFF_COLUMNS = `
   id, full_name, employee_id, designation, department, employment_type,
   date_of_joining, monthly_wage, phone, alternate_phone, emergency_contact_name,
   emergency_contact, address, date_of_birth, gender, blood_group, aadhaar_no,
-  pan_no, bank_account_no, bank_name, ifsc_code, notes, is_active,
+  pan_no, bank_account_no, bank_name, ifsc_code, notes, is_active, resigned_at,
   attendance_hidden, created_at, updated_at
 `
 
@@ -200,12 +202,12 @@ export async function deleteSupportStaff(id: string): Promise<{ success: boolean
   return { success: true }
 }
 
-/** Marks a support staff member as left / restores them. */
+/** Marks a support staff member as resigned / restores them. */
 export async function setSupportStaffActive(
   id: string,
   active: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-  return updateSupportStaff(id, { is_active: active })
+  return updateSupportStaff(id, { is_active: active, resigned_at: active ? null : new Date().toISOString() })
 }
 
 // ============================================

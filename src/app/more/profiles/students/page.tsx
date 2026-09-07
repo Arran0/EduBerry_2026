@@ -25,6 +25,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
@@ -50,6 +52,31 @@ const STUDENTS_BANNER_DEFAULT = {
   imageUrl: '',
 }
 
+// ── Filtering & sorting ──────────────────────────────────────────────────────
+
+const GRADE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All Grades' },
+  ...GRADE_OPTIONS.map(g => ({ value: String(g.value), label: g.label })),
+]
+
+type StatusFilter = 'all' | 'active' | 'inactive'
+type SortKey = 'name_asc' | 'name_desc' | 'grade' | 'recent'
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'name_asc', label: 'Name (A–Z)' },
+  { value: 'name_desc', label: 'Name (Z–A)' },
+  { value: 'grade', label: 'Grade' },
+  { value: 'recent', label: 'Recently Added' },
+]
+
+/** "12 Jan 2026" for a ban date, or null if there isn't one on file (banned before this was tracked). */
+function formatBannedDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.025 } },
@@ -68,6 +95,9 @@ export default function StudentProfileManagerPage() {
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [gradeFilter, setGradeFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('name_asc')
   const [showBulkImport, setShowBulkImport] = useState(false)
 
   const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
@@ -109,7 +139,7 @@ export default function StudentProfileManagerPage() {
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const filteredProfiles = profiles.filter(p => {
+  const searchedProfiles = profiles.filter(p => {
     const q = searchQuery.toLowerCase()
     return (
       p.full_name?.toLowerCase().includes(q) ||
@@ -118,6 +148,30 @@ export default function StudentProfileManagerPage() {
       (p.section && p.section.toLowerCase().includes(q))
     )
   })
+
+  // Counts for the grade filter dropdown — computed off the search-filtered
+  // set (not grade/status-filtered) so switching the grade filter never moves
+  // the numbers the admin is reading right before they click it.
+  const gradeCounts: Record<string, number> = {}
+  for (const p of searchedProfiles) {
+    const key = String(p.grade ?? '')
+    if (key) gradeCounts[key] = (gradeCounts[key] ?? 0) + 1
+  }
+
+  const matchesStatus = (isBanned: boolean) =>
+    statusFilter === 'all' || (statusFilter === 'inactive' ? isBanned : !isBanned)
+
+  const filteredProfiles = searchedProfiles
+    .filter(p => (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) && matchesStatus(!!p.is_banned))
+    .sort((a, b) => {
+      if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
+      if (sortBy === 'grade') return (a.grade ?? 0) - (b.grade ?? 0) || (a.full_name ?? '').localeCompare(b.full_name ?? '')
+      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
+    })
+
+  const filtersActive = gradeFilter !== 'all' || statusFilter !== 'all'
+  const clearFilters = () => { setGradeFilter('all'); setStatusFilter('all') }
 
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
@@ -248,21 +302,71 @@ export default function StudentProfileManagerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
-            {/* Search */}
-            <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
-                placeholder="Search by name, email, grade or section…"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded">
-                  <X size={13} />
-                </button>
-              )}
+            {/* Search + filter & sort — one row on desktop, search then a
+                sleeker filter row underneath on a narrow phone. */}
+            <div className="mb-4 relative z-10 flex flex-col sm:flex-row sm:items-center gap-2" style={{ marginTop: '-22px' }}>
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
+                  placeholder="Search by name, email, grade or section…"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap flex-shrink-0">
+                <div className="relative">
+                  <Filter size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={gradeFilter}
+                    onChange={e => setGradeFilter(e.target.value)}
+                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  >
+                    {GRADE_FILTER_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{gradeCounts[o.value] ? ` (${gradeCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                  className="px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Banned Only</option>
+                </select>
+
+                <div className="relative">
+                  <ArrowUpDown size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value as SortKey)}
+                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  >
+                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                  </select>
+                </div>
+
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                  >
+                    <X size={11} /> Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* List */}
@@ -304,7 +408,9 @@ export default function StudentProfileManagerPage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
                               {p.is_banned && (
-                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Banned</span>
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                  <Ban size={8} /> Banned{formatBannedDate(p.banned_at) ? ` · ${formatBannedDate(p.banned_at)}` : ''}
+                                </span>
                               )}
                             </div>
                             <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>

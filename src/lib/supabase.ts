@@ -208,6 +208,8 @@ export interface UserProfile {
   grade?: number
   section?: string
   is_banned?: boolean
+  /** When is_banned was last set true — see /api/admin/toggle-ban. Null while active, or on a resignation recorded before this column existed. */
+  banned_at?: string | null
   geofence_exempt?: boolean
   attendance_hidden?: boolean
   // Cosmetic-only flag: a 'teacher' account displayed as "Non-Teaching" (e.g.

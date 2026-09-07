@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   const { error: updateError } = await adminClient
     .from('profiles')
-    .update({ is_banned: ban })
+    .update({ is_banned: ban, banned_at: ban ? new Date().toISOString() : null })
     .eq('id', userId)
   if (updateError) {
     return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })

@@ -131,6 +131,14 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'recent', label: 'Recently Added' },
 ]
 
+/** "12 Jan 2026" for a resignation date, or null if there isn't one on file (resigned before this was tracked). */
+function formatResignedDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 /** Blank values always sort after real ones, whichever direction is asked for. */
 function compareBlanksLast(a: string, b: string, desc = false): number {
   const av = a?.trim() ?? ''
@@ -327,7 +335,7 @@ export default function StaffProfileManagerPage() {
 
   const handleToggleSupportActive = async (person: SupportStaff) => {
     const msg = person.is_active
-      ? `Mark "${person.full_name}" as left? They stop appearing in attendance, and their past records are kept.`
+      ? `Resign "${person.full_name}"? They stop appearing in attendance, and their past records are kept.`
       : `Restore "${person.full_name}" to the support staff roster?`
     if (!window.confirm(msg)) return
     const result = await setSupportStaffActive(person.id, !person.is_active)
@@ -463,59 +471,61 @@ export default function StaffProfileManagerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
-            {/* Search */}
-            <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
-              {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
-            </div>
-
-            {/* Filter & sort */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Filter size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-                <select
-                  value={roleFilter}
-                  onChange={e => setRoleFilter(e.target.value)}
-                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
-                >
-                  {ROLE_FILTER_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
-                    </option>
-                  ))}
-                </select>
+            {/* Search + filter & sort — one row on desktop, search then a
+                sleeker filter row underneath on a narrow phone. */}
+            <div className="mb-4 relative z-10 flex flex-col sm:flex-row sm:items-center gap-2" style={{ marginTop: '-22px' }}>
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
+                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                className="px-3 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">Active Only</option>
-                <option value="inactive">Resigned / Left Only</option>
-              </select>
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap flex-shrink-0">
+                <div className="relative">
+                  <Filter size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={roleFilter}
+                    onChange={e => setRoleFilter(e.target.value)}
+                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  >
+                    {ROLE_FILTER_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="relative">
-                <ArrowUpDown size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                 <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as SortKey)}
-                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                  className="px-2 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
                 >
-                  {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Resignation Only</option>
                 </select>
-              </div>
 
-              {filtersActive && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
-                >
-                  <X size={12} /> Clear filters
-                </button>
-              )}
+                <div className="relative">
+                  <ArrowUpDown size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value as SortKey)}
+                    className="pl-6 pr-5 py-1.5 text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  >
+                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                  </select>
+                </div>
+
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
+                  >
+                    <X size={11} /> Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* List */}
@@ -557,7 +567,11 @@ export default function StaffProfileManagerPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
-                                {p.is_banned && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Resigned</span>}
+                                {p.is_banned && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                    <Ban size={8} /> Resigned{formatResignedDate(p.banned_at) ? ` · ${formatResignedDate(p.banned_at)}` : ''}
+                                  </span>
+                                )}
                               </div>
                               <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                             </div>
@@ -625,7 +639,11 @@ export default function StaffProfileManagerPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className={`text-sm font-semibold truncate ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
-                              {!s.is_active && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Left</span>}
+                              {!s.is_active && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                  <Ban size={8} /> Resigned{formatResignedDate(s.resigned_at) ? ` · ${formatResignedDate(s.resigned_at)}` : ''}
+                                </span>
+                              )}
                             </div>
                             <p className="hidden sm:block text-xs text-[#71717A] truncate">
                               {s.phone || <span className="text-[#C4C4C8]">No phone</span>}
@@ -648,7 +666,7 @@ export default function StaffProfileManagerPage() {
                             {isAdmin && (
                               <>
                                 <button onClick={() => setEditingSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit details"><Pencil size={14} /></button>
-                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Mark as left' : 'Restore'}>
+                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Resign' : 'Restore'}>
                                   {s.is_active ? <Ban size={14} /> : <ShieldCheck size={14} />}
                                 </button>
                                 <button onClick={() => handleDeleteSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
