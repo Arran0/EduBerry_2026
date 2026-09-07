@@ -91,7 +91,7 @@ import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
-import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
+import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
 function QuoteBanner() {
   const [visible, setVisible] = useState(true)
@@ -827,6 +827,7 @@ export default function HomePage() {
   const HOME_CLASSROOM_COL_GAP = 10
   const HOME_CLASSROOM_ROW_GAP = 12.5 // 25% more than the column gap, for shadow-bleed margin between rows
   const homeClassroomsMaxHeight = classroomGridMaxHeight(HOME_CLASSROOM_VISIBLE_ROWS, HOME_CLASSROOM_ROW_GAP)
+  const homeClassroomItemWidth = classroomItemWidth(classroomColumns, HOME_CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -1205,7 +1206,7 @@ export default function HomePage() {
                         // the same control the announcements banner carries.
                         action={<PushToggle onDark={false} compact />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
                           : <NotificationsSummaryCard
@@ -1232,7 +1233,7 @@ export default function HomePage() {
                         title="Fees Due"
                         action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <OverdueFeesCard fees={overdueFees} />
                       </div>
                       </div>
@@ -1252,7 +1253,7 @@ export default function HomePage() {
                         // the same control the announcements banner carries.
                         action={<PushToggle onDark={false} compact />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         {notifLoading
                           ? <NotificationsCardSkeleton />
                           : <NotificationsSummaryCard
@@ -1288,7 +1289,7 @@ export default function HomePage() {
                           </div>
                         }
                       />
-                      <div className="pro-card h-[260px] overflow-hidden mx-4">
+                      <div className="pro-card h-[260px] overflow-hidden mx-2 sm:mx-4">
                         <div className="px-4 pt-3 pb-2 border-b border-slate-200">
                           <div className="flex items-center justify-between mb-2.5">
                             <div className="flex items-center gap-1.5">
@@ -1361,7 +1362,7 @@ export default function HomePage() {
                         title="Attendance"
                         action={<span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <TeacherAttendanceCard key={dayKey} userId={user.id} />
                       </div>
                       </div>
@@ -1379,7 +1380,7 @@ export default function HomePage() {
                         title="My Tasks"
                         action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />
                       </div>
                       </div>
@@ -1397,7 +1398,7 @@ export default function HomePage() {
                         title="Grading"
                         action={<ViewAllLink href="/more/exam" className="text-indigo-600 hover:text-indigo-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <ExamGradingCard queues={gradingQueues} />
                       </div>
                       </div>
@@ -1415,7 +1416,7 @@ export default function HomePage() {
                         title="School Work"
                         action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onEmptyChange={setSchoolWorkEmpty} />
                       </div>
                       </div>
@@ -1432,7 +1433,7 @@ export default function HomePage() {
                         eyebrow="Latest"
                         title="Assessments"
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <LatestAssessmentsMiniList classrooms={classrooms} onEmptyChange={setAssessmentsEmpty} />
                       </div>
                       </div>
@@ -1450,7 +1451,7 @@ export default function HomePage() {
                         title="Report Cards"
                         action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <ReportCardsMiniList userId={user.id} onEmptyChange={setReportCardsEmpty} />
                       </div>
                       </div>
@@ -1468,7 +1469,7 @@ export default function HomePage() {
                         title="Timetable"
                         action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <TodayTimetableCard userId={user.id} onEmptyChange={setTimetableEmpty} />
                       </div>
                       </div>
@@ -1486,7 +1487,7 @@ export default function HomePage() {
                         title="Exams"
                         action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <ExamsMiniCard userId={user.id} onEmptyChange={setExamsEmpty} />
                       </div>
                       </div>
@@ -1504,7 +1505,7 @@ export default function HomePage() {
                             title="Fee Manager"
                             action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
                           />
-                          <div className="pro-card h-[260px] p-4 flex items-center mx-4">
+                          <div className="pro-card h-[260px] p-4 flex items-center mx-2 sm:mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
                               <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -1543,7 +1544,7 @@ export default function HomePage() {
                             title="Bus Fees"
                             action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
                           />
-                          <div className="pro-card h-[260px] p-4 flex items-center mx-4">
+                          <div className="pro-card h-[260px] p-4 flex items-center mx-2 sm:mx-4">
                             <div className="grid grid-cols-2 gap-3 w-full">
                               <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
                                 <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
@@ -1582,7 +1583,7 @@ export default function HomePage() {
                         title="Announcements"
                         action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
                       />
-                      <div className="mx-4">
+                      <div className="mx-2 sm:mx-4">
                         <AnnouncementsList items={announcements} />
                       </div>
                       </div>
@@ -1686,12 +1687,13 @@ export default function HomePage() {
                     scrollPaddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                     scrollPaddingBottom: HOME_CLASSROOM_ROW_GAP,
                   }}
-                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                  className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                 >
                   <ClassroomGridItems
                     items={classroomsLoaded ? topClassrooms.map((classroom, i) => ({ classroom, index: i })) : null}
                     skeletonCount={HOME_CLASSROOM_LIMIT}
                     heightClass="h-[64px]"
+                    itemWidth={homeClassroomItemWidth}
                     showTeacher
                     navigatingId={navigatingId}
                     onNavigate={id => setNavigatingId(id)}

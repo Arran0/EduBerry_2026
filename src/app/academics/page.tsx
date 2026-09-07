@@ -18,7 +18,7 @@ import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
-import { classroomGridMaxHeight, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
+import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
@@ -211,6 +211,7 @@ export default function AcademicsPage() {
   const CLASSROOM_COL_GAP = 12
   const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
   const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
+  const classroomItemWidthCss = classroomItemWidth(classroomColumns, CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -556,12 +557,13 @@ export default function AcademicsPage() {
                   scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                   scrollPaddingBottom: CLASSROOM_ROW_GAP,
                 }}
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
               >
                 <ClassroomGridItems
                   items={null}
                   skeletonCount={CLASSROOM_LIMIT}
                   heightClass="h-[64px]"
+                  itemWidth={classroomItemWidthCss}
                   navigatingId={navigatingId}
                   onNavigate={setNavigatingId}
                 />
@@ -583,12 +585,13 @@ export default function AcademicsPage() {
                   scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                   scrollPaddingBottom: CLASSROOM_ROW_GAP,
                 }}
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
               >
                 <ClassroomGridItems
                   items={filteredClassrooms.map(classroom => ({ classroom, index: classrooms.indexOf(classroom) }))}
                   skeletonCount={CLASSROOM_LIMIT}
                   heightClass="h-[64px]"
+                  itemWidth={classroomItemWidthCss}
                   navigatingId={navigatingId}
                   onNavigate={setNavigatingId}
                 />
