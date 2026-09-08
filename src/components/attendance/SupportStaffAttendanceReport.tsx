@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import Avatar from '@/components/Avatar'
-import { Search, X, Loader2, HardHat, Umbrella, Ban } from 'lucide-react'
+import { Search, X, Loader2, HardHat, Umbrella, Ban, CheckSquare } from 'lucide-react'
 import {
   SupportStaff,
   SupportAttendanceRecord,
@@ -307,6 +307,7 @@ export default function SupportStaffAttendanceReport({
   const [driverMonthRecords, setDriverMonthRecords] = useState<StaffAttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [markingAll, setMarkingAll] = useState(false)
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<Tab>('absent')
 
@@ -391,6 +392,14 @@ export default function SupportStaffAttendanceReport({
     [dayRecords],
   )
 
+  // Anyone with no mark for the day yet — what "Mark All Present" fills in.
+  // Leaves everyone who already has a mark (present, absent, on leave, …)
+  // exactly as an admin set it.
+  const unmarkedRoster = useMemo(
+    () => roster.filter(p => !recordByStaff.has(p.id)),
+    [roster, recordByStaff],
+  )
+
   // Same rule AllStaffAttendanceReport uses for `shouldDeriveAbsents`: a whole-
   // school day off (holiday or non-working) suppresses derivation, and so does
   // a future date — otherwise a missing row is Absent.
@@ -461,6 +470,23 @@ export default function SupportStaffAttendanceReport({
     setSavingId(null)
   }
 
+  // Fills in Present for everyone still unmarked today — same idea as the
+  // homeroom attendance sheet's "All P", but since every mark here writes
+  // straight to the DB (there's no local draft to bulk-save), this fires the
+  // upserts directly rather than flipping local row state.
+  const handleMarkAllPresent = async () => {
+    if (unmarkedRoster.length === 0) return
+    setMarkingAll(true)
+    await Promise.all(unmarkedRoster.map(person =>
+      person.kind === 'ground'
+        ? markSupportAttendance(person.id, date, 'present', viewerId)
+        : adminMarkStaffAttendance(person.id, date, 'present', viewerId)
+    ))
+    await load({ silent: true })
+    onChanged?.()
+    setMarkingAll(false)
+  }
+
   return (
     <>
       {/* Summary strip — support staff + drivers only, no overlap with the
@@ -498,6 +524,20 @@ export default function SupportStaffAttendanceReport({
                   {stats.not_marked > 0 ? ` · ${stats.not_marked} not marked` : ''}
                 </p>
               </div>
+              {canEdit && unmarkedRoster.length > 0 && (
+                <button
+                  onClick={handleMarkAllPresent}
+                  disabled={markingAll}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  {markingAll
+                    ? <Loader2 size={12} className="animate-spin" />
+                    : <CheckSquare size={12} />}
+                  <span className="hidden sm:inline">Mark All Present</span>
+                  <span className="sm:hidden">All P</span>
+                  <span className="opacity-70">({unmarkedRoster.length})</span>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -580,7 +620,7 @@ export default function SupportStaffAttendanceReport({
                       person={person}
                       record={recordByStaff.get(person.id)}
                       derivedStatus={recordByStaff.get(person.id) ? undefined : 'absent'}
-                      saving={savingId === person.id}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
                       viewerId={viewerId}
                       onSet={handleSet}
@@ -604,7 +644,7 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
-                      saving={savingId === person.id}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
                       viewerId={viewerId}
                       onSet={handleSet}
@@ -628,7 +668,7 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
-                      saving={savingId === person.id}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
                       viewerId={viewerId}
                       onSet={handleSet}
