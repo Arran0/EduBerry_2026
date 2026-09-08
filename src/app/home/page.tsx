@@ -513,6 +513,9 @@ export default function HomePage() {
         absent: studentTally.absent,
         exception: studentTally.irregular,
       },
+      // Support staff & drivers are intentionally excluded here — this card
+      // is scoped to tracked (main) staff only. The Support Staff tab of the
+      // attendance report is where their own numbers live.
       staff: { ...staffTally, absent: staffTally.absent + virtualAbsentCount },
     })
   }, [isAttendanceViewer, isCoordinator, user])

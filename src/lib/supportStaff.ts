@@ -311,11 +311,19 @@ export interface SupportDayStats {
 }
 
 /**
- * The day's tallies across a roster. Unlike the regular staff report, an
- * unmarked support staff member is NOT derived as absent: nobody can check
- * themselves in here, so a missing row means the admin has not gotten to them
- * yet, which is a different fact from being away — and counting it as absent
- * would silently distort the salary side.
+ * The day's tallies across a roster. `deriveAbsent` mirrors the regular staff
+ * report's auto-absent rule (see AllStaffAttendanceReport's `shouldDeriveAbsents`
+ * / `virtualAbsents`, and `deriveDayStatus` in attendance.ts): on a working day
+ * that isn't a whole-school holiday or non-working day and isn't still in the
+ * future, a missing row counts as Absent rather than "not marked" — nobody can
+ * check themselves in here, so by the time that's settled (past the day, or
+ * checked at all) a missing row means the person didn't come in. Payroll
+ * already treats support staff this way (computeStaffAttendanceStats runs the
+ * same deriveDayStatus over their staff_attendance_records-shaped rows via
+ * supportRecordToStaffShape), so this keeps the daily report from disagreeing
+ * with what the pay cycle actually deducts. Pass `deriveAbsent: false` (the
+ * default) for a day that shouldn't derive — a holiday, a non-working day, or
+ * a future date — where a missing row stays "not marked".
  *
  * Roster and records are typed loosely (just an id, just a status keyed by
  * support_staff_id) so the same function also covers drivers folded into
@@ -326,6 +334,7 @@ export interface SupportDayStats {
 export function computeSupportDayStats(
   roster: { id: string }[],
   records: { support_staff_id: string; status: SupportAttendanceStatus }[],
+  deriveAbsent = false,
 ): SupportDayStats {
   const byStaff = new Map(records.map(r => [r.support_staff_id, r]))
   const stats: SupportDayStats = {
@@ -335,7 +344,11 @@ export function computeSupportDayStats(
   }
   for (const person of roster) {
     const record = byStaff.get(person.id)
-    if (!record) { stats.not_marked++; continue }
+    if (!record) {
+      if (deriveAbsent) stats.absent++
+      else stats.not_marked++
+      continue
+    }
     switch (record.status) {
       case 'present': stats.present++; break
       case 'late': stats.late++; stats.present++; break
