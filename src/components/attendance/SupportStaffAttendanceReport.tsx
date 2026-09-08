@@ -58,15 +58,15 @@ const StaffAttendanceCalendarDynamic = dynamic(
 // row is set by hand. The section mirrors AllStaffAttendanceReport's format —
 // the same Absent / Present / Irregular inline tabs, the same five manual
 // marks (P/A/Late/½/Exception), and the same rule for which tab a status
-// lands in. No WFH here (no punch to work from home from). Unlike the main
-// report, an unmarked person isn't surfaced as its own tab or block — there
-// would be nothing else to say about them beyond "nobody has marked them
-// yet", so they simply don't appear in Absent / Present / Irregular until
-// someone does.
+// lands in. No WFH here (no punch to work from home from).
 //
-// An unmarked person is NOT derived as absent the way the school-staff report
-// derives it: a missing row means "not marked yet", not "away" — see
-// computeSupportDayStats.
+// Auto-absent derivation mirrors the school-staff report: on a working day
+// (not a whole-school holiday/non-working day per `dayOff`, and not still in
+// the future) an unmarked person is derived Absent, same as
+// AllStaffAttendanceReport's `virtualAbsents` — see computeSupportDayStats.
+// This also keeps the daily view in step with payroll, which already derives
+// absence the same way for support staff (computeStaffAttendanceStats via
+// supportRecordToStaffShape).
 // ============================================
 
 interface Props {
@@ -130,10 +130,12 @@ function shortName(name: string, max = 14) {
 // ── One row (ground support staff or driver) ─────────────────────────────────
 
 function SupportRow({
-  person, record, saving, canEdit, viewerId, onSet, onClear,
+  person, record, derivedStatus, saving, canEdit, viewerId, onSet, onClear,
 }: {
   person: SectionPerson
   record?: { status: SupportAttendanceStatus }
+  /** Shown as the status pill when absent is auto-derived (no DB record yet). */
+  derivedStatus?: SupportAttendanceStatus
   saving: boolean
   canEdit: boolean
   viewerId: string
@@ -141,6 +143,7 @@ function SupportRow({
   onClear: (id: string) => void
 }) {
   const [showCalendar, setShowCalendar] = useState(false)
+  const effectiveStatus = record?.status ?? derivedStatus
 
   // Ground support staff have no staff_attendance_records row of their own —
   // their month lives in support_staff_attendance instead, so it's fetched
@@ -179,9 +182,9 @@ function SupportRow({
           )}
         </div>
 
-        {record ? (
-          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full flex-shrink-0 ${SUPPORT_ATTENDANCE_STATUS_PILL[record.status]}`}>
-            {SUPPORT_ATTENDANCE_STATUS_LABELS[record.status]}
+        {effectiveStatus ? (
+          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full flex-shrink-0 ${SUPPORT_ATTENDANCE_STATUS_PILL[effectiveStatus]}`}>
+            {SUPPORT_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
           </span>
         ) : (
           <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border border-dashed border-[#D4D4D8] text-[#A1A1AA] rounded-full flex-shrink-0`}>
@@ -202,7 +205,7 @@ function SupportRow({
                   className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
                     isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
                   } ${
-                    record?.status === st
+                    effectiveStatus === st
                       ? QUICK_ACTIVE[st]
                       : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
                   }`}
@@ -364,7 +367,15 @@ export default function SupportStaffAttendanceReport({
     [dayRecords],
   )
 
-  const stats = useMemo(() => computeSupportDayStats(roster, dayRecords), [roster, dayRecords])
+  // Same rule AllStaffAttendanceReport uses for `shouldDeriveAbsents`: a whole-
+  // school day off (holiday or non-working) suppresses derivation, and so does
+  // a future date — otherwise a missing row is Absent.
+  const shouldDeriveAbsents = !dayOff && !isFuture
+
+  const stats = useMemo(
+    () => computeSupportDayStats(roster, dayRecords, shouldDeriveAbsents),
+    [roster, dayRecords, shouldDeriveAbsents],
+  )
 
   const filterByQuery = useCallback((people: SectionPerson[]) => {
     const q = query.trim().toLowerCase()
@@ -375,13 +386,16 @@ export default function SupportStaffAttendanceReport({
   }, [query])
 
   // ── Classification — same rule the main staff report uses: on_leave counts
-  // as Absent, late counts as Present, half_day/exception are Irregular.
+  // as Absent, late counts as Present, half_day/exception are Irregular. An
+  // unmarked person joins Absent too, once `shouldDeriveAbsents` says the day
+  // has settled into a real absence (see AllStaffAttendanceReport's virtualAbsents).
   const absentRoster = useMemo(
     () => roster.filter(p => {
       const s = recordByStaff.get(p.id)?.status
-      return s === 'absent' || s === 'on_leave'
+      if (s === 'absent' || s === 'on_leave') return true
+      return !s && shouldDeriveAbsents
     }),
-    [roster, recordByStaff],
+    [roster, recordByStaff, shouldDeriveAbsents],
   )
   const presentRoster = useMemo(
     () => roster.filter(p => {
@@ -541,6 +555,7 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
+                      derivedStatus={recordByStaff.get(person.id) ? undefined : 'absent'}
                       saving={savingId === person.id}
                       canEdit={canEdit}
                       viewerId={viewerId}
