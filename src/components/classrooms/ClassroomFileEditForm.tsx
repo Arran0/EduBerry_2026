@@ -125,7 +125,6 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
     >
       {/* Header */}
       <FormHeader
-        accent="cyan"
         icon={<FileText size={17} />}
         title="Classwork"
         subtitle={file.folder.title}
@@ -258,7 +257,6 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
       </div>
 
       <FormFooter
-        accent="cyan"
         onCancel={onCancel}
         disabled={!title.trim() || saving || uploading}
         submitIcon={saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}

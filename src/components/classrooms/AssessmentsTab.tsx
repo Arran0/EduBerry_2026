@@ -315,7 +315,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
         {isStaff && (
           <button
             onClick={() => setShowNewForm(!showNewForm)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold transition-all shadow-lg shadow-amber-500/25 active:scale-95 flex-shrink-0"
+            className="keep-round flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold transition-all shadow-lg shadow-amber-500/25 active:scale-95 flex-shrink-0"
           >
             <Plus size={13} /> New Assessment
           </button>

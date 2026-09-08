@@ -112,8 +112,7 @@ function ClassroomDetailPageContent() {
       img.src = classroom.banner_url
     } else {
       const p = pickClassroomBannerPalette(classroom.id)
-      const gradLum = (hexToLuminance(p.hexFrom) + hexToLuminance(p.hexVia) + hexToLuminance(p.hexTo)) / 3
-      setBannerLum(gradLum)
+      setBannerLum((hexToLuminance(p.hexFrom) + hexToLuminance(p.hexTo)) / 2)
       setBannerReady(true)
     }
   }, [classroom?.banner_url, classroom?.id])
@@ -245,7 +244,7 @@ function ClassroomDetailPageContent() {
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : `bg-gradient-to-br ${palette!.avatarGradient}`} overflow-hidden`}>
+                    <div className={`keep-round w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : `bg-gradient-to-br ${palette!.avatarGradient}`} overflow-hidden`}>
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
@@ -255,7 +254,7 @@ function ClassroomDetailPageContent() {
                       )}
                     </div>
                     {canEditClassroom && !closed && (
-                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                      <label className="keep-round absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                         <Camera size={16} />
                         <input type="file" accept="image/*" className="hidden" onChange={e => {
                           const f = e.target.files?.[0]

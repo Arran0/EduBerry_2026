@@ -379,6 +379,22 @@ body:has(.pro-chrome) .modal-portal.modal-portal [class*='animate-spin'] {
   border-radius: 9999px;
 }
 
+/* Field focus for the homework / classwork authoring cards — tinted from the
+   page palette an admin sets in app settings, so the ring matches the card's
+   header band and primary button (see WorkFormKit). */
+.themed-input:focus {
+  border-color: var(--page-primary, #6366f1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--page-primary, #6366f1) 12%, transparent);
+}
+
+/* Icon chips keep their rounded-square badge shape — the icon is a piece of
+   identity, like an app tile, and squaring it off flattens the whole page's
+   rhythm. Same radius as .icon-chip itself. */
+.pro-chrome.pro-chrome .icon-chip,
+body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
+  border-radius: 0.85rem;
+}
+
 /* Spring-like pressable — subtle lift on hover, crisp tap feedback. */
 .pressable {
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1),

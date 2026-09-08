@@ -247,7 +247,6 @@ export default function SmartboardHomeworkForm({
       >
         {/* Header */}
         <FormHeader
-          accent="purple"
           icon={isEdit ? <Save size={17} /> : <Plus size={17} />}
           title={heading ?? (isEdit ? 'Homework' : 'New Homework')}
           subtitle={isEdit ? 'Edit this homework for the whole class' : 'Appears on every student’s calendar'}
@@ -453,7 +452,6 @@ export default function SmartboardHomeworkForm({
         </div>
 
         <FormFooter
-          accent="purple"
           onCancel={onCancel}
           disabled={!title.trim() || saving || uploading}
           submitIcon={saving ? <Loader2 size={15} className="animate-spin" /> : isEdit ? <Save size={15} /> : <Plus size={15} />}

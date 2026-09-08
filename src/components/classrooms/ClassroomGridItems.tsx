@@ -6,16 +6,13 @@ import type { ClassroomWithDetails } from '@/lib/classrooms'
 
 interface ClassroomGridItem {
   classroom: ClassroomWithDetails
-  /** Pastel-palette index — the caller's own choice of "position" for
-   *  color-stability purposes (e.g. position in the full unfiltered list,
-   *  not the filtered one), so a card's color doesn't shift as a search
-   *  filter changes which cards are shown. */
-  index: number
 }
 
 interface ClassroomGridItemsProps {
   /** null while loading (renders `skeletonCount` placeholders instead). */
   items: ClassroomGridItem[] | null
+  /** Placeholders to show while loading — one row's worth, so a school with
+   *  three classrooms doesn't flash four rows of them and then collapse. */
   skeletonCount: number
   heightClass: string
   /** CSS width (e.g. from `classroomItemWidth`) applied to every slot — the
@@ -58,7 +55,6 @@ export default function ClassroomGridItems({
           {items ? (
             <ClassroomButton
               classroom={items[i].classroom}
-              index={items[i].index}
               heightClass={heightClass}
               showTeacher={showTeacher}
               navigating={navigatingId === items[i].classroom.id}

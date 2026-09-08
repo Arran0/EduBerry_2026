@@ -12,36 +12,30 @@ import { Star } from 'lucide-react'
  * band, labelled field groups, tappable toggle cards and a chunky footer.
  */
 
+/* The cards take their colour from the page palette an admin sets in app
+   settings (see PageConfigContext, which writes --page-* onto the page's
+   data-page-theme element; ModalShell copies that attribute onto its portal
+   so a card raised into <body> is themed too). `themed-input` carries the
+   focus ring, which needs a tint of the same variable. */
 export const INPUT_CLASS =
-  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm ' +
-  'focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 transition-all'
+  'themed-input w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 ' +
+  'placeholder:text-slate-400 shadow-sm focus:outline-none transition-all'
 
-export type Accent = 'indigo' | 'purple' | 'cyan'
-
-const ACCENT_HEADER: Record<Accent, string> = {
-  indigo: 'from-indigo-600 via-indigo-600 to-blue-600',
-  purple: 'from-violet-600 via-purple-600 to-fuchsia-600',
-  cyan:   'from-cyan-600 via-sky-600 to-blue-600',
-}
-
-const ACCENT_BUTTON: Record<Accent, string> = {
-  indigo: 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/30',
-  purple: 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/30',
-  cyan:   'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-600/30',
-}
+/** Header band / primary button fill, straight from the page palette. */
+const HEADER_GRADIENT = 'linear-gradient(to right, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #2563eb))'
+const BUTTON_FILL = 'var(--page-primary-dark, #4338ca)'
 
 /** Coloured header band: icon chip, title, optional subtitle and actions. */
 export function FormHeader({
-  accent = 'indigo', icon, title, subtitle, actions,
+  icon, title, subtitle, actions,
 }: {
-  accent?: Accent
   icon: React.ReactNode
   title: string
   subtitle?: string | null
   actions?: React.ReactNode
 }) {
   return (
-    <div className={`flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5 bg-gradient-to-r ${ACCENT_HEADER[accent]}`}>
+    <div className="flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5" style={{ background: HEADER_GRADIENT }}>
       <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-white flex-shrink-0 [&>svg]:w-[15px] [&>svg]:h-[15px]">
         {icon}
       </div>
@@ -171,9 +165,8 @@ export function PointsPicker({
 
 /** Sticky footer with a cancel link and a solid primary action. */
 export function FormFooter({
-  accent = 'indigo', onCancel, submitLabel, submitIcon, disabled,
+  onCancel, submitLabel, submitIcon, disabled,
 }: {
-  accent?: Accent
   onCancel: () => void
   submitLabel: string
   submitIcon: React.ReactNode
@@ -191,7 +184,8 @@ export function FormFooter({
       <button
         type="submit"
         disabled={disabled}
-        className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white shadow-md transition-all active:scale-[0.98] disabled:opacity-50 disabled:shadow-none [&_svg]:w-[14px] [&_svg]:h-[14px] ${ACCENT_BUTTON[accent]}`}
+        className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white shadow-md transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:shadow-none [&_svg]:w-[14px] [&_svg]:h-[14px]"
+        style={{ background: BUTTON_FILL }}
       >
         {submitIcon}
         {submitLabel}

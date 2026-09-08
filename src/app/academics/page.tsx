@@ -409,7 +409,7 @@ export default function AcademicsPage() {
                     block (eyebrow + title for staff, title + greeting for a
                     student) rather than hanging off its first line. */}
                 <div className="flex items-center gap-3">
-                  <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
+                  <div className={`p-3 backdrop-blur-sm !rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
                     <GraduationCap size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                   </div>
                   <div className="min-w-0">
@@ -614,7 +614,7 @@ export default function AcademicsPage() {
               >
                 <ClassroomGridItems
                   items={null}
-                  skeletonCount={CLASSROOM_LIMIT}
+                  skeletonCount={classroomColumns}
                   heightClass="h-[64px]"
                   itemWidth={classroomItemWidthCss}
                   navigatingId={navigatingId}
@@ -641,8 +641,8 @@ export default function AcademicsPage() {
                 className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
               >
                 <ClassroomGridItems
-                  items={filteredClassrooms.map(classroom => ({ classroom, index: classrooms.indexOf(classroom) }))}
-                  skeletonCount={CLASSROOM_LIMIT}
+                  items={filteredClassrooms.map(classroom => ({ classroom }))}
+                  skeletonCount={classroomColumns}
                   heightClass="h-[64px]"
                   itemWidth={classroomItemWidthCss}
                   navigatingId={navigatingId}

@@ -1690,8 +1690,8 @@ export default function HomePage() {
                   className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                 >
                   <ClassroomGridItems
-                    items={classroomsLoaded ? topClassrooms.map((classroom, i) => ({ classroom, index: i })) : null}
-                    skeletonCount={HOME_CLASSROOM_LIMIT}
+                    items={classroomsLoaded ? topClassrooms.map(classroom => ({ classroom })) : null}
+                    skeletonCount={classroomColumns}
                     heightClass="h-[64px]"
                     itemWidth={homeClassroomItemWidth}
                     showTeacher

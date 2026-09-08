@@ -567,7 +567,7 @@ export default function FolderFileView({
         {canManage && (
           <button
             onClick={() => setShowNewFolder(!showNewFolder)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg shadow-slate-900/20 bg-slate-800 hover:bg-slate-900 active:scale-95 flex-shrink-0"
+            className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg shadow-slate-900/20 bg-slate-800 hover:bg-slate-900 active:scale-95 flex-shrink-0"
           >
             <Plus size={13} /> New Folder
           </button>

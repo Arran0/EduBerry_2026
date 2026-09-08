@@ -104,11 +104,22 @@ export default function ModalShell({
 
   if (typeof document === 'undefined') return null
 
+  // The page's palette lives on its [data-page-theme] element (globals.css for
+  // the defaults, PageConfigContext for whatever an admin picked in app
+  // settings). A portal lands on <body>, outside that element, so carry the
+  // attribute across — otherwise every --page-* variable inside a modal falls
+  // back to its default and the sheet ignores the school's colours.
+  const pageTheme = document.querySelector('[data-page-theme]')
+    ?.getAttribute('data-page-theme') ?? undefined
+
   return createPortal(
     // modal-portal marks this subtree as page chrome that was raised out of the
     // page: a pro-chrome (staff) page squares its modals through that hook,
     // since the portal lands on <body>, outside the page's own scope.
-    <div className={`modal-portal fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}>
+    <div
+      data-page-theme={pageTheme}
+      className={`modal-portal fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}
+    >
       {/* Backdrop */}
       <motion.div
         className="absolute inset-0 bg-slate-950/45 backdrop-blur-md"
