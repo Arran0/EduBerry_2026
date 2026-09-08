@@ -237,7 +237,9 @@ export default function HomeroomWorkCalendar({
           onClick={() => { setNewHwDate(''); setShowForm(true) }}
           disabled={!canCreate}
           title={canCreate ? undefined : 'No classroom yet holds a student from this homeroom'}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 disabled:cursor-not-allowed"
+          // keep-round: this stays a pill even where the page squares its
+          // corners for staff (pro chrome) — see globals.css.
+          className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 disabled:cursor-not-allowed"
           style={{ background: themeGradFrom }}
         >
           <Plus size={13} /> New Homework

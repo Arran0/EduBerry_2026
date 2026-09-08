@@ -340,6 +340,45 @@ body {
     0 10px 24px -16px rgba(15, 23, 42, 0.28);
 }
 
+/* Professional chrome — the .pro-card idea applied to a whole page. Staff work
+   the academics page and the classrooms behind it as a tool, so every corner
+   inside squares off: cards, day columns, icon chips, inputs, tabs and pill
+   buttons all drop the consumer-app radius. Students keep the rounded, frosted
+   treatment, so the scope is opted into per page (see the academics and
+   classroom pages) rather than applied globally.
+
+   Modals raised from such a page portal to <body>, outside this subtree, so
+   .modal-portal squares off too for as long as a pro page is mounted.
+
+   Two things stay round, because squaring them reads as broken rather than
+   crisp: anything mid-spin (loader rings), and anything explicitly opted out
+   with .keep-round — avatars, and the "New Homework" button the staff work
+   calendars lead with.
+
+   The class is doubled (.pro-chrome.pro-chrome) purely for specificity: the
+   component classes below bake their own radius in (.icon-chip, .btn-primary,
+   .input-field…), and a single class would only tie with them — leaving the
+   winner down to which rule sits later in this file. Doubling outranks them
+   wherever they are declared; the keep-round exceptions then need one class
+   more again. */
+.pro-chrome.pro-chrome,
+.pro-chrome.pro-chrome *,
+body:has(.pro-chrome) .modal-portal.modal-portal,
+body:has(.pro-chrome) .modal-portal.modal-portal * {
+  border-radius: 0;
+}
+
+.pro-chrome.pro-chrome .keep-round,
+.pro-chrome.pro-chrome .spinner,
+.pro-chrome.pro-chrome .spinner-sm,
+.pro-chrome.pro-chrome [class*='animate-spin'],
+body:has(.pro-chrome) .modal-portal.modal-portal .keep-round,
+body:has(.pro-chrome) .modal-portal.modal-portal .spinner,
+body:has(.pro-chrome) .modal-portal.modal-portal .spinner-sm,
+body:has(.pro-chrome) .modal-portal.modal-portal [class*='animate-spin'] {
+  border-radius: 9999px;
+}
+
 /* Spring-like pressable — subtle lift on hover, crisp tap feedback. */
 .pressable {
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1),

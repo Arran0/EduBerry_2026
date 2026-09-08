@@ -105,7 +105,10 @@ export default function ModalShell({
   if (typeof document === 'undefined') return null
 
   return createPortal(
-    <div className={`fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}>
+    // modal-portal marks this subtree as page chrome that was raised out of the
+    // page: a pro-chrome (staff) page squares its modals through that hook,
+    // since the portal lands on <body>, outside the page's own scope.
+    <div className={`modal-portal fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}>
       {/* Backdrop */}
       <motion.div
         className="absolute inset-0 bg-slate-950/45 backdrop-blur-md"

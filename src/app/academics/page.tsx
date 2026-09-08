@@ -57,14 +57,55 @@ function getSessionVibes(name: string): string[] {
   ]
 }
 
+/** The same greetings cut to a single phone line — the full sentences above
+ *  wrap to three lines beside the streak flame on a narrow screen, which
+ *  pushes the banner tall and buries the heading. */
+function getShortSessionVibes(name: string): string[] {
+  const h = new Date().getHours()
+  const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
+  const first = name.split(' ')[0]
+  return [
+    `Hey ${first}! Let's go.`,
+    `${first} is back.`,
+    `Good ${session}, ${first}.`,
+    `Make it count, ${first}.`,
+    `Rise and shine, ${first}!`,
+    `You showed up, ${first}.`,
+    `Small steps, big wins.`,
+    `${first} levels up.`,
+    `Curiosity wins, ${first}.`,
+    `Own this ${session}.`,
+  ]
+}
+
 function TypingGreeting({ name, dark }: { name: string; dark: boolean }) {
-  const vibes = useMemo(() => getSessionVibes(name), [name])
+  // Phones get the short set; the breakpoint matches Tailwind's `sm`.
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsPhone(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  const vibes = useMemo(
+    () => (isPhone ? getShortSessionVibes(name) : getSessionVibes(name)),
+    [name, isPhone],
+  )
   const [vibeIdx, setVibeIdx] = useState(0)
   const [displayed, setDisplayed] = useState('')
   const [phase, setPhase] = useState<'typing' | 'hold' | 'deleting'>('typing')
 
+  // Crossing the breakpoint swaps the set (and its length), so restart the line
+  // rather than leave half a sentence from the other set on screen.
   useEffect(() => {
-    const text = vibes[vibeIdx]
+    setVibeIdx(0)
+    setDisplayed('')
+    setPhase('typing')
+  }, [vibes])
+
+  useEffect(() => {
+    const text = vibes[vibeIdx] ?? ''
     if (phase === 'typing') {
       if (displayed.length < text.length) {
         const t = setTimeout(() => setDisplayed(text.slice(0, displayed.length + 1)), 38)
@@ -312,7 +353,9 @@ export default function AcademicsPage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="academics">
+      {/* Staff work this page as a tool, so it takes the square-cornered pro
+          chrome (see globals.css); students keep the rounded, frosted look. */}
+      <div data-page-theme="academics" className={isStudent ? undefined : 'pro-chrome'}>
 
         {/* ── Immersive full-bleed banner ── */}
         <AnimatePresence>
@@ -364,6 +407,14 @@ export default function AcademicsPage() {
                     <GraduationCap size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                   </div>
                   <div className="min-w-0">
+                    {!isStudent && (
+                      <p
+                        className={`eyebrow mb-1.5 transition-colors duration-300 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
+                        style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+                      >
+                        Teach &amp; Track
+                      </p>
+                    )}
                     <h1
                       className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
                       style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.4)' } : undefined}

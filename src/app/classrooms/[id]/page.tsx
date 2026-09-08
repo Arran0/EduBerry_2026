@@ -122,6 +122,7 @@ function ClassroomDetailPageContent() {
 
   const closed = classroom ? isClassroomClosed(classroom) : false
   const canEditClassroom = profile ? isStaffRole(profile.role) : false
+  const isStudent = profile.role === 'student'
   // null or low luminance = dark background → white text
   const bannerOnDark = bannerLum === null || bannerLum < 0.4
 
@@ -147,7 +148,10 @@ function ClassroomDetailPageContent() {
   const isSmartboard = profile.role === 'smartboard'
 
   const inner = (
-      <div data-page-theme="academics">
+      // Everyone but a student sees the classroom as a working tool, so it takes
+      // the square-cornered pro chrome (see globals.css) — the same treatment
+      // the academics page it opens from uses.
+      <div data-page-theme="academics" className={isStudent ? undefined : 'pro-chrome'}>
 
         {loading ? (
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">

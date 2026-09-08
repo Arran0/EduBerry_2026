@@ -467,7 +467,9 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         {canManage && (
           <button
             onClick={() => { setNewHwDate(''); setShowForm(v => !v); setDetailTask(null); setDetailFile(null) }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0"
+            // keep-round: this stays a pill even where the page squares its
+            // corners for staff (pro chrome) — see globals.css.
+            className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0"
             style={{ background: 'var(--page-primary, #06b6d4)' }}
           >
             <Plus size={13} /> New Homework
