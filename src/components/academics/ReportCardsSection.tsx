@@ -263,6 +263,20 @@ function StaffReportCardView({
 
 // ─── Staff individual search ─────────────────────────────────────────────────
 
+/** True on phones, where inputs are forced to 16px (globals.css, so iOS does
+ *  not zoom in on focus) and a placeholder written for 14px no longer fits. */
+function useIsPhone(): boolean {
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsPhone(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  return isPhone
+}
+
 function StaffReportCardSearch({
   viewerId, viewerRole, viewer, branding,
 }: {
@@ -271,6 +285,7 @@ function StaffReportCardSearch({
   viewer: UserProfile
   branding: SiteBranding
 }) {
+  const isPhone = useIsPhone()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<UserProfile[]>([])
   const [searching, setSearching] = useState(false)
@@ -324,10 +339,13 @@ function StaffReportCardSearch({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
             viewerRole === 'admin' || viewerRole === 'principal'
-              ? 'Search any student by name or email…'
-              : 'Search students from your classrooms by name or email…'
+              ? (isPhone ? 'Search any student…' : 'Search any student by name or email…')
+              : (isPhone ? 'Search your students…' : 'Search students from your classrooms by name or email…')
           }
-          className="flex-1 bg-transparent text-sm focus:outline-none text-slate-700 placeholder:text-slate-400"
+          // min-w-0 lets the field shrink inside the flex row, and the ellipsis
+          // catches anything still too long on the narrowest phones rather
+          // than slicing the placeholder mid-word.
+          className="flex-1 min-w-0 bg-transparent text-sm text-ellipsis focus:outline-none text-slate-700 placeholder:text-slate-400"
         />
         {searching && <Loader2 size={14} className="text-slate-400 animate-spin" />}
         {query && !searching && (

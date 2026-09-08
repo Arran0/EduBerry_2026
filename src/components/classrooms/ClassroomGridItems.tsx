@@ -2,7 +2,6 @@
 
 import { AnimatePresence, motion } from 'framer-motion'
 import ClassroomButton, { ClassroomButtonSkeleton } from './ClassroomButton'
-import { CLASSROOM_ROW_HEIGHT } from '@/lib/classroomGridLayout'
 import type { ClassroomWithDetails } from '@/lib/classrooms'
 
 interface ClassroomGridItem {
@@ -22,8 +21,9 @@ interface ClassroomGridItemsProps {
   itemWidth: string
   /** Columns per row, so a slot knows which row it lands on. */
   columns: number
-  /** Vertical gap between rows, for the same reason. */
-  rowGap: number
+  /** Rows to show right now — the first load deals them out one at a time
+   *  (see useStaggeredRows). Infinity once every row is free to render. */
+  maxRows?: number
   showTeacher?: boolean
   navigatingId: string | null
   onNavigate: (id: string) => void
@@ -42,35 +42,36 @@ interface ClassroomGridItemsProps {
  * close the gap at the same time — the excess placeholders fold into
  * themselves as the real grid closes in around them.
  *
- * Loading shows a single row, so every row below the first is a slot that
- * did not exist a moment ago. Each starts stacked on the skeleton row and
- * slides down to its own, a row at a time — the grid unfolds out of the
- * placeholder rather than appearing around it. (The caller animates the
- * container's height to match, which is what carries the rest of the page
- * down with it.)
+ * Loading shows a single row. The rest arrive a row at a time (`maxRows`),
+ * each one settling into place as the caller's animated container height
+ * eases whatever sits below the grid further down the page.
  */
 export default function ClassroomGridItems({
-  items, skeletonCount, heightClass, itemWidth, columns, rowGap,
+  items, skeletonCount, heightClass, itemWidth, columns, maxRows = Infinity,
   showTeacher, navigatingId, onNavigate,
 }: ClassroomGridItemsProps) {
-  const count = items ? items.length : skeletonCount
-  const rowStride = CLASSROOM_ROW_HEIGHT + rowGap
+  const total = items ? items.length : skeletonCount
+  const cols = Math.max(1, columns)
+  // While the reveal is staged, slots past the last revealed row simply are
+  // not rendered yet — each row mounts as its turn comes.
+  const count = Math.min(total, maxRows === Infinity ? total : maxRows * cols)
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>
       {Array.from({ length: count }, (_, i) => {
-        const row = Math.floor(i / Math.max(1, columns))
+        const col = i % cols
         return (
         <motion.div
           key={`slot-${i}`}
           layout
           style={{ width: itemWidth, flexGrow: 0, flexShrink: 0 }}
-          // Row 0 is the slot the skeleton already occupied — it stays put and
-          // just swaps its content. Lower rows rise from it and settle.
-          initial={row > 0 ? { opacity: 0, y: -row * rowStride, scale: 0.96 } : false}
+          // A row lands as a row: its buttons rise together from just below,
+          // with a hair of delay across the columns so it reads as dealt
+          // rather than snapped into place.
+          initial={{ opacity: 0, y: 10, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ scale: 0, opacity: 0 }}
-          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1], delay: row * 0.05 }}
+          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1], delay: col * 0.035 }}
         >
           {items ? (
             <ClassroomButton

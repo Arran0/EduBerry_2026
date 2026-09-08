@@ -58,7 +58,6 @@ import {
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
-import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
@@ -90,6 +89,7 @@ import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
+import { useStaggeredRows } from '@/hooks/useStaggeredRows'
 import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
 import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
@@ -436,14 +436,6 @@ export default function HomePage() {
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
-    // Admin/principal accounts don't get this section on home unless they've
-    // opted in from the Academics page — skip the fetch entirely by default.
-    const isAdminOrPrincipal = isAdminRole(profile.role) || profile.role === 'principal'
-    if (isAdminOrPrincipal && !getShowClassroomsOnHome(user.id)) {
-      setClassrooms([])
-      setClassroomsLoaded(true)
-      return
-    }
     try {
       const enrolled = await fetchClassroomsForUser(user.id, profile.role)
       setClassrooms(sortByLastVisited(enrolled))
@@ -827,13 +819,11 @@ export default function HomePage() {
   const HOME_CLASSROOM_COL_GAP = 10
   const HOME_CLASSROOM_ROW_GAP = 12.5 // 25% more than the column gap, for shadow-bleed margin between rows
   const homeClassroomsMaxHeight = classroomGridMaxHeight(HOME_CLASSROOM_VISIBLE_ROWS, HOME_CLASSROOM_ROW_GAP)
-  /** Height of the grid as it stands — one row of skeletons, then however many
-   *  rows the classrooms fill. Animated, so the rows unfolding out of the
-   *  skeleton row carry the cards below down with them. */
-  const homeClassroomGridHeight = (count: number) => classroomGridMaxHeight(
-    Math.min(HOME_CLASSROOM_VISIBLE_ROWS, Math.max(1, Math.ceil(count / classroomColumns))),
-    HOME_CLASSROOM_ROW_GAP,
-  )
+  /** Height of the grid as it stands. The rows are dealt out one at a time on
+   *  first load and this follows them, so the cards below the grid ease down
+   *  the page a row at a time rather than jumping. */
+  const homeClassroomGridHeight = (rows: number) => classroomGridMaxHeight(
+    Math.max(1, Math.min(HOME_CLASSROOM_VISIBLE_ROWS, rows)), HOME_CLASSROOM_ROW_GAP)
   const homeClassroomItemWidth = classroomItemWidth(classroomColumns, HOME_CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
@@ -841,6 +831,11 @@ export default function HomePage() {
     handleScroll: handleClassroomsScroll,
   } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: HOME_CLASSROOM_ROW_GAP })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
+  const homeClassroomRowCount = Math.min(
+    HOME_CLASSROOM_VISIBLE_ROWS,
+    Math.max(1, Math.ceil(topClassrooms.length / classroomColumns)),
+  )
+  const homeRevealRows = useStaggeredRows(homeClassroomRowCount, classroomsLoaded)
 
   const snapToView = useCallback((targetView: AdminCardView) => {
     const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
@@ -1686,9 +1681,9 @@ export default function HomePage() {
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
                   style={{
-                    height: homeClassroomGridHeight(classroomsLoaded ? topClassrooms.length : classroomColumns),
+                    height: homeClassroomGridHeight(classroomsLoaded ? Math.min(homeClassroomRowCount, homeRevealRows) : 1),
                     maxHeight: homeClassroomsMaxHeight,
-                    transition: 'height 460ms cubic-bezier(0.22, 1, 0.36, 1)',
+                    transition: 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)',
                     rowGap: HOME_CLASSROOM_ROW_GAP,
                     columnGap: HOME_CLASSROOM_COL_GAP,
                     paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
@@ -1704,7 +1699,7 @@ export default function HomePage() {
                     heightClass="h-[64px]"
                     itemWidth={homeClassroomItemWidth}
                     columns={classroomColumns}
-                    rowGap={HOME_CLASSROOM_ROW_GAP}
+                    maxRows={homeRevealRows}
                     showTeacher
                     navigatingId={navigatingId}
                     onNavigate={id => setNavigatingId(id)}
