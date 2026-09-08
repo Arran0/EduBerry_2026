@@ -21,6 +21,9 @@ import { useGridColumns } from '@/hooks/useGridColumns'
 import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
+import {
+  WorkWeekCalendarSkeleton, BLEED_CARD_INSET, themeFromGradient,
+} from '@/components/calendar/WorkWeekCalendar'
 const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
 const HomeroomWorkCalendar = dynamic(() => import('@/components/academics/HomeroomWorkCalendar'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
@@ -402,7 +405,10 @@ export default function AcademicsPage() {
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-12">
             <div className="flex items-center gap-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-3">
+                {/* Centred, not top-aligned: the chip sits against a two-line
+                    block (eyebrow + title for staff, title + greeting for a
+                    student) rather than hanging off its first line. */}
+                <div className="flex items-center gap-3">
                   <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/70 border-white/50'}`}>
                     <GraduationCap size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                   </div>
@@ -421,12 +427,8 @@ export default function AcademicsPage() {
                     >
                       Academics
                     </h1>
-                    {isStudent ? (
+                    {isStudent && (
                       <TypingGreeting name={profile.full_name ?? 'there'} dark={bannerOnDark} />
-                    ) : (
-                      <p className={`hidden sm:block text-sm transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>
-                        Access your classrooms and grade data in one place.
-                      </p>
                     )}
                   </div>
                 </div>
@@ -674,7 +676,10 @@ export default function AcademicsPage() {
               {/* No card wrapper — the calendar brings its own chrome and runs
                   edge-to-edge on phones (it cancels this container's gutter). */}
               {loading ? (
-                <p className="text-sm text-slate-500">Loading…</p>
+                <WorkWeekCalendarSkeleton
+                  theme={themeFromGradient(bannerCfg.gradFrom, bannerCfg.gradTo)}
+                  rootClassName={BLEED_CARD_INSET}
+                />
               ) : isStudent ? (
                 <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
               ) : (

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useCallback } from 'react'
+import React, { useRef, useState, useLayoutEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, LayoutList } from 'lucide-react'
 
 // ── Date helpers (shared by every surface that renders this calendar) ─────────
@@ -94,6 +94,13 @@ interface WorkWeekCalendarProps<T> {
   itemKey: (item: T) => string
   /** `compact` is true for the narrow desktop columns that aren't expanded. */
   renderItem: (item: T, compact: boolean) => React.ReactNode
+  /**
+   * Plain-text title, used for the sliver preview a collapsed column shows on
+   * phones — at a twelfth of the screen there is no room for the compact card,
+   * only a couple of truncated words. Without it a collapsed phone column
+   * shows just its count.
+   */
+  itemLabel?: (item: T) => string
   /** Staff-only "add work on this day" affordance. */
   onAddForDay?: (day: Date) => void
   /** Noun used in the add button, e.g. "homework". */
@@ -106,12 +113,22 @@ interface WorkWeekCalendarProps<T> {
   rootClassName?: string
 }
 
+/* The `!` on every radius below (and on the controls inside the calendar) keeps
+   the soft corners even on the square-cornered staff pages — the calendar is a
+   shared student/staff surface, so it holds its own shape rather than taking
+   the page's. See the pro-chrome block in globals.css. */
+
 /** Full-bleed on phones, rounded card from `lg` up — for a page whose own
  *  container already drops its gutter on phones (the classroom tabs). */
-export const BLEED_CARD = 'bg-white border-y border-slate-200 lg:border lg:rounded-2xl lg:shadow-sm overflow-hidden'
+export const BLEED_CARD = 'bg-white border-y border-slate-200 lg:border lg:!rounded-2xl lg:shadow-sm overflow-hidden'
 /** Full-bleed on phones by cancelling a 1rem page gutter, rounded card from
  *  `sm` up — for a page that keeps its padding at every width (academics). */
-export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-0 sm:border sm:rounded-2xl sm:shadow-sm overflow-hidden'
+export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-0 sm:border sm:!rounded-2xl sm:shadow-sm overflow-hidden'
+
+/** Below this width a column strip can't fit six readable columns beside an
+ *  expanded one at 3x, so the expanded column takes 6x instead — the ratio the
+ *  home page's swipeable week card uses at the same width (MiniWeekCalendar). */
+const NARROW_WIDTH = 480
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -121,21 +138,21 @@ export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-
  *
  * Phones (up to `lg`) get a Daily/Weekly toggle: Daily — the default — pairs a
  * compact week picker with a full-width agenda for one day, and Weekly shows
- * the same swipeable day-column strip the staff Task Manager uses — seven
- * columns in a horizontally scrollable row, the active day's column expanded
- * to a full-width card and the rest narrowed to compact previews, so a finger
- * swipe (or tapping a header) moves between days instead of scrolling through
- * every day stacked vertically. Desktop has room for all seven days side by
- * side without scrolling, so it renders the same column strip un-scrolled:
- * the selected day's column expands to 4x width with the same full row design
- * as the phone agenda, and every other column narrows to a compact wrapped
- * card (never truncated).
+ * the swipeable day-column strip, sized exactly like the home page's week card
+ * (MiniWeekCalendar): all seven days on screen at once, the open one 6x the
+ * width of the rest below NARROW_WIDTH and 3x above it, easing between days on
+ * a tap rather than stacking every day's agenda vertically. Closed columns are
+ * a sliver at 6x, so they preview titles instead of the compact card.
+ *
+ * Desktop has room for all seven days at a gentler ratio, so it renders the
+ * same strip with the open column at 4x: full rows in the open column, and a
+ * compact wrapped card (never truncated) in every other.
  */
 export default function WorkWeekCalendar<T>({
   weekStart, onWeekStartChange,
   selectedDay, onSelectDay,
   viewMode, onViewModeChange,
-  itemsForDay, itemKey, renderItem,
+  itemsForDay, itemKey, renderItem, itemLabel,
   onAddForDay, addNoun = 'homework',
   emptyDayLabel = 'Nothing scheduled for this day.',
   theme = PAGE_THEME,
@@ -186,30 +203,30 @@ export default function WorkWeekCalendar<T>({
     </button>
   )
 
-  // Horizontal-scroll container for the phone weekly view's swipeable
-  // day-column strip — auto-scrolls the expanded column into view whenever it
-  // changes, the same way the staff Task Manager's grid keeps its focal
-  // column (today, by default) in view on narrow screens.
-  const weeklyScrollRef = useRef<HTMLDivElement>(null)
-  const scrollExpandedColIntoView = useCallback((colEl: HTMLDivElement) => {
-    requestAnimationFrame(() => {
-      const container = weeklyScrollRef.current
-      if (!container || !colEl.isConnected) return
-      if (container.scrollWidth <= container.clientWidth) return // fully visible already
-      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
-      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
-    })
-  }, [])
-  const expandedColRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) scrollExpandedColIntoView(node)
-  }, [scrollExpandedColIntoView])
+  // The phone strip sizes its columns off its own width, the way the home
+  // page's week card does: below NARROW_WIDTH the open column takes 6x the
+  // others, above it 3x. Measured rather than assumed, since the same strip
+  // renders inside a full-bleed page and inside a classroom tab.
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [stripNarrow, setStripNarrow] = useState(true)
+  useLayoutEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    const measure = () => setStripNarrow(el.offsetWidth < NARROW_WIDTH)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [viewMode])
 
   /** One day's column for the swipeable day strip, shared by the phone weekly
-   *  view and the desktop layout. `narrow` pins a min column width (matching
-   *  the staff Task Manager's own grid) so seven columns overflow into a
-   *  horizontally scrollable strip instead of squeezing unreadably thin —
-   *  desktop has room for all seven without scrolling, so it skips this. */
-  const dayColumn = (day: Date, i: number, narrow: boolean) => {
+   *  view and the desktop layout. `expandRatio` is how many times wider the
+   *  open column runs than a closed one; `sliver` says the closed columns are
+   *  too narrow for the compact card and show a title preview instead. */
+  const dayColumn = (
+    day: Date, i: number,
+    { expandRatio, sliver = false }: { expandRatio: number; sliver?: boolean },
+  ) => {
     const isToday    = isSameDay(day, today)
     const isExpanded = isSameDay(day, activeDay)
     const isLastCol  = i === 6
@@ -218,11 +235,11 @@ export default function WorkWeekCalendar<T>({
     return (
       <div
         key={day.toISOString()}
-        ref={narrow && isExpanded ? expandedColRef : undefined}
         style={{
-          flex: isExpanded ? (narrow ? '3 3 0%' : '4 4 0%') : '1 1 0%',
-          minWidth: narrow ? (isExpanded ? '176px' : '76px') : undefined,
-          transition: 'flex 320ms ease',
+          flex: `${isExpanded ? expandRatio : 1} ${isExpanded ? expandRatio : 1} 0%`,
+          // Matches the home page's week card, so switching days eases open at
+          // the same rate wherever the strip is used.
+          transition: 'flex 0.35s ease',
         }}
         className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
       >
@@ -261,21 +278,40 @@ export default function WorkWeekCalendar<T>({
           </span>
         </button>
 
-        {/* Day content */}
-        <div className={`flex-1 overflow-y-auto max-h-[32rem] ${isExpanded ? 'divide-y divide-slate-100' : 'p-1.5 space-y-1.5 bg-slate-50/30'}`}>
+        {/* Day content. A closed sliver column is a twelfth of the screen, so
+            it previews titles the way the home page's week card does; every
+            other closed column has room for the compact card. */}
+        <div className={`flex-1 overflow-y-auto max-h-[32rem] ${
+          isExpanded ? 'divide-y divide-slate-100' : sliver ? 'px-0.5 py-1 space-y-1 bg-slate-50/30' : 'p-1.5 space-y-1.5 bg-slate-50/30'
+        }`}>
           {/* An empty narrow column says nothing — its header already
               shows a count of 0, so the add button sits straight under
               the header instead of below a placeholder dash. */}
           {items.length === 0 && isExpanded && (
             <p className="text-slate-500 text-center py-7 text-sm">{emptyDayLabel}</p>
           )}
-          {items.map(item => (
-            <React.Fragment key={itemKey(item)}>{renderItem(item, !isExpanded)}</React.Fragment>
-          ))}
-          {onAddForDay && (
+          {!isExpanded && sliver
+            ? itemLabel && items.slice(0, 3).map(item => (
+                <p
+                  key={itemKey(item)}
+                  title={itemLabel(item)}
+                  className="text-[8px] leading-tight text-center text-slate-500 truncate"
+                >
+                  {itemLabel(item)}
+                </p>
+              ))
+            : items.map(item => (
+                <React.Fragment key={itemKey(item)}>{renderItem(item, !isExpanded)}</React.Fragment>
+              ))}
+          {!isExpanded && sliver && items.length > 3 && (
+            <p className="text-[8px] leading-tight text-center font-semibold" style={{ color: theme.primary }}>
+              +{items.length - 3}
+            </p>
+          )}
+          {onAddForDay && !(sliver && !isExpanded) && (
             <button
               onClick={() => onAddForDay(day)}
-              className={`flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 ${
+              className={`flex items-center justify-center gap-1 !rounded-lg border border-dashed border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 ${
                 isExpanded ? 'w-[calc(100%-0.75rem)] m-1.5 py-2.5 text-xs font-semibold' : 'w-full py-1'
               }`}
               title={`Add ${addNoun} for this day`}
@@ -298,7 +334,7 @@ export default function WorkWeekCalendar<T>({
       >
         <button
           onClick={() => { onWeekStartChange(addDays(weekStart, -7)); onSelectDay(null) }}
-          className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
+          className="p-1.5 !rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
           aria-label="Previous week"
         >
           <ChevronLeft size={18} />
@@ -315,7 +351,7 @@ export default function WorkWeekCalendar<T>({
         </button>
         <button
           onClick={() => { onWeekStartChange(addDays(weekStart, 7)); onSelectDay(null) }}
-          className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
+          className="p-1.5 !rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
           aria-label="Next week"
         >
           <ChevronRight size={18} />
@@ -327,7 +363,7 @@ export default function WorkWeekCalendar<T>({
 
         {/* View toggle */}
         <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50 border-b border-slate-200">
-          <div className="inline-flex rounded-full bg-white p-0.5 ring-1 ring-slate-200">
+          <div className="inline-flex !rounded-full bg-white p-0.5 ring-1 ring-slate-200">
             {(['daily', 'weekly'] as const).map(mode => {
               const on = viewMode === mode
               const Icon = mode === 'daily' ? CalendarDays : LayoutList
@@ -335,7 +371,7 @@ export default function WorkWeekCalendar<T>({
                 <button
                   key={mode}
                   onClick={() => onViewModeChange(mode)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold capitalize transition-all active:scale-95 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 !rounded-full text-[11px] font-bold capitalize transition-all active:scale-95 ${
                     on ? 'text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                   style={on ? { background: gradient } : undefined}
@@ -365,7 +401,7 @@ export default function WorkWeekCalendar<T>({
                   <button
                     key={day.toISOString()}
                     onClick={() => onSelectDay(day)}
-                    className={`flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition-all active:scale-95 ${
+                    className={`flex flex-col items-center gap-0.5 py-1.5 !rounded-xl transition-all active:scale-95 ${
                       isActive
                         ? 'text-white shadow-md'
                         : isToday
@@ -392,7 +428,7 @@ export default function WorkWeekCalendar<T>({
                       {total > 0 && Array.from({ length: Math.min(total, 3) }).map((_, d) => (
                         <span
                           key={d}
-                          className={`w-1 h-1 rounded-full ${isActive ? 'bg-white/90' : ''}`}
+                          className={`w-1 h-1 !rounded-full ${isActive ? 'bg-white/90' : ''}`}
                           style={isActive ? undefined : { background: theme.primary }}
                         />
                       ))}
@@ -410,7 +446,7 @@ export default function WorkWeekCalendar<T>({
                   <span className="ml-2 text-[10px] font-bold uppercase tracking-wide" style={{ color: theme.primary }}>Today</span>
                 )}
               </h3>
-              <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
+              <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 !rounded-full px-2 py-0.5 flex-shrink-0">
                 {agendaItems.length} scheduled
               </span>
             </div>
@@ -421,22 +457,109 @@ export default function WorkWeekCalendar<T>({
             {addButton(activeDay, `Add ${addNoun} for ${activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`)}
           </>
         ) : (
-          /* Weekly — the same swipeable day-column strip the staff Task
-             Manager uses: seven columns in a horizontally scrollable row,
-             the active day's column expanded into a full card. A finger
-             swipe (or tapping a header) moves between days, instead of
-             scrolling through every day's agenda stacked vertically. */
-          <div ref={weeklyScrollRef} className="overflow-x-auto">
-            <div className="flex">
-              {weekDays.map((day, i) => dayColumn(day, i, true))}
-            </div>
+          /* Weekly — the swipeable day-column strip, sized exactly like the
+             home page's week card: all seven days on screen at once, the open
+             one 6x the others on a phone (3x once there is room), easing
+             between days instead of stacking every day's agenda vertically. */
+          <div ref={stripRef} className="flex">
+            {weekDays.map((day, i) =>
+              dayColumn(day, i, { expandRatio: stripNarrow ? 6 : 3, sliver: stripNarrow }))}
           </div>
         )}
       </div>
 
       {/* ── Desktop: seven columns, the active day expanded to 4x width ── */}
       <div className="hidden lg:flex">
-        {weekDays.map((day, i) => dayColumn(day, i, false))}
+        {weekDays.map((day, i) => dayColumn(day, i, { expandRatio: 4 }))}
+      </div>
+    </div>
+  )
+}
+
+// ── Skeleton ─────────────────────────────────────────────────────────────────
+
+/** How many chips each day of the skeleton week shows — an uneven week reads as
+ *  a calendar filling in rather than a loading bar. Mirrors the Task Manager's
+ *  own calendar skeleton. */
+const SKELETON_CHIPS = [2, 1, 2, 3, 1, 2, 1]
+
+/**
+ * Placeholder for the calendar while its work loads. Like the Task Manager's,
+ * it renders the real shell — the week bar with the real week label, the view
+ * toggle, and this week's actual day headers — so only the rows themselves
+ * animate in, and nothing shifts when the data lands.
+ */
+export function WorkWeekCalendarSkeleton({
+  weekStart = getWeekStart(new Date()),
+  theme = PAGE_THEME,
+  rootClassName = BLEED_CARD,
+}: {
+  weekStart?: Date
+  theme?: CalendarTheme
+  rootClassName?: string
+} = {}) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekLabel = (() => {
+    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    return `${fmt(weekDays[0])} – ${fmt(weekDays[6])}`
+  })()
+
+  return (
+    <div className={rootClassName} aria-busy="true">
+      {/* Week bar — the real label, so it doesn't change when data lands */}
+      <div
+        className="flex items-center gap-2 px-2 py-2.5"
+        style={{ background: `linear-gradient(to right, ${theme.gradFrom}, ${theme.gradTo})` }}
+      >
+        <ChevronLeft size={18} className="text-white/50 flex-shrink-0" />
+        <div className="flex-1 min-w-0 text-center leading-tight">
+          <span className="block text-sm font-bold text-white truncate">{weekLabel}</span>
+          <span className="block h-2.5 mt-1 mx-auto w-32 max-w-full !rounded-full bg-white/25 animate-pulse" />
+        </div>
+        <ChevronRight size={18} className="text-white/50 flex-shrink-0" />
+      </div>
+
+      {/* Toggle row — phone-only, exactly as the loaded calendar has it */}
+      <div className="lg:hidden flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50 border-b border-slate-200">
+        <div className="h-6 w-32 !rounded-full bg-slate-200 animate-pulse" />
+        <div className="h-3 w-16 !rounded-full bg-slate-200 animate-pulse" />
+      </div>
+
+      {/* Day columns — real headers, chips pulsing in left to right */}
+      <div className="flex">
+        {weekDays.map((day, i) => {
+          const isToday = isSameDay(day, today)
+          return (
+            <div
+              key={day.toISOString()}
+              className={`flex-1 min-w-0 flex flex-col ${i < 6 ? 'border-r border-slate-100' : ''}`}
+            >
+              <div
+                className={`px-2 py-2.5 text-center border-b ${isToday ? 'border-slate-200' : 'bg-slate-50 border-slate-200'}`}
+                style={isToday ? { background: theme.primaryLight } : undefined}
+              >
+                <p
+                  className="text-[10px] font-bold uppercase tracking-wide text-slate-500"
+                  style={isToday ? { color: theme.primary } : undefined}
+                >
+                  {DAY_NAMES[i]}
+                </p>
+                <p className="text-sm font-bold leading-tight text-slate-700">{day.getDate()}</p>
+                <span className="block h-2.5 mt-0.5 mx-auto w-3 !rounded-full bg-slate-200" />
+              </div>
+              <div className="p-1.5 space-y-1.5 min-h-[7rem] bg-slate-50/30">
+                {Array.from({ length: SKELETON_CHIPS[i] }).map((_, j) => (
+                  <div
+                    key={j}
+                    className="h-8 w-full !rounded-lg bg-slate-200/80 animate-pulse"
+                    style={{ animationDelay: `${(i * 3 + j) * 60}ms` }}
+                  />
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

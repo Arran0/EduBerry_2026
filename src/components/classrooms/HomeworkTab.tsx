@@ -19,7 +19,7 @@ import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
 import WorkWeekCalendar, {
-  CalendarViewMode, formatDate, getWeekStart, parseDate,
+  CalendarViewMode, WorkWeekCalendarSkeleton, formatDate, getWeekStart, parseDate,
 } from '@/components/calendar/WorkWeekCalendar'
 import {
   SmartboardTask,
@@ -435,18 +435,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="space-y-3 px-2 sm:px-0">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
-            <div className="h-3 w-1/3 bg-slate-100 rounded animate-pulse mt-2.5" />
-          </div>
-        ))}
-      </div>
-    )
-  }
+  if (loading) return <WorkWeekCalendarSkeleton weekStart={weekStart} />
 
   return (
     <div className="space-y-4">
@@ -508,6 +497,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         renderItem={(entry, compact) => entry.kind === 'hw'
           ? renderHwItem(entry.task, compact)
           : renderCwItem(entry.file, compact)}
+        itemLabel={entry => entry.kind === 'hw' ? entry.task.title : entry.file.title}
         onAddForDay={canManage ? day => { setNewHwDate(formatDate(day)); setShowForm(true) } : undefined}
         addNoun="homework"
       />

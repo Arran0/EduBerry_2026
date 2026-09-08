@@ -86,7 +86,6 @@ interface ReportCardsSectionProps {
 const KEYBOARD_GAP = 12
 
 function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectionProps) {
-  const [expanded, setExpanded] = useState(false)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
   const sectionRef = useRef<HTMLElement>(null)
   const searchParams = useSearchParams()
@@ -96,24 +95,16 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
     fetchBranding().then(setBranding).catch(() => {})
   }, [])
 
-  // Deep-link support, e.g. /academics?section=reportcards — opens the panel;
-  // the reveal effect below scrolls it into view like a tap on View does.
+  // Deep-link support, e.g. /academics?section=reportcards — the panel is
+  // always open, so this only brings it into view. The section's own
+  // scroll-margin keeps its header clear of the sticky navbar.
   useEffect(() => {
     if (searchParams.get('section') !== 'reportcards') return
-    setExpanded(true)
-  }, [searchParams])
-
-  // Opening the panel brings it into view. The section's own scroll-margin
-  // keeps its header clear of the sticky navbar, and `block: 'start'` targets
-  // the header — which doesn't move as the panel springs open below it, so one
-  // scroll is enough for the whole animation.
-  useEffect(() => {
-    if (!expanded) return
     const raf = requestAnimationFrame(() => {
       sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
     return () => cancelAnimationFrame(raf)
-  }, [expanded])
+  }, [searchParams])
 
   /**
    * The app runs with `interactiveWidget: 'resizes-visual'`, so the soft
@@ -131,22 +122,22 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
     if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'smooth' })
   }, [])
 
-  // The staff search field autofocuses as the panel opens, so the keyboard
-  // arrives before any focusin listener below could be attached — catch that
-  // case when the keyboard itself reports open. The delay lets both the reveal
-  // scroll above and the keyboard's own animation settle, so the overlap is
-  // measured against final geometry rather than a frame mid-flight.
+  // A field focused before the focusin listener below is attached (or focused
+  // by the browser itself, restoring a form) still needs lifting — catch that
+  // when the keyboard reports open. The delay lets any deep-link scroll and
+  // the keyboard's own animation settle, so the overlap is measured against
+  // final geometry rather than a frame mid-flight.
   useEffect(() => {
-    if (!expanded || !keyboardOpen) return
+    if (!keyboardOpen) return
     const t = window.setTimeout(liftFocusedAboveKeyboard, 420)
     return () => window.clearTimeout(t)
-  }, [expanded, keyboardOpen, liftFocusedAboveKeyboard])
+  }, [keyboardOpen, liftFocusedAboveKeyboard])
 
   // Fields focused later (remarks, filters) get the same treatment, once the
   // keyboard has finished animating in.
   useEffect(() => {
     const section = sectionRef.current
-    if (!section || !expanded) return
+    if (!section) return
     let t = 0
     const onFocusIn = () => {
       window.clearTimeout(t)
@@ -157,7 +148,7 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
       window.clearTimeout(t)
       section.removeEventListener('focusin', onFocusIn)
     }
-  }, [expanded, liftFocusedAboveKeyboard])
+  }, [liftFocusedAboveKeyboard])
 
   return (
     <section
@@ -176,66 +167,34 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
             Report Cards
           </h2>
         </div>
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className={`flex-shrink-0 inline-flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-full text-sm font-semibold border shadow-sm transition-all active:scale-95 ${
-            expanded
-              ? 'bg-rose-500 text-white border-rose-500'
-              : 'bg-white/80 text-slate-600 border-white/70 hover:text-rose-600 hover:border-rose-200'
-          }`}
-        >
-          {expanded ? 'Close' : 'View'}
-          <ChevronDown size={16} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
-        </button>
       </div>
 
-      {/* ── Jelly-expanding white card ── */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="rc-panel"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 210, damping: 24, mass: 0.9 }}
-            className="overflow-hidden"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: -8 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.97, y: -4 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 19, mass: 0.8 }}
-              className="glass-card rounded-[1.5rem] p-4 sm:p-5 origin-top"
-            >
-              {isStudent ? (
-                <ReportCardForStudent
-                  studentProfile={profile}
-                  viewerId={user.id}
-                  viewerRole={profile.role}
-                  branding={branding}
-                  selfView
-                />
-              ) : (
-                <StaffReportCardView
-                  viewerId={user.id}
-                  viewerRole={profile.role}
-                  viewer={profile}
-                  branding={branding}
-                />
-              )}
-            </motion.div>
-          </motion.div>
+      {/* ── Panel — always open, so report cards are one scroll away ── */}
+      <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
+        {isStudent ? (
+          <ReportCardForStudent
+            studentProfile={profile}
+            viewerId={user.id}
+            viewerRole={profile.role}
+            branding={branding}
+            selfView
+          />
+        ) : (
+          <StaffReportCardView
+            viewerId={user.id}
+            viewerRole={profile.role}
+            viewer={profile}
+            branding={branding}
+          />
         )}
-      </AnimatePresence>
+      </div>
 
       {/* Scroll room for the keyboard. This panel is the last thing on the
           page, so without it there is nothing left to scroll and the fields at
           the bottom stay pinned under the keyboard. `--keyboard-inset` is
           rewritten every viewport frame (see useKeyboardInset), so the spacer
           tracks the keyboard's open/close animation with no re-render. */}
-      {expanded && (
-        <div aria-hidden style={{ height: 'var(--keyboard-inset, 0px)' }} />
-      )}
+      <div aria-hidden style={{ height: 'var(--keyboard-inset, 0px)' }} />
     </section>
   )
 }
@@ -355,9 +314,11 @@ function StaffReportCardSearch({
     <div className="space-y-3">
       <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-slate-300">
         <Search size={16} className="text-slate-400 flex-shrink-0" />
+        {/* No autofocus: the panel is open from the moment the page loads, so
+            focusing here would scroll the page down to it and raise the
+            keyboard before the reader has asked for either. */}
         <input
           ref={inputRef}
-          autoFocus
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

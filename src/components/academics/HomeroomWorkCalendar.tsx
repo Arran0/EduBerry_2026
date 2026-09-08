@@ -12,7 +12,8 @@ import { Classroom } from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import ModalShell from '@/components/ui/ModalShell'
 import WorkWeekCalendar, {
-  CalendarViewMode, BLEED_CARD_INSET, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
+  CalendarViewMode, WorkWeekCalendarSkeleton, BLEED_CARD_INSET,
+  addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
 
 /** Only the fields the picker and row labels need. */
@@ -256,10 +257,7 @@ export default function HomeroomWorkCalendar({
       )}
 
       {loading ? (
-        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-slate-100 bg-white p-8 text-center">
-          <div className="spinner mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading homeroom calendar…</p>
-        </div>
+        <WorkWeekCalendarSkeleton weekStart={weekStart} theme={theme} rootClassName={BLEED_CARD_INSET} />
       ) : (
         <>
           <WorkWeekCalendar<SmartboardTask>
@@ -272,6 +270,7 @@ export default function HomeroomWorkCalendar({
             itemsForDay={tasksForDay}
             itemKey={task => task.id}
             renderItem={renderTask}
+            itemLabel={task => task.title}
             onAddForDay={canCreate ? day => { setNewHwDate(formatDate(day)); setShowForm(true) } : undefined}
             addNoun="homework"
             emptyDayLabel="No homework set for this day."

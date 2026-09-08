@@ -20,7 +20,8 @@ import {
   upsertTaskCompletion,
 } from '@/lib/smartboard'
 import WorkWeekCalendar, {
-  CalendarViewMode, BLEED_CARD_INSET, addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
+  CalendarViewMode, WorkWeekCalendarSkeleton, BLEED_CARD_INSET,
+  addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -136,58 +137,6 @@ function EduPointsBadge({
       <Star size={8} className={earned ? 'fill-current' : ''} />
       {earned ? `+${points}` : points} EP
     </span>
-  )
-}
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-/** Mirrors the WorkWeekCalendar shell: gradient week bar, view toggle, day
- *  picker and a few agenda rows. */
-function CalendarSkeleton() {
-  return (
-    <div className="space-y-4 animate-pulse">
-      <div className={BLEED_CARD_INSET}>
-        {/* Week bar */}
-        <div className="flex items-center justify-between gap-2 px-3 py-3 bg-slate-200/70">
-          <div className="w-6 h-6 bg-white/60 rounded-full" />
-          <div className="w-32 h-4 bg-white/60 rounded" />
-          <div className="w-6 h-6 bg-white/60 rounded-full" />
-        </div>
-        {/* Toggle row */}
-        <div className="flex items-center justify-between px-2.5 py-2 bg-slate-50 border-b border-slate-200">
-          <div className="w-32 h-6 bg-slate-200 rounded-full" />
-          <div className="w-16 h-3 bg-slate-200 rounded" />
-        </div>
-        {/* Day picker */}
-        <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
-          {Array.from({ length: 7 }, (_, i) => (
-            <div key={i} className="h-11 bg-slate-200/70 rounded-xl" />
-          ))}
-        </div>
-        {/* Agenda rows */}
-        <div className="divide-y divide-slate-100">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="flex items-start gap-3 px-4 py-3">
-              <div className="w-1 self-stretch bg-slate-200 rounded-full" />
-              <div className="w-3.5 h-3.5 bg-slate-200 rounded-full mt-0.5" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3.5 bg-slate-100 rounded w-2/3" />
-                <div className="h-2.5 bg-slate-100 rounded w-1/3" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Overdue placeholder */}
-      <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-3.5 h-3.5 bg-red-200 rounded" />
-          <div className="w-16 h-3.5 bg-red-200 rounded" />
-        </div>
-        <div className="w-full h-10 bg-red-100 rounded-xl" />
-        <div className="w-3/4 h-10 bg-red-100 rounded-xl" />
-      </div>
-    </div>
   )
 }
 
@@ -500,7 +449,15 @@ export default function SchoolWorkManager({
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  if (filesLoading || hwLoading) return <CalendarSkeleton />
+  if (filesLoading || hwLoading) {
+    return (
+      <WorkWeekCalendarSkeleton
+        weekStart={weekStart}
+        theme={themeFromGradient(themeGradFrom, themeGradTo)}
+        rootClassName={BLEED_CARD_INSET}
+      />
+    )
+  }
 
   if (workItems.length === 0 && homeworkItems.length === 0) {
     return (
@@ -536,6 +493,7 @@ export default function SchoolWorkManager({
         renderItem={(entry, compact) => entry.kind === 'hw'
           ? renderHwItem(entry.task, compact)
           : renderCwItem(entry.item, compact)}
+        itemLabel={entry => entry.kind === 'hw' ? entry.task.title : entry.item.title}
         emptyDayLabel="Nothing due on this day."
         theme={calendarTheme}
         rootClassName={BLEED_CARD_INSET}
