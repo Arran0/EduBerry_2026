@@ -827,6 +827,13 @@ export default function HomePage() {
   const HOME_CLASSROOM_COL_GAP = 10
   const HOME_CLASSROOM_ROW_GAP = 12.5 // 25% more than the column gap, for shadow-bleed margin between rows
   const homeClassroomsMaxHeight = classroomGridMaxHeight(HOME_CLASSROOM_VISIBLE_ROWS, HOME_CLASSROOM_ROW_GAP)
+  /** Height of the grid as it stands — one row of skeletons, then however many
+   *  rows the classrooms fill. Animated, so the rows unfolding out of the
+   *  skeleton row carry the cards below down with them. */
+  const homeClassroomGridHeight = (count: number) => classroomGridMaxHeight(
+    Math.min(HOME_CLASSROOM_VISIBLE_ROWS, Math.max(1, Math.ceil(count / classroomColumns))),
+    HOME_CLASSROOM_ROW_GAP,
+  )
   const homeClassroomItemWidth = classroomItemWidth(classroomColumns, HOME_CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
@@ -1679,7 +1686,9 @@ export default function HomePage() {
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
                   style={{
+                    height: homeClassroomGridHeight(classroomsLoaded ? topClassrooms.length : classroomColumns),
                     maxHeight: homeClassroomsMaxHeight,
+                    transition: 'height 460ms cubic-bezier(0.22, 1, 0.36, 1)',
                     rowGap: HOME_CLASSROOM_ROW_GAP,
                     columnGap: HOME_CLASSROOM_COL_GAP,
                     paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
@@ -1694,6 +1703,8 @@ export default function HomePage() {
                     skeletonCount={classroomColumns}
                     heightClass="h-[64px]"
                     itemWidth={homeClassroomItemWidth}
+                    columns={classroomColumns}
+                    rowGap={HOME_CLASSROOM_ROW_GAP}
                     showTeacher
                     navigatingId={navigatingId}
                     onNavigate={id => setNavigatingId(id)}

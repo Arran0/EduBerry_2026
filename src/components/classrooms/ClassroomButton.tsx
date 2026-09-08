@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react'
 import type { ClassroomWithDetails } from '@/lib/classrooms'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { isDarkLum } from '@/lib/bannerStyle'
-import { pickClassroomBannerPalette } from '@/lib/classroomPalette'
+import { pickClassroomPalette } from '@/lib/classroomPalette'
 
 // Alpha of the pastel veil laid over banner photos — softens the image and
 // also biases the luminance test toward dark (readable) text.
@@ -62,7 +62,7 @@ export default function ClassroomButton({
   // Keyed off the classroom itself, not its place in the grid: the tile keeps
   // its colour however the list is sorted, and the classroom's own banner
   // opens in the same pastel.
-  const { hexFrom, hexTo } = pickClassroomBannerPalette(classroom.id)
+  const { from: fillFrom, to: fillTo } = pickClassroomPalette(classroom.id)
   const banner = classroom.banner_url
   const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
 
@@ -71,7 +71,7 @@ export default function ClassroomButton({
   const [onDark, setOnDark] = useState(false)
   useEffect(() => {
     if (!banner) {
-      setOnDark(isDarkLum((hexToLuminance(hexFrom) + hexToLuminance(hexTo)) / 2))
+      setOnDark(isDarkLum((hexToLuminance(fillFrom) + hexToLuminance(fillTo)) / 2))
       return
     }
     let active = true
@@ -81,10 +81,10 @@ export default function ClassroomButton({
       setOnDark(isDarkLum(eff))
     })
     return () => { active = false }
-  }, [banner, hexFrom, hexTo])
+  }, [banner, fillFrom, fillTo])
 
   const translucentGrad =
-    `linear-gradient(135deg, ${hexA(hexFrom, 0.6)} 0%, ${hexA(hexTo, 0.6)} 100%)`
+    `linear-gradient(135deg, ${hexA(fillFrom, 0.6)} 0%, ${hexA(fillTo, 0.6)} 100%)`
 
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>

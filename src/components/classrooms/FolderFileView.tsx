@@ -1001,7 +1001,7 @@ export default function FolderFileView({
             title="Submit your work"
             subtitle="Write text, paste a link, or upload a file"
             icon={<Send size={15} />}
-            iconClassName="bg-indigo-100 text-indigo-600"
+            iconClassName="themed-chip"
             bodyClassName="space-y-3"
             footer={
               <div className="flex justify-end gap-2">
@@ -1051,7 +1051,7 @@ export default function FolderFileView({
             title="Student Tracking"
             subtitle={trackingData.file?.title}
             icon={<Users size={15} />}
-            iconClassName="bg-indigo-100 text-indigo-600"
+            iconClassName="themed-chip"
           >
               {trackingData.file && (
                 <div className="flex flex-wrap gap-2 mb-4 text-xs">
@@ -1192,7 +1192,7 @@ export default function FolderFileView({
             title="New Classwork"
             subtitle={folders.find(f => f.id === showNewFile)?.title}
             icon={<Plus size={16} />}
-            iconClassName="bg-indigo-100 text-indigo-600"
+            iconClassName="themed-chip"
             bodyClassName="space-y-3 bg-slate-50/60 !py-3"
             footer={
               <div className="flex items-center gap-2">
@@ -1205,7 +1205,8 @@ export default function FolderFileView({
                 </button>
                 <button
                   onClick={e => handleCreateFile(e as unknown as React.FormEvent, showNewFile!)}
-                  className="flex-1 inline-flex items-center justify-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-full transition-all disabled:opacity-50 disabled:shadow-none bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-lg shadow-indigo-600/30"
+                  className="keep-round flex-1 inline-flex items-center justify-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-full transition-all disabled:opacity-50 disabled:shadow-none hover:brightness-110 active:scale-[0.98] shadow-lg"
+                  style={{ background: 'var(--page-primary-dark, #4338ca)' }}
                   disabled={!newFileTitle.trim() || uploadingFile}
                 >
                   <Plus size={15} />

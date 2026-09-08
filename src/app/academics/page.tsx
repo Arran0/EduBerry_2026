@@ -255,6 +255,15 @@ export default function AcademicsPage() {
   const CLASSROOM_COL_GAP = 12
   const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
   const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
+  /** Height of the grid as it stands — one row while the skeletons show, then
+   *  however many rows the classrooms fill (capped at the scrolling limit).
+   *  Animated, so rows unfolding out of the skeleton row carry the sections
+   *  below the grid down with them instead of jumping. */
+  const classroomGridHeight = (count: number) => classroomGridMaxHeight(
+    Math.min(CLASSROOM_VISIBLE_ROWS, Math.max(1, Math.ceil(count / classroomColumns))),
+    CLASSROOM_ROW_GAP,
+  )
+  const GRID_HEIGHT_TRANSITION = 'height 460ms cubic-bezier(0.22, 1, 0.36, 1)'
   const classroomItemWidthCss = classroomItemWidth(classroomColumns, CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
@@ -602,7 +611,9 @@ export default function AcademicsPage() {
                 ref={classroomsScrollRef}
                 onScroll={handleClassroomsScroll}
                 style={{
+                  height: classroomGridHeight(classroomColumns),
                   maxHeight: classroomsMaxHeight,
+                  transition: GRID_HEIGHT_TRANSITION,
                   rowGap: CLASSROOM_ROW_GAP,
                   columnGap: CLASSROOM_COL_GAP,
                   paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
@@ -617,6 +628,8 @@ export default function AcademicsPage() {
                   skeletonCount={classroomColumns}
                   heightClass="h-[64px]"
                   itemWidth={classroomItemWidthCss}
+                  columns={classroomColumns}
+                  rowGap={CLASSROOM_ROW_GAP}
                   navigatingId={navigatingId}
                   onNavigate={setNavigatingId}
                 />
@@ -630,7 +643,9 @@ export default function AcademicsPage() {
                 ref={classroomSearch ? undefined : classroomsScrollRef}
                 onScroll={classroomSearch ? undefined : handleClassroomsScroll}
                 style={{
+                  height: classroomGridHeight(filteredClassrooms.length),
                   maxHeight: classroomsMaxHeight,
+                  transition: GRID_HEIGHT_TRANSITION,
                   rowGap: CLASSROOM_ROW_GAP,
                   columnGap: CLASSROOM_COL_GAP,
                   paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
@@ -645,6 +660,8 @@ export default function AcademicsPage() {
                   skeletonCount={classroomColumns}
                   heightClass="h-[64px]"
                   itemWidth={classroomItemWidthCss}
+                  columns={classroomColumns}
+                  rowGap={CLASSROOM_ROW_GAP}
                   navigatingId={navigatingId}
                   onNavigate={setNavigatingId}
                 />

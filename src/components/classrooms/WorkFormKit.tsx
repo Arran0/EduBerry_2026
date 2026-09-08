@@ -21,11 +21,18 @@ export const INPUT_CLASS =
   'themed-input w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 ' +
   'placeholder:text-slate-400 shadow-sm focus:outline-none transition-all'
 
-/** Header band / primary button fill, straight from the page palette. */
-const HEADER_GRADIENT = 'linear-gradient(to right, var(--page-gradient-from, #4f46e5), var(--page-gradient-to, #2563eb))'
+/** Primary button fill and the header icon chip's tint, straight from the
+ *  page palette. The header itself stays white — a full colour band across the
+ *  top made the card read as an alert rather than a form. */
 const BUTTON_FILL = 'var(--page-primary-dark, #4338ca)'
+const CHIP_TINT = 'color-mix(in srgb, var(--page-primary, #6366f1) 16%, white)'
+const CHIP_INK = 'var(--page-primary-dark, #4338ca)'
 
-/** Coloured header band: icon chip, title, optional subtitle and actions. */
+/**
+ * Card header: a tinted icon chip beside the title, on white — the same shape
+ * ModalShell gives the classwork card, so all four authoring cards (new/edit
+ * homework, new/edit classwork) read as one family.
+ */
 export function FormHeader({
   icon, title, subtitle, actions,
 }: {
@@ -35,20 +42,23 @@ export function FormHeader({
   actions?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5" style={{ background: HEADER_GRADIENT }}>
-      <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-white flex-shrink-0 [&>svg]:w-[15px] [&>svg]:h-[15px]">
+    <div className="flex items-center gap-3 px-3.5 sm:px-5 py-3 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
+      <div
+        className="w-9 h-9 !rounded-xl flex items-center justify-center flex-shrink-0 [&>svg]:w-[17px] [&>svg]:h-[17px]"
+        style={{ background: CHIP_TINT, color: CHIP_INK }}
+      >
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-bold text-white leading-tight truncate">{title}</p>
-        {subtitle && <p className="text-[10px] text-white/80 truncate mt-0.5">{subtitle}</p>}
+        <p className="text-[15px] font-bold text-slate-800 leading-tight truncate">{title}</p>
+        {subtitle && <p className="text-[11px] text-slate-500 truncate mt-0.5">{subtitle}</p>}
       </div>
       {actions}
     </div>
   )
 }
 
-/** Header icon button — sits on the coloured band. */
+/** Header icon button — sits on the white header beside the title. */
 export function HeaderAction({
   onClick, title, disabled, children,
 }: {
@@ -64,7 +74,7 @@ export function HeaderAction({
       title={title}
       aria-label={title}
       disabled={disabled}
-      className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full text-white/85 hover:text-white hover:bg-white/20 active:scale-90 transition-all disabled:opacity-50 [&>svg]:w-[15px] [&>svg]:h-[15px]"
+      className="w-8 h-8 flex-shrink-0 flex items-center justify-center !rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-90 transition-all disabled:opacity-50 [&>svg]:w-[15px] [&>svg]:h-[15px]"
     >
       {children}
     </button>

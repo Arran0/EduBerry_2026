@@ -387,6 +387,14 @@ body:has(.pro-chrome) .modal-portal.modal-portal [class*='animate-spin'] {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--page-primary, #6366f1) 12%, transparent);
 }
 
+/* Icon chip for the authoring cards' headers — a tint of the page palette, so
+   the four cards (new/edit homework, new/edit classwork) carry the school's
+   colour without a full colour band across the top. */
+.themed-chip {
+  background: color-mix(in srgb, var(--page-primary, #6366f1) 16%, white);
+  color: var(--page-primary-dark, #4338ca);
+}
+
 /* Icon chips keep their rounded-square badge shape — the icon is a piece of
    identity, like an app tile, and squaring it off flattens the whole page's
    rhythm. Same radius as .icon-chip itself. */

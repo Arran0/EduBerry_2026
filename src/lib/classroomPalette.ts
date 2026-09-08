@@ -1,84 +1,83 @@
 // The one pastel set every classroom surface draws from, so a classroom reads
 // as the same colour wherever it appears — its button in the grid and the
-// banner of the classroom it opens. Stored as hex stops (the buttons tint and
-// fade them at will) alongside the Tailwind classes the banner needs.
+// banner of the classroom it opens.
 //
-// Tailwind class names below are written out in full (never built from
-// interpolated variables) so the JIT scanner picks them up from this file.
+// Hex only, deliberately: Tailwind's JIT scans `src/components` and `src/app`,
+// so class names living in a lib module are only generated when some component
+// happens to use the same ones. A pastel that no component uses would compile
+// to nothing and the banner would render as a transparent band. Inline
+// gradients built from these stops can't miss.
 
-export interface ClassroomBannerPalette {
+export interface ClassroomPalette {
   name: string
-  /** Pastel stops — the button's fill, and the banner's gradient ends. */
-  hexFrom: string
-  hexTo: string
-  /** `bg-gradient-to-br ${bannerGradient}` for the immersive hero. */
-  bannerGradient: string
-  /** `bg-gradient-to-br ${avatarGradient}` for the logo bubble. Saturated, not
-   *  pastel: it carries white initials, and it accents the pastel banner. */
-  avatarGradient: string
-  /** Decorative blurred glow orbs shown behind the banner content. */
+  /** Pastel stops — the button's fill and the banner's gradient. */
+  from: string
+  to: string
+  /** Saturated stops for the logo bubble, which carries white initials and
+   *  needs the contrast the pastels can't give. Same hue family. */
+  deepFrom: string
+  deepTo: string
+  /** Decorative blurred glow orbs behind the banner content. */
   orbA: string
   orbB: string
 }
 
-export const CLASSROOM_BANNER_PALETTES: ClassroomBannerPalette[] = [
+export const CLASSROOM_PALETTES: ClassroomPalette[] = [
   {
     name: 'Sky Breeze',
-    hexFrom: '#a5f3fc', hexTo: '#bae6fd',
-    bannerGradient: 'from-cyan-200 via-sky-200 to-blue-200',
-    avatarGradient: 'from-cyan-500 to-sky-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-sky-300/35',
+    from: '#a5f3fc', to: '#bae6fd',
+    deepFrom: '#06b6d4', deepTo: '#0284c7',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(125,211,252,0.45)',
   },
   {
     name: 'Lilac',
-    hexFrom: '#ddd6fe', hexTo: '#e9d5ff',
-    bannerGradient: 'from-violet-200 via-purple-200 to-fuchsia-200',
-    avatarGradient: 'from-violet-500 to-purple-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-purple-300/35',
+    from: '#ddd6fe', to: '#e9d5ff',
+    deepFrom: '#8b5cf6', deepTo: '#9333ea',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(216,180,254,0.45)',
   },
   {
     name: 'Blossom',
-    hexFrom: '#fecdd3', hexTo: '#fbcfe8',
-    bannerGradient: 'from-rose-200 via-pink-200 to-fuchsia-200',
-    avatarGradient: 'from-rose-500 to-pink-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-pink-300/35',
+    from: '#fecdd3', to: '#fbcfe8',
+    deepFrom: '#f43f5e', deepTo: '#db2777',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(249,168,212,0.45)',
   },
   {
     name: 'Apricot',
-    hexFrom: '#fde68a', hexTo: '#fed7aa',
-    bannerGradient: 'from-amber-200 via-orange-200 to-rose-200',
-    avatarGradient: 'from-amber-500 to-orange-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-orange-300/35',
+    from: '#fde68a', to: '#fed7aa',
+    deepFrom: '#f59e0b', deepTo: '#ea580c',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(253,186,116,0.45)',
   },
   {
     name: 'Mint',
-    hexFrom: '#a7f3d0', hexTo: '#99f6e4',
-    bannerGradient: 'from-emerald-200 via-teal-200 to-cyan-200',
-    avatarGradient: 'from-emerald-500 to-teal-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-teal-300/35',
+    from: '#a7f3d0', to: '#99f6e4',
+    deepFrom: '#10b981', deepTo: '#0d9488',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(94,234,212,0.45)',
   },
   {
     name: 'Periwinkle',
-    hexFrom: '#bfdbfe', hexTo: '#c7d2fe',
-    bannerGradient: 'from-blue-200 via-indigo-200 to-violet-200',
-    avatarGradient: 'from-blue-500 to-indigo-600',
-    orbA: 'bg-white/45',
-    orbB: 'bg-indigo-300/35',
+    from: '#bfdbfe', to: '#c7d2fe',
+    deepFrom: '#3b82f6', deepTo: '#4f46e5',
+    orbA: 'rgba(255,255,255,0.55)', orbB: 'rgba(165,180,252,0.45)',
   },
 ]
 
 /** Deterministic palette pick so a given classroom always renders the same
  *  colours — the same one for its button and its banner, stable across
  *  reloads, viewers, and however the grid happens to be sorted. */
-export function pickClassroomBannerPalette(classroomId: string): ClassroomBannerPalette {
+export function pickClassroomPalette(classroomId: string): ClassroomPalette {
   let hash = 0
   for (let i = 0; i < classroomId.length; i++) {
     hash = (hash * 31 + classroomId.charCodeAt(i)) >>> 0
   }
-  return CLASSROOM_BANNER_PALETTES[hash % CLASSROOM_BANNER_PALETTES.length]
+  return CLASSROOM_PALETTES[hash % CLASSROOM_PALETTES.length]
+}
+
+/** `background` for a classroom's banner / button fill. */
+export function classroomGradient(p: ClassroomPalette, angle = '135deg'): string {
+  return `linear-gradient(${angle}, ${p.from} 0%, ${p.to} 100%)`
+}
+
+/** `background` for the saturated logo bubble. */
+export function classroomLogoGradient(p: ClassroomPalette): string {
+  return `linear-gradient(135deg, ${p.deepFrom} 0%, ${p.deepTo} 100%)`
 }

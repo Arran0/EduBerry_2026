@@ -156,14 +156,14 @@ export default function ModalShell({
           className={`sm:hidden flex-shrink-0 flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none ${bare ? 'absolute top-0 left-0 right-0 z-20' : ''}`}
           onPointerDown={e => dragControls.start(e)}
         >
-          <div className={`w-10 h-1.5 rounded-full ${bare ? 'bg-slate-900/15 backdrop-blur-sm' : 'bg-slate-300/80'}`} />
+          <div className={`w-10 h-1.5 !rounded-full ${bare ? 'bg-slate-900/15 backdrop-blur-sm' : 'bg-slate-300/80'}`} />
         </div>
 
         {/* Header */}
         {title != null && !bare && (
           <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
             {icon && (
-              <div className={`w-9 h-9 ${sharp ? '' : 'rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
+              <div className={`w-9 h-9 ${sharp ? '' : '!rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
                 {icon}
               </div>
             )}
@@ -177,7 +177,7 @@ export default function ModalShell({
             <button
               onClick={onClose}
               aria-label="Close"
-              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : 'rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
+              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : '!rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
             >
               <X size={15} strokeWidth={2.5} />
             </button>

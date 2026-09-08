@@ -28,7 +28,7 @@ import {
 } from '@/lib/classrooms'
 import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
-import { pickClassroomBannerPalette } from '@/lib/classroomPalette'
+import { pickClassroomPalette, classroomGradient, classroomLogoGradient } from '@/lib/classroomPalette'
 import { isStaffRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
@@ -99,7 +99,7 @@ function ClassroomDetailPageContent() {
 
   // Each classroom gets a stable, friendly gradient palette (hashed from its
   // id) instead of every classroom sharing one fixed purple/blue/cyan combo.
-  const palette = classroom ? pickClassroomBannerPalette(classroom.id) : null
+  const palette = classroom ? pickClassroomPalette(classroom.id) : null
 
   useEffect(() => {
     if (!classroom) return
@@ -111,8 +111,8 @@ function ClassroomDetailPageContent() {
       img.onerror = () => setBannerReady(true)
       img.src = classroom.banner_url
     } else {
-      const p = pickClassroomBannerPalette(classroom.id)
-      setBannerLum((hexToLuminance(p.hexFrom) + hexToLuminance(p.hexTo)) / 2)
+      const p = pickClassroomPalette(classroom.id)
+      setBannerLum((hexToLuminance(p.from) + hexToLuminance(p.to)) / 2)
       setBannerReady(true)
     }
   }, [classroom?.banner_url, classroom?.id])
@@ -191,7 +191,7 @@ function ClassroomDetailPageContent() {
                   className="relative overflow-hidden"
                 >
               {/* Background: banner image or this classroom's gradient palette */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${palette!.bannerGradient}`}>
+              <div className="absolute inset-0" style={{ background: classroomGradient(palette!) }}>
                 {classroom.banner_url && (
                   <img
                     src={classroom.banner_url}
@@ -204,8 +204,8 @@ function ClassroomDetailPageContent() {
               {/* Decorative glow orbs (visible on the gradient banner) */}
               {!classroom.banner_url && (
                 <>
-                  <div className={`absolute -top-16 -right-10 w-64 h-64 rounded-full ${palette!.orbA} blur-3xl pointer-events-none`} />
-                  <div className={`absolute -bottom-20 left-1/4 w-72 h-72 rounded-full ${palette!.orbB} blur-3xl pointer-events-none`} />
+                  <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: palette!.orbA }} />
+                  <div className="absolute -bottom-20 left-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ background: palette!.orbB }} />
                 </>
               )}
 
@@ -244,7 +244,9 @@ function ClassroomDetailPageContent() {
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`keep-round w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : `bg-gradient-to-br ${palette!.avatarGradient}`} overflow-hidden`}>
+                    <div className={`keep-round w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : ''} overflow-hidden`}
+                      style={closed ? undefined : { background: classroomLogoGradient(palette!) }}
+                    >
                       {classroom.logo_url ? (
                         <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
