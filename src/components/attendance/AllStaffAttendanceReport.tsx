@@ -208,7 +208,14 @@ function StaffRow({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <motion.div
+        layout="position"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
+        transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+      >
         <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
@@ -308,7 +315,7 @@ function StaffRow({
             })}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {warning && showWarning && record && (
         <LocationWarningModal
@@ -371,7 +378,11 @@ function StaffRow({
 }
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+  return (
+    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </div>
+  )
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
@@ -456,8 +467,11 @@ export default function AllStaffAttendanceReport({
   }, [hasFixedRoster])
 
   // Load the day's records, holiday status, and any custom timing together.
-  const loadRecords = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading spinner — used after a quick mark/clear so the
+  // list stays on screen and animates the row out instead of the whole tab
+  // flashing to a spinner and back.
+  const loadRecords = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     setStreakMap(new Map())
     // Apply any cutoff / holiday / non-working-day rule that changed since the
     // last look before reading the day, so the report never shows a status
@@ -486,7 +500,18 @@ export default function AllStaffAttendanceReport({
     }
   }, [date, viewerRole])
 
-  useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
+  // Full spinner only when the day (or, for admin, the timing-relevant
+  // viewer role) actually changes. A `refreshKey` bump alone — e.g. from
+  // marking someone here or in the Support Staff tab, both of which bump the
+  // same page-level refreshKey — reloads the same day's data silently
+  // instead of flashing the whole tab back to "Loading…".
+  const lastLoadedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const loadKey = `${date}|${viewerRole}`
+    const silent = lastLoadedKeyRef.current === loadKey
+    lastLoadedKeyRef.current = loadKey
+    loadRecords({ silent })
+  }, [loadRecords, refreshKey, date, viewerRole])
 
   // Resolve the active roster (team for admins, fixed list for coordinators/teachers).
   useEffect(() => {
@@ -786,7 +811,7 @@ export default function AllStaffAttendanceReport({
     setSavingId(staffId)
     const ok = await adminMarkStaffAttendance(staffId, date, status, viewerId)
     if (ok) {
-      await loadRecords()
+      await loadRecords({ silent: true })
       if (!hasFixedRoster) fetchTrackedStaffCount().then(setTrackedTotal)
       onChanged?.()
     }
@@ -1173,9 +1198,11 @@ export default function AllStaffAttendanceReport({
                           <span className="text-xs text-red-500">({filteredUnverified.length})</span>
                         </div>
                         <div className="divide-y divide-red-100">
-                          {filteredUnverified.map(r => (
-                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
-                          ))}
+                          <AnimatePresence initial={false}>
+                            {filteredUnverified.map(r => (
+                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
+                            ))}
+                          </AnimatePresence>
                         </div>
                       </div>
                     )}

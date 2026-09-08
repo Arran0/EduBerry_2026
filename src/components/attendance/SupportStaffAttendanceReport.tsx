@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -158,7 +158,14 @@ function SupportRow({
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <motion.div
+        layout="position"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
+        transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+      >
         <Avatar
           avatarUrl={person.avatar_url ?? null}
           name={person.full_name}
@@ -226,7 +233,7 @@ function SupportRow({
             </button>
           </div>
         )}
-      </div>
+      </motion.div>
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -281,7 +288,11 @@ function SupportRow({
 }
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+  return (
+    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </div>
+  )
 }
 
 // ── Section ──────────────────────────────────────────────────────────────────
@@ -301,8 +312,11 @@ export default function SupportStaffAttendanceReport({
 
   const isFuture = date > todayStr
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading spinner — used after a quick mark/clear so the
+  // list stays on screen and animates the row out instead of the whole tab
+  // flashing to a spinner and back.
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     const [ground, drivers] = await Promise.all([
       fetchSupportStaff({ activeOnly: true, trackedOnly: true }),
       fetchTrackedDrivers(),
@@ -324,7 +338,17 @@ export default function SupportStaffAttendanceReport({
     setLoading(false)
   }, [date])
 
-  useEffect(() => { load() }, [load, refreshKey])
+  // Full spinner only when the day actually changes (a different roster/
+  // records to fetch). A `refreshKey` bump alone — e.g. from marking someone
+  // here, which bumps the page-level refreshKey that both this and the main
+  // staff report listen to — reloads the same day's data silently instead of
+  // flashing the whole tab back to "Loading…".
+  const lastLoadedDateRef = useRef<string | null>(null)
+  useEffect(() => {
+    const silent = lastLoadedDateRef.current === date
+    lastLoadedDateRef.current = date
+    load({ silent })
+  }, [load, refreshKey, date])
 
   // Reset paging-adjacent input whenever the day changes, same as the main report.
   useEffect(() => { setQuery('') }, [date])
@@ -422,7 +446,7 @@ export default function SupportStaffAttendanceReport({
     const ok = person.kind === 'ground'
       ? await markSupportAttendance(id, date, status, viewerId)
       : await adminMarkStaffAttendance(id, date, status as StaffAttendanceStatus, viewerId)
-    if (ok) { await load(); onChanged?.() }
+    if (ok) { await load({ silent: true }); onChanged?.() }
     setSavingId(null)
   }
 
@@ -433,7 +457,7 @@ export default function SupportStaffAttendanceReport({
     const ok = person.kind === 'ground'
       ? await clearSupportAttendance(id, date)
       : await clearStaffAttendance(id, date)
-    if (ok) { await load(); onChanged?.() }
+    if (ok) { await load({ silent: true }); onChanged?.() }
     setSavingId(null)
   }
 

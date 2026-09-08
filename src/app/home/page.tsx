@@ -48,10 +48,8 @@ import {
   fetchAllTrackedStaff,
   fetchStaffAttendanceReportByDate,
   fetchStudentAttendanceTallyByDate,
-  fetchTrackedDrivers,
   StaffAttendanceRecord,
 } from '@/lib/attendance'
-import { fetchSupportStaff, fetchSupportAttendanceRange } from '@/lib/supportStaff'
 import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
@@ -517,59 +515,18 @@ export default function HomePage() {
     }
 
     const staffTally = tallyStaff(stRecords)
-
-    // Ground support staff and drivers — admin-only, same as the Support
-    // Staff tab of the attendance report (canSeeSupport there is admin-only
-    // too). Nobody here can check themselves in, so an unmarked person is
-    // derived Absent the same way tracked staff are above, unless today is a
-    // whole-school holiday — mirrors computeSupportDayStats' `deriveAbsent`.
-    const supportTally = { present: 0, absent: 0, exception: 0 }
-    if (isAdmin) {
-      const [supportRoster, driverRoster] = await Promise.all([
-        fetchSupportStaff({ activeOnly: true, trackedOnly: true }),
-        fetchTrackedDrivers(),
-      ])
-      const driverIds = driverRoster.map(d => d.id)
-      const [groundToday, driverTodayResult] = await Promise.all([
-        supportRoster.length > 0 ? fetchSupportAttendanceRange(today, today) : Promise.resolve([]),
-        driverIds.length > 0
-          ? supabase.from('staff_attendance_records').select('staff_id, status').eq('date', today).in('staff_id', driverIds)
-          : Promise.resolve({ data: [] as { staff_id: string; status: string }[], error: null }),
-      ])
-      const driverToday = driverTodayResult.data ?? []
-
-      const recordByPerson = new Map<string, string>()
-      for (const r of groundToday) recordByPerson.set(r.support_staff_id, r.status)
-      for (const r of driverToday) recordByPerson.set(r.staff_id, r.status)
-
-      const SUPPORT_PRESENT = new Set(['present', 'late'])
-      const SUPPORT_ABSENT = new Set(['absent', 'on_leave'])
-      const supportPeople = [...supportRoster.map(s => s.id), ...driverIds]
-      for (const id of supportPeople) {
-        const status = recordByPerson.get(id)
-        if (status) {
-          if (SUPPORT_PRESENT.has(status)) supportTally.present++
-          else if (SUPPORT_ABSENT.has(status)) supportTally.absent++
-          else supportTally.exception++
-        } else if (!holidayToday) {
-          supportTally.absent++
-        }
-      }
-    }
-
     setAttendanceCounts({
       students: {
         present: studentTally.present,
         absent: studentTally.absent,
         exception: studentTally.irregular,
       },
-      staff: {
-        present: staffTally.present + supportTally.present,
-        absent: staffTally.absent + virtualAbsentCount + supportTally.absent,
-        exception: staffTally.exception + supportTally.exception,
-      },
+      // Support staff & drivers are intentionally excluded here — this card
+      // is scoped to tracked (main) staff only. The Support Staff tab of the
+      // attendance report is where their own numbers live.
+      staff: { ...staffTally, absent: staffTally.absent + virtualAbsentCount },
     })
-  }, [isAdmin, isAttendanceViewer, isCoordinator, user])
+  }, [isAttendanceViewer, isCoordinator, user])
 
   const hasOverdueFees = overdueFees.length > 0
   const hasGradingQueue = gradingQueues.length > 0
