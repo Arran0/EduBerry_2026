@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useRef, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, LayoutList } from 'lucide-react'
 
 // ── Date helpers (shared by every surface that renders this calendar) ─────────
@@ -120,12 +120,16 @@ export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-
  * School Work Calendar, so both read and behave identically.
  *
  * Phones (up to `lg`) get a Daily/Weekly toggle: Daily — the default — pairs a
- * compact week picker with a full-width agenda for one day, and Weekly stacks
- * all seven days' agendas, since seven narrow grid columns truncated every
- * title. Desktop has room for all seven days side by side, so it shows a column
- * per day: the selected day's column expands to 4x width with the same full row
- * design as the phone agenda, and every other column narrows to a compact
- * wrapped card (never truncated).
+ * compact week picker with a full-width agenda for one day, and Weekly shows
+ * the same swipeable day-column strip the staff Task Manager uses — seven
+ * columns in a horizontally scrollable row, the active day's column expanded
+ * to a full-width card and the rest narrowed to compact previews, so a finger
+ * swipe (or tapping a header) moves between days instead of scrolling through
+ * every day stacked vertically. Desktop has room for all seven days side by
+ * side without scrolling, so it renders the same column strip un-scrolled:
+ * the selected day's column expands to 4x width with the same full row design
+ * as the phone agenda, and every other column narrows to a compact wrapped
+ * card (never truncated).
  */
 export default function WorkWeekCalendar<T>({
   weekStart, onWeekStartChange,
@@ -181,6 +185,108 @@ export default function WorkWeekCalendar<T>({
       <Plus size={slim ? 12 : 14} /> {label}
     </button>
   )
+
+  // Horizontal-scroll container for the phone weekly view's swipeable
+  // day-column strip — auto-scrolls the expanded column into view whenever it
+  // changes, the same way the staff Task Manager's grid keeps its focal
+  // column (today, by default) in view on narrow screens.
+  const weeklyScrollRef = useRef<HTMLDivElement>(null)
+  const scrollExpandedColIntoView = useCallback((colEl: HTMLDivElement) => {
+    requestAnimationFrame(() => {
+      const container = weeklyScrollRef.current
+      if (!container || !colEl.isConnected) return
+      if (container.scrollWidth <= container.clientWidth) return // fully visible already
+      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
+    })
+  }, [])
+  const expandedColRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) scrollExpandedColIntoView(node)
+  }, [scrollExpandedColIntoView])
+
+  /** One day's column for the swipeable day strip, shared by the phone weekly
+   *  view and the desktop layout. `narrow` pins a min column width (matching
+   *  the staff Task Manager's own grid) so seven columns overflow into a
+   *  horizontally scrollable strip instead of squeezing unreadably thin —
+   *  desktop has room for all seven without scrolling, so it skips this. */
+  const dayColumn = (day: Date, i: number, narrow: boolean) => {
+    const isToday    = isSameDay(day, today)
+    const isExpanded = isSameDay(day, activeDay)
+    const isLastCol  = i === 6
+    const items      = itemsForDay(day)
+
+    return (
+      <div
+        key={day.toISOString()}
+        ref={narrow && isExpanded ? expandedColRef : undefined}
+        style={{
+          flex: isExpanded ? (narrow ? '3 3 0%' : '4 4 0%') : '1 1 0%',
+          minWidth: narrow ? (isExpanded ? '176px' : '76px') : undefined,
+          transition: 'flex 320ms ease',
+        }}
+        className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
+      >
+        {/* Day header — click to expand this day. Every column renders the
+            same three lines at the same sizes, so expanding one day never
+            leaves the header row ragged. */}
+        <button
+          onClick={() => onSelectDay(day)}
+          className={`px-2 py-2.5 text-center border-b transition-all ${
+            isExpanded
+              ? 'border-transparent'
+              : isToday
+                ? 'border-slate-200 hover:brightness-95'
+                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+          }`}
+          style={
+            isExpanded
+              ? { background: gradient }
+              : isToday
+                ? { background: theme.primaryLight }
+                : undefined
+          }
+        >
+          <p
+            className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : 'text-slate-500'}`}
+            style={!isExpanded && isToday ? { color: theme.primary } : undefined}
+          >
+            {DAY_NAMES[i]}
+          </p>
+          <p className={`text-sm font-bold leading-tight ${isExpanded ? 'text-white' : 'text-slate-700'}`}>
+            {day.getDate()}
+            {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
+          </p>
+          <span className={`block text-[10px] font-medium leading-tight ${isExpanded ? 'text-white/80' : 'text-slate-400'}`}>
+            {isExpanded ? `${items.length} scheduled` : items.length}
+          </span>
+        </button>
+
+        {/* Day content */}
+        <div className={`flex-1 overflow-y-auto max-h-[32rem] ${isExpanded ? 'divide-y divide-slate-100' : 'p-1.5 space-y-1.5 bg-slate-50/30'}`}>
+          {/* An empty narrow column says nothing — its header already
+              shows a count of 0, so the add button sits straight under
+              the header instead of below a placeholder dash. */}
+          {items.length === 0 && isExpanded && (
+            <p className="text-slate-500 text-center py-7 text-sm">{emptyDayLabel}</p>
+          )}
+          {items.map(item => (
+            <React.Fragment key={itemKey(item)}>{renderItem(item, !isExpanded)}</React.Fragment>
+          ))}
+          {onAddForDay && (
+            <button
+              onClick={() => onAddForDay(day)}
+              className={`flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 ${
+                isExpanded ? 'w-[calc(100%-0.75rem)] m-1.5 py-2.5 text-xs font-semibold' : 'w-full py-1'
+              }`}
+              title={`Add ${addNoun} for this day`}
+            >
+              <Plus size={isExpanded ? 13 : 12} /> {isExpanded ? `Add ${addNoun}` : null}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={rootClassName}>
@@ -315,132 +421,22 @@ export default function WorkWeekCalendar<T>({
             {addButton(activeDay, `Add ${addNoun} for ${activeDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`)}
           </>
         ) : (
-          /* Weekly — every day of the week stacked, so the whole week reads in
-             one scroll without the seven-column squeeze. */
-          <div>
-            {weekDays.map((day, i) => {
-              const items   = itemsForDay(day)
-              const isToday = isSameDay(day, today)
-              return (
-                <div key={day.toISOString()} className={i > 0 ? 'border-t-4 border-slate-100' : ''}>
-                  <button
-                    onClick={() => { onSelectDay(day); onViewModeChange('daily') }}
-                    className="w-full flex items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-slate-100 text-left transition-colors hover:bg-slate-50"
-                    style={isToday ? { background: theme.primaryLight } : undefined}
-                    title="Open this day"
-                  >
-                    <span className="flex items-baseline gap-1.5 min-w-0">
-                      <span
-                        className="text-[10px] font-bold uppercase tracking-wide"
-                        style={{ color: isToday ? theme.primary : undefined }}
-                      >
-                        {DAY_NAMES[i]}
-                      </span>
-                      <span className="text-sm font-bold text-slate-800">{day.getDate()}</span>
-                      <span className="text-[11px] text-slate-500 truncate">
-                        {day.toLocaleDateString(undefined, { month: 'short' })}
-                      </span>
-                      {isToday && (
-                        <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: theme.primary }}>Today</span>
-                      )}
-                    </span>
-                    <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex-shrink-0">
-                      {items.length}
-                    </span>
-                  </button>
-
-                  {/* No "nothing scheduled" filler — the header's count says
-                      so, and the add button follows it directly. */}
-                  {items.length > 0 && (
-                    <div className="divide-y divide-slate-100">
-                      {items.map(item => (
-                        <React.Fragment key={itemKey(item)}>{renderItem(item, false)}</React.Fragment>
-                      ))}
-                    </div>
-                  )}
-                  {addButton(day, `Add ${addNoun}`, true)}
-                </div>
-              )
-            })}
+          /* Weekly — the same swipeable day-column strip the staff Task
+             Manager uses: seven columns in a horizontally scrollable row,
+             the active day's column expanded into a full card. A finger
+             swipe (or tapping a header) moves between days, instead of
+             scrolling through every day's agenda stacked vertically. */
+          <div ref={weeklyScrollRef} className="overflow-x-auto">
+            <div className="flex">
+              {weekDays.map((day, i) => dayColumn(day, i, true))}
+            </div>
           </div>
         )}
       </div>
 
       {/* ── Desktop: seven columns, the active day expanded to 4x width ── */}
       <div className="hidden lg:flex">
-        {weekDays.map((day, i) => {
-          const isToday    = isSameDay(day, today)
-          const isExpanded = isSameDay(day, activeDay)
-          const isLastCol  = i === 6
-          const items      = itemsForDay(day)
-
-          return (
-            <div
-              key={day.toISOString()}
-              style={{ flex: isExpanded ? '4 4 0%' : '1 1 0%', transition: 'flex 320ms ease' }}
-              className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
-            >
-              {/* Day header — click to expand this day. Every column renders
-                  the same three lines at the same sizes, so expanding one day
-                  never leaves the header row ragged. */}
-              <button
-                onClick={() => onSelectDay(day)}
-                className={`px-2 py-2.5 text-center border-b transition-all ${
-                  isExpanded
-                    ? 'border-transparent'
-                    : isToday
-                      ? 'border-slate-200 hover:brightness-95'
-                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                }`}
-                style={
-                  isExpanded
-                    ? { background: gradient }
-                    : isToday
-                      ? { background: theme.primaryLight }
-                      : undefined
-                }
-              >
-                <p
-                  className={`text-[10px] font-bold uppercase tracking-wide ${isExpanded ? 'text-white/80' : 'text-slate-500'}`}
-                  style={!isExpanded && isToday ? { color: theme.primary } : undefined}
-                >
-                  {DAY_NAMES[i]}
-                </p>
-                <p className={`text-sm font-bold leading-tight ${isExpanded ? 'text-white' : 'text-slate-700'}`}>
-                  {day.getDate()}
-                  {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
-                </p>
-                <span className={`block text-[10px] font-medium leading-tight ${isExpanded ? 'text-white/80' : 'text-slate-400'}`}>
-                  {isExpanded ? `${items.length} scheduled` : items.length}
-                </span>
-              </button>
-
-              {/* Day content */}
-              <div className={`flex-1 overflow-y-auto max-h-[32rem] ${isExpanded ? 'divide-y divide-slate-100' : 'p-1.5 space-y-1.5 bg-slate-50/30'}`}>
-                {/* An empty narrow column says nothing — its header already
-                    shows a count of 0, so the add button sits straight under
-                    the header instead of below a placeholder dash. */}
-                {items.length === 0 && isExpanded && (
-                  <p className="text-slate-500 text-center py-7 text-sm">{emptyDayLabel}</p>
-                )}
-                {items.map(item => (
-                  <React.Fragment key={itemKey(item)}>{renderItem(item, !isExpanded)}</React.Fragment>
-                ))}
-                {onAddForDay && (
-                  <button
-                    onClick={() => onAddForDay(day)}
-                    className={`flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 ${
-                      isExpanded ? 'w-[calc(100%-0.75rem)] m-1.5 py-2.5 text-xs font-semibold' : 'w-full py-1'
-                    }`}
-                    title={`Add ${addNoun} for this day`}
-                  >
-                    <Plus size={isExpanded ? 13 : 12} /> {isExpanded ? `Add ${addNoun}` : null}
-                  </button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        {weekDays.map((day, i) => dayColumn(day, i, false))}
       </div>
     </div>
   )
