@@ -302,6 +302,10 @@ export async function fetchClassroomsForUser(
   userRole: UserRole,
   includeAll = false,
   limit?: number,
+  // Callers that render only title/grade/banner (e.g. the home and academics
+  // dashboard grids) never display this — skip it there to avoid pulling
+  // every classroom_members row for the whole school just to count them.
+  withMemberCount = true,
 ): Promise<ClassroomWithDetails[]> {
   const today = new Date().toISOString().split('T')[0]
 
@@ -325,7 +329,7 @@ export async function fetchClassroomsForUser(
     }
 
     // Skip member-count query when a preview limit is set (saves a full-table scan)
-    if (limit) {
+    if (limit || !withMemberCount) {
       return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
     }
 
@@ -377,7 +381,7 @@ export async function fetchClassroomsForUser(
     return []
   }
 
-  if (limit) {
+  if (limit || !withMemberCount) {
     return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
   }
 

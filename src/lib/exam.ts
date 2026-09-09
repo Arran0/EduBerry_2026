@@ -1044,11 +1044,10 @@ export async function fetchSubmissionForStudent(
 
 /** Every audience student paired with their submission (if any). */
 export async function fetchGradingQueue(examId: string): Promise<GradingQueueRow[]> {
-  const students = await resolveAudienceStudents(examId)
-  const { data: subs } = await supabase
-    .from('exam_submissions')
-    .select('*')
-    .eq('exam_id', examId)
+  const [students, { data: subs }] = await Promise.all([
+    resolveAudienceStudents(examId),
+    supabase.from('exam_submissions').select('*').eq('exam_id', examId),
+  ])
   const subByStudent = new Map<string, ExamSubmission>()
   for (const s of (subs ?? []) as ExamSubmission[]) subByStudent.set(s.student_id, s)
 
@@ -1081,7 +1080,12 @@ export async function fetchGraderGradingQueues(userId: string): Promise<GraderEx
   const graderIds = [...new Set((graderRows ?? []).map(r => r.exam_id as string))]
   if (graderIds.length === 0) return []
 
-  const { data: exams } = await supabase.from('exams').select('*').in('id', graderIds)
+  // Only the columns examPhase() and the progress summary below actually use —
+  // full exam rows (description, settings, etc.) aren't needed here.
+  const { data: exams } = await supabase
+    .from('exams')
+    .select('id, title, results_published, is_closed, start_at, due_at, end_at')
+    .in('id', graderIds)
   const underGrading = ((exams ?? []) as Exam[]).filter(e => examPhase(e) === 'grading')
   if (underGrading.length === 0) return []
 

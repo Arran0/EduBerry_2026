@@ -655,6 +655,16 @@ export async function markLeaveApplicationViewed(applicationId: string): Promise
   if (error) console.error('Failed to mark leave application viewed:', error)
 }
 
+/** Batch form — one round trip for any number of applications, instead of
+ *  calling markLeaveApplicationViewed once per id. */
+export async function markLeaveApplicationsViewed(applicationIds: string[]): Promise<void> {
+  if (applicationIds.length === 0) return
+  const { error } = await supabase.rpc('mark_leave_applications_viewed', {
+    p_application_ids: applicationIds,
+  })
+  if (error) console.error('Failed to mark leave applications viewed:', error)
+}
+
 /**
  * The approvals on this application addressed to `userId` — named to them
  * directly, or left open to whoever holds their role.

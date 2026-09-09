@@ -29,6 +29,7 @@ import {
   fetchApprovalQueueIds,
   fetchLeaveApplicationsByIdsPage,
   markLeaveApplicationViewed,
+  markLeaveApplicationsViewed,
   LEAVE_TYPE_LABELS,
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
@@ -188,7 +189,7 @@ export function markNotificationsRead(userId: string, items: NotifItem[]): void 
   const decisions = items.filter(isApplicantDecision)
   if (decisions.length === 0) return
   dismissNotifications(userId, decisions.map(i => i.id))
-  for (const appId of new Set(decisions.map(i => i.appId))) markLeaveApplicationViewed(appId)
+  markLeaveApplicationsViewed([...new Set(decisions.map(i => i.appId))])
   emitLeaveNotificationsChanged()
 }
 
