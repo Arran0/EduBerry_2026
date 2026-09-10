@@ -979,6 +979,28 @@ export async function fetchAssessmentMarks(assessmentId: string): Promise<Assess
   return (data ?? []) as AssessmentMark[]
 }
 
+/** One student's marks across a set of assessments, in one round trip instead
+ *  of fetching every student's marks per assessment and filtering client-side. */
+export async function fetchStudentAssessmentMarks(
+  studentId: string,
+  assessmentIds: string[],
+): Promise<Record<string, AssessmentMark>> {
+  if (assessmentIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .eq('student_id', studentId)
+    .in('assessment_id', assessmentIds)
+
+  if (error) {
+    console.error('Failed to fetch student marks:', error.message)
+    return {}
+  }
+  const byAssessment: Record<string, AssessmentMark> = {}
+  for (const m of (data ?? []) as AssessmentMark[]) byAssessment[m.assessment_id] = m
+  return byAssessment
+}
+
 export interface StudentMarkWithContext {
   marks: number | null
   max_marks: number
