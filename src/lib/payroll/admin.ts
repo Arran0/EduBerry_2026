@@ -69,11 +69,6 @@ export async function fetchStructures(): Promise<StructureRow[]> {
   return (data ?? []) as unknown as StructureRow[]
 }
 
-export async function fetchEngineStructures(): Promise<EngineStructure[]> {
-  const rows = await fetchStructures()
-  return rows.map(r => toEngineStructure(r, new Map()))
-}
-
 export interface StructureInput {
   code: string
   name: string
@@ -271,20 +266,45 @@ export function previewIncrement(
   }).sort((x, y) => y.delta - x.delta)
 }
 
-/** Apply a revision: one new assignment per employee, previous ones closed. */
+/**
+ * Apply a revision: one new assignment per employee, previous ones closed.
+ * Every row shares the same effectiveFrom/closeDate, so — unlike the
+ * single-employee assignStructure() this mirrors — closing the previous
+ * assignments and inserting the new ones are each done in one batched query
+ * instead of two round trips per employee.
+ */
 export async function applyRevision(
   revisionId: string, rows: IncrementPreviewRow[], effectiveFrom: string,
   structureByEmployee: Record<string, string>, createdBy: string,
 ): Promise<Result> {
-  for (const r of rows) {
-    const structureId = structureByEmployee[r.employeeId]
-    if (!structureId) continue
-    const res = await assignStructure({
-      employeeId: r.employeeId, structureId, effectiveFrom,
-      anchorAmount: r.newAnchor, reason: 'Salary revision', revisionId, createdBy,
-    })
-    if (!res.success) return res
+  const targets = rows
+    .map(r => ({ r, structureId: structureByEmployee[r.employeeId] }))
+    .filter((t): t is { r: IncrementPreviewRow; structureId: string } => !!t.structureId)
+  if (targets.length === 0) {
+    return fail('applyRevision', { message: 'No employees with a target structure' })
   }
+
+  const closeOn = new Date(`${effectiveFrom}T12:00:00Z`)
+  closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+  const closeDate = closeOn.toISOString().slice(0, 10)
+
+  const { error: closeErr } = await supabase
+    .from('payroll_employee_structures')
+    .update({ effective_to: closeDate })
+    .in('employee_id', targets.map(t => t.r.employeeId))
+    .is('effective_to', null)
+    .lt('effective_from', effectiveFrom)
+  if (closeErr) return fail('applyRevision (closing previous)', closeErr)
+
+  const { error: insertErr } = await supabase.from('payroll_employee_structures').insert(
+    targets.map(({ r, structureId }) => ({
+      employee_id: r.employeeId, structure_id: structureId,
+      effective_from: effectiveFrom, anchor_amount: r.newAnchor,
+      reason: 'Salary revision', revision_id: revisionId, created_by: createdBy,
+    }))
+  )
+  if (insertErr) return fail('applyRevision', insertErr)
+
   const { error } = await supabase
     .from('payroll_revisions')
     .update({ status: 'applied', applied_at: new Date().toISOString(), approved_by: createdBy })
@@ -369,19 +389,6 @@ export async function fetchRuleSets(includeDrafts = true): Promise<RuleSetRow[]>
   const { data, error } = await q.order('domain').order('effective_from', { ascending: false })
   if (error) { console.error('fetchRuleSets failed:', error); return [] }
   return (data ?? []) as RuleSetRow[]
-}
-
-/** The set in force for a domain on a date, preferring the state-specific one. */
-export function ruleSetInForce(rows: RuleSetRow[], domain: string, jurisdiction: string, onDate: string): RuleSet | null {
-  const candidates = rows.filter(r =>
-    r.domain === domain && r.status === 'published' &&
-    r.effective_from <= onDate && (r.effective_to === null || r.effective_to >= onDate) &&
-    (r.jurisdiction === jurisdiction || r.jurisdiction === 'IN'),
-  ).sort((a, b) =>
-    (b.jurisdiction === jurisdiction ? 1 : 0) - (a.jurisdiction === jurisdiction ? 1 : 0) ||
-    b.effective_from.localeCompare(a.effective_from),
-  )
-  return candidates[0] ? toRuleSet(candidates[0]) : null
 }
 
 /**

@@ -1,7 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { computeSubmissionScores, allManualGraded } from './examGrading'
 import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
-import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
+import { createAssessment, upsertAssessmentMarks, fetchStudentMembers } from './classrooms'
 import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================================
@@ -221,11 +221,6 @@ export function examPhase(
   const deadline = attemptDeadline(exam)
   if (deadline != null && now > deadline) return 'grading'
   return 'open'
-}
-
-/** Students may only attempt while the exam is open. */
-export function canAttemptExam(exam: Parameters<typeof examPhase>[0], now: number = Date.now()): boolean {
-  return examPhase(exam, now) === 'open'
 }
 
 /** An immediate-results exam whose preset auto-close moment has passed. */
@@ -1322,11 +1317,11 @@ export async function linkResultsToClassrooms(
     )
     if (!assessment) continue
 
-    for (const m of matched) {
+    await upsertAssessmentMarks(assessment.id, matched.map(m => {
       const score = scoreByStudent.get(m.user_id)!
-      await upsertAssessmentMark(assessment.id, m.user_id, score.total, score.max)
-      totalLinked++
-    }
+      return { studentId: m.user_id, marks: score.total, maxMarks: score.max }
+    }))
+    totalLinked += matched.length
 
     await supabase.from('exam_result_links').insert({
       exam_id: examId,

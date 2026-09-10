@@ -137,16 +137,6 @@ export function limitApplies(rule: LimitRule, p: PlacementLite): boolean {
   return rule.scopeId === null || rule.scopeId === p.homeroomId
 }
 
-// Bucket key groups placements that share the constrained entity (and day,
-// for per-day rules). applies() has already matched the homeroom target.
-export function limitBucket(rule: LimitRule, p: PlacementLite, day: Weekday): string {
-  const entity =
-    rule.scope === 'teacher' ? p.teacherId : rule.scope === 'subject' ? p.subjectId : p.homeroomId
-  const hr = rule.homeroomId ? `|${rule.homeroomId}` : ''
-  const d = rule.period === 'day' ? `|${day}` : ''
-  return `${rule.scope}:${entity}${hr}${d}`
-}
-
 /**
  * Every bucket a placement contributes to under one rule — empty when the rule
  * doesn't apply. A co-taught period counts against EACH of its teachers, so a

@@ -78,10 +78,14 @@ export async function createTeam(input: {
     .select('id')
     .in('role', ['principal', 'admin'])
 
-  for (const member of defaultMembers ?? []) {
-    if (member.id !== coordinatorId) {
-      await addTeamMember(id, member.id)
-    }
+  const defaultMemberIds = (defaultMembers ?? [])
+    .map(m => m.id)
+    .filter(memberId => memberId !== coordinatorId)
+
+  if (defaultMemberIds.length > 0) {
+    await supabase.from('team_members').insert(
+      defaultMemberIds.map(userId => ({ team_id: id, user_id: userId }))
+    )
   }
 
   return {

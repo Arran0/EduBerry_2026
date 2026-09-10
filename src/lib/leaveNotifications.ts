@@ -299,19 +299,6 @@ export function createNotificationFeed(userId: string, mode: NotifMode): Notific
 }
 
 /**
- * The first page of the feed — what the Home page uses to decide whether the
- * notifications slot renders at all.
- */
-export async function fetchNotificationItems(
-  userId: string,
-  mode: NotifMode,
-  size = NOTIF_PAGE_SIZE,
-): Promise<NotifItem[]> {
-  const { items } = await createNotificationFeed(userId, mode).next(size)
-  return items
-}
-
-/**
  * Just the applicant's unread decisions — the "your application was
  * approved / rejected" popup shown on entering the Staff Attendance app.
  * Capped: the popup is a heads-up, not an archive.

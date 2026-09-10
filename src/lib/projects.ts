@@ -333,24 +333,6 @@ export async function fetchProjectsForUser(
   return enrichProjects(projects as Project[])
 }
 
-export async function fetchProjectById(
-  projectId: string
-): Promise<ProjectWithDetails | null> {
-  const { data: project, error } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('id', projectId)
-    .single()
-
-  if (error || !project) {
-    console.error('Error fetching project:', error)
-    return null
-  }
-
-  const enriched = await enrichProjects([project as Project])
-  return enriched.length > 0 ? enriched[0] : null
-}
-
 export interface SubtaskWithProject extends Subtask {
   project_title: string
   project_sequential: boolean

@@ -411,14 +411,6 @@ export async function fetchClassroomsHoldingHomeroomStudents(
 }
 
 // ============================================
-// Display Helpers
-// ============================================
-
-export function homeroomDisplayName(homeroom: Homeroom): string {
-  return homeroom.name
-}
-
-// ============================================
 // Smart Board Account
 // ============================================
 

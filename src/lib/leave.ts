@@ -117,11 +117,6 @@ export function isImageFile(name: string): boolean {
   return /\.(jpe?g|png|gif|webp|svg)$/i.test(name)
 }
 
-export function getLeaveFileUrl(path: string): string {
-  const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
-  return data.publicUrl
-}
-
 export async function uploadLeaveFile(
   file: File,
   folder: string
@@ -143,12 +138,6 @@ export async function uploadLeaveFile(
 // ============================================
 // Helper Functions
 // ============================================
-
-function calculateLeaveDays(startDate: string, endDate: string): number {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-}
 
 export async function fetchCoordinators(): Promise<{ id: string; full_name: string; email: string }[]> {
   const { data } = await supabase
@@ -919,8 +908,6 @@ export async function deleteLeaveApplication(id: string): Promise<boolean> {
   return true
 }
 
-export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty' | 'half_day' | 'late'>, number> = { casual: 12, medical: 15 }
-
 /** Fetch leave applications for a student that overlap with a given month. */
 export async function fetchLeaveApplicationsForStudentByMonth(
   studentId: string,
@@ -949,28 +936,3 @@ export async function fetchLeaveApplicationsForStudentByMonth(
   return (data || []) as LeaveApplicationWithDetails[]
 }
 
-export async function fetchLeaveBalance(
-  userId: string
-): Promise<{ casual: { used: number; total: number }; medical: { used: number; total: number } }> {
-  const now = new Date()
-  const academicYearStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-  const { data } = await supabase
-    .from('leave_applications')
-    .select('leave_type, start_date, end_date')
-    .eq('applicant_id', userId)
-    .eq('status', 'approved')
-    .gte('start_date', `${academicYearStart}-04-01`)
-    .lte('end_date', `${academicYearStart + 1}-03-31`)
-
-  let casualUsed = 0, medicalUsed = 0
-  for (const app of data ?? []) {
-    if (app.leave_type === 'on_duty') continue
-    const days = calculateLeaveDays(app.start_date, app.end_date)
-    if (app.leave_type === 'casual') casualUsed += days
-    else if (app.leave_type === 'medical') medicalUsed += days
-  }
-  return {
-    casual: { used: casualUsed, total: LEAVE_ALLOWANCES.casual },
-    medical: { used: medicalUsed, total: LEAVE_ALLOWANCES.medical },
-  }
-}

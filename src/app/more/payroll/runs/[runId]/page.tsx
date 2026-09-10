@@ -65,9 +65,12 @@ function RunDetail() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const r = await fetchRun(runId)
+    // fetchRun and the other three only depend on runId, not on each other's
+    // results — run them together instead of waiting on fetchRun first.
+    const [r, l, e, ev] = await Promise.all([
+      fetchRun(runId), fetchRunLines(runId), fetchExceptions(runId), fetchRunEvents(runId),
+    ])
     if (!r) { setLoading(false); return }
-    const [l, e, ev] = await Promise.all([fetchRunLines(runId), fetchExceptions(runId), fetchRunEvents(runId)])
     setRun(r); setLines(l); setExceptions(e); setEvents(ev)
     setVariance(await fetchVariance(r, l))
     setLoading(false)
