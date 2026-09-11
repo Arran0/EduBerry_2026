@@ -23,9 +23,12 @@ interface Props {
   spec: StatementSpec
   title: string
   onClose: () => void
+  /** Square the panel and its chrome — used from the Salary Manager's sharp-edged
+   *  Download Centre, so a preview doesn't read as a different product mid-flow. */
+  sharp?: boolean
 }
 
-export default function StatementPreviewModal({ spec, title, onClose }: Props) {
+export default function StatementPreviewModal({ spec, title, onClose, sharp }: Props) {
   const [downloading, setDownloading] = useState(false)
 
   const onDownload = async () => {
@@ -43,20 +46,20 @@ export default function StatementPreviewModal({ spec, title, onClose }: Props) {
       <motion.div
         initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-3xl max-h-[92dvh] sm:h-[88vh] flex flex-col overflow-hidden"
+        className={`bg-white ${sharp ? 'rounded-t-lg sm:rounded-none' : 'rounded-t-3xl sm:rounded-2xl'} shadow-2xl w-full sm:max-w-3xl max-h-[92dvh] sm:h-[88vh] flex flex-col overflow-hidden`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="p-1.5 bg-slate-100 rounded-lg flex-shrink-0"><FileText size={16} className="text-slate-700" /></div>
+            <div className={`p-1.5 bg-slate-100 ${sharp ? '' : 'rounded-lg'} flex-shrink-0`}><FileText size={16} className="text-slate-700" /></div>
             <h2 className="font-bold text-slate-800 truncate">{title}</h2>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={onDownload} disabled={downloading}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              className={`flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold px-4 py-2 ${sharp ? '' : 'rounded-lg'} transition-colors disabled:opacity-50`}>
               <Download size={15} /> {downloading ? 'Saving…' : 'Download'}
             </button>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+            <button onClick={onClose} className={`p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ${sharp ? '' : 'rounded-lg'}`}>
               <X size={18} />
             </button>
           </div>

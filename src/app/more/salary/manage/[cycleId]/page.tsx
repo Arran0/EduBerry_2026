@@ -59,6 +59,7 @@ import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
+import { SalarySheetCategory, SalarySheetRow, downloadSalarySheet } from '@/components/salary/statements/salarySheetXlsx'
 import type { StatutorySourceRow } from '@/lib/statutory'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
@@ -80,6 +81,26 @@ const ROWS_PER_CHUNK = 30
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
   return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
+}
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
+/** Which Salary Sheet tab a record belongs on — the same Teaching / Non-Teaching /
+ *  Drivers split the office's own paper sheet uses, derived from the roster kind
+ *  and (for staff) the same is_non_teaching flag the role badge already reads. */
+function salarySheetCategory(r: SalaryRecord): SalarySheetCategory {
+  const kind = recordPersonKind(r)
+  if (kind === 'driver') return 'driver'
+  if (kind === 'support') return 'non_teaching'
+  return r.staff?.is_non_teaching ? 'non_teaching' : 'teaching'
+}
+
+function salarySheetDesignation(r: SalaryRecord): string {
+  if (r.staff) return getDisplayRole(r.staff)
+  if (r.support_staff) return r.support_staff.designation || 'Support Staff'
+  return r.person_role_snapshot ? capitalize(r.person_role_snapshot) : '—'
 }
 
 /**
@@ -815,6 +836,54 @@ export default function SalaryCycleDetailPage() {
     )
   }
 
+  /**
+   * The Salary Sheet's rows — same filtered set the bank CSV exports (see
+   * downloadBankCsv above), so choosing a team, a search term, or "Staff only"
+   * on the toolbar before opening the Download Centre narrows this file to
+   * exactly that set of people.
+   */
+  const salarySheetRows = useMemo<SalarySheetRow[]>(() => visibleRecords.map(r => {
+    const c = computedRows[r.id]
+    const { pf, esi, bonus, manualItems, net } = rowFigures(r)
+    const positiveManual = manualItems.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount), 0)
+    const negativeManual = Math.abs(manualItems.filter(i => Number(i.amount) < 0).reduce((s, i) => s + Number(i.amount), 0))
+    const workingDays = c?.workingDays ?? 0
+    const leaveCount = c?.leaveCount ?? 0
+    const lateCount = c?.lateCount ?? 0
+    const halfDayCount = c?.halfDayCount ?? 0
+    return {
+      category: salarySheetCategory(r),
+      name: recordPersonName(r) || '—',
+      designation: salarySheetDesignation(r),
+      payByCash: r.pay_by_cash,
+      baseAmount: Number(r.base_amount) || 0,
+      workingDays,
+      daysWorked: workingDays - (leaveCount + lateCount + halfDayCount),
+      leaveCount, lateCount, halfDayCount,
+      salaryPerDay: c?.salaryPerDay ?? 0,
+      pf, esi,
+      advance: negativeManual,
+      extraOther: bonus + positiveManual,
+      net,
+    }
+  }), [visibleRecords, computedRows, rowFigures])
+
+  const downloadSalarySheetFile = async () => {
+    if (!cycle) return
+    setDisburseMsg(null)
+    if (salarySheetRows.length === 0) {
+      setDisburseMsg('Nothing to export — adjust the search and filters first.')
+      return
+    }
+    try {
+      const { included, fileName } = await downloadSalarySheet(cycle, salarySheetRows)
+      setDisburseMsg(`Exported ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.`)
+    } catch (e) {
+      console.error('salary sheet generation failed:', e)
+      setDisburseMsg('Could not build the Salary Sheet — please try again.')
+    }
+  }
+
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
@@ -1208,6 +1277,7 @@ export default function SalaryCycleDetailPage() {
             onClose={() => setShowDocs(false)}
             onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
             onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+            onSalarySheet={() => { setShowDocs(false); setPdfBusy('sheet'); downloadSalarySheetFile().finally(() => setPdfBusy(null)) }}
             onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
           />
         )}
@@ -1266,7 +1336,7 @@ export default function SalaryCycleDetailPage() {
           />
         )}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
         )}
       </AnimatePresence>
     </ProtectedLayout>

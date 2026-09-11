@@ -153,7 +153,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
       <motion.div
         initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-t-lg sm:rounded-none shadow-2xl w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
@@ -163,11 +163,11 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
           <div className="flex items-center gap-3 min-w-0">
             {viewing && (
               <button onClick={() => setViewing(null)} title="Back"
-                className="p-1.5 -ml-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
+                className="p-1.5 -ml-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] flex-shrink-0">
                 <ChevronLeft size={18} />
               </button>
             )}
-            <div className="w-9 h-9 rounded-xl bg-[#27272A] flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
               <Landmark size={16} className="text-[#B8983C]" />
             </div>
             <div className="min-w-0">
@@ -182,11 +182,11 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
           <div className="flex items-center gap-1 flex-shrink-0">
             {!viewing && (
               <button onClick={() => setShowSettings(s => !s)} title="Establishment details & rates"
-                className={`p-1.5 rounded-lg transition-colors ${showSettings ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]'}`}>
+                className={`p-1.5 transition-colors ${showSettings ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]'}`}>
                 <SlidersHorizontal size={16} />
               </button>
             )}
-            <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg">
+            <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]">
               <X size={16} />
             </button>
           </div>
@@ -210,7 +210,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
                 fixed when it is locked — until then these figures are a
                 preview and will move if attendance or a wage changes. */}
             {cycle.status !== 'closed' && (
-              <div className="flex items-start gap-2 rounded-xl border border-[#EFE3C4] bg-[#FBF6E9] p-3 mb-4 text-[#8A6D1F]">
+              <div className="flex items-start gap-2 border border-[#EFE3C4] bg-[#FBF6E9] p-3 mb-4 text-[#8A6D1F]">
                 <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
                 <p className="text-[11px] leading-relaxed">
                   This cycle is still unlocked, so PF, ESI and loss of pay can change. Generate now to check
@@ -232,7 +232,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
                     key={doc.key}
                     onClick={() => doc.key === 'summary' ? openSummary() : setViewing(doc.key)}
                     disabled={empty || busy === doc.key}
-                    className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all ${
+                    className={`flex flex-col items-center justify-center gap-1 py-3 border transition-all ${
                       empty
                         ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
                         : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
@@ -253,7 +253,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
             {/* Contribution totals — the figures the challans are raised for. */}
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mt-5 mb-2">Remittance for {period}</p>
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-[#E4E4E7] p-3">
+              <div className="border border-[#E4E4E7] p-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">EPF</p>
                 <Line label="A/c 1 — EPF" value={epf.accountOne} />
                 <Line label="A/c 10 — EPS" value={epf.accountTen} />
@@ -261,7 +261,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
                 <Line label="A/c 2 — Admin" value={epf.accountTwo} />
                 <Line label="Total" value={epf.grandTotal} strong />
               </div>
-              <div className="rounded-xl border border-[#E4E4E7] p-3">
+              <div className="border border-[#E4E4E7] p-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">ESI</p>
                 <Line label="Wages" value={esi.totalWages} />
                 <Line label="Employee 0.75%" value={esi.employeeShare} />
@@ -293,7 +293,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
                 ESI reason code for members with no paid days
               </label>
               <select value={zeroDayReason} onChange={e => setZeroDayReason(e.target.value)}
-                className="w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-xs text-[#27272A] focus:outline-none focus:border-[#27272A]">
+                className="w-full bg-white border border-[#E4E4E7] px-3 py-2 text-xs text-[#27272A] focus:outline-none focus:border-[#27272A]">
                 {Object.entries(ESI_REASON_CODES).filter(([c]) => c !== '0').map(([code, label]) => (
                   <option key={code} value={code}>{code} — {label}</option>
                 ))}
@@ -315,7 +315,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
 
       <AnimatePresence>
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
         )}
       </AnimatePresence>
     </motion.div>
@@ -361,13 +361,13 @@ function DocumentPreview({ docKey, ecrRows, esiRows, busy, onDownload }: {
     <>
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {raw !== null ? (
-          <pre className="text-[10px] leading-relaxed font-mono text-[#27272A] bg-[#FAFAFA] border border-[#E4E4E7] rounded-xl p-3 whitespace-pre overflow-x-auto">
+          <pre className="text-[10px] leading-relaxed font-mono text-[#27272A] bg-[#FAFAFA] border border-[#E4E4E7] p-3 whitespace-pre overflow-x-auto">
             {raw || 'No members to file.'}
           </pre>
         ) : tableRows.length === 0 ? (
           <p className="text-sm text-[#A1A1AA] text-center py-10">No members to file.</p>
         ) : (
-          <div className="overflow-x-auto border border-[#E4E4E7] rounded-xl">
+          <div className="overflow-x-auto border border-[#E4E4E7]">
             <table className="w-full text-[10px] tabular-nums">
               <thead>
                 <tr className="bg-[#27272A] text-white">
@@ -402,7 +402,7 @@ function DocumentPreview({ docKey, ecrRows, esiRows, busy, onDownload }: {
       <div className="px-4 py-3 border-t border-[#E4E4E7] flex-shrink-0 flex items-center justify-between gap-3">
         <p className="text-[11px] text-[#71717A]">{rowCount} row{rowCount === 1 ? '' : 's'}</p>
         <button onClick={onDownload} disabled={busy}
-          className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+          className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
           <Download size={15} /> {busy ? 'Saving…' : 'Download'}
         </button>
       </div>
@@ -414,7 +414,7 @@ function DocumentPreview({ docKey, ecrRows, esiRows, busy, onDownload }: {
 // Establishment details & rates
 // ============================================
 
-const fieldCls = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+const fieldCls = 'w-full bg-white border border-[#E4E4E7] px-2.5 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
 
 function ConfigPanel({ config, saving, saved, onChange }: {
   config: StatutoryConfig
@@ -430,7 +430,7 @@ function ConfigPanel({ config, saving, saved, onChange }: {
   const fromPct = (s: string) => (parseFloat(s) || 0) / 100
 
   return (
-    <div className="rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-3 mb-4">
+    <div className="border border-[#E4E4E7] bg-[#FAFAFA] p-3 mb-4">
       <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2.5">Establishment &amp; rates</p>
       <div className="grid grid-cols-2 gap-2 mb-2">
         <Field label="EPF establishment ID">
@@ -481,7 +481,7 @@ function ConfigPanel({ config, saving, saved, onChange }: {
       </label>
 
       <button onClick={() => onChange(draft)} disabled={saving}
-        className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50">
+        className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 transition-colors disabled:opacity-50">
         {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save rates'}
       </button>
     </div>
@@ -522,7 +522,7 @@ function IssueList({ tone, title, note, items }: {
     ? 'border-rose-200 bg-rose-50 text-rose-700'
     : 'border-[#EFE3C4] bg-[#FBF6E9] text-[#8A6D1F]'
   return (
-    <div className={`mt-3 rounded-xl border p-3 ${cls}`}>
+    <div className={`mt-3 border p-3 ${cls}`}>
       <p className="flex items-center gap-1.5 text-[11px] font-bold mb-1.5">
         <AlertTriangle size={13} className="flex-shrink-0" /> {title}
       </p>
