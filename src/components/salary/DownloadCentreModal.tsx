@@ -57,13 +57,12 @@ export default function DownloadCentreModal({
         </button>
         {onSalarySheet && (
           <button
-            disabled={busyKey === 'sheet'}
             onClick={onSalarySheet}
-            title="Department-wise Salary Sheet (Excel) for the staff currently shown on the sheet — adjust the search and filters first to export just a subset"
-            className={`flex flex-col items-center justify-center gap-1.5 py-4 ${sharp ? '' : 'rounded-xl'} border border-slate-200 bg-white text-slate-800 hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all disabled:opacity-50`}
+            title="Preview, filter, and download the department-wise Salary Sheet (Excel)"
+            className={`flex flex-col items-center justify-center gap-1.5 py-4 ${sharp ? '' : 'rounded-xl'} border border-slate-200 bg-white text-slate-800 hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm transition-all`}
           >
             <FileSpreadsheet size={18} className="text-[#A8896B]" />
-            <span className="text-xs font-semibold">{busyKey === 'sheet' ? 'Building…' : 'Salary Sheet'}</span>
+            <span className="text-xs font-semibold leading-tight text-center">Salary<br />Sheet</span>
           </button>
         )}
         {onStatutory && (

@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import {
-  X, ChevronLeft, Download, Loader2, Landmark, FileText, FileSpreadsheet,
+  ChevronLeft, Download, Loader2, Landmark, FileText, FileSpreadsheet,
   Table2, HeartPulse, SlidersHorizontal, AlertTriangle, Check,
 } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SalaryCycle, formatPeriod } from '@/lib/salary'
 import {
@@ -152,175 +152,157 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
     { key: 'summary', label: 'Remittance', sub: 'Summary PDF', icon: <Landmark size={15} />, count: filableEcr.length + filableEsi.length },
   ]
 
+  /** Row count for whichever document is open in the preview — feeds the footer below. */
+  const viewingRowCount = useMemo(() => {
+    if (!viewing) return 0
+    if (viewing === 'ecr-txt') { const t = ecrTextContent(ecrRows); return t ? t.split(/\r?\n/).length : 0 }
+    if (viewing === 'ecr-csv') { const t = ecrCsvContent(ecrRows); return t ? t.split(/\r?\n/).length : 0 }
+    return viewing === 'esi-xls' ? esiSheetPreviewRows(esiRows).length : epfSheetPreviewRows(ecrRows).length
+  }, [viewing, ecrRows, esiRows])
+
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="bg-white rounded-t-lg sm:rounded-none shadow-2xl w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7] flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            {viewing && (
-              <button onClick={() => setViewing(null)} title="Back"
-                className="p-1.5 -ml-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] flex-shrink-0">
-                <ChevronLeft size={18} />
-              </button>
-            )}
-            <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-              <Landmark size={16} className="text-[#B8983C]" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-[#18181B] text-sm truncate">
-                {viewing ? DOC_TITLES[viewing] : 'EPF / ESI Filing'}
-              </p>
-              <p className="text-[11px] text-[#71717A] truncate">
-                {period} · {filableEcr.length} EPF member{filableEcr.length === 1 ? '' : 's'} · {filableEsi.length} insured person{filableEsi.length === 1 ? '' : 's'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {!viewing && (
-              <button onClick={() => setShowSettings(s => !s)} title="Establishment details & rates"
-                className={`p-1.5 transition-colors ${showSettings ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]'}`}>
-                <SlidersHorizontal size={16} />
-              </button>
-            )}
-            <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]">
-              <X size={16} />
-            </button>
-          </div>
+    <ModalShell
+      onClose={onClose}
+      size="xl"
+      sharp
+      title={viewing ? DOC_TITLES[viewing] : 'EPF / ESI Filing'}
+      subtitle={`${period} · ${filableEcr.length} EPF member${filableEcr.length === 1 ? '' : 's'} · ${filableEsi.length} insured person${filableEsi.length === 1 ? '' : 's'}`}
+      icon={viewing ? (
+        <button onClick={() => setViewing(null)} title="Back" className="w-full h-full flex items-center justify-center">
+          <ChevronLeft size={18} className="text-[#B8983C]" />
+        </button>
+      ) : <Landmark size={16} className="text-[#B8983C]" />}
+      iconClassName="bg-[#27272A] text-white"
+      headerActions={!viewing && (
+        <button onClick={() => setShowSettings(s => !s)} title="Establishment details & rates"
+          className={`p-1.5 transition-colors ${showSettings ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]'}`}>
+          <SlidersHorizontal size={16} />
+        </button>
+      )}
+      footer={viewing && !loading ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-[#71717A]">{viewingRowCount} row{viewingRowCount === 1 ? '' : 's'}</p>
+          <button onClick={() => download(viewing)} disabled={busy === viewing}
+            className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
+            <Download size={15} /> {busy === viewing ? 'Saving…' : 'Download'}
+          </button>
         </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-14 text-[#A1A1AA]">
-            <Loader2 size={18} className="animate-spin" /><span className="text-sm">Loading…</span>
-          </div>
-        ) : viewing ? (
-          <DocumentPreview
-            docKey={viewing}
-            ecrRows={ecrRows}
-            esiRows={esiRows}
-            busy={busy === viewing}
-            onDownload={() => download(viewing)}
-          />
-        ) : (
-          <div className="p-4 overflow-y-auto">
-            {/* Download Centre opens on any cycle, but PF and ESI are only
-                fixed when it is locked — until then these figures are a
-                preview and will move if attendance or a wage changes. */}
-            {cycle.status !== 'closed' && (
-              <div className="flex items-start gap-2 border border-[#EFE3C4] bg-[#FBF6E9] p-3 mb-4 text-[#8A6D1F]">
-                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] leading-relaxed">
-                  This cycle is still unlocked, so PF, ESI and loss of pay can change. Generate now to check
-                  identifiers and totals, but lock the cycle before filing anything.
-                </p>
-              </div>
-            )}
-
-            {showSettings && (
-              <ConfigPanel config={config} saving={saving} saved={saved} onChange={saveConfig} />
-            )}
-
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Filing documents</p>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {DOCS.map(doc => {
-                const empty = doc.count === 0
-                return (
-                  <button
-                    key={doc.key}
-                    onClick={() => doc.key === 'summary' ? openSummary() : setViewing(doc.key)}
-                    disabled={empty || busy === doc.key}
-                    className={`flex flex-col items-center justify-center gap-1 py-3 border transition-all ${
-                      empty
-                        ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
-                        : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
-                    }`}
-                  >
-                    <span className={empty ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
-                    <span className="text-[11px] font-semibold leading-tight text-center">
-                      {busy === doc.key ? '…' : doc.label}
-                    </span>
-                    <span className={`text-[9px] font-normal leading-none ${empty ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
-                      {doc.sub}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Contribution totals — the figures the challans are raised for. */}
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mt-5 mb-2">Remittance for {period}</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="border border-[#E4E4E7] p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">EPF</p>
-                <Line label="A/c 1 — EPF" value={epf.accountOne} />
-                <Line label="A/c 10 — EPS" value={epf.accountTen} />
-                <Line label="A/c 21 — EDLI" value={epf.accountTwentyOne} />
-                <Line label="A/c 2 — Admin" value={epf.accountTwo} />
-                <Line label="Total" value={epf.grandTotal} strong />
-              </div>
-              <div className="border border-[#E4E4E7] p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">ESI</p>
-                <Line label="Wages" value={esi.totalWages} />
-                <Line label="Employee 0.75%" value={esi.employeeShare} />
-                <Line label="Employer 3.25%" value={esi.employerShare} />
-                <Line label="Total" value={esi.grandTotal} strong />
-              </div>
-            </div>
-
-            {/* Anyone the returns cannot carry, and anything they disagree with. */}
-            {blockers.length > 0 && (
-              <IssueList
-                tone="rose"
-                title={`${blockers.length} left out of the returns`}
-                note="Add the missing identifier in Salary Manager → Base salaries, then generate again."
-                items={blockers}
-              />
-            )}
-            {warnings.length > 0 && (
-              <IssueList
-                tone="amber"
-                title={`${warnings.length} to reconcile`}
-                note="These members are filed, but the return claims a different figure from what the cycle deducted. Check the PF Basic wage or the override on the cycle."
-                items={warnings}
-              />
-            )}
-
-            <div className="mt-4 pt-3 border-t border-[#F4F4F5]">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] block mb-1.5">
-                ESI reason code for members with no paid days
-              </label>
-              <select value={zeroDayReason} onChange={e => setZeroDayReason(e.target.value)}
-                className="w-full bg-white border border-[#E4E4E7] px-3 py-2 text-xs text-[#27272A] focus:outline-none focus:border-[#27272A]">
-                {Object.entries(ESI_REASON_CODES).filter(([c]) => c !== '0').map(([code, label]) => (
-                  <option key={code} value={code}>{code} — {label}</option>
-                ))}
-              </select>
-              <p className="text-[10px] text-[#A1A1AA] mt-1.5 leading-relaxed">
-                Only codes that keep the person on the employer&apos;s roll are offered. Removing someone
-                (left service, retired, expired) needs a last working day and is done on the ESIC portal itself.
+      ) : undefined}
+    >
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-14 text-[#A1A1AA]">
+          <Loader2 size={18} className="animate-spin" /><span className="text-sm">Loading…</span>
+        </div>
+      ) : viewing ? (
+        <DocumentPreviewBody docKey={viewing} ecrRows={ecrRows} esiRows={esiRows} />
+      ) : (
+        <>
+          {/* Download Centre opens on any cycle, but PF and ESI are only
+              fixed when it is locked — until then these figures are a
+              preview and will move if attendance or a wage changes. */}
+          {cycle.status !== 'closed' && (
+            <div className="flex items-start gap-2 border border-[#EFE3C4] bg-[#FBF6E9] p-3 mb-4 text-[#8A6D1F]">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed">
+                This cycle is still unlocked, so PF, ESI and loss of pay can change. Generate now to check
+                identifiers and totals, but lock the cycle before filing anything.
               </p>
             </div>
+          )}
 
-            <p className="text-[10px] text-[#A1A1AA] mt-4 leading-relaxed">
-              Names are filed in capitals with only letters and spaces, as both portals require. Wages fall in
-              proportion to the days lost to leave and late marks on this cycle. Check the figures against the
-              portals before remitting.
+          {showSettings && (
+            <ConfigPanel config={config} saving={saving} saved={saved} onChange={saveConfig} />
+          )}
+
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Filing documents</p>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {DOCS.map(doc => {
+              const empty = doc.count === 0
+              return (
+                <button
+                  key={doc.key}
+                  onClick={() => doc.key === 'summary' ? openSummary() : setViewing(doc.key)}
+                  disabled={empty || busy === doc.key}
+                  className={`flex flex-col items-center justify-center gap-1 py-3 border transition-all ${
+                    empty
+                      ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
+                      : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
+                  }`}
+                >
+                  <span className={empty ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
+                  <span className="text-[11px] font-semibold leading-tight text-center">
+                    {busy === doc.key ? '…' : doc.label}
+                  </span>
+                  <span className={`text-[9px] font-normal leading-none ${empty ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
+                    {doc.sub}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Contribution totals — the figures the challans are raised for. */}
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mt-5 mb-2">Remittance for {period}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="border border-[#E4E4E7] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">EPF</p>
+              <Line label="A/c 1 — EPF" value={epf.accountOne} />
+              <Line label="A/c 10 — EPS" value={epf.accountTen} />
+              <Line label="A/c 21 — EDLI" value={epf.accountTwentyOne} />
+              <Line label="A/c 2 — Admin" value={epf.accountTwo} />
+              <Line label="Total" value={epf.grandTotal} strong />
+            </div>
+            <div className="border border-[#E4E4E7] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">ESI</p>
+              <Line label="Wages" value={esi.totalWages} />
+              <Line label="Employee 0.75%" value={esi.employeeShare} />
+              <Line label="Employer 3.25%" value={esi.employerShare} />
+              <Line label="Total" value={esi.grandTotal} strong />
+            </div>
+          </div>
+
+          {/* Anyone the returns cannot carry, and anything they disagree with. */}
+          {blockers.length > 0 && (
+            <IssueList
+              tone="rose"
+              title={`${blockers.length} left out of the returns`}
+              note="Add the missing identifier in Salary Manager → Base salaries, then generate again."
+              items={blockers}
+            />
+          )}
+          {warnings.length > 0 && (
+            <IssueList
+              tone="amber"
+              title={`${warnings.length} to reconcile`}
+              note="These members are filed, but the return claims a different figure from what the cycle deducted. Check the PF Basic wage or the override on the cycle."
+              items={warnings}
+            />
+          )}
+
+          <div className="mt-4 pt-3 border-t border-[#F4F4F5]">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] block mb-1.5">
+              ESI reason code for members with no paid days
+            </label>
+            <select value={zeroDayReason} onChange={e => setZeroDayReason(e.target.value)}
+              className="w-full bg-white border border-[#E4E4E7] px-3 py-2 text-xs text-[#27272A] focus:outline-none focus:border-[#27272A]">
+              {Object.entries(ESI_REASON_CODES).filter(([c]) => c !== '0').map(([code, label]) => (
+                <option key={code} value={code}>{code} — {label}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-[#A1A1AA] mt-1.5 leading-relaxed">
+              Only codes that keep the person on the employer&apos;s roll are offered. Removing someone
+              (left service, retired, expired) needs a last working day and is done on the ESIC portal itself.
             </p>
           </div>
-        )}
-      </motion.div>
-    </motion.div>
+
+          <p className="text-[10px] text-[#A1A1AA] mt-4 leading-relaxed">
+            Names are filed in capitals with only letters and spaces, as both portals require. Wages fall in
+            proportion to the days lost to leave and late marks on this cycle. Check the figures against the
+            portals before remitting.
+          </p>
+        </>
+      )}
+    </ModalShell>
   )
 }
 
@@ -335,12 +317,10 @@ const DOC_TITLES: Record<DocKey, string> = {
 // Preview — the file's own contents, not a rendering of them
 // ============================================
 
-function DocumentPreview({ docKey, ecrRows, esiRows, busy, onDownload }: {
+function DocumentPreviewBody({ docKey, ecrRows, esiRows }: {
   docKey: DocKey
   ecrRows: EcrRow[]
   esiRows: EsiRow[]
-  busy: boolean
-  onDownload: () => void
 }) {
   const isEsi = docKey === 'esi-xls'
   // The two text formats *are* their preview — showing the raw lines is the
@@ -355,59 +335,46 @@ function DocumentPreview({ docKey, ecrRows, esiRows, busy, onDownload }: {
   const headers: readonly string[] = isEsi
     ? ['IP Number', 'IP Name', 'Days Paid', 'Total Wages', 'Reason Code', 'Last Working Day']
     : ECR_COLUMN_LABELS
-  const rowCount = raw !== null
-    ? (raw ? raw.split(/\r?\n/).length : 0)
-    : tableRows.length
 
   return (
     <>
-      <div className="flex-1 overflow-auto p-4 min-h-0">
-        {raw !== null ? (
-          <pre className="text-[10px] leading-relaxed font-mono text-[#27272A] bg-[#FAFAFA] border border-[#E4E4E7] p-3 whitespace-pre overflow-x-auto">
-            {raw || 'No members to file.'}
-          </pre>
-        ) : tableRows.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-10">No members to file.</p>
-        ) : (
-          <div className="overflow-x-auto border border-[#E4E4E7]">
-            <table className="w-full text-[10px] tabular-nums">
-              <thead>
-                <tr className="bg-[#27272A] text-white">
-                  {headers.map(h => (
-                    <th key={h} className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">{h}</th>
+      {raw !== null ? (
+        <pre className="text-[10px] leading-relaxed font-mono text-[#27272A] bg-[#FAFAFA] border border-[#E4E4E7] p-3 whitespace-pre overflow-x-auto">
+          {raw || 'No members to file.'}
+        </pre>
+      ) : tableRows.length === 0 ? (
+        <p className="text-sm text-[#A1A1AA] text-center py-10">No members to file.</p>
+      ) : (
+        <div className="overflow-x-auto border border-[#E4E4E7]">
+          <table className="w-full text-[10px] tabular-nums">
+            <thead>
+              <tr className="bg-[#27272A] text-white">
+                {headers.map(h => (
+                  <th key={h} className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((row, i) => (
+                <tr key={i} className="border-b border-[#F4F4F5] last:border-0">
+                  {row.map((cell, c) => (
+                    <td key={c} className={`px-2 py-1.5 whitespace-nowrap ${c === 1 ? 'text-[#18181B] font-semibold' : 'text-[#52525B]'}`}>
+                      {cell === '' ? '—' : cell}
+                    </td>
                   ))}
                 </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((row, i) => (
-                  <tr key={i} className="border-b border-[#F4F4F5] last:border-0">
-                    {row.map((cell, c) => (
-                      <td key={c} className={`px-2 py-1.5 whitespace-nowrap ${c === 1 ? 'text-[#18181B] font-semibold' : 'text-[#52525B]'}`}>
-                        {cell === '' ? '—' : cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        <p className="text-[10px] text-[#A1A1AA] mt-3 leading-relaxed">
-          {docKey === 'ecr-txt' && 'Fields are separated by #~# in EPFO’s own order: UAN, name, gross / EPF / EPS / EDLI wages, EPF and EPS contributions remitted, their difference, NCP days, refund of advances. Upload this file as-is.'}
-          {docKey === 'ecr-csv' && 'The same eleven fields, comma separated, for checking in a spreadsheet. The portal takes the text file, not this one.'}
-          {docKey === 'epf-xlsx' && 'The office working copy. Wage columns are typed values; EPS and EDLI wages, both contributions and their difference stay live formulas, so correcting a wage re-adds the rest.'}
-          {docKey === 'esi-xls' && 'Saved as Excel 97-2003 with every cell stored as text, which is what the ESIC upload requires. Column headings are reproduced from the ESIC template unchanged.'}
-        </p>
-      </div>
-
-      <div className="px-4 py-3 border-t border-[#E4E4E7] flex-shrink-0 flex items-center justify-between gap-3">
-        <p className="text-[11px] text-[#71717A]">{rowCount} row{rowCount === 1 ? '' : 's'}</p>
-        <button onClick={onDownload} disabled={busy}
-          className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
-          <Download size={15} /> {busy ? 'Saving…' : 'Download'}
-        </button>
-      </div>
+      <p className="text-[10px] text-[#A1A1AA] mt-3 leading-relaxed">
+        {docKey === 'ecr-txt' && 'Fields are separated by #~# in EPFO’s own order: UAN, name, gross / EPF / EPS / EDLI wages, EPF and EPS contributions remitted, their difference, NCP days, refund of advances. Upload this file as-is.'}
+        {docKey === 'ecr-csv' && 'The same eleven fields, comma separated, for checking in a spreadsheet. The portal takes the text file, not this one.'}
+        {docKey === 'epf-xlsx' && 'The office working copy. Wage columns are typed values; EPS and EDLI wages, both contributions and their difference stay live formulas, so correcting a wage re-adds the rest.'}
+        {docKey === 'esi-xls' && 'Saved as Excel 97-2003 with every cell stored as text, which is what the ESIC upload requires. Column headings are reproduced from the ESIC template unchanged.'}
+      </p>
     </>
   )
 }

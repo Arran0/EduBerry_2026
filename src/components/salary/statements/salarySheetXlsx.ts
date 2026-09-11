@@ -15,6 +15,8 @@ export type SalarySheetCategory = 'teaching' | 'non_teaching' | 'driver'
 
 export interface SalarySheetRow {
   category: SalarySheetCategory
+  /** recordPersonId(r) — lets a filter UI match a row against team/department membership. */
+  personId: string
   name: string
   designation: string
   payByCash: boolean
@@ -32,8 +34,8 @@ export interface SalarySheetRow {
   net: number
 }
 
-const CATEGORY_ORDER: SalarySheetCategory[] = ['teaching', 'non_teaching', 'driver']
-const CATEGORY_LABEL: Record<SalarySheetCategory, string> = {
+export const CATEGORY_ORDER: SalarySheetCategory[] = ['teaching', 'non_teaching', 'driver']
+export const CATEGORY_LABEL: Record<SalarySheetCategory, string> = {
   teaching: 'Teaching Staff',
   non_teaching: 'Non-Teaching Staff',
   driver: 'Drivers',

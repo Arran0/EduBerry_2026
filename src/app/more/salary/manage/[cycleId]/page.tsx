@@ -59,12 +59,13 @@ import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
-import { SalarySheetCategory, SalarySheetRow, downloadSalarySheet } from '@/components/salary/statements/salarySheetXlsx'
+import { SalarySheetCategory, SalarySheetRow } from '@/components/salary/statements/salarySheetXlsx'
 import type { StatutorySourceRow } from '@/lib/statutory'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 const EpfDocumentsModal = dynamic(() => import('@/components/salary/EpfDocumentsModal'))
+const SalarySheetPreviewModal = dynamic(() => import('@/components/salary/statements/SalarySheetPreviewModal'))
 
 /**
  * How many rows mount at a time.
@@ -191,6 +192,7 @@ export default function SalaryCycleDetailPage() {
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
   const [showEpfDocs, setShowEpfDocs] = useState(false)
+  const [showSalarySheet, setShowSalarySheet] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
   const [calendarPerson, setCalendarPerson] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -505,6 +507,11 @@ export default function SalaryCycleDetailPage() {
     }),
     [records, editsOf, verified],
   )
+
+  /** Sign off every currently-unverified row at once, against the values it holds right now. */
+  const verifyAll = () => {
+    for (const r of unverified) verified.setVerified(r.id, editFingerprint(editsOf(r)), true)
+  }
 
   /**
    * Every record flattened into what the EPF and ESI monthly returns need.
@@ -837,12 +844,12 @@ export default function SalaryCycleDetailPage() {
   }
 
   /**
-   * The Salary Sheet's rows — same filtered set the bank CSV exports (see
-   * downloadBankCsv above), so choosing a team, a search term, or "Staff only"
-   * on the toolbar before opening the Download Centre narrows this file to
-   * exactly that set of people.
+   * Every record's Salary Sheet row, built once from the whole cycle — the
+   * Salary Sheet preview does its own category/department/search filtering
+   * (see SalarySheetPreviewModal), independent of whatever the cycle sheet's
+   * own toolbar currently shows.
    */
-  const salarySheetRows = useMemo<SalarySheetRow[]>(() => visibleRecords.map(r => {
+  const salarySheetAllRows = useMemo<SalarySheetRow[]>(() => records.map(r => {
     const c = computedRows[r.id]
     const { pf, esi, bonus, manualItems, net } = rowFigures(r)
     const positiveManual = manualItems.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount), 0)
@@ -853,6 +860,7 @@ export default function SalaryCycleDetailPage() {
     const halfDayCount = c?.halfDayCount ?? 0
     return {
       category: salarySheetCategory(r),
+      personId: recordPersonId(r),
       name: recordPersonName(r) || '—',
       designation: salarySheetDesignation(r),
       payByCash: r.pay_by_cash,
@@ -866,23 +874,7 @@ export default function SalaryCycleDetailPage() {
       extraOther: bonus + positiveManual,
       net,
     }
-  }), [visibleRecords, computedRows, rowFigures])
-
-  const downloadSalarySheetFile = async () => {
-    if (!cycle) return
-    setDisburseMsg(null)
-    if (salarySheetRows.length === 0) {
-      setDisburseMsg('Nothing to export — adjust the search and filters first.')
-      return
-    }
-    try {
-      const { included, fileName } = await downloadSalarySheet(cycle, salarySheetRows)
-      setDisburseMsg(`Exported ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.`)
-    } catch (e) {
-      console.error('salary sheet generation failed:', e)
-      setDisburseMsg('Could not build the Salary Sheet — please try again.')
-    }
-  }
+  }), [records, computedRows, rowFigures])
 
   return (
     <ProtectedLayout adminOnly>
@@ -1002,11 +994,17 @@ export default function SalaryCycleDetailPage() {
                   {!closed && unverified.length > 0 && (
                     <div className="flex items-start gap-1.5 bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] px-2.5 py-2 mb-2 mx-2 sm:mx-0">
                       <ShieldAlert size={13} className="flex-shrink-0 mt-px" />
-                      <p className="text-[11px] leading-snug">
+                      <p className="text-[11px] leading-snug flex-1">
                         <span className="font-semibold">{unverified.length} row(s) have hand-typed figures.</span>{' '}
                         They are pinned to the top of the sheet — tick each one to confirm it before locking the
                         cycle. Editing a row again clears its tick.
                       </p>
+                      <button
+                        onClick={verifyAll}
+                        className="flex-shrink-0 text-[11px] font-semibold underline decoration-[#EFE3C4] hover:decoration-[#8A6D1F] underline-offset-2"
+                      >
+                        Tick all
+                      </button>
                     </div>
                   )}
 
@@ -1277,7 +1275,7 @@ export default function SalaryCycleDetailPage() {
             onClose={() => setShowDocs(false)}
             onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
             onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
-            onSalarySheet={() => { setShowDocs(false); setPdfBusy('sheet'); downloadSalarySheetFile().finally(() => setPdfBusy(null)) }}
+            onSalarySheet={() => { setShowDocs(false); setShowSalarySheet(true) }}
             onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
           />
         )}
@@ -1288,6 +1286,14 @@ export default function SalaryCycleDetailPage() {
             daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
             onClose={() => setShowEpfDocs(false)}
             onPreview={(spec, title) => setPreview({ spec, title })}
+          />
+        )}
+        {showSalarySheet && cycle && (
+          <SalarySheetPreviewModal
+            cycle={cycle}
+            rows={salarySheetAllRows}
+            teams={teams}
+            onClose={() => setShowSalarySheet(false)}
           />
         )}
         {showSettings && cycle && (
