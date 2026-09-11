@@ -14,8 +14,11 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   test: {
+    // Node by default — the payroll engine needs no DOM. The handful of
+    // component tests (*.test.tsx) opt into jsdom with a
+    // `@vitest-environment jsdom` docblock of their own.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     env: {
       NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',

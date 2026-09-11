@@ -381,10 +381,10 @@ export default function StaffSalaryView() {
 
       <AnimatePresence>
         {showDocs && profile && (
-          <SalaryStatementsModal staff={profile} onClose={() => setShowDocs(false)} />
+          <SalaryStatementsModal key="salary-statements" staff={profile} onClose={() => setShowDocs(false)} />
         )}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal key="statement-preview" spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
         )}
       </AnimatePresence>
     </>

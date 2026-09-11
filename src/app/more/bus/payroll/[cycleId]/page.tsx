@@ -698,6 +698,7 @@ export default function DriverCycleDetailPage() {
       <AnimatePresence>
         {showDocs && salaryCycle && (
           <DownloadCentreModal
+            key="download-centre"
             periodLabel={formatPeriod(salaryCycle.period_month, salaryCycle.period_year)}
             recordCount={records.length}
             busyKey={pdfBusy}
@@ -708,6 +709,7 @@ export default function DriverCycleDetailPage() {
         )}
         {showSettings && cycle && (
           <CycleSettingsModal
+            key="cycle-settings"
             initial={calibration}
             hasOverride={!!cycle.payroll_config}
             onClose={() => setShowSettings(false)}
@@ -715,7 +717,7 @@ export default function DriverCycleDetailPage() {
           />
         )}
         {confirmAction && (
-          <ModalShell onClose={() => setConfirmAction(null)} size="sm">
+          <ModalShell key="confirm-lock" onClose={() => setConfirmAction(null)} size="sm">
             <h3 className="font-bold text-slate-800 mb-1.5">
               {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
@@ -737,10 +739,11 @@ export default function DriverCycleDetailPage() {
           </ModalShell>
         )}
         {docsDriver && (
-          <DriverStatementsModal driver={docsDriver} onClose={() => setDocsDriver(null)} />
+          <DriverStatementsModal key="driver-statements" driver={docsDriver} onClose={() => setDocsDriver(null)} />
         )}
         {calendarPerson && (
           <AttendanceCalendarModal
+            key="attendance-calendar"
             person={calendarPerson}
             viewerId={viewerId}
             year={cycle?.period_year}
@@ -751,7 +754,7 @@ export default function DriverCycleDetailPage() {
           />
         )}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal key="statement-preview" spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
         )}
       </AnimatePresence>
     </ProtectedLayout>
