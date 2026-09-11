@@ -2,7 +2,8 @@
 // employee with the attendance and statutory figures behind their net pay,
 // and a blank Signature column for the paper copy kept on file. Splits into
 // one sheet per staff category present in the rows handed in (Teaching Staff /
-// Non-Teaching Staff / Drivers), plus a Summary sheet with the cycle's totals.
+// Non-Teaching Staff / Support Staff / Drivers), plus a Summary sheet with the
+// cycle's totals.
 //
 // Unlike the Salary Register (a condensed audit trail of basic/adjustments/net
 // per employee), this mirrors the office's own working sheet — the one used to
@@ -11,7 +12,7 @@
 
 import { SalaryCycle, formatPeriod } from '@/lib/salary'
 
-export type SalarySheetCategory = 'teaching' | 'non_teaching' | 'driver'
+export type SalarySheetCategory = 'teaching' | 'non_teaching' | 'support' | 'driver'
 
 export interface SalarySheetRow {
   category: SalarySheetCategory
@@ -34,10 +35,11 @@ export interface SalarySheetRow {
   net: number
 }
 
-export const CATEGORY_ORDER: SalarySheetCategory[] = ['teaching', 'non_teaching', 'driver']
+export const CATEGORY_ORDER: SalarySheetCategory[] = ['teaching', 'non_teaching', 'support', 'driver']
 export const CATEGORY_LABEL: Record<SalarySheetCategory, string> = {
   teaching: 'Teaching Staff',
   non_teaching: 'Non-Teaching Staff',
+  support: 'Support Staff',
   driver: 'Drivers',
 }
 

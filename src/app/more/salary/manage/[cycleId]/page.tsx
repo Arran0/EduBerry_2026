@@ -13,6 +13,7 @@ import {
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
+import ModalErrorBoundary from '@/components/ui/ModalErrorBoundary'
 import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/SalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
@@ -89,12 +90,14 @@ function capitalize(s: string): string {
 }
 
 /** Which Salary Sheet tab a record belongs on — the same Teaching / Non-Teaching /
- *  Drivers split the office's own paper sheet uses, derived from the roster kind
- *  and (for staff) the same is_non_teaching flag the role badge already reads. */
+ *  Support / Drivers split the office's own paper sheet uses, derived from the
+ *  roster kind and (for staff) the same is_non_teaching flag the role badge
+ *  already reads. Support staff (house-keeping etc., no profiles row) are kept
+ *  apart from non-teaching office staff rather than folded into that tab. */
 function salarySheetCategory(r: SalaryRecord): SalarySheetCategory {
   const kind = recordPersonKind(r)
   if (kind === 'driver') return 'driver'
-  if (kind === 'support') return 'non_teaching'
+  if (kind === 'support') return 'support'
   return r.staff?.is_non_teaching ? 'non_teaching' : 'teaching'
 }
 
@@ -1267,34 +1270,40 @@ export default function SalaryCycleDetailPage() {
 
       <AnimatePresence>
         {showDocs && cycle && (
-          <DownloadCentreModal
-            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
-            recordCount={records.length}
-            busyKey={pdfBusy}
-            sharp
-            onClose={() => setShowDocs(false)}
-            onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
-            onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
-            onSalarySheet={() => { setShowDocs(false); setShowSalarySheet(true) }}
-            onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
-          />
+          <ModalErrorBoundary onClose={() => setShowDocs(false)}>
+            <DownloadCentreModal
+              periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
+              recordCount={records.length}
+              busyKey={pdfBusy}
+              sharp
+              onClose={() => setShowDocs(false)}
+              onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
+              onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+              onSalarySheet={() => { setShowDocs(false); setShowSalarySheet(true) }}
+              onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
+            />
+          </ModalErrorBoundary>
         )}
         {showEpfDocs && cycle && (
-          <EpfDocumentsModal
-            cycle={cycle}
-            sourceRows={statutoryRows}
-            daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
-            onClose={() => setShowEpfDocs(false)}
-            onPreview={(spec, title) => setPreview({ spec, title })}
-          />
+          <ModalErrorBoundary onClose={() => setShowEpfDocs(false)}>
+            <EpfDocumentsModal
+              cycle={cycle}
+              sourceRows={statutoryRows}
+              daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
+              onClose={() => setShowEpfDocs(false)}
+              onPreview={(spec, title) => setPreview({ spec, title })}
+            />
+          </ModalErrorBoundary>
         )}
         {showSalarySheet && cycle && (
-          <SalarySheetPreviewModal
-            cycle={cycle}
-            rows={salarySheetAllRows}
-            teams={teams}
-            onClose={() => setShowSalarySheet(false)}
-          />
+          <ModalErrorBoundary onClose={() => setShowSalarySheet(false)}>
+            <SalarySheetPreviewModal
+              cycle={cycle}
+              rows={salarySheetAllRows}
+              teams={teams}
+              onClose={() => setShowSalarySheet(false)}
+            />
+          </ModalErrorBoundary>
         )}
         {showSettings && cycle && (
           <CycleSettingsModal

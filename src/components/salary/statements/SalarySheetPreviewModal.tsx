@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { Download, FileSpreadsheet, Loader2, Search } from 'lucide-react'
+import { Download, FileSpreadsheet, Loader2, Search, X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
+import SmartTypeahead from '@/components/SmartTypeahead'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SalaryCycle, formatPeriod } from '@/lib/salary'
 import { TeamMembership } from '@/lib/teams'
@@ -32,6 +33,7 @@ interface Props {
 export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }: Props) {
   const [categories, setCategories] = useState<Set<SalarySheetCategory>>(new Set(CATEGORY_ORDER))
   const [teamIds, setTeamIds] = useState<string[]>([])
+  const [teamQuery, setTeamQuery] = useState('')
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -39,10 +41,24 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
   const period = formatPeriod(cycle.period_month, cycle.period_year)
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<SalarySheetCategory, number> = { teaching: 0, non_teaching: 0, driver: 0 }
+    const counts: Record<SalarySheetCategory, number> = { teaching: 0, non_teaching: 0, support: 0, driver: 0 }
     for (const r of rows) counts[r.category] += 1
     return counts
   }, [rows])
+
+  /** Teams not already picked, narrowed to the typed-ahead query — teams can run
+   *  into the dozens across a school, so this replaces listing every one at once. */
+  const teamSuggestions = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase()
+    return teams
+      .filter(t => !teamIds.includes(t.id) && (!q || t.name.toLowerCase().includes(q)))
+      .slice(0, 8)
+  }, [teams, teamIds, teamQuery])
+
+  const selectedTeams = useMemo(
+    () => teamIds.map(id => teams.find(t => t.id === id)).filter((t): t is TeamMembership => !!t),
+    [teamIds, teams],
+  )
 
   /** Union of the rosters of every selected department/team; null when none are selected. */
   const teamMemberIds = useMemo(() => {
@@ -131,12 +147,28 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
       {teams.length > 0 && (
         <>
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-1.5">Department / team</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {teams.map(t => (
-              <button key={t.id} onClick={() => toggleTeam(t.id)} className={chip(teamIds.includes(t.id))}>
-                {t.name}
-              </button>
-            ))}
+          {selectedTeams.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {selectedTeams.map(t => (
+                <button key={t.id} onClick={() => toggleTeam(t.id)} className={`${chip(true)} flex items-center gap-1`}>
+                  {t.name} <X size={11} />
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mb-3">
+            <SmartTypeahead<TeamMembership>
+              query={teamQuery}
+              onQueryChange={setTeamQuery}
+              suggestions={teamSuggestions}
+              onSelect={t => { toggleTeam(t.id); setTeamQuery('') }}
+              getKey={t => t.id}
+              placeholder="Search a department or team…"
+              className="flex items-center gap-2 border border-[#E4E4E7] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
+              renderSuggestion={(t, active) => (
+                <div className={`px-3 py-2 text-sm ${active ? 'bg-[#F5F5F5]' : 'bg-white'}`}>{t.name}</div>
+              )}
+            />
           </div>
         </>
       )}
