@@ -13,6 +13,7 @@ import {
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
+import ModalErrorBoundary from '@/components/ui/ModalErrorBoundary'
 import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/SalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
@@ -59,11 +60,13 @@ import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
+import { SalarySheetCategory, SalarySheetRow } from '@/components/salary/statements/salarySheetXlsx'
 import type { StatutorySourceRow } from '@/lib/statutory'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 const EpfDocumentsModal = dynamic(() => import('@/components/salary/EpfDocumentsModal'))
+const SalarySheetPreviewModal = dynamic(() => import('@/components/salary/statements/SalarySheetPreviewModal'))
 
 /**
  * How many rows mount at a time.
@@ -80,6 +83,28 @@ const ROWS_PER_CHUNK = 30
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
   return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
+}
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
+/** Which Salary Sheet tab a record belongs on — the same Teaching / Non-Teaching /
+ *  Support / Drivers split the office's own paper sheet uses, derived from the
+ *  roster kind and (for staff) the same is_non_teaching flag the role badge
+ *  already reads. Support staff (house-keeping etc., no profiles row) are kept
+ *  apart from non-teaching office staff rather than folded into that tab. */
+function salarySheetCategory(r: SalaryRecord): SalarySheetCategory {
+  const kind = recordPersonKind(r)
+  if (kind === 'driver') return 'driver'
+  if (kind === 'support') return 'support'
+  return r.staff?.is_non_teaching ? 'non_teaching' : 'teaching'
+}
+
+function salarySheetDesignation(r: SalaryRecord): string {
+  if (r.staff) return getDisplayRole(r.staff)
+  if (r.support_staff) return r.support_staff.designation || 'Support Staff'
+  return r.person_role_snapshot ? capitalize(r.person_role_snapshot) : '—'
 }
 
 /**
@@ -170,6 +195,7 @@ export default function SalaryCycleDetailPage() {
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
   const [showEpfDocs, setShowEpfDocs] = useState(false)
+  const [showSalarySheet, setShowSalarySheet] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
   const [calendarPerson, setCalendarPerson] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -484,6 +510,11 @@ export default function SalaryCycleDetailPage() {
     }),
     [records, editsOf, verified],
   )
+
+  /** Sign off every currently-unverified row at once, against the values it holds right now. */
+  const verifyAll = () => {
+    for (const r of unverified) verified.setVerified(r.id, editFingerprint(editsOf(r)), true)
+  }
 
   /**
    * Every record flattened into what the EPF and ESI monthly returns need.
@@ -815,6 +846,39 @@ export default function SalaryCycleDetailPage() {
     )
   }
 
+  /**
+   * Every record's Salary Sheet row, built once from the whole cycle — the
+   * Salary Sheet preview does its own category/department/search filtering
+   * (see SalarySheetPreviewModal), independent of whatever the cycle sheet's
+   * own toolbar currently shows.
+   */
+  const salarySheetAllRows = useMemo<SalarySheetRow[]>(() => records.map(r => {
+    const c = computedRows[r.id]
+    const { pf, esi, bonus, manualItems, net } = rowFigures(r)
+    const positiveManual = manualItems.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount), 0)
+    const negativeManual = Math.abs(manualItems.filter(i => Number(i.amount) < 0).reduce((s, i) => s + Number(i.amount), 0))
+    const workingDays = c?.workingDays ?? 0
+    const leaveCount = c?.leaveCount ?? 0
+    const lateCount = c?.lateCount ?? 0
+    const halfDayCount = c?.halfDayCount ?? 0
+    return {
+      category: salarySheetCategory(r),
+      personId: recordPersonId(r),
+      name: recordPersonName(r) || '—',
+      designation: salarySheetDesignation(r),
+      payByCash: r.pay_by_cash,
+      baseAmount: Number(r.base_amount) || 0,
+      workingDays,
+      daysWorked: workingDays - (leaveCount + lateCount + halfDayCount),
+      leaveCount, lateCount, halfDayCount,
+      salaryPerDay: c?.salaryPerDay ?? 0,
+      pf, esi,
+      advance: negativeManual,
+      extraOther: bonus + positiveManual,
+      net,
+    }
+  }), [records, computedRows, rowFigures])
+
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
@@ -933,11 +997,17 @@ export default function SalaryCycleDetailPage() {
                   {!closed && unverified.length > 0 && (
                     <div className="flex items-start gap-1.5 bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] px-2.5 py-2 mb-2 mx-2 sm:mx-0">
                       <ShieldAlert size={13} className="flex-shrink-0 mt-px" />
-                      <p className="text-[11px] leading-snug">
+                      <p className="text-[11px] leading-snug flex-1">
                         <span className="font-semibold">{unverified.length} row(s) have hand-typed figures.</span>{' '}
                         They are pinned to the top of the sheet — tick each one to confirm it before locking the
                         cycle. Editing a row again clears its tick.
                       </p>
+                      <button
+                        onClick={verifyAll}
+                        className="flex-shrink-0 text-[11px] font-semibold underline decoration-[#EFE3C4] hover:decoration-[#8A6D1F] underline-offset-2"
+                      >
+                        Tick all
+                      </button>
                     </div>
                   )}
 
@@ -1200,24 +1270,40 @@ export default function SalaryCycleDetailPage() {
 
       <AnimatePresence>
         {showDocs && cycle && (
-          <DownloadCentreModal
-            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
-            recordCount={records.length}
-            busyKey={pdfBusy}
-            sharp
-            onClose={() => setShowDocs(false)}
-            onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
-            onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
-            onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
-          />
+          <ModalErrorBoundary onClose={() => setShowDocs(false)}>
+            <DownloadCentreModal
+              periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
+              recordCount={records.length}
+              busyKey={pdfBusy}
+              sharp
+              onClose={() => setShowDocs(false)}
+              onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
+              onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+              onSalarySheet={() => { setShowDocs(false); setShowSalarySheet(true) }}
+              onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
+            />
+          </ModalErrorBoundary>
         )}
         {showEpfDocs && cycle && (
-          <EpfDocumentsModal
-            cycle={cycle}
-            sourceRows={statutoryRows}
-            daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
-            onClose={() => setShowEpfDocs(false)}
-          />
+          <ModalErrorBoundary onClose={() => setShowEpfDocs(false)}>
+            <EpfDocumentsModal
+              cycle={cycle}
+              sourceRows={statutoryRows}
+              daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
+              onClose={() => setShowEpfDocs(false)}
+              onPreview={(spec, title) => setPreview({ spec, title })}
+            />
+          </ModalErrorBoundary>
+        )}
+        {showSalarySheet && cycle && (
+          <ModalErrorBoundary onClose={() => setShowSalarySheet(false)}>
+            <SalarySheetPreviewModal
+              cycle={cycle}
+              rows={salarySheetAllRows}
+              teams={teams}
+              onClose={() => setShowSalarySheet(false)}
+            />
+          </ModalErrorBoundary>
         )}
         {showSettings && cycle && (
           <CycleSettingsModal
@@ -1266,7 +1352,7 @@ export default function SalaryCycleDetailPage() {
           />
         )}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
         )}
       </AnimatePresence>
     </ProtectedLayout>
