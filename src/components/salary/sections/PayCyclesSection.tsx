@@ -180,10 +180,10 @@ export default function PayCyclesSection() {
 
       <AnimatePresence>
         {showNew && (
-          <NewCycleForm onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />
+          <NewCycleForm key="new-cycle" onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />
         )}
         {pendingDelete && (
-          <ModalShell onClose={() => { setPendingDelete(null); setError(null) }} size="sm" sharp>
+          <ModalShell key="confirm-delete" onClose={() => { setPendingDelete(null); setError(null) }} size="sm" sharp>
             <h3 className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#18181B] mb-2">
               Delete {formatPeriod(pendingDelete.period_month, pendingDelete.period_year)}
               {pendingDelete.kind === 'staff' ? ' · Staff' : ' · Drivers'}?

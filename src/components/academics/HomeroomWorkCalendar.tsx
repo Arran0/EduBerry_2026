@@ -329,6 +329,7 @@ export default function HomeroomWorkCalendar({
       <AnimatePresence>
         {detailTask && (
           <ModalShell
+            key="task-detail"
             onClose={() => setDetailTask(null)}
             size="lg"
             title="Homework"

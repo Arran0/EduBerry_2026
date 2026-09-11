@@ -1278,9 +1278,33 @@ export default function SalaryCycleDetailPage() {
         </div>
       </div>
 
+      {/*
+        Every direct child here carries its own `key`, and must keep it.
+
+        AnimatePresence identifies its children *only* by key
+        (`getChildKey = child => child.key || ''`) and its own documentation
+        requires each one to be unique. Keyless siblings therefore all collapse
+        onto a single anonymous slot, and this page puts two popups on screen
+        at once — the EPF/ESI panel opens the remittance preview alongside
+        itself — so React was being handed two children under one key. React's
+        behaviour for a duplicate key is undefined by design: it cannot tell
+        the two subtrees apart, so which one is kept, torn down, or reconciled
+        into the other is not something this page can rely on.
+
+        That matters more here than a misdrawn popup would, because of what
+        these children are. ModalShell portals a `fixed inset-0` root onto
+        <body>; a child whose exit never completes leaves that root mounted,
+        faded to nothing but still covering the viewport and still taking every
+        click. Nothing is thrown, so no error boundary fires and the console
+        stays clean — the page just looks entirely normal and answers nothing,
+        which is exactly how the Download Centre freeze was reported.
+
+        (See also the route-level error.tsx and the inert-while-leaving guard
+        in ModalShell, which make that symptom unreachable from either cause.)
+      */}
       <AnimatePresence>
         {showDocs && cycle && (
-          <ModalErrorBoundary onClose={() => setShowDocs(false)}>
+          <ModalErrorBoundary key="download-centre" onClose={() => setShowDocs(false)}>
             <DownloadCentreModal
               periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
               recordCount={records.length}
@@ -1295,7 +1319,7 @@ export default function SalaryCycleDetailPage() {
           </ModalErrorBoundary>
         )}
         {showEpfDocs && cycle && (
-          <ModalErrorBoundary onClose={() => setShowEpfDocs(false)}>
+          <ModalErrorBoundary key="epf-docs" onClose={() => setShowEpfDocs(false)}>
             <EpfDocumentsModal
               cycle={cycle}
               sourceRows={statutoryRows}
@@ -1306,7 +1330,7 @@ export default function SalaryCycleDetailPage() {
           </ModalErrorBoundary>
         )}
         {showSalarySheet && cycle && (
-          <ModalErrorBoundary onClose={() => setShowSalarySheet(false)}>
+          <ModalErrorBoundary key="salary-sheet" onClose={() => setShowSalarySheet(false)}>
             <SalarySheetPreviewModal
               cycle={cycle}
               rows={salarySheetAllRows}
@@ -1316,16 +1340,18 @@ export default function SalaryCycleDetailPage() {
           </ModalErrorBoundary>
         )}
         {showSettings && cycle && (
-          <CycleSettingsModal
-            initial={calibration}
-            hasOverride={!!cycle.payroll_config}
-            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
-            onClose={() => setShowSettings(false)}
-            onSave={saveCycleConfig}
-          />
+          <ModalErrorBoundary key="cycle-settings" onClose={() => setShowSettings(false)}>
+            <CycleSettingsModal
+              initial={calibration}
+              hasOverride={!!cycle.payroll_config}
+              periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
+              onClose={() => setShowSettings(false)}
+              onSave={saveCycleConfig}
+            />
+          </ModalErrorBoundary>
         )}
         {confirmAction && (
-          <ModalShell onClose={() => setConfirmAction(null)} size="sm" sharp>
+          <ModalShell key="confirm-lock" onClose={() => setConfirmAction(null)} size="sm" sharp>
             <h3 className="font-bold text-[#18181B] mb-1.5">
               {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
@@ -1347,22 +1373,39 @@ export default function SalaryCycleDetailPage() {
           </ModalShell>
         )}
         {docsStaff && (
-          <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
+          <ModalErrorBoundary key="staff-statements" onClose={() => setDocsStaff(null)}>
+            <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
+          </ModalErrorBoundary>
         )}
         {calendarPerson && (
-          <AttendanceCalendarModal
-            person={calendarPerson}
-            viewerId={viewerId}
-            year={cycle?.period_year}
-            month={cycle?.period_month}
-            periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
-            sharp
-            onClose={() => setCalendarPerson(null)}
-            onClosed={load}
-          />
+          <ModalErrorBoundary key="attendance-calendar" onClose={() => setCalendarPerson(null)}>
+            <AttendanceCalendarModal
+              person={calendarPerson}
+              viewerId={viewerId}
+              year={cycle?.period_year}
+              month={cycle?.period_month}
+              periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+              sharp
+              onClose={() => setCalendarPerson(null)}
+              onClosed={load}
+            />
+          </ModalErrorBoundary>
         )}
+        {/*
+          Wrapped like the rest. This one is the whole reason the EPF/ESI flow
+          could take the page down: it is what the Remittance Summary tile
+          opens, and it mounts @react-pdf/renderer's PDFViewer, by some margin
+          the heaviest thing any of these popups render. Left unguarded, an
+          uncaught error in it had no boundary between it and the root, so
+          React's recovery was to unmount the entire app — a page that still
+          looks completely normal and answers nothing, with no dialog to say
+          so. The containment added around the other Download Centre popups
+          never covered this one.
+        */}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
+          <ModalErrorBoundary key="statement-preview" onClose={() => setPreview(null)}>
+            <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
+          </ModalErrorBoundary>
         )}
       </AnimatePresence>
     </ProtectedLayout>
