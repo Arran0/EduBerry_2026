@@ -328,17 +328,6 @@ export async function fetchSalaryRecord(recordId: string): Promise<SalaryRecord 
   return (data as unknown as SalaryRecord) ?? null
 }
 
-/** Count of records per cycle, keyed by cycle_id (for the cycles list). */
-export async function fetchCycleRecordCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('salary_records').select('cycle_id')
-  if (error) { console.error('fetchCycleRecordCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { cycle_id: string }[]) {
-    counts[r.cycle_id] = (counts[r.cycle_id] ?? 0) + 1
-  }
-  return counts
-}
-
 export interface CycleTally { total: number; paid: number }
 
 /**
@@ -403,10 +392,11 @@ export async function ensureDriverRecordsInCycle(
 ): Promise<{ success: boolean; added?: number; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
 
-  const [driversRes, basesRes, existingRes] = await Promise.all([
-    supabase.from('profiles').select('id').eq('role', 'driver'),
+  const [driversRes, basesRes, existingRes, hiddenIds] = await Promise.all([
+    supabase.from('profiles').select('id').eq('role', 'driver').eq('is_banned', false),
     supabase.from('driver_payroll_base').select('driver_id, base_amount, active'),
     supabase.from('salary_records').select('id, staff_id, base_amount').eq('cycle_id', cycleId).not('staff_id', 'is', null),
+    fetchHiddenSalaryMemberIds(),
   ])
   if (driversRes.error) return { success: false, error: driversRes.error.message }
   if (existingRes.error) return { success: false, error: existingRes.error.message }
@@ -416,11 +406,13 @@ export async function ensureDriverRecordsInCycle(
       .map(b => [b.driver_id, b]),
   )
   const already = ((existingRes.data ?? []) as { id: string; staff_id: string; base_amount: number }[])
+  const hidden = new Set(hiddenIds)
 
   const rows = ((driversRes.data ?? []) as { id: string }[])
-    // A driver explicitly marked inactive stays off payroll; one with no base
-    // row at all is still included, at zero, to be filled in on the cycle page.
-    .filter(d => !already.some(r => r.staff_id === d.id) && (bases.get(d.id)?.active ?? true))
+    // A driver explicitly marked inactive or resigned (banned), or hidden
+    // from the salary app, stays off payroll; one with no base row at all is
+    // still included, at zero, to be filled in on the cycle page.
+    .filter(d => !already.some(r => r.staff_id === d.id) && (bases.get(d.id)?.active ?? true) && !hidden.has(d.id))
     .map(d => ({
       cycle_id: cycleId,
       staff_id: d.id,
@@ -458,10 +450,11 @@ export async function ensureSupportStaffRecordsInCycle(
 ): Promise<{ success: boolean; added?: number; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
 
-  const [supportRes, basesRes, existingRes] = await Promise.all([
+  const [supportRes, basesRes, existingRes, hiddenIds] = await Promise.all([
     supabase.from('support_staff').select('id').eq('is_active', true),
     supabase.from('support_staff_salary_base').select('support_staff_id, base_amount, active'),
     supabase.from('salary_records').select('id, support_staff_id, base_amount').eq('cycle_id', cycleId).not('support_staff_id', 'is', null),
+    fetchHiddenSalaryMemberIds(),
   ])
   if (supportRes.error) {
     // A school with no support staff module applied yet has no such table —
@@ -476,9 +469,10 @@ export async function ensureSupportStaffRecordsInCycle(
       .map(b => [b.support_staff_id, b]),
   )
   const already = ((existingRes.data ?? []) as { id: string; support_staff_id: string; base_amount: number }[])
+  const hidden = new Set(hiddenIds)
 
   const rows = ((supportRes.data ?? []) as { id: string }[])
-    .filter(s => !already.some(r => r.support_staff_id === s.id) && (bases.get(s.id)?.active ?? true))
+    .filter(s => !already.some(r => r.support_staff_id === s.id) && (bases.get(s.id)?.active ?? true) && !hidden.has(s.id))
     .map(s => ({
       cycle_id: cycleId,
       support_staff_id: s.id,
@@ -642,6 +636,31 @@ export async function bulkSetSalaryRecordStatus(
   if (recordIds.length === 0) return { success: true }
   const { error } = await supabase.from('salary_records').update({ status }).in('id', recordIds)
   if (error) { console.error('bulkSetSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/**
+ * Drop draft records for people who have since resigned or been hidden from
+ * the salary app, right before a cycle locks.
+ *
+ * These rows exist because the roster sync re-adds anyone missing a record
+ * every time an open cycle loads (see generateSalaryCycle /
+ * ensureDriverRecordsInCycle / ensureSupportStaffRecordsInCycle) — while the
+ * cycle stays open they are correctly filtered out of the sheet, but a
+ * CLOSED cycle shows every record it has with no such filter, since it is
+ * meant to be history. Left alone, locking would make them reappear: someone
+ * who never had a row on the sheet the admin reviewed would suddenly be
+ * counted, paid, and show up in every export. Deleting them here — never on
+ * an open cycle, where the same person coming off the hidden list or back
+ * from resignation should simply pick their row back up — keeps a locked
+ * cycle's history to exactly what was approved.
+ */
+export async function deleteSalaryRecordsByIds(
+  recordIds: string[],
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0) return { success: true }
+  const { error } = await supabase.from('salary_records').delete().in('id', recordIds)
+  if (error) { console.error('deleteSalaryRecordsByIds failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 

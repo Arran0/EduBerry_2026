@@ -27,10 +27,11 @@ import {
   fetchDriverCycle, fetchDriverCycleRecords, setDriverCycleStatus, setDriverCyclePayrollConfig,
   driverSalaryNet, formatPeriod, fetchPayoutConfig, initiateDriverCyclePayouts, fetchDriverBaseSalaries,
   bulkInsertDriverSalaryItems, deleteDriverSalaryItemsByLabel, bulkSetDriverSalaryRecordStatus,
+  deleteDriverSalaryRecordsByIds,
   updateDriverSalaryRecordOverrides, DriverSalaryRecordOverrides,
 } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
-import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
+import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints, fetchHiddenSalaryMemberIds } from '@/lib/salary'
 import {
   fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays,
   recomputePendingAttendance,
@@ -157,6 +158,9 @@ export default function DriverCycleDetailPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
   const [search, setSearch] = useState('')
+  /** Records left out of the sheet because the driver has resigned or is hidden —
+   *  dropped for good when this (still open) cycle locks. See closeCycle. */
+  const [excludedRecordIds, setExcludedRecordIds] = useState<string[]>([])
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -172,10 +176,19 @@ export default function DriverCycleDetailPage() {
     // are LOP here too, so any attendance rule changed after the day it covers
     // is settled before the month's attendance is read.
     await recomputePendingAttendance()
-    const [c, recs, cfg, banks, bases, globalCal] = await Promise.all([
+    const [c, allRecs, cfg, banks, bases, globalCal, hiddenIds] = await Promise.all([
       fetchDriverCycle(cycleId), fetchDriverCycleRecords(cycleId), fetchPayoutConfig(), fetchDriverBankAccounts(),
-      fetchDriverBaseSalaries(), fetchPayrollCalibration(),
+      fetchDriverBaseSalaries(), fetchPayrollCalibration(), fetchHiddenSalaryMemberIds(),
     ])
+    // Mirrors the staff cycle page exactly: while a cycle is still OPEN, a
+    // driver who has since resigned (is_banned) or been hidden from the
+    // salary app is excluded from the sheet and every total on it — neither
+    // should be paid or counted yet. A CLOSED cycle is history and keeps
+    // every record regardless, whatever the driver's status is today.
+    const hidden = new Set(hiddenIds)
+    const isExcluded = (r: DriverSalaryRecord) => !!r.driver?.is_banned || hidden.has(r.driver_id)
+    const recs = c && c.status === 'closed' ? allRecs : allRecs.filter(r => !isExcluded(r))
+    setExcludedRecordIds(c && c.status === 'closed' ? [] : allRecs.filter(isExcluded).map(r => r.id))
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     const bm: Record<string, StaffBankAccount> = {}
@@ -372,6 +385,13 @@ export default function DriverCycleDetailPage() {
 
     const st = await bulkSetDriverSalaryRecordStatus(recordIds, 'approved')
     if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
+
+    // Drop draft records for drivers who resigned or were hidden while this
+    // cycle was open — see deleteDriverSalaryRecordsByIds.
+    if (excludedRecordIds.length > 0) {
+      const purge = await deleteDriverSalaryRecordsByIds(excludedRecordIds)
+      if (!purge.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${purge.error}`); return }
+    }
 
     const cy = await setDriverCycleStatus(cycleId, 'closed')
     if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }
