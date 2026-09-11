@@ -6,7 +6,7 @@ import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bo
 import {
   ClassroomAssessment, AssessmentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
-  upsertAssessmentMark, fetchAssessmentMarks, fetchStudentMembers, fetchProfilesByIds,
+  upsertAssessmentMarks, fetchAssessmentMarks, fetchStudentAssessmentMarks, fetchStudentMembers, fetchProfilesByIds,
   ClassroomMember, ClassroomWithDetails,
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
@@ -220,10 +220,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const handleSaveMarks = async (assessmentId: string) => {
     if (hasInvalidMarks) return
     setSaving(true)
-    for (const [studentId, mark] of Object.entries(marks)) {
-      const marksVal = mark.isAbsent || mark.marks.trim() === '' ? null : parseFloat(mark.marks)
-      await upsertAssessmentMark(assessmentId, studentId, marksVal, assessmentMaxMarks, mark.isAbsent)
-    }
+    await upsertAssessmentMarks(assessmentId, Object.entries(marks).map(([studentId, mark]) => ({
+      studentId,
+      marks: mark.isAbsent || mark.marks.trim() === '' ? null : parseFloat(mark.marks),
+      maxMarks: assessmentMaxMarks,
+      isAbsent: mark.isAbsent,
+    })))
     setSaving(false)
     setShowMarksheet(null)
   }
@@ -252,11 +254,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   useEffect(() => {
     if (isStudent && assessments.length > 0) {
       const loadMarks = async () => {
-        for (const a of assessments) {
-          const allMarks = await fetchAssessmentMarks(a.id)
-          const mine = allMarks.find((m) => m.student_id === userId)
-          if (mine) setStudentMarks((prev) => ({ ...prev, [a.id]: mine }))
-        }
+        const byAssessment = await fetchStudentAssessmentMarks(userId, assessments.map(a => a.id))
+        setStudentMarks(byAssessment)
       }
       loadMarks()
     }

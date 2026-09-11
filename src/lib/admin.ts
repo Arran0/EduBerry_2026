@@ -278,36 +278,6 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
   }
 }
 
-// Note: Creating auth users requires Supabase Admin API
-// For now, this function creates only the profile (user must sign up via auth first)
-// In production, you'd use Supabase Admin API to create auth.users
-export async function createProfileForExistingAuth(
-  userId: string,
-  input: Omit<NewUserInput, 'email'>
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      full_name: input.full_name,
-      role: input.role,
-      grade: input.grade || null,
-      section: input.section || null,
-    })
-    .eq('id', userId)
-
-  if (error) {
-    console.error('Failed to create/update profile:', error)
-    return false
-  }
-
-  // Set team memberships
-  if (input.team_ids && input.team_ids.length > 0) {
-    await updateTeamMemberships(userId, input.team_ids)
-  }
-
-  return true
-}
-
 // Directly set a new password for a user — admin only, no email step required
 export async function setUserPassword(userId: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {

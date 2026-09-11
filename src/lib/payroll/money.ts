@@ -183,8 +183,3 @@ export async function fetchLeaveAvailable(employeeId?: string, year?: string): P
   return (data ?? []) as unknown as LeaveAvailableRow[]
 }
 
-/** Total encashable days for a settlement. Zero when no ledger has been set up. */
-export async function encashableDaysFor(employeeId: string, year: string): Promise<number> {
-  const rows = await fetchLeaveAvailable(employeeId, year)
-  return rows.filter(r => r.encashable).reduce((s, r) => s + Number(r.available), 0)
-}

@@ -426,11 +426,6 @@ export async function setAnnouncementPinned(
   }
 }
 
-/** True when the announcement schema supports pinning (column present). */
-export function isPinningAvailable(): boolean {
-  return pinnedColumnAvailable
-}
-
 // ---------------------------------------------------------------------------
 // Likes
 // ---------------------------------------------------------------------------

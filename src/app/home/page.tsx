@@ -412,8 +412,13 @@ export default function HomePage() {
     const { data, error } = await supabase.storage.from('classroom-files').upload(path, compressed, { upsert: true, cacheControl: '31536000' })
     if (error) { alert('Upload failed: ' + error.message); return }
     const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
-    await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: publicUrl }, { onConflict: 'key' })
+    // Show the new banner immediately — persisting it site-wide can finish in
+    // the background instead of blocking the admin's own view of the change.
     setWelcomeBanner(publicUrl)
+    supabase.from('site_settings').upsert({ key: 'welcome_banner', value: publicUrl }, { onConflict: 'key' })
+      .then(({ error: upsertError }) => {
+        if (upsertError) console.error('Failed to save welcome banner:', upsertError)
+      })
   }
 
   const loadAnnouncements = useCallback(async () => {
@@ -437,7 +442,9 @@ export default function HomePage() {
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
+      // The home grid never shows member_count, so skip that extra
+      // classroom_members query (a full roster scan on top of the classroom rows).
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role, false, undefined, false)
       setClassrooms(sortByLastVisited(enrolled))
     } catch (err) {
       console.error('Failed to load classrooms for home:', err)
@@ -684,7 +691,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!isStudent || !user) return
     const today = new Date().toISOString().split('T')[0]
-    fetchFeesForStudent(user.id)
+    fetchFeesForStudent(user.id, undefined, ['unpaid', 'partial'])
       .then(fees => setOverdueFees(fees.filter(f => isFeeOverdue(f, today))))
       .catch(err => console.error('Failed to load student fees for home card:', err))
   }, [isStudent, user])

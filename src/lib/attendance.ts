@@ -229,10 +229,6 @@ export interface StaffMonthlyStats {
 // Statuses that count as the staff member having shown up for work.
 export const PRESENT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'wfh', 'half_day']
 
-export function isPresentStatus(status: StaffAttendanceStatus): boolean {
-  return PRESENT_STATUSES.includes(status)
-}
-
 // ============================================
 // Display Helpers
 // ============================================
@@ -1594,49 +1590,6 @@ export async function fetchLocationAttempts(
   return (data ?? []) as unknown as LocationAttempt[]
 }
 
-function percentile(sorted: number[], p: number): number | null {
-  if (sorted.length === 0) return null
-  const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))
-  return Math.round(sorted[idx])
-}
-
-export function summariseLocationAttempts(attempts: LocationAttempt[]): LocationAttemptStats {
-  const accuracies = attempts
-    .map(a => a.accuracy_m)
-    .filter((a): a is number => a != null)
-    .sort((x, y) => x - y)
-
-  const perStaff = new Map<string, { name: string; problemCount: number; attempts: number }>()
-  for (const a of attempts) {
-    const entry = perStaff.get(a.staff_id) ?? {
-      name: a.staff?.full_name ?? 'Unknown', problemCount: 0, attempts: 0,
-    }
-    entry.attempts++
-    // "Problem" is anything that did not resolve cleanly for the staff member:
-    // a refusal, or an acceptance whose location was never actually confirmed.
-    if (!a.accepted || LOCATION_WARNING_VERDICTS.includes(a.verdict)) entry.problemCount++
-    perStaff.set(a.staff_id, entry)
-  }
-
-  return {
-    total: attempts.length,
-    accepted: attempts.filter(a => a.accepted).length,
-    refused: attempts.filter(a => !a.accepted).length,
-    uncertain: attempts.filter(a => a.verdict === 'uncertain').length,
-    coarse: attempts.filter(a => a.coarse_lock).length,
-    deviceIssue: attempts.filter(a => a.verdict === 'device_issue').length,
-    locationOff: attempts.filter(a => a.verdict === 'location_off').length,
-    noFix: attempts.filter(a => a.verdict === 'no_fix').length,
-    medianAccuracyM: percentile(accuracies, 0.5),
-    p95AccuracyM: percentile(accuracies, 0.95),
-    worstAffected: [...perStaff.entries()]
-      .map(([staffId, v]) => ({ staffId, ...v }))
-      .filter(s => s.problemCount > 0)
-      .sort((a, b) => b.problemCount - a.problemCount)
-      .slice(0, 10),
-  }
-}
-
 // ============================================
 // Attendance Config (site_settings key: 'attendance_config')
 // ============================================
@@ -2377,48 +2330,6 @@ export async function fetchAllStaff(): Promise<UserProfile[]> {
     return []
   }
   return (data ?? []) as UserProfile[]
-}
-
-/**
- * School-wide present/total summary via COUNT queries only — no row data fetched.
- * Safe to call for schools of any size.
- */
-export async function fetchSchoolAttendanceSummary(
-  date: string
-): Promise<{ present: number; total: number }> {
-  const [presentRes, totalRes] = await Promise.all([
-    supabase
-      .from('staff_attendance_records')
-      .select('*', { count: 'exact', head: true })
-      .eq('date', date)
-      .in('status', PRESENT_STATUSES),
-    supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .in('role', STAFF_ROLES)
-      .eq('is_banned', false)
-      .eq('attendance_hidden', false),
-  ])
-  return {
-    present: presentRes.count ?? 0,
-    total: totalRes.count ?? 0,
-  }
-}
-
-/** Lightweight staff name search for calendar view-as picker. Excludes resigned staff. */
-export async function searchStaff(
-  query: string
-): Promise<{ id: string; full_name: string; role: string }[]> {
-  if (query.trim().length < 2) return []
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, full_name, role')
-    .in('role', STAFF_ROLES)
-    .eq('is_banned', false)
-    .ilike('full_name', `%${query.trim()}%`)
-    .order('full_name')
-    .limit(8)
-  return (data ?? []) as { id: string; full_name: string; role: string }[]
 }
 
 /** Attendance records for a set of staff on a given date (used for present/total counts). */

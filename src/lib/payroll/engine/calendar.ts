@@ -22,10 +22,6 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
-export function toDateStr(year: number, month: number, day: number): string {
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
 /** 0 = Sunday .. 6 = Saturday, read at midday so no timezone can shift it. */
 export function weekdayOf(date: string): number {
   return new Date(`${date}T12:00:00Z`).getUTCDay()

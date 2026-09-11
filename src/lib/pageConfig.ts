@@ -246,7 +246,6 @@ export async function saveSetting(key: string, value: unknown): Promise<boolean>
   } catch { return false }
 }
 
-export const fetchPageIconConfig = () => fetchSetting<PageIconMap>('page_icons', PAGE_DEFAULTS)
 export const fetchPageIconConfigResult = () => fetchSettingResult<PageIconMap>('page_icons', PAGE_DEFAULTS)
 export const savePageIconConfig = (c: PageIconMap) => saveSetting('page_icons', c)
 
@@ -254,11 +253,9 @@ export const fetchBranding = () => fetchSetting<SiteBranding>('branding', BRANDI
 export const fetchBrandingResult = () => fetchSettingResult<SiteBranding>('branding', BRANDING_DEFAULTS)
 export const saveBranding = (c: SiteBranding) => saveSetting('branding', c)
 
-export const fetchLoginConfig = () => fetchSetting<LoginPageConfig>('login_config', LOGIN_DEFAULTS)
 export const fetchLoginConfigResult = () => fetchSettingResult<LoginPageConfig>('login_config', LOGIN_DEFAULTS)
 export const saveLoginConfig = (c: LoginPageConfig) => saveSetting('login_config', c)
 
-export const fetchPageThemes = () => fetchSetting<PageThemeMap>('page_themes', {})
 export const fetchPageThemesResult = () => fetchSettingResult<PageThemeMap>('page_themes', {})
 export const savePageThemes = (c: PageThemeMap) => saveSetting('page_themes', c)
 

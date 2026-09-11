@@ -61,11 +61,3 @@ export function dismissNotifications(userId: string, ids: string[]): void {
   write(userId, [...existing, ...new Set(fresh)])
 }
 
-export function clearDismissedNotifications(userId: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.removeItem(storageKey(userId))
-  } catch {
-    // ignore
-  }
-}

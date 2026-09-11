@@ -233,27 +233,6 @@ export const isAdminRole = (role: UserRole): boolean => {
   return role === 'admin'
 }
 
-// Bus drivers get a dedicated dashboard-only experience (no normal app nav).
-export const isDriverRole = (role: UserRole): boolean => {
-  return role === 'driver'
-}
-
-// Smart boards get a dedicated dashboard-only experience (no normal app nav),
-// opened on the homeroom's physical board for most of the school day.
-export const isSmartboardRole = (role: UserRole): boolean => {
-  return role === 'smartboard'
-}
-
-// Check if user has coordinator tag
-export const isCoordinatorRole = (role: UserRole): boolean => {
-  return role === 'coordinator'
-}
-
-// Check if user has principal tag
-export const isPrincipalRole = (role: UserRole): boolean => {
-  return role === 'principal'
-}
-
 // Check if user can see Team Analytics (all staff roles)
 export const canViewTeamAnalytics = (role: UserRole): boolean => {
   return ['admin', 'coordinator', 'principal', 'teacher'].includes(role)

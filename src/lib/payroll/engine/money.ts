@@ -33,12 +33,6 @@ export function ceilRupee(n: number): number {
   return Math.ceil(n - 1e-9)
 }
 
-/** Always down. Used for tax slab arithmetic where the statute rounds down to ₹10. */
-export function floorTo(n: number, multiple: number): number {
-  if (!Number.isFinite(n) || multiple <= 0) return 0
-  return Math.floor(n / multiple) * multiple
-}
-
 export type RoundingMode = 'none' | 'nearest_rupee' | 'up_rupee' | 'down_rupee' | 'nearest_paisa'
 
 export function applyRounding(n: number, mode: RoundingMode): number {

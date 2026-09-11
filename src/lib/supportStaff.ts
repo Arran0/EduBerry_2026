@@ -375,53 +375,6 @@ export interface SupportPersonStats {
 }
 
 /**
- * Month-to-date figures for one person, computed over the days actually
- * marked. Unmarked days are left out of both sides of the fraction for the
- * reason given on computeSupportDayStats — it keeps the percentage a
- * statement about observed days rather than about how far the admin has got.
- *
- * Takes just `{ status }[]` (SupportAttendanceRecord satisfies this) so a
- * driver's staff_attendance_records rows can be passed in after mapping
- * their status into this narrower enum, without a second copy of this math.
- */
-export function computeSupportPersonStats(
-  records: { status: SupportAttendanceStatus }[],
-): SupportPersonStats {
-  const stats: SupportPersonStats = {
-    marked_days: records.length,
-    present: 0, late: 0, half_day: 0, absent: 0, on_leave: 0, e: 0, present_pct: 0,
-  }
-  for (const r of records) {
-    switch (r.status) {
-      case 'present': stats.present++; break
-      case 'late': stats.late++; break
-      case 'half_day': stats.half_day++; break
-      case 'absent': stats.absent++; break
-      case 'on_leave': stats.on_leave++; break
-      case 'e': stats.e++; break
-    }
-  }
-  const denominator = stats.marked_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.e + stats.half_day * 0.5
-  stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
-  return stats
-}
-
-/** Groups a flat range of records by person, each list sorted by date. */
-export function groupSupportRecordsByStaff(
-  records: SupportAttendanceRecord[],
-): Map<string, SupportAttendanceRecord[]> {
-  const map = new Map<string, SupportAttendanceRecord[]>()
-  for (const r of records) {
-    const list = map.get(r.support_staff_id)
-    if (list) list.push(r)
-    else map.set(r.support_staff_id, [r])
-  }
-  for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date))
-  return map
-}
-
-/**
  * Adapts one support-staff attendance row into the shape
  * computeStaffAttendanceStats (src/lib/payroll.ts) and deriveDayStatus /
  * computeMonthlyStats (src/lib/attendance.ts) already know how to reduce

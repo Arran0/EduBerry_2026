@@ -1,7 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { computeSubmissionScores, allManualGraded } from './examGrading'
 import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
-import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
+import { createAssessment, upsertAssessmentMarks, fetchStudentMembers } from './classrooms'
 import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================================
@@ -221,11 +221,6 @@ export function examPhase(
   const deadline = attemptDeadline(exam)
   if (deadline != null && now > deadline) return 'grading'
   return 'open'
-}
-
-/** Students may only attempt while the exam is open. */
-export function canAttemptExam(exam: Parameters<typeof examPhase>[0], now: number = Date.now()): boolean {
-  return examPhase(exam, now) === 'open'
 }
 
 /** An immediate-results exam whose preset auto-close moment has passed. */
@@ -1044,11 +1039,10 @@ export async function fetchSubmissionForStudent(
 
 /** Every audience student paired with their submission (if any). */
 export async function fetchGradingQueue(examId: string): Promise<GradingQueueRow[]> {
-  const students = await resolveAudienceStudents(examId)
-  const { data: subs } = await supabase
-    .from('exam_submissions')
-    .select('*')
-    .eq('exam_id', examId)
+  const [students, { data: subs }] = await Promise.all([
+    resolveAudienceStudents(examId),
+    supabase.from('exam_submissions').select('*').eq('exam_id', examId),
+  ])
   const subByStudent = new Map<string, ExamSubmission>()
   for (const s of (subs ?? []) as ExamSubmission[]) subByStudent.set(s.student_id, s)
 
@@ -1081,7 +1075,12 @@ export async function fetchGraderGradingQueues(userId: string): Promise<GraderEx
   const graderIds = [...new Set((graderRows ?? []).map(r => r.exam_id as string))]
   if (graderIds.length === 0) return []
 
-  const { data: exams } = await supabase.from('exams').select('*').in('id', graderIds)
+  // Only the columns examPhase() and the progress summary below actually use —
+  // full exam rows (description, settings, etc.) aren't needed here.
+  const { data: exams } = await supabase
+    .from('exams')
+    .select('id, title, results_published, is_closed, start_at, due_at, end_at')
+    .in('id', graderIds)
   const underGrading = ((exams ?? []) as Exam[]).filter(e => examPhase(e) === 'grading')
   if (underGrading.length === 0) return []
 
@@ -1318,11 +1317,11 @@ export async function linkResultsToClassrooms(
     )
     if (!assessment) continue
 
-    for (const m of matched) {
+    await upsertAssessmentMarks(assessment.id, matched.map(m => {
       const score = scoreByStudent.get(m.user_id)!
-      await upsertAssessmentMark(assessment.id, m.user_id, score.total, score.max)
-      totalLinked++
-    }
+      return { studentId: m.user_id, marks: score.total, maxMarks: score.max }
+    }))
+    totalLinked += matched.length
 
     await supabase.from('exam_result_links').insert({
       exam_id: examId,

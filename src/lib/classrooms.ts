@@ -302,6 +302,10 @@ export async function fetchClassroomsForUser(
   userRole: UserRole,
   includeAll = false,
   limit?: number,
+  // Callers that render only title/grade/banner (e.g. the home and academics
+  // dashboard grids) never display this — skip it there to avoid pulling
+  // every classroom_members row for the whole school just to count them.
+  withMemberCount = true,
 ): Promise<ClassroomWithDetails[]> {
   const today = new Date().toISOString().split('T')[0]
 
@@ -325,7 +329,7 @@ export async function fetchClassroomsForUser(
     }
 
     // Skip member-count query when a preview limit is set (saves a full-table scan)
-    if (limit) {
+    if (limit || !withMemberCount) {
       return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
     }
 
@@ -377,7 +381,7 @@ export async function fetchClassroomsForUser(
     return []
   }
 
-  if (limit) {
+  if (limit || !withMemberCount) {
     return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
   }
 
@@ -791,18 +795,6 @@ export async function fetchSubmissions(fileId: string): Promise<FileSubmission[]
   return (data ?? []) as FileSubmission[]
 }
 
-export async function fetchStudentSubmission(fileId: string, studentId: string): Promise<FileSubmission | null> {
-  const { data, error } = await supabase
-    .from('classroom_submissions')
-    .select('*')
-    .eq('file_id', fileId)
-    .eq('student_id', studentId)
-    .single()
-
-  if (error) return null
-  return data as FileSubmission
-}
-
 export async function fetchStudentSubmissionsForFiles(fileIds: string[], studentId: string): Promise<FileSubmission[]> {
   if (fileIds.length === 0) return []
   const { data, error } = await supabase
@@ -944,6 +936,36 @@ export async function upsertAssessmentMark(
   return true
 }
 
+/** Batch form of upsertAssessmentMark — one round trip for a whole marksheet
+ *  instead of one upsert per student. Entries failing the same range check
+ *  upsertAssessmentMark applies are silently dropped from the batch. */
+export async function upsertAssessmentMarks(
+  assessmentId: string,
+  entries: { studentId: string; marks: number | null; maxMarks: number; isAbsent?: boolean }[],
+): Promise<boolean> {
+  const rows = entries
+    .filter(e => e.isAbsent || e.marks == null || (e.marks >= 0 && e.marks <= e.maxMarks))
+    .map(e => ({
+      assessment_id: assessmentId,
+      student_id: e.studentId,
+      marks: e.isAbsent ? null : e.marks,
+      max_marks: e.maxMarks,
+      is_absent: e.isAbsent ?? false,
+      updated_at: new Date().toISOString(),
+    }))
+  if (rows.length === 0) return true
+
+  const { error } = await supabase
+    .from('classroom_assessment_marks')
+    .upsert(rows, { onConflict: 'assessment_id,student_id' })
+
+  if (error) {
+    console.error('Failed to upsert marks:', error.message)
+    return false
+  }
+  return true
+}
+
 export async function fetchAssessmentMarks(assessmentId: string): Promise<AssessmentMark[]> {
   const { data, error } = await supabase
     .from('classroom_assessment_marks')
@@ -955,6 +977,28 @@ export async function fetchAssessmentMarks(assessmentId: string): Promise<Assess
     return []
   }
   return (data ?? []) as AssessmentMark[]
+}
+
+/** One student's marks across a set of assessments, in one round trip instead
+ *  of fetching every student's marks per assessment and filtering client-side. */
+export async function fetchStudentAssessmentMarks(
+  studentId: string,
+  assessmentIds: string[],
+): Promise<Record<string, AssessmentMark>> {
+  if (assessmentIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .eq('student_id', studentId)
+    .in('assessment_id', assessmentIds)
+
+  if (error) {
+    console.error('Failed to fetch student marks:', error.message)
+    return {}
+  }
+  const byAssessment: Record<string, AssessmentMark> = {}
+  for (const m of (data ?? []) as AssessmentMark[]) byAssessment[m.assessment_id] = m
+  return byAssessment
 }
 
 export interface StudentMarkWithContext {

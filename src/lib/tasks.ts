@@ -289,48 +289,49 @@ const UNDEFINED_COLUMN = '42703'
 
 export async function createTask(input: NewTaskInput, createdBy: string): Promise<Task | null> {
   const assigneeIds = input.assignee_ids.length > 0 ? input.assignee_ids : [createdBy]
-  let firstTask: Task | null = null
 
-  for (const assigneeId of assigneeIds) {
-    const row = {
-      title: input.title,
-      description: input.description || null,
-      due_date: input.due_date || null,
-      timing: input.timing || null,
-      end_time: input.end_time || null,
-      require_check: input.require_check ?? false,
-      requires_submission: input.requires_submission ?? false,
-      tag: input.tag || null,
-      bonus_points: input.bonus_points || 0,
-      recurrence: input.recurrence || 'none',
-      created_by: createdBy,
-    }
-    let { data: task, error } = await supabase.from('tasks').insert(row).select().single()
-    if (error?.code === UNDEFINED_COLUMN) {
-      const { requires_submission, ...fallbackRow } = row
-      ;({ data: task, error } = await supabase.from('tasks').insert(fallbackRow).select().single())
-    }
+  // Assigning to N people creates N independent task instances (one row each,
+  // each with its own single assignee) — every row has identical content, so
+  // batching the inserts is safe regardless of which returned row pairs with
+  // which assignee.
+  const row = {
+    title: input.title,
+    description: input.description || null,
+    due_date: input.due_date || null,
+    timing: input.timing || null,
+    end_time: input.end_time || null,
+    require_check: input.require_check ?? false,
+    requires_submission: input.requires_submission ?? false,
+    tag: input.tag || null,
+    bonus_points: input.bonus_points || 0,
+    recurrence: input.recurrence || 'none',
+    created_by: createdBy,
+  }
+  const rows = assigneeIds.map(() => ({ ...row }))
 
-    if (error || !task) {
-      console.error('Error creating task:', error)
-      continue
-    }
-
-    await supabase.from('task_assignees').insert({ task_id: task.id, user_id: assigneeId })
-
-    if (input.checklist_items && input.checklist_items.length > 0) {
-      const checklistRecords = input.checklist_items.map((text, i) => ({
-        task_id: task.id,
-        text,
-        sort_order: i,
-      }))
-      await supabase.from('task_checklist_items').insert(checklistRecords)
-    }
-
-    if (!firstTask) firstTask = task as Task
+  let { data: tasks, error } = await supabase.from('tasks').insert(rows).select()
+  if (error?.code === UNDEFINED_COLUMN) {
+    const fallbackRows = rows.map(({ requires_submission, ...fallbackRow }) => fallbackRow)
+    ;({ data: tasks, error } = await supabase.from('tasks').insert(fallbackRows).select())
   }
 
-  return firstTask
+  if (error || !tasks || tasks.length === 0) {
+    console.error('Error creating task:', error)
+    return null
+  }
+
+  await supabase.from('task_assignees').insert(
+    tasks.map((task, i) => ({ task_id: task.id, user_id: assigneeIds[i] }))
+  )
+
+  if (input.checklist_items && input.checklist_items.length > 0) {
+    const checklistRecords = tasks.flatMap(task =>
+      input.checklist_items!.map((text, i) => ({ task_id: task.id, text, sort_order: i }))
+    )
+    await supabase.from('task_checklist_items').insert(checklistRecords)
+  }
+
+  return tasks[0] as Task
 }
 
 /**
@@ -486,67 +487,6 @@ async function _spawnNextRecurrence(taskId: string): Promise<void> {
       checklist.map(c => ({ task_id: newTask.id, text: c.text, sort_order: c.sort_order }))
     )
   }
-}
-
-export async function updateTask(
-  taskId: string,
-  updates: Partial<Pick<Task, 'title' | 'description' | 'due_date' | 'timing' | 'end_time' | 'require_check' | 'tag' | 'bonus_points' | 'is_overdue' | 'recurrence'>>
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('tasks')
-    .update(updates)
-    .eq('id', taskId)
-
-  if (error) {
-    console.error('Error updating task:', error)
-    return false
-  }
-  return true
-}
-
-export async function updateTaskAssignees(taskId: string, assigneeIds: string[]): Promise<boolean> {
-  // Delete existing assignees
-  const { error: delErr } = await supabase
-    .from('task_assignees')
-    .delete()
-    .eq('task_id', taskId)
-
-  if (delErr) {
-    console.error('Error deleting assignees:', delErr)
-    return false
-  }
-
-  // Insert new assignees
-  if (assigneeIds.length === 0) return true
-
-  const { error: insErr } = await supabase
-    .from('task_assignees')
-    .insert(assigneeIds.map(uid => ({ task_id: taskId, user_id: uid })))
-
-  if (insErr) {
-    console.error('Error inserting assignees:', insErr)
-    return false
-  }
-
-  return true
-}
-
-export async function updateChecklistItems(taskId: string, items: string[]): Promise<boolean> {
-  // Delete existing items
-  const { error: delErr } = await supabase
-    .from('task_checklist_items')
-    .delete()
-    .eq('task_id', taskId)
-
-  if (delErr) return false
-
-  if (items.length === 0) return true
-
-  const { error: insErr } = await supabase
-    .from('task_checklist_items')
-    .insert(items.map((text, i) => ({ task_id: taskId, text, sort_order: i })))
-
-  return !insErr
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
@@ -747,23 +687,6 @@ export async function fetchTodayTasks(userId: string): Promise<{ today: TaskWith
   })
 
   return { today, overdueOrUndated }
-}
-
-export async function fetchWeekTasks(userId: string, weekStart: Date): Promise<TaskWithDetails[]> {
-  const allTasks = await fetchTasksForUser(userId)
-  // Use local date formatting to avoid UTC offset issues with toISOString()
-  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  const startStr = fmt(weekStart)
-  const end = new Date(weekStart)
-  end.setDate(end.getDate() + 6)
-  const endStr = fmt(end)
-
-  return allTasks.filter(t => t.due_date && t.due_date >= startStr && t.due_date <= endStr)
-}
-
-export async function fetchBonusTasks(userId: string): Promise<TaskWithDetails[]> {
-  const allTasks = await fetchTasksForUser(userId)
-  return allTasks.filter(t => t.bonus_points !== 0 || t.tag === 'bonus')
 }
 
 /**

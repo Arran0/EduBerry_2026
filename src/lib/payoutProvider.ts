@@ -379,8 +379,3 @@ export function getPayoutProvider(
   }
 }
 
-/** Validate a file format's columns; surfaced in Settings before saving. */
-export function unknownFileTokens(columns: string[]): string[] {
-  const known = new Set<string>(PAYOUT_FILE_TOKENS)
-  return columns.filter(c => !known.has(c))
-}
