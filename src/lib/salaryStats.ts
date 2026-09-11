@@ -219,11 +219,17 @@ export function aggregateMonth(
       s.esi += f.esi
       s.lop += f.lop
       s.net += f.net
-      // A generated record for someone with no base salary set is a
-      // placeholder, not a person being paid — counting it would put "0/95"
-      // on the disbursement card for a month that only ever pays 80 people.
-      if (!f.onPayroll) continue
+      // Headcount is every roster record this month — the same thing the
+      // cycle detail page and Pay Cycles list count as "records in this
+      // cycle" (see the mirrored on-roster filter above). It must match
+      // those screens exactly, or this dashboard quietly disagrees with
+      // every other place that reads the same records.
       s.headcount += 1
+      // The disbursement ratio (paidCount/totalCount) is narrower: a
+      // generated record for someone with no base salary set is a
+      // placeholder, not a person being paid — counting it would put "0/95"
+      // on that card for a month that only ever pays 80 people.
+      if (!f.onPayroll) continue
       s.totalCount += 1
       if (record.status === 'paid') s.paidCount += 1
       else s.pendingAmount += Math.max(0, f.net)

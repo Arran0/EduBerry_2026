@@ -27,6 +27,8 @@ export interface SalarySheetRow {
   leaveCount: number
   lateCount: number
   halfDayCount: number
+  /** Loss-of-pay actually withheld, in rupees — late + leave + half-day LOP combined. */
+  lopAmount: number
   salaryPerDay: number
   pf: number
   esi: number
@@ -45,7 +47,7 @@ export const CATEGORY_LABEL: Record<SalarySheetCategory, string> = {
 
 const HEADER = [
   'Sl No', 'Name', 'Designation', 'Salary', 'No. of Working Days', 'Days Worked',
-  'Leave', 'Late (LOP)', 'Half Day (LOP)', 'Total Leave', 'Salary/Day', 'PF', 'ESI',
+  'Leave Count', 'Half Day Count', 'Late Count', 'LOP (₹)', 'Salary/Day', 'PF', 'ESI',
   'Advance', 'Extra/Other Salary', 'Amount in Rupees', 'Signature',
 ]
 
@@ -72,10 +74,9 @@ function categoryAoa(periodLabel: string, categoryLabel: string, rows: SalaryShe
     HEADER,
   ]
   rows.forEach((r, i) => {
-    const totalLeave = r.leaveCount + r.lateCount + r.halfDayCount
     aoa.push([
       i + 1, r.name, r.designation, r.baseAmount, r.workingDays, round(r.daysWorked),
-      round(r.leaveCount), round(r.lateCount), round(r.halfDayCount), round(totalLeave),
+      round(r.leaveCount), round(r.halfDayCount), round(r.lateCount), round(r.lopAmount),
       round(r.salaryPerDay), r.pf || '', r.esi || '', r.advance || '', r.extraOther || '',
       round(r.net), '',
     ])
@@ -84,7 +85,7 @@ function categoryAoa(periodLabel: string, categoryLabel: string, rows: SalaryShe
   aoa.push([])
   aoa.push([
     '', `TOTAL — ${rows.length} record${rows.length === 1 ? '' : 's'}`, '', sum(r => r.baseAmount),
-    '', '', '', '', '', '', '', sum(r => r.pf), sum(r => r.esi), sum(r => r.advance),
+    '', '', '', '', '', round(sum(r => r.lopAmount)), '', sum(r => r.pf), sum(r => r.esi), sum(r => r.advance),
     sum(r => r.extraOther), round(sum(r => r.net)), '',
   ])
   return aoa

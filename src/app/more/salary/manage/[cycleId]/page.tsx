@@ -854,9 +854,14 @@ export default function SalaryCycleDetailPage() {
    */
   const salarySheetAllRows = useMemo<SalarySheetRow[]>(() => records.map(r => {
     const c = computedRows[r.id]
-    const { pf, esi, bonus, manualItems, net } = rowFigures(r)
+    const { pf, esi, bonus, manualItems, net, lopLateRs, lopLeaveRs, lopHalfDayRs } = rowFigures(r)
     const positiveManual = manualItems.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount), 0)
     const negativeManual = Math.abs(manualItems.filter(i => Number(i.amount) < 0).reduce((s, i) => s + Number(i.amount), 0))
+    // Leave/late/half-day counts (c?.*) already fold in the late-arrival and
+    // half-day grace periods — see computeStaffAttendanceStats — for an open
+    // cycle's live figures, and are the values frozen at lock time for a
+    // closed one. The grace periods are payroll-only: they never change what
+    // a staff member's own attendance calendar shows for the same day.
     const workingDays = c?.workingDays ?? 0
     const leaveCount = c?.leaveCount ?? 0
     const lateCount = c?.lateCount ?? 0
@@ -871,6 +876,7 @@ export default function SalaryCycleDetailPage() {
       workingDays,
       daysWorked: workingDays - (leaveCount + lateCount + halfDayCount),
       leaveCount, lateCount, halfDayCount,
+      lopAmount: lopLateRs + lopLeaveRs + lopHalfDayRs,
       salaryPerDay: c?.salaryPerDay ?? 0,
       pf, esi,
       advance: negativeManual,
@@ -939,8 +945,12 @@ export default function SalaryCycleDetailPage() {
                     <SlidersHorizontal size={13} />
                   </button>
                   {records.length > 0 && (
-                    <button onClick={() => setShowDocs(true)} title="Download Centre"
-                      className={`${SHARP.darkBtn} !py-[7px]`}>
+                    <button
+                      onClick={() => closed && setShowDocs(true)}
+                      disabled={!closed}
+                      title={closed ? 'Download Centre' : 'Lock the cycle first — its figures are still a live preview until then'}
+                      className={`${SHARP.darkBtn} !py-[7px]`}
+                    >
                       <Download size={13} /> <span className="hidden sm:inline">Download Centre</span>
                     </button>
                   )}
