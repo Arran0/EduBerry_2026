@@ -104,13 +104,18 @@ export { formatPeriod } from './salary'
 
 /** All drivers (role = 'driver'), ordered by name. */
 export async function fetchEligibleDrivers(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('role', 'driver')
-    .order('full_name', { ascending: true })
+  const [{ data, error }, hiddenIds] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'driver')
+      .eq('is_banned', false)
+      .order('full_name', { ascending: true }),
+    fetchHiddenSalaryMemberIds(),
+  ])
   if (error) { console.error('fetchEligibleDrivers failed:', error); return [] }
-  return (data as UserProfile[]) || []
+  const hidden = new Set(hiddenIds)
+  return ((data as UserProfile[]) || []).filter(p => !hidden.has(p.id))
 }
 
 // ============================================
@@ -162,17 +167,6 @@ export async function fetchDriverCycleRecords(cycleId: string): Promise<DriverSa
   return ((data as DriverSalaryRecord[]) || []).sort(
     (a, b) => (a.driver?.full_name ?? '').localeCompare(b.driver?.full_name ?? ''),
   )
-}
-
-/** Count of records per cycle, keyed by cycle_id (for the cycles list). */
-export async function fetchDriverCycleRecordCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('driver_payroll_records').select('cycle_id')
-  if (error) { console.error('fetchDriverCycleRecordCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { cycle_id: string }[]) {
-    counts[r.cycle_id] = (counts[r.cycle_id] ?? 0) + 1
-  }
-  return counts
 }
 
 /** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
@@ -316,6 +310,20 @@ export async function bulkSetDriverSalaryRecordStatus(
   if (recordIds.length === 0) return { success: true }
   const { error } = await supabase.from('driver_payroll_records').update({ status }).in('id', recordIds)
   if (error) { console.error('bulkSetDriverSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/**
+ * Drop draft records for drivers who have since resigned (been banned) or
+ * been hidden from the salary app, right before a cycle locks — mirrors
+ * deleteSalaryRecordsByIds in src/lib/salary.ts (see it for why).
+ */
+export async function deleteDriverSalaryRecordsByIds(
+  recordIds: string[],
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0) return { success: true }
+  const { error } = await supabase.from('driver_payroll_records').delete().in('id', recordIds)
+  if (error) { console.error('deleteDriverSalaryRecordsByIds failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 

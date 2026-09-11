@@ -21,7 +21,7 @@ interface RecordRow {
   status: string
   staff_id: string
   pay_by_cash: boolean
-  staff: { full_name: string } | null
+  staff: { full_name: string; is_banned: boolean } | null
   items: { amount: number }[]
 }
 
@@ -89,17 +89,26 @@ export async function POST(request: NextRequest) {
   // Only approved records are eligible for disbursement. Rows marked paid by
   // cash are dropped before the bank batch is built — that person isn't
   // getting a bank transfer this cycle regardless of what's on file for them.
-  const { data: records, error: recErr } = await admin
-    .from('salary_records')
-    .select('id, base_amount, status, staff_id, pay_by_cash, staff:profiles!staff_id(full_name), items:salary_record_items(amount)')
-    .eq('cycle_id', cycle_id)
-    .eq('status', 'approved')
+  // So is anyone who has resigned (banned) or been hidden from the salary app
+  // since this cycle was approved — a row approved before either happened
+  // must not still trigger a real bank transfer once it has.
+  const [{ data: records, error: recErr }, { data: hiddenRow }] = await Promise.all([
+    admin
+      .from('salary_records')
+      .select('id, base_amount, status, staff_id, pay_by_cash, staff:profiles!staff_id(full_name, is_banned), items:salary_record_items(amount)')
+      .eq('cycle_id', cycle_id)
+      .eq('status', 'approved'),
+    admin.from('site_settings').select('value').eq('key', 'salary_hidden_members').maybeSingle(),
+  ])
   if (recErr) {
     console.error('payout/initiate: load records failed', recErr)
     return NextResponse.json({ success: false, error: 'Could not load records' }, { status: 500 })
   }
+  const hiddenIds = (hiddenRow?.value as { ids?: unknown } | null)?.ids
+  const hidden = new Set(Array.isArray(hiddenIds) ? hiddenIds.filter((id): id is string => typeof id === 'string') : [])
 
-  const rows = ((records ?? []) as unknown as RecordRow[]).filter(r => !r.pay_by_cash)
+  const rows = ((records ?? []) as unknown as RecordRow[])
+    .filter(r => !r.pay_by_cash && !r.staff?.is_banned && !hidden.has(r.staff_id))
   if (rows.length === 0) {
     return NextResponse.json({ success: false, error: 'No approved records to disburse in this cycle' }, { status: 409 })
   }

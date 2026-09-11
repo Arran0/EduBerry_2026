@@ -35,6 +35,7 @@ import {
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
+  deleteSalaryRecordsByIds,
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
   recordPersonId, recordPersonName, recordPersonLeft, recordPersonKind,
   generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle,
@@ -204,6 +205,8 @@ export default function SalaryCycleDetailPage() {
   const [filters, setFilters] = useState<CycleFilters>(DEFAULT_CYCLE_FILTERS)
   /** Records left out of the sheet because the person has resigned or is hidden. */
   const [excludedCount, setExcludedCount] = useState(0)
+  /** Their record ids — dropped for good when this (still open) cycle locks. See closeCycle. */
+  const [excludedRecordIds, setExcludedRecordIds] = useState<string[]>([])
   /** How many rows are actually mounted — the rest arrive as you scroll. */
   const [renderLimit, setRenderLimit] = useState(ROWS_PER_CHUNK)
   const verified = useVerifiedEdits(cycleId)
@@ -267,10 +270,10 @@ export default function SalaryCycleDetailPage() {
     // exclusion — and the roster sync above — only ever apply to an open
     // cycle; a closed one is never filtered.
     const hidden = new Set(hiddenIds)
-    const recs = c && c.status === 'closed'
-      ? cycleRecs
-      : cycleRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
-    setExcludedCount(cycleRecs.length - recs.length)
+    const isExcluded = (r: SalaryRecord) => recordPersonLeft(r) || hidden.has(recordPersonId(r))
+    const recs = c && c.status === 'closed' ? cycleRecs : cycleRecs.filter(r => !isExcluded(r))
+    setExcludedCount(c && c.status === 'closed' ? 0 : cycleRecs.length - recs.length)
+    setExcludedRecordIds(c && c.status === 'closed' ? [] : cycleRecs.filter(isExcluded).map(r => r.id))
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     // A cycle lists staff, drivers and support staff together, but their
@@ -750,6 +753,15 @@ export default function SalaryCycleDetailPage() {
 
     const st = await bulkSetSalaryRecordStatus(recordIds, 'approved')
     if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
+
+    // Drop draft records for anyone who resigned or was hidden while this
+    // cycle was open — a closed cycle shows every record it has with no such
+    // filter, so left alone these would silently reappear the moment it
+    // locks. See deleteSalaryRecordsByIds.
+    if (excludedRecordIds.length > 0) {
+      const purge = await deleteSalaryRecordsByIds(excludedRecordIds)
+      if (!purge.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${purge.error}`); return }
+    }
 
     const cy = await setCycleStatus(cycleId, 'closed')
     if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }

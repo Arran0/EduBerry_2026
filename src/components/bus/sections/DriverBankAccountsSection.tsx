@@ -6,6 +6,7 @@ import Avatar from '@/components/Avatar'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
+import { fetchHiddenSalaryMemberIds } from '@/lib/salary'
 
 export default function DriverBankAccountsSection() {
   const [loading, setLoading] = useState(true)
@@ -14,10 +15,18 @@ export default function DriverBankAccountsSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [people, accounts] = await Promise.all([fetchDrivers(), fetchDriverBankAccounts()])
+    const [people, accounts, hiddenIds] = await Promise.all([
+      fetchDrivers(), fetchDriverBankAccounts(), fetchHiddenSalaryMemberIds(),
+    ])
+    const hidden = new Set(hiddenIds)
+    // fetchDrivers() is the general driver roster (trips use it too, banned
+    // driver and all) — a resigned or hidden driver has no business managing
+    // bank details for salary purposes, so exclude both here specifically,
+    // exactly as the staff Bank Accounts section does for its own drivers.
+    const eligible = people.filter(d => !d.is_banned && !hidden.has(d.id))
     const map: Record<string, DriverBankAccount> = {}
     for (const a of accounts) map[a.driver_id] = a
-    setDrivers(people)
+    setDrivers(eligible)
     setBankByDriver(map)
     setLoading(false)
   }, [])
