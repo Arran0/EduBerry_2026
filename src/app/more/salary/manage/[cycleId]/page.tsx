@@ -1287,6 +1287,7 @@ export default function SalaryCycleDetailPage() {
             sourceRows={statutoryRows}
             daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
             onClose={() => setShowEpfDocs(false)}
+            onPreview={(spec, title) => setPreview({ spec, title })}
           />
         )}
         {showSettings && cycle && (

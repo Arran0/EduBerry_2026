@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import dynamic from 'next/dynamic'
+import { motion } from 'framer-motion'
 import {
   X, ChevronLeft, Download, Loader2, Landmark, FileText, FileSpreadsheet,
   Table2, HeartPulse, SlidersHorizontal, AlertTriangle, Check,
@@ -24,8 +23,6 @@ import {
 } from '@/components/salary/statements/statutoryFiles'
 import { StatementSpec, buildStatutoryRemittanceSummary } from '@/components/salary/statements/generate'
 
-const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
-
 interface Props {
   cycle: SalaryCycle
   /** One row per pay-cycle record, already flattened by the pay cycle page. */
@@ -33,6 +30,16 @@ interface Props {
   /** Calendar length of the cycle's month — the NCP figure for an unpaid member. */
   daysInMonth: number
   onClose: () => void
+  /**
+   * Hands a built PDF spec up to the pay cycle page, which renders the shared
+   * StatementPreviewModal as a sibling of this modal (not nested inside it).
+   * Framer Motion's AnimatePresence only coordinates an exit animation
+   * cleanly for direct children — a preview modal nested inside this one, and
+   * unmounted at the same time this modal is (e.g. closing straight after
+   * opening the remittance summary), could leave its full-screen backdrop
+   * behind, silently blocking clicks on the rest of the page.
+   */
+  onPreview: (spec: StatementSpec, title: string) => void
 }
 
 type DocKey = 'ecr-txt' | 'ecr-csv' | 'epf-xlsx' | 'esi-xls'
@@ -52,7 +59,7 @@ type DocKey = 'ecr-txt' | 'ecr-csv' | 'epf-xlsx' | 'esi-xls'
  *
  * Mirrors SalaryStatementsModal so the two document surfaces feel like one.
  */
-export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onClose }: Props) {
+export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onClose, onPreview }: Props) {
   const [config, setConfig] = useState<StatutoryConfig>(DEFAULT_STATUTORY_CONFIG)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -61,10 +68,11 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
   const [zeroDayReason, setZeroDayReason] = useState('1')
   const [viewing, setViewing] = useState<DocKey | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
 
   useEffect(() => {
-    fetchStatutoryConfig().then(c => { setConfig(c); setLoading(false) })
+    let cancelled = false
+    fetchStatutoryConfig().then(c => { if (!cancelled) { setConfig(c); setLoading(false) } })
+    return () => { cancelled = true }
   }, [])
 
   const period = formatPeriod(cycle.period_month, cycle.period_year)
@@ -131,7 +139,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
     setBusy('summary')
     try {
       const spec = await buildStatutoryRemittanceSummary(cycle, config, epf, esi, blockers)
-      setPreview({ spec, title: `EPF & ESI Remittance Summary — ${period}` })
+      onPreview(spec, `EPF & ESI Remittance Summary — ${period}`)
     } catch (e) { console.error('remittance summary failed:', e) }
     setBusy(null)
   }
@@ -312,12 +320,6 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
           </div>
         )}
       </motion.div>
-
-      <AnimatePresence>
-        {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }
