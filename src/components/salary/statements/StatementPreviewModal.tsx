@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useIsPresent } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { X, Download, FileText } from 'lucide-react'
 import { StatementSpec, downloadStatement } from './generate'
@@ -30,6 +30,10 @@ interface Props {
 
 export default function StatementPreviewModal({ spec, title, onClose, sharp }: Props) {
   const [downloading, setDownloading] = useState(false)
+  // This overlay covers the viewport, so it must stop intercepting clicks the
+  // moment AnimatePresence marks it as leaving rather than when its fade ends.
+  // See ModalShell for the same guard and why it matters.
+  const isPresent = useIsPresent()
 
   const onDownload = async () => {
     setDownloading(true)
@@ -41,6 +45,7 @@ export default function StatementPreviewModal({ spec, title, onClose, sharp }: P
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-6 bg-black/60 backdrop-blur-sm"
+      style={isPresent ? undefined : { pointerEvents: 'none' }}
       onClick={onClose}
     >
       <motion.div

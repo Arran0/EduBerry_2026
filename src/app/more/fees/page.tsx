@@ -979,6 +979,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
       <AnimatePresence>
         {showIssue && (
           <IssueFeeModal
+            key="issue-fee"
             feeHeads={heads}
             homerooms={homerooms}
             onClose={() => setShowIssue(false)}
@@ -987,6 +988,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         )}
         {(showNewHead || editHead) && (
           <FeeHeadFormModal
+            key="fee-head-form"
             head={editHead}
             onClose={() => { setShowNewHead(false); setEditHead(null) }}
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
@@ -994,6 +996,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         )}
         {recordingFee && (
           <RecordPaymentModal
+            key="record-payment"
             fee={recordingFee}
             paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
@@ -1002,6 +1005,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
         )}
         {studentPopup && (
           <StudentStatementsModal
+            key="student-statements"
             student={studentPopup}
             year={year}
             onClose={() => setStudentPopup(null)}
@@ -1364,6 +1368,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
       <AnimatePresence>
         {payingFee && (
           <PaySchoolFeeModal
+            key="pay-school-fee"
             fee={payingFee}
             payable={remainingOf(payingFee)}
             onClose={() => setPayingFee(null)}
@@ -1372,6 +1377,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         )}
         {payingBusFee && (
           <PayBusFeeModal
+            key="pay-bus-fee"
             fee={payingBusFee}
             payable={remainingOfBus(payingBusFee)}
             onClose={() => setPayingBusFee(null)}
@@ -1380,6 +1386,7 @@ function StudentFeeView({ onBack }: { onBack: () => void }) {
         )}
         {showStatements && profile && (
           <StudentStatementsModal
+            key="my-statements"
             student={profile}
             year={year}
             onClose={() => setShowStatements(false)}

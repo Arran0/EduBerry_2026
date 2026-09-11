@@ -798,6 +798,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
       <AnimatePresence>
         {recordingFee && (
           <BusRecordPaymentModal
+            key="record-payment"
             fee={recordingFee}
             paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
@@ -806,6 +807,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {showIssue && (
           <FeeIssueModal
+            key="fee-issue"
             assignable={assignable}
             feeHeads={heads}
             onClose={() => setShowIssue(false)}
@@ -814,6 +816,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {(showNewHead || editHead) && (
           <BusFeeHeadFormModal
+            key="fee-head-form"
             head={editHead}
             onClose={() => { setShowNewHead(false); setEditHead(null) }}
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
@@ -821,6 +824,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {showNewDraft && (
           <MonthlyDraftModal
+            key="monthly-draft"
             trips={trips}
             feeHeads={heads}
             onClose={() => setShowNewDraft(false)}
@@ -834,6 +838,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {statementPassenger && (
           <BusStudentStatementsModal
+            key="student-statements"
             passenger={statementPassenger}
             onClose={() => setStatementPassenger(null)}
           />
