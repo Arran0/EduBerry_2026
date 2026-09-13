@@ -136,6 +136,8 @@ describe('AttendanceInfographicPanel', () => {
       />,
     )
     expect(container.textContent).toContain('—')
+    // …and captions the dash honestly rather than calling it a present rate.
+    expect(container.textContent).toContain('not marked yet')
     expect(container.textContent).not.toContain('NaN')
   })
 

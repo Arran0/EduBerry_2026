@@ -856,9 +856,21 @@ export default function HomePage() {
      ──────────────────────────────────────────────────────────────────────── */
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
+  /* On mobile a card with nothing in it is a wasted swipe, so the carousel
+     drops empty slots. The desktop grid has no such cost and a dashboard that
+     rearranges itself as data loads (or that quietly omits "Bus Fees" on a day
+     nothing was billed) is harder to read than one whose cards are always in
+     the same place — so every card the role is entitled to stays, showing its
+     own zero/empty state. Role and preference gates still apply: this relaxes
+     "has content", never "should this user see it". */
+  const showEmptyCards = isDesktop
+  // The admin's own "show my task calendar on home" preference is a choice, not
+  // an emptiness check, so it survives on desktop; only `hasTasks` is relaxed.
+  const showTaskCalendarSlot = showEmptyCards ? (!isAdmin || showTaskCalendarOnHome) : showTaskCalendar
+
   const slots: HomeSlot[] = []
 
-  if (isStudent && hasOverdueFees) {
+  if (isStudent && (showEmptyCards || hasOverdueFees)) {
     slots.push({
       key: 'overdue-fees',
       span: 'half',
@@ -875,7 +887,7 @@ export default function HomePage() {
     })
   }
 
-  if (showNotifSlot) {
+  if (showEmptyCards || showNotifSlot) {
     slots.push({
       key: 'notifications',
       span: 'half',
@@ -905,7 +917,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && isAttendanceViewer && showAttendanceViewerCard) {
+  if (isStaff && isAttendanceViewer && (showEmptyCards || showAttendanceViewerCard)) {
     slots.push({
       key: 'attendance',
       // Two scopes of donuts side by side — this one earns the full width.
@@ -950,7 +962,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && showTaskCalendar) {
+  if (isStaff && showTaskCalendarSlot) {
     slots.push({
       key: 'task-calendar',
       span: 'wide',
@@ -967,7 +979,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && hasGradingQueue) {
+  if (isStaff && (showEmptyCards || hasGradingQueue)) {
     slots.push({
       key: 'grading',
       span: 'half',
@@ -984,7 +996,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showSchoolWork) {
+  if (isStudent && user && (showEmptyCards || showSchoolWork)) {
     slots.push({
       key: 'calendar',
       span: 'wide',
@@ -1001,7 +1013,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showAssessments) {
+  if (isStudent && user && (showEmptyCards || showAssessments)) {
     slots.push({
       key: 'assessments',
       span: 'half',
@@ -1017,7 +1029,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showReportCards) {
+  if (isStudent && user && (showEmptyCards || showReportCards)) {
     slots.push({
       key: 'report-cards',
       span: 'half',
@@ -1034,7 +1046,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showTimetable) {
+  if (isStudent && user && (showEmptyCards || showTimetable)) {
     slots.push({
       key: 'timetable',
       span: 'half',
@@ -1051,7 +1063,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showExams) {
+  if (isStudent && user && (showEmptyCards || showExams)) {
     slots.push({
       key: 'exams',
       span: 'half',
@@ -1068,7 +1080,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && showFees) {
+  if (isAdmin && (showEmptyCards || showFees)) {
     slots.push({
       key: 'fees',
       span: 'half',
@@ -1102,7 +1114,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && showBusFees) {
+  if (isAdmin && (showEmptyCards || showBusFees)) {
     slots.push({
       key: 'bus-fees',
       span: 'half',
@@ -1136,7 +1148,7 @@ export default function HomePage() {
     })
   }
 
-  if (showAnnouncements) {
+  if (showEmptyCards || showAnnouncements) {
     slots.push({
       key: 'announcements',
       span: 'half',

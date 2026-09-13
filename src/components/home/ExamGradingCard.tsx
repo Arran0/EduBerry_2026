@@ -6,13 +6,15 @@ import { ClipboardCheck, ChevronRight } from 'lucide-react'
 import { type GraderExamProgress } from '@/lib/exam'
 
 interface ExamGradingCardProps {
-  /** Exams under grading that this user grades (already filtered non-empty). */
+  /** Exams under grading that this user grades. */
   queues: GraderExamProgress[]
 }
 
 /** Staff card: for each exam the user grades that is under grading, shows how
  *  many submissions are graded vs still to grade, linking to the exam's
- *  grading tab. */
+ *  grading tab. The mobile carousel only carries this card when a queue is
+ *  waiting; the desktop dashboard shows it either way, so an empty queue says
+ *  so rather than leaving the card blank. */
 export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
   return (
     <div className="pro-card h-[260px] overflow-hidden flex flex-col">
@@ -20,6 +22,15 @@ export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
         <ClipboardCheck size={16} className="text-indigo-500" />
         <span className="text-sm font-bold text-slate-700">Grading</span>
       </div>
+      {queues.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="w-12 h-12 bg-slate-100 flex items-center justify-center mb-3">
+            <ClipboardCheck size={22} className="text-slate-300" />
+          </div>
+          <p className="text-sm font-medium text-slate-400">Nothing to grade</p>
+          <p className="text-xs text-slate-300 mt-1">You&apos;re up to date</p>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-slate-200">
         {queues.map(q => {
           const total = q.gradedCount + q.toGradeCount
@@ -44,6 +55,7 @@ export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
           )
         })}
       </div>
+      )}
     </div>
   )
 }

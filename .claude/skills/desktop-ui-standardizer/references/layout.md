@@ -94,6 +94,28 @@ per breakpoint. Autoplay timers, drag listeners and `ResizeObserver` measurement
 for the carousel must be disabled on desktop, not merely hidden — a hidden
 carousel still ticking is a wasted render every 7s.
 
+**Empty cards stay on desktop.** A carousel legitimately drops a card with
+nothing in it — an empty slide is a wasted swipe. A dashboard does the opposite:
+cards that appear and disappear with the data move every other card on the page,
+so a user can never learn where anything is, and a missing panel is
+indistinguishable from a panel that doesn't exist for them. On desktop keep every
+card the role is entitled to and let it show its own zero/empty state (`0%`, "No
+fees overdue", "You're all caught up").
+
+Relax only the *has content* gate; role and user-preference gates still decide
+who sees what:
+
+```jsx
+const showEmptyCards = isDesktop
+if (isAdmin && (showEmptyCards || showFees)) slots.push(feeSlot)      // emptiness: relaxed
+if (isStaff && (showEmptyCards ? !isAdmin || prefEnabled : hasTasks)) // preference: kept
+```
+
+This makes every card body's empty state load-bearing, so audit them: a card
+whose "empty" is a blank box under a header needs a real empty state (icon,
+one line of what it means, one line of reassurance) before it can be shown
+unconditionally.
+
 ## Navigation
 
 - Keep `hidden md:flex` for real nav and `md:hidden` for the hamburger. Never

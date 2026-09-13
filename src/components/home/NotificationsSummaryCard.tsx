@@ -75,6 +75,20 @@ export default function NotificationsSummaryCard({
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) onLoadMore()
   }, [hasMore, loadingMore, onLoadMore])
 
+  // The mobile carousel drops this slot when there is nothing unread; the
+  // desktop dashboard keeps every card, so an empty inbox says so.
+  if (items.length === 0) {
+    return (
+      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
+        <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
+          <Inbox size={22} className="text-slate-300" />
+        </div>
+        <p className="text-sm font-medium text-slate-400">You&apos;re all caught up</p>
+        <p className="text-xs text-slate-300 mt-1">No unread notifications</p>
+      </div>
+    )
+  }
+
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       <div

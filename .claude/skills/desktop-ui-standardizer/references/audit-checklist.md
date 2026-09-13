@@ -21,6 +21,9 @@ Run this before calling a desktop view done. Check at **1280px, 1440px and
 - [ ] Carousel autoplay timers, drag listeners and observers are disabled on
       desktop, not merely hidden.
 - [ ] Bottom sheets / full-screen pushes became modals or side panels.
+- [ ] Dashboard cards keep their position as data loads — empty ones show a real
+      empty state instead of dropping out of the grid (role and preference gates
+      still apply).
 - [ ] `mobile → tablet → desktop` was designed deliberately; `md:` is not simply
       inherited from base.
 

@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { SchoolFee } from '@/lib/fees'
 
 function formatAmount(n: number): string {
@@ -20,10 +20,24 @@ interface OverdueFeesCardProps {
   fees: SchoolFee[]
 }
 
-/** Shown to a student only when they have fees past their due date. Each row
- *  links to the fees app. */
+/** A student's fees past their due date, each row linking to the fees app.
+ *  The mobile carousel only carries this card when there are any; the desktop
+ *  dashboard shows every card, so an empty list reads as "nothing overdue"
+ *  (good news worth stating) rather than an empty box. */
 export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
   const total = fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0)
+
+  if (fees.length === 0) {
+    return (
+      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
+        <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
+          <CheckCircle2 size={22} className="text-emerald-300" />
+        </div>
+        <p className="text-sm font-medium text-slate-400">No fees overdue</p>
+        <p className="text-xs text-slate-300 mt-1">You&apos;re all paid up</p>
+      </div>
+    )
+  }
 
   return (
     <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col border border-red-200/60">

@@ -56,7 +56,9 @@ function ScopeBlock({
           size={118}
           thickness={13}
           centerValue={total > 0 ? `${rate}%` : '—'}
-          centerLabel="present"
+          // A day nobody has been marked yet says so, rather than captioning an
+          // em dash "present" as though it were a reading.
+          centerLabel={total > 0 ? 'present' : 'not marked yet'}
           ariaLabel={`${title} attendance today: ${present} present, ${absent} absent, ${exception} irregular out of ${total}.`}
           segments={[
             { label: 'Present', value: present, color: PRESENT, href: hrefs.present },
