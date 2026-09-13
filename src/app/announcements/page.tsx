@@ -61,12 +61,7 @@ export default function AnnouncementsPage() {
 
   // Opening the page is what "reading" an announcement means here — clear the
   // navbar badge on arrival.
-  const { markAllRead } = useAnnouncementNotifications(
-    user?.id ?? null,
-    profile?.role ?? null,
-    profile?.grade,
-    profile?.section,
-  )
+  const { markAllRead } = useAnnouncementNotifications(user?.id ?? null)
   useEffect(() => { markAllRead() }, [markAllRead])
 
   // ── Load teams ──
@@ -85,6 +80,9 @@ export default function AnnouncementsPage() {
       setPendingCfg(cfg)
       if (cfg.imageUrl) {
         const img = new window.Image()
+        // The banner is the LCP element — don't let its fetch queue behind the
+        // feed's avatars and attachment thumbnails.
+        img.fetchPriority = 'high'
         img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
         img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
         img.src = cfg.imageUrl
@@ -206,14 +204,15 @@ export default function AnnouncementsPage() {
           )}
 
           {/* Main header row */}
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-8">
+          {/* Vertical rhythm matches the academics banner (pt-5 pb-6, p-3 icon) */}
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className={`p-3.5 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/75 border-white/55'}`}>
-                  <Megaphone size={28} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
+                <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/75 border-white/55'}`}>
+                  <Megaphone size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                 </div>
                 <div>
-                  <h1 className={`font-display text-3xl sm:text-4xl font-black leading-tight tracking-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
+                  <h1 className={`font-display text-[2rem] sm:text-[2.6rem] font-black leading-[1.04] tracking-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                     Announcements
                   </h1>
                   <p className={`text-sm mt-1 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
@@ -347,8 +346,6 @@ export default function AnnouncementsPage() {
           <AnnouncementsList
             userId={user.id}
             userRole={profile.role}
-            userGrade={profile.grade}
-            userSection={profile.section}
             userTeams={userTeams}
             allTeams={allTeams}
             teamGradeRanges={teamGradeRanges}

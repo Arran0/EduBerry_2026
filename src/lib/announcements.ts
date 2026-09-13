@@ -1,4 +1,4 @@
-import { supabase, UserProfile, UserRole } from './supabase'
+import { supabase, UserProfile } from './supabase'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +48,10 @@ export interface AnnouncementAudience {
 export interface AnnouncementWithDetails extends Announcement {
   audiences: AnnouncementAudience[]
   creator?: UserProfile
+  /** Total likes, counted server-side with the feed row */
+  like_count: number
+  /** Whether the requesting user is one of them */
+  liked_by_me: boolean
 }
 
 /**
@@ -157,169 +161,60 @@ export async function deleteAnnouncement(announcementId: string): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
-// Fetch helpers (shared select fragment)
+// Feed
 // ---------------------------------------------------------------------------
 
-const ANNOUNCEMENT_SELECT = `
-  *,
-  audiences:announcement_audiences(*, team:teams(id, name)),
-  creator:profiles!announcements_created_by_fkey(id, full_name, avatar_url, role)
-` as const
-
 /**
- * Set to false the first time Postgres tells us the `pinned` column is missing
- * (i.e. supabase-migrations/add_announcement_pinning.sql hasn't been run yet),
- * so the feed keeps working — just without pin-first ordering.
- */
-let pinnedColumnAvailable = true
-
-function isMissingPinnedColumn(error: { message?: string; code?: string } | null): boolean {
-  if (!error) return false
-  return error.code === '42703' || (error.message ?? '').includes('pinned')
-}
-
-/**
- * Run an announcements query with the shared select fragment, ordering pinned
- * announcements first and falling back gracefully when the column is absent.
- * `applyFilters` receives the query builder and returns it with filters applied.
- */
-async function queryAnnouncements(
-  applyFilters: (q: any) => any,
-  limit: number,
-  offset: number,
-): Promise<{ data: AnnouncementWithDetails[] | null; error: { message: string } | null }> {
-  const run = async (withPinned: boolean) => {
-    let q = applyFilters(supabase.from('announcements').select(ANNOUNCEMENT_SELECT))
-    if (withPinned) q = q.order('pinned', { ascending: false })
-    return q
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-  }
-
-  const first = await run(pinnedColumnAvailable)
-  if (first.error && pinnedColumnAvailable && isMissingPinnedColumn(first.error)) {
-    pinnedColumnAvailable = false
-    return run(false)
-  }
-  return first
-}
-
-/**
- * Which announcements a given user is allowed to see.
- *   - 'all'  → coordinator / principal / admin see everything
- *   - 'ids'  → everyone else sees the announcements their audience rows match,
- *              narrowed further by announcement type
- * Resolving this separately from fetching lets the feed and the unread-badge
- * count share exactly one definition of "targeted at me".
- */
-export type AnnouncementScope =
-  | { kind: 'all' }
-  | { kind: 'ids'; ids: string[]; types: AnnouncementType[] }
-
-export async function resolveAnnouncementScope(
-  userId: string,
-  userRole: UserRole,
-  userGrade?: number,
-  userSection?: string,
-): Promise<AnnouncementScope> {
-
-  // Smart board: same reach as a student in that homeroom
-  if (userRole === 'smartboard') {
-    return resolveAnnouncementScope(userId, 'student', userGrade, userSection)
-  }
-
-  if (['coordinator', 'principal', 'admin'].includes(userRole)) {
-    return { kind: 'all' }
-  }
-
-  // ── Teacher: staff (or 'both') announcements for their teams ─────────────
-  if (userRole === 'teacher') {
-    const { data: memberships } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('user_id', userId)
-
-    const teamIds = (memberships ?? []).map(m => m.team_id)
-
-    const orFilter = teamIds.length > 0
-      ? `all_teams.eq.true,team_id.in.(${teamIds.join(',')})`
-      : `all_teams.eq.true`
-
-    const [{ data: matchingAudiences, error: audienceError }, { data: individualAudiences }] =
-      await Promise.all([
-        supabase.from('announcement_audiences').select('announcement_id').or(orFilter),
-        supabase.from('announcement_audiences').select('announcement_id').eq('user_id', userId),
-      ])
-
-    if (audienceError) throw new Error(`Failed to fetch audiences: ${audienceError.message}`)
-
-    const ids = new Set((matchingAudiences ?? []).map(a => a.announcement_id))
-    ;(individualAudiences ?? []).forEach(a => ids.add(a.announcement_id))
-
-    return { kind: 'ids', ids: [...ids], types: ['staff', 'both'] }
-  }
-
-  // ── Student: student (or 'both') announcements for their grade/section ───
-  if (userRole === 'student') {
-    const audienceQueries: Promise<{ data: { announcement_id: string }[] | null }>[] = [
-      supabase.from('announcement_audiences').select('announcement_id').eq('all_students', true) as any,
-      supabase.from('announcement_audiences').select('announcement_id').eq('user_id', userId) as any,
-    ]
-    if (userGrade != null) {
-      const sectionFilter = userSection
-        ? `section.is.null,section.eq.${userSection}`
-        : `section.is.null`
-      audienceQueries.push(
-        supabase
-          .from('announcement_audiences')
-          .select('announcement_id')
-          .eq('grade', userGrade)
-          .or(sectionFilter) as any
-      )
-    }
-
-    const results = await Promise.all(audienceQueries)
-    const matchedIds = new Set<string>()
-    for (const { data } of results) {
-      ;(data ?? []).forEach((r: { announcement_id: string }) => matchedIds.add(r.announcement_id))
-    }
-
-    return { kind: 'ids', ids: [...matchedIds], types: ['student', 'both'] }
-  }
-
-  return { kind: 'ids', ids: [], types: [] }
-}
-
-/**
- * Fetch all announcements visible to the current user.
+ * Who may see what is decided entirely by the RLS SELECT policy on
+ * `announcements` (see supabase-migrations/add_announcement_feed_rpcs.sql and
+ * fix_announcement_individual_audience_visibility.sql):
  *
- * Visibility rules (enforced both by RLS and client-side logic):
- *   - coordinator / principal / admin → see ALL announcements
- *   - teacher → sees 'staff' and 'both' announcements that target their team
- *               or have all_teams = true
- *   - student  → sees 'student' and 'both' announcements that target their
- *               grade/section (or have all_students = true)
+ *   - coordinator / principal / admin → all announcements
+ *   - teacher  → 'staff'/'both' notices for their teams, or all_teams
+ *   - student  → 'student'/'both' notices for their grade/section, or all_students
+ *   - smartboard → the same reach as the homeroom it displays
+ *   - anyone   → notices addressed to them individually
+ *
+ * The feed RPCs are SECURITY INVOKER, so that policy is the single source of
+ * truth. The client no longer mirrors those rules: it used to pull every
+ * matching `announcement_audiences` row into the browser and post the ids back
+ * as an ever-growing `id=in.(...)` filter, which the database then re-filtered
+ * through RLS anyway. Audiences, creator and like state ride along with each
+ * page instead of costing a round trip apiece.
+ */
+
+/** Shape returned by the feed RPCs — audiences/creator arrive as JSON. */
+interface AnnouncementFeedRow extends Omit<AnnouncementWithDetails, 'audiences' | 'creator'> {
+  audiences: AnnouncementAudience[] | null
+  creator: UserProfile | null
+}
+
+function toAnnouncements(rows: AnnouncementFeedRow[] | null): AnnouncementWithDetails[] {
+  return (rows ?? []).map(row => ({
+    ...row,
+    audiences: row.audiences ?? [],
+    creator: row.creator ?? undefined,
+    like_count: row.like_count ?? 0,
+    liked_by_me: row.liked_by_me ?? false,
+  }))
+}
+
+/**
+ * One page of the announcements feed, pinned first then newest first.
+ * A single request: visibility, audiences, creator and likes all resolve in the
+ * database.
  */
 export async function fetchAnnouncementsForUser(
-  userId: string,
-  userRole: UserRole,
-  userGrade?: number,
-  userSection?: string,
   limit = 10,
   offset = 0,
 ): Promise<AnnouncementWithDetails[]> {
-  const scope = await resolveAnnouncementScope(userId, userRole, userGrade, userSection)
-
-  if (scope.kind === 'ids' && scope.ids.length === 0) return []
-
-  const { data, error } = await queryAnnouncements(
-    q => scope.kind === 'all' ? q : q.in('id', scope.ids).in('type', scope.types),
-    limit,
-    offset,
-  )
+  const { data, error } = await supabase.rpc('get_announcement_feed', {
+    p_limit: limit,
+    p_offset: offset,
+  })
 
   if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
-  return (data ?? []) as AnnouncementWithDetails[]
+  return toAnnouncements(data as AnnouncementFeedRow[] | null)
 }
 
 /**
@@ -327,30 +222,16 @@ export async function fetchAnnouncementsForUser(
  * Drives the navbar badge. The user's own announcements never count — you
  * don't need telling about the notice you just wrote.
  */
-export async function countUnreadAnnouncements(
-  userId: string,
-  userRole: UserRole,
-  sinceIso: string,
-  userGrade?: number,
-  userSection?: string,
-): Promise<number> {
-  const scope = await resolveAnnouncementScope(userId, userRole, userGrade, userSection)
-  if (scope.kind === 'ids' && scope.ids.length === 0) return 0
+export async function countUnreadAnnouncements(sinceIso: string): Promise<number> {
+  const { data, error } = await supabase.rpc('count_unread_announcements', {
+    p_since: sinceIso,
+  })
 
-  let q = supabase
-    .from('announcements')
-    .select('id', { count: 'exact', head: true })
-    .gt('created_at', sinceIso)
-    .neq('created_by', userId)
-
-  if (scope.kind === 'ids') q = q.in('id', scope.ids).in('type', scope.types)
-
-  const { count, error } = await q
   if (error) {
     console.warn('Could not count unread announcements:', error.message)
     return 0
   }
-  return count ?? 0
+  return (data as number | null) ?? 0
 }
 
 /**
@@ -363,40 +244,17 @@ export async function fetchHomeroomAnnouncements(
   section: string | null,
   limit = 3,
 ): Promise<AnnouncementWithDetails[]> {
-  const audienceQueries: Promise<{ data: { announcement_id: string }[] | null }>[] = [
-    supabase.from('announcement_audiences').select('announcement_id').eq('all_students', true) as any,
-  ]
-  if (grade != null) {
-    const sectionFilter = section
-      ? `section.is.null,section.eq.${section}`
-      : `section.is.null`
-    audienceQueries.push(
-      supabase
-        .from('announcement_audiences')
-        .select('announcement_id')
-        .eq('grade', grade)
-        .or(sectionFilter) as any,
-    )
-  }
-
-  const results = await Promise.all(audienceQueries)
-  const matchedIds = new Set<string>()
-  for (const { data } of results) {
-    ;(data ?? []).forEach((r: { announcement_id: string }) => matchedIds.add(r.announcement_id))
-  }
-  if (matchedIds.size === 0) return []
-
-  const { data, error } = await queryAnnouncements(
-    q => q.in('id', Array.from(matchedIds)).in('type', ['student', 'both']),
-    limit,
-    0,
-  )
+  const { data, error } = await supabase.rpc('get_homeroom_announcement_feed', {
+    p_grade: grade,
+    p_section: section,
+    p_limit: limit,
+  })
 
   if (error) {
     console.error('fetchHomeroomAnnouncements error:', error)
     return []
   }
-  return (data ?? []) as AnnouncementWithDetails[]
+  return toAnnouncements(data as AnnouncementFeedRow[] | null)
 }
 
 // ---------------------------------------------------------------------------
@@ -418,10 +276,6 @@ export async function setAnnouncementPinned(
     .eq('id', announcementId)
 
   if (error) {
-    if (isMissingPinnedColumn(error)) {
-      pinnedColumnAvailable = false
-      throw new Error('Pinning is not enabled yet — run add_announcement_pinning.sql')
-    }
     throw new Error(`Failed to ${pinned ? 'pin' : 'unpin'} announcement: ${error.message}`)
   }
 }
@@ -430,11 +284,7 @@ export async function setAnnouncementPinned(
 // Likes
 // ---------------------------------------------------------------------------
 
-/**
- * Toggle a like for an announcement.
- * Silently no-ops if the announcement_likes table doesn't exist yet
- * (run announcement-likes-migration.sql to enable persistence).
- */
+/** Toggle a like for an announcement. */
 export async function toggleAnnouncementLike(
   announcementId: string,
   userId: string,
@@ -453,35 +303,6 @@ export async function toggleAnnouncementLike(
       .insert({ announcement_id: announcementId, user_id: userId })
     if (error) throw new Error(`Failed to like: ${error.message}`)
   }
-}
-
-/** Fetch like counts + which ones the current user has liked, in one query. */
-export async function fetchLikesForAnnouncements(
-  announcementIds: string[],
-  userId: string
-): Promise<{ counts: Record<string, number>; liked: Set<string> }> {
-  if (announcementIds.length === 0) return { counts: {}, liked: new Set() }
-
-  const { data, error } = await supabase
-    .from('announcement_likes')
-    .select('announcement_id, user_id')
-    .in('announcement_id', announcementIds)
-
-  if (error) {
-    // Table may not exist yet — degrade gracefully
-    console.warn('Could not fetch announcement likes:', error.message)
-    return { counts: {}, liked: new Set() }
-  }
-
-  const counts: Record<string, number> = {}
-  const liked = new Set<string>()
-
-  for (const row of data ?? []) {
-    counts[row.announcement_id] = (counts[row.announcement_id] ?? 0) + 1
-    if (row.user_id === userId) liked.add(row.announcement_id)
-  }
-
-  return { counts, liked }
 }
 
 // ---------------------------------------------------------------------------

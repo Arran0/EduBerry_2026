@@ -424,13 +424,7 @@ export default function HomePage() {
   const loadAnnouncements = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const data = await fetchAnnouncementsForUser(
-        user.id,
-        profile.role,
-        profile.grade ?? undefined,
-        profile.section ?? undefined,
-        5,
-      )
+      const data = await fetchAnnouncementsForUser(5)
       setAnnouncements(data)
     } catch (err) {
       console.error('Failed to load announcements for home:', err)

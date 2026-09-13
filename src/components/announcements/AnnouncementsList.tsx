@@ -8,15 +8,12 @@ import NewAnnouncementForm from './NewAnnouncementForm'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
-  fetchLikesForAnnouncements,
 } from '@/lib/announcements'
 import { UserRole } from '@/lib/supabase'
 
 interface AnnouncementsListProps {
   userId: string
   userRole: UserRole
-  userGrade?: number
-  userSection?: string
   userTeams?: { id: string; name: string }[]
   allTeams?: { id: string; name: string }[]
   teamGradeRanges?: { teamId: string; grades: number[] }[]
@@ -174,8 +171,6 @@ const PAGE_SIZE = 10
 export default function AnnouncementsList({
   userId,
   userRole,
-  userGrade,
-  userSection,
   userTeams = [],
   allTeams  = [],
   teamGradeRanges = [],
@@ -187,8 +182,6 @@ export default function AnnouncementsList({
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore,     setHasMore]     = useState(false)
   const [nextOffset,  setNextOffset]  = useState(0)
-  const [likeCounts,  setLikeCounts]  = useState<Record<string, number>>({})
-  const [likedSet,    setLikedSet]    = useState<Set<string>>(new Set())
   const [localShowNewForm, setLocalShowNewForm] = useState(false)
 
   const showNewForm    = externalShowNewForm ?? localShowNewForm
@@ -205,32 +198,22 @@ export default function AnnouncementsList({
     else setLoading(true)
 
     try {
-      const data = await fetchAnnouncementsForUser(
-        userId, userRole, userGrade, userSection, PAGE_SIZE, currentOffset
-      )
+      // Like counts and the viewer's own like state come back with the page,
+      // so there is no follow-up request here.
+      const data = await fetchAnnouncementsForUser(PAGE_SIZE, currentOffset)
 
       setAnnouncements(prev => append ? [...prev, ...data] : data)
       setHasMore(data.length === PAGE_SIZE)
       setNextOffset(currentOffset + data.length)
-
-      if (data.length > 0) {
-        const ids = data.map(a => a.id)
-        const { counts, liked } = await fetchLikesForAnnouncements(ids, userId)
-        if (append) {
-          setLikeCounts(prev => ({ ...prev, ...counts }))
-          setLikedSet(prev => new Set([...prev, ...liked]))
-        } else {
-          setLikeCounts(counts)
-          setLikedSet(liked)
-        }
-      }
     } catch (err) {
       console.error('Failed to load announcements:', err)
     } finally {
       if (append) setLoadingMore(false)
       else setLoading(false)
     }
-  }, [userId, userRole, userGrade, userSection])
+    // Visibility is resolved server-side from the caller's session, so the only
+    // thing that invalidates a loaded feed is the session changing.
+  }, [userId])
 
   useEffect(() => { loadPage(0, false) }, [loadPage])
 
@@ -326,8 +309,8 @@ export default function AnnouncementsList({
         onDelete={handleDelete}
         onPinChange={handlePinChange}
         userId={userId}
-        initialLikeCount={likeCounts[ann.id] ?? 0}
-        initialUserLiked={likedSet.has(ann.id)}
+        initialLikeCount={ann.like_count}
+        initialUserLiked={ann.liked_by_me}
       />
       <FullBleedRule />
     </motion.div>
