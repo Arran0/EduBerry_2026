@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import {
   Bell,
   Megaphone,
+  ChevronLeft,
   ChevronRight,
   Pencil,
   GraduationCap,
@@ -298,6 +299,52 @@ interface HomeSlot {
   body: React.ReactNode
   desktopBody?: React.ReactNode
   span: 'half' | 'wide'
+}
+
+/** Each slot's accent, used by the carousel's active indicator dot. */
+const DOT_COLORS: Record<AdminCardView, string> = {
+  attendance: 'bg-emerald-500',
+  'teacher-attendance': 'bg-emerald-500',
+  fees: 'bg-teal-500',
+  'bus-fees': 'bg-orange-500',
+  calendar: 'bg-violet-500',
+  'task-calendar': 'bg-sky-500',
+  assessments: 'bg-amber-500',
+  'report-cards': 'bg-rose-500',
+  'overdue-fees': 'bg-red-500',
+  notifications: 'bg-sky-500',
+  timetable: 'bg-indigo-500',
+  exams: 'bg-purple-500',
+  grading: 'bg-indigo-500',
+  announcements: 'bg-sky-500',
+}
+
+/**
+ * Desktop step controls for the card strip. A pointer has no swipe, so the
+ * strip needs something to click. The swipe track is full-bleed but the card
+ * inside it is centred in the page's max-w-7xl box, so the arrows are anchored
+ * to that same box — in the gutter either side of the card, not stranded at
+ * the far edges of a 1440px screen. They stay out of the way until the strip
+ * is hovered and come back on keyboard focus, so they are reachable without a
+ * mouse. The wrapper stops above the indicator dots so the arrows sit against
+ * the card rather than the strip's full height.
+ */
+function CarouselArrows({ onPrev, onNext }: { onPrev: () => void; onNext: () => void }) {
+  const arrowClass = `pointer-events-auto absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center
+    bg-white/80 backdrop-blur-sm border border-white/70 shadow-sm text-slate-500
+    opacity-0 group-hover/carousel:opacity-100 focus-visible:opacity-100
+    hover:bg-white hover:text-slate-800 transition-all duration-200
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-10 z-10 max-w-7xl mx-auto">
+      <button type="button" onClick={onPrev} aria-label="Previous card" className={`${arrowClass} left-0`}>
+        <ChevronLeft size={18} />
+      </button>
+      <button type="button" onClick={onNext} aria-label="Next card" className={`${arrowClass} right-0`}>
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  )
 }
 
 /** Mobile stat-tile card for a fee ledger — the 2×2 grid of deep-linked tiles. */
@@ -1165,10 +1212,23 @@ export default function HomePage() {
     })
   }
 
-  // The carousel's index space. Memoised on the joined keys so the array
-  // identity only changes when the slot list itself does — the effects below
-  // depend on it and must not re-run on every render.
-  const slotKeys = slots.map(s => s.key).join('|')
+  /* Desktop splits the slot list into three rows: the statistics get rows of
+     their own — attendance across the full width, then the two fee ledgers
+     side by side — and everything else stays in the rotating strip above them.
+     A statistic is a standing number an admin reads at a glance; putting it
+     behind a swipe (or worse, a swipe it shares with a notifications feed) is
+     exactly the mobile habit this view is meant to drop. Below lg every slot
+     stays in the one strip, unchanged. */
+  const STAT_KEYS: AdminCardView[] = ['attendance', 'fees', 'bus-fees']
+  const carouselSlots = isDesktop ? slots.filter(s => !STAT_KEYS.includes(s.key)) : slots
+  const attendanceSlot = isDesktop ? slots.find(s => s.key === 'attendance') : undefined
+  const feeSlots = isDesktop ? slots.filter(s => s.key === 'fees' || s.key === 'bus-fees') : []
+
+  // The carousel's index space — the strip's own slots, so the dots and the
+  // drag maths stay in step with what is actually in the strip at this width.
+  // Memoised on the joined keys so the array identity only changes when that
+  // list does; the effects below depend on it and must not re-run every render.
+  const slotKeys = carouselSlots.map(s => s.key).join('|')
   const CARD_VIEWS = useMemo<AdminCardView[]>(
     () => (slotKeys ? slotKeys.split('|') as AdminCardView[] : []),
     [slotKeys],
@@ -1198,9 +1258,7 @@ export default function HomePage() {
   }, [CARD_VIEWS])
 
   useEffect(() => {
-    // Desktop shows every card at once, so the autoplay clock is switched off
-    // rather than left ticking behind a hidden carousel.
-    if (!showCardCarousel || isDesktop) return
+    if (!showCardCarousel) return
     const t = setInterval(() => {
       const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
@@ -1264,8 +1322,7 @@ export default function HomePage() {
   // (page or a nested list) behaves normally.
   useEffect(() => {
     const el = cardContainerRef.current
-    // No swipe track on desktop — the grid shows every card at once.
-    if (!el || isDesktop) return
+    if (!el) return
 
     const onStart = (e: TouchEvent) => {
       interactedRef.current = true
@@ -1345,10 +1402,11 @@ export default function HomePage() {
   // bannerLum set means custom image → use luminance threshold
   const bannerOnDark = bannerLum !== null && bannerLum < 0.4
 
-  // Three deliberate tiers rather than one phone height stretched wide: a
-  // desktop hero is proportionally shorter relative to its width, so it gains
-  // height without swallowing the fold.
-  const bannerHeight = isMobileBanner ? 204 : isDesktop ? 296 : 255
+  // Three deliberate tiers rather than one phone height stretched wide. The
+  // desktop hero is deliberately shallow: at 1440px wide it is a band, not a
+  // cover image, and every pixel it gives back is a dashboard row that clears
+  // the fold. (178 = 296 × 0.6 — see the 40% trim.)
+  const bannerHeight = isMobileBanner ? 204 : isDesktop ? 178 : 255
 
   interface AppEntry {
     key: string
@@ -1593,48 +1651,29 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Home cards — one slot list (see `slots` above), two presentations.
-              Below lg: a full-bleed swipe track, one card per screen, rotating
-              every 7 s. The track (this div plus cardContainerRef) is
-              edge-to-edge while each slide still centers its own content in the
-              page's max-w-7xl box, so the visible card is exactly the width it
-              always was and only the swipe hit area is wider.
-              At lg and up: the same slots as a dashboard grid — everything
-              visible at once, no gesture required, with the admin statistics
-              (attendance, school fees, bus fees) rendered as infographic panels
-              instead of stacked tiles. ── */}
-          {isDesktop ? (
-            /* Same max-w-7xl box as the banner text, classrooms grid and app
-               row below, so every region on the page shares one left edge. */
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2">
-              <motion.div variants={itemVariants} className="grid grid-cols-12 gap-x-5 gap-y-6 items-start">
-                {slots.map(slot => (
-                  <section
-                    key={slot.key}
-                    className={
-                      slot.span === 'wide'
-                        ? 'col-span-12 xl:col-span-8 flex flex-col'
-                        : 'col-span-6 xl:col-span-4 flex flex-col'
-                    }
-                  >
-                    {slot.heading}
-                    {/* Every card body is 260 px tall, so panels sitting in the
-                        same grid row line up instead of ending raggedly. */}
-                    <div className="h-[260px]">
-                      {slot.desktopBody ?? slot.body}
-                    </div>
-                  </section>
-                ))}
-              </motion.div>
-            </div>
-          ) : (
+          {/* ── Home cards — one slot list (see `slots` above), laid out by width.
+              Below lg: every slot in a full-bleed swipe track, one card per
+              screen, rotating every 7 s. The track (this div plus
+              cardContainerRef) is edge-to-edge while each slide still centers
+              its own content in the page's max-w-7xl box, so the visible card
+              is exactly the width it always was and only the swipe hit area is
+              wider.
+              At lg and up the same track carries row 1 — everything that isn't
+              a headline statistic — and the statistics move out into two rows
+              of their own below it: attendance across the full width, then the
+              two fee ledgers side by side, each as an infographic panel rather
+              than stacked tiles. ── */}
           <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
-                <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
+                <div
+                  ref={cardContainerRef}
+                  className="group/carousel relative overflow-hidden min-h-[330px] pb-6"
+                  style={{ touchAction: 'pan-y' }}
+                >
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
-                    {slots.map(slot => (
+                    {carouselSlots.map(slot => (
                       <div key={slot.key} style={{ width: containerW || '100%', flexShrink: 0 }}>
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           {slot.heading}
@@ -1643,33 +1682,28 @@ export default function HomePage() {
                       </div>
                     ))}
                   </motion.div>
+
+                  {/* Desktop has no swipe, so the strip grows pointer and
+                      keyboard controls: arrows either side (revealed on hover,
+                      and on focus for keyboard users) plus the dots below. */}
+                  {isDesktop && CARD_VIEWS.length > 1 && (
+                    <CarouselArrows
+                      onPrev={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) - 1 + CARD_VIEWS.length) % CARD_VIEWS.length])}
+                      onNext={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) + 1) % CARD_VIEWS.length])}
+                    />
+                  )}
+
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
-                    {CARD_VIEWS.map((v: AdminCardView) => {
-                      const dotColors: Record<AdminCardView, string> = {
-                        attendance: 'bg-emerald-500',
-                        'teacher-attendance': 'bg-emerald-500',
-                        fees: 'bg-teal-500',
-                        'bus-fees': 'bg-orange-500',
-                        calendar: 'bg-violet-500',
-                        'task-calendar': 'bg-sky-500',
-                        assessments: 'bg-amber-500',
-                        'report-cards': 'bg-rose-500',
-                        'overdue-fees': 'bg-red-500',
-                        notifications: 'bg-sky-500',
-                        timetable: 'bg-indigo-500',
-                        exams: 'bg-purple-500',
-                        grading: 'bg-indigo-500',
-                        announcements: 'bg-sky-500',
-                      }
-                      return (
-                        <button
-                          key={v}
-                          onClick={() => { if (v !== adminCardView) snapToView(v) }}
-                          className={`rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${dotColors[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
-                        />
-                      )
-                    })}
+                    {CARD_VIEWS.map((v: AdminCardView) => (
+                      <button
+                        key={v}
+                        onClick={() => { if (v !== adminCardView) snapToView(v) }}
+                        aria-label={`Show ${v.replace(/-/g, ' ')}`}
+                        aria-current={adminCardView === v}
+                        className={`rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${adminCardView === v ? `w-4 h-1.5 ${DOT_COLORS[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                      />
+                    ))}
                   </div>
                 </div>
               ) : (
@@ -1686,6 +1720,32 @@ export default function HomePage() {
               )}
             </motion.div>
           </div>
+
+          {/* ── Desktop rows 2 and 3: the standing statistics, always on screen.
+              Same max-w-7xl box as the banner text, classrooms grid and app row
+              below, so every region on the page shares one left edge. ── */}
+          {isDesktop && (attendanceSlot || feeSlots.length > 0) && (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2 space-y-6">
+              {attendanceSlot && (
+                <motion.section variants={itemVariants}>
+                  {attendanceSlot.heading}
+                  {attendanceSlot.desktopBody ?? attendanceSlot.body}
+                </motion.section>
+              )}
+              {feeSlots.length > 0 && (
+                <motion.div
+                  variants={itemVariants}
+                  className={`grid gap-5 items-stretch ${feeSlots.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}
+                >
+                  {feeSlots.map(slot => (
+                    <section key={slot.key} className="flex flex-col">
+                      {slot.heading}
+                      <div className="flex-1">{slot.desktopBody ?? slot.body}</div>
+                    </section>
+                  ))}
+                </motion.div>
+              )}
+            </div>
           )}
 
           {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom).

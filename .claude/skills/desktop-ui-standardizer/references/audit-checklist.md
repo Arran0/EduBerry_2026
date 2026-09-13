@@ -17,9 +17,13 @@ Run this before calling a desktop view done. Check at **1280px, 1440px and
 ## Transformation (not just resizing)
 
 - [ ] Every multi-tier component changes *kind* between tiers, not only width.
-- [ ] No carousel/swipe strip survives to `lg:` — it became a grid.
-- [ ] Carousel autoplay timers, drag listeners and observers are disabled on
-      desktop, not merely hidden.
+- [ ] No statistic sits behind a swipe or a rotation at `lg:` — stat cards have
+      their own always-visible rows.
+- [ ] A strip that does survive to `lg:` (equivalent feeds only) has prev/next
+      arrows anchored to the content box plus clickable, labelled dots, and
+      reveals them on hover *and* focus.
+- [ ] A carousel that does *not* survive has its autoplay timers, drag listeners
+      and observers disabled on desktop, not merely hidden.
 - [ ] Bottom sheets / full-screen pushes became modals or side panels.
 - [ ] Dashboard cards keep their position as data loads — empty ones show a real
       empty state instead of dropping out of the grid (role and preference gates

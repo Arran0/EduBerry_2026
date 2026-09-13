@@ -74,20 +74,42 @@ Rules:
 
 ## Carousel → grid
 
-A swipeable strip must not survive to desktop. Extract the slots into data, then
-render two branches from the same array:
+**Statistics must never sit behind a swipe on desktop.** A headline number is
+read at a glance; a gesture (or a 7-second rotation) between the viewer and it
+is the mobile habit this view exists to drop. Lift every statistic out of the
+strip into rows of its own that are always on screen.
+
+A rotating strip *may* survive on desktop for a set of equivalent feeds — cards
+nobody needs simultaneously (notifications, announcements, a timetable) — where
+showing all of them at once would pad the page with half-empty lists. When it
+does, it must stop being touch-only: add prev/next arrows anchored to the
+content box (not stranded at the edges of a full-bleed track), keep the
+indicator dots clickable with `aria-label`/`aria-current`, and reveal the arrows
+on `group-hover` *and* `focus-visible` so they exist for the keyboard.
+
+The shape that usually falls out of this on a dashboard is three rows: the
+rotating feed strip, then one row per statistic group (full width for the
+widest, side by side for peers). Cards then live in fixed places, which is what
+makes a dashboard readable day to day.
+
+To split one slot list across both presentations, extract the slots into data
+and branch on width:
 
 ```jsx
 const slots = [/* { key, heading, body, desktopBody?, span } */]
 
-/* mobile/tablet: existing swipe strip */
-<div className="lg:hidden">…slots.map(swipe track)…</div>
+/* Desktop pulls the statistics out of the strip into rows of their own;
+   below lg every slot stays in the one strip, untouched. */
+const STAT_KEYS = ['attendance', 'fees', 'bus-fees']
+const stripSlots = isDesktop ? slots.filter(s => !STAT_KEYS.includes(s.key)) : slots
+const statSlots  = isDesktop ? slots.filter(s =>  STAT_KEYS.includes(s.key)) : []
 
-/* desktop: dashboard grid, everything visible at once */
-<div className="hidden lg:grid lg:grid-cols-12 gap-5">
-  {slots.map(s => <div key={s.key} className={spanClass(s.span)}>{s.desktopBody ?? s.body}</div>)}
-</div>
+<Carousel slots={stripSlots} />                 {/* row 1, both widths */}
+{isDesktop && statSlots.map(renderStatRow)}     {/* rows 2…n, desktop only */}
 ```
+
+Derive the carousel's index space (dots, drag maths) from `stripSlots`, not the
+full list, or the dots will address slots that are no longer in the strip.
 
 Keep one source of truth for the slot list and its ordering; never fork the data
 per breakpoint. Autoplay timers, drag listeners and `ResizeObserver` measurements
