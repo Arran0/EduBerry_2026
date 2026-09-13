@@ -130,7 +130,7 @@ export function getProjectStatus(
 
 /** A project is open (shown under "Active", counted in the badge) until it is
  *  completed — whether on time or after its deadline. */
-export function isProjectOpen(endDate: string | null, subtasks: ProjectProgressSubtask[]): boolean {
+function isProjectOpen(endDate: string | null, subtasks: ProjectProgressSubtask[]): boolean {
   const status = getProjectStatus(endDate, subtasks)
   return !status.isCompleted && !status.isCompletedAfterDue
 }
