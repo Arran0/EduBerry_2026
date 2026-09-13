@@ -734,7 +734,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
               <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
                 <Tag size={28} className="text-[#B8983C]" strokeWidth={1.6} />
               </div>
-              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. "Monthly Bus Fee") to issue from.</p>
+              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. &ldquo;Monthly Bus Fee&rdquo;) to issue from.</p>
               <button onClick={() => setShowNewHead(true)} className={`${ADMIN.darkBtn} mx-auto`}>
                 <Plus size={14} /> New Fee Head
               </button>

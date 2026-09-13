@@ -8,6 +8,7 @@ import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, Cal
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
+import { fetchRawSetting } from '@/lib/pageConfig'
 import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDetails } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
@@ -116,8 +117,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     && (isStudentProfile || isDriverProfile || isSalaryStaffProfile)
 
   useEffect(() => {
-    supabase.from('site_settings').select('value').eq('key', 'profile_banner').single()
-      .then(({ data }) => { if (data?.value && typeof data.value === 'string') setProfileBannerUrl(data.value) })
+    fetchRawSetting<string>('profile_banner')
+      .then(url => { if (typeof url === 'string' && url) setProfileBannerUrl(url) })
   }, [])
 
   const loadProfile = useCallback(async () => {

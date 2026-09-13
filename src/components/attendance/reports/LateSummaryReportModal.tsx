@@ -125,7 +125,7 @@ export default function LateSummaryReportModal({ onClose }: Props) {
 
               {rangeInvalid && (
                 <p className="flex items-center gap-1.5 text-xs text-red-600">
-                  <AlertCircle size={12} /> "From" date must be before "To" date.
+                  <AlertCircle size={12} /> &ldquo;From&rdquo; date must be before &ldquo;To&rdquo; date.
                 </p>
               )}
 

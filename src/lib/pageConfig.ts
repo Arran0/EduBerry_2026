@@ -221,13 +221,129 @@ export interface SettingFetchResult<T> {
   failed: boolean
 }
 
+// ---- Settings cache ----
+//
+// site_settings is 33 rows / ~7KB in total, and a typical page reads several of
+// them (branding, page_icons, page_themes, plus that page's banner). Fetching
+// them one key at a time meant four-plus round trips per page load, repeated on
+// every navigation, for data that changes when an admin edits it and not
+// otherwise.
+//
+// So: read the whole table at once, keep it in memory for the tab, and mirror it
+// to localStorage so a cold load paints from cache instead of waiting. Freshness
+// comes from site_settings_version() — one tiny scalar RPC that returns
+// max(updated_at) plus the row count. When it matches what we cached, nothing
+// else is fetched. Revalidation is rate-limited to REVALIDATE_EVERY_MS so a burst
+// of reads during one page load shares a single probe.
+
+const SETTINGS_CACHE_KEY   = 'site_settings_cache_v1'
+const REVALIDATE_EVERY_MS  = 30_000
+
+/**
+ * Keys held in memory for the tab but never mirrored to localStorage. RLS only
+ * returns these to an admin (see restrict_sensitive_site_settings_reads.sql);
+ * that is no reason to leave them sitting on their disk afterwards.
+ */
+const NEVER_PERSIST = new Set(['fee_runtime'])
+
+interface SettingsSnapshot {
+  version: string
+  values: Record<string, unknown>
+}
+
+let snapshot:   SettingsSnapshot | null = null
+let lastChecked = 0
+let inflight:   Promise<SettingsSnapshot | null> | null = null
+
+function readPersistedSnapshot(): SettingsSnapshot | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as SettingsSnapshot
+    return parsed && typeof parsed.version === 'string' && parsed.values ? parsed : null
+  } catch { return null }
+}
+
+function persistSnapshot(next: SettingsSnapshot): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const safe: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(next.values)) {
+      if (!NEVER_PERSIST.has(k)) safe[k] = v
+    }
+    // Persisted under a version of '' when anything was withheld, so the next
+    // load treats it as stale and re-reads rather than serving a partial table
+    // as if it were complete.
+    const withheld = Object.keys(next.values).length !== Object.keys(safe).length
+    localStorage.setItem(
+      SETTINGS_CACHE_KEY,
+      JSON.stringify({ version: withheld ? '' : next.version, values: safe }),
+    )
+  } catch { /* quota or private mode — the in-memory cache still works */ }
+}
+
+/** Drop the cache so the next read re-fetches. Called after any write. */
+export function invalidateSettingsCache(): void {
+  snapshot = null
+  lastChecked = 0
+  inflight = null
+  if (typeof localStorage === 'undefined') return
+  try { localStorage.removeItem(SETTINGS_CACHE_KEY) } catch { /* ignore */ }
+}
+
+async function revalidate(): Promise<SettingsSnapshot | null> {
+  if (!snapshot) snapshot = readPersistedSnapshot()
+
+  const { data: version, error: versionError } =
+    await supabase.rpc('site_settings_version')
+
+  // Probe failed — keep serving whatever we already have rather than falling
+  // back to defaults, and let the next call try again.
+  if (versionError) return snapshot
+
+  if (snapshot && snapshot.version === version) {
+    lastChecked = Date.now()
+    return snapshot
+  }
+
+  const { data, error } = await supabase.from('site_settings').select('key, value')
+  if (error) return snapshot
+
+  const values: Record<string, unknown> = {}
+  for (const row of (data ?? []) as { key: string; value: unknown }[]) {
+    values[row.key] = row.value
+  }
+
+  snapshot = { version: (version as string) ?? '', values }
+  lastChecked = Date.now()
+  persistSnapshot(snapshot)
+  return snapshot
+}
+
+async function loadSettings(): Promise<SettingsSnapshot | null> {
+  if (snapshot && Date.now() - lastChecked < REVALIDATE_EVERY_MS) return snapshot
+  if (inflight) return inflight
+
+  inflight = revalidate().finally(() => { inflight = null })
+  return inflight
+}
+
 export async function fetchSettingResult<T>(key: string, fallback: T): Promise<SettingFetchResult<T>> {
   try {
-    const { data, error } = await supabase.from('site_settings').select('value').eq('key', key).single()
-    // PGRST116 = no row found for this key — genuinely unconfigured, not a failure.
-    if (error && error.code !== 'PGRST116') return { value: fallback, failed: true }
-    if (!data?.value) return { value: fallback, failed: false }
-    return { value: { ...fallback, ...(typeof data.value === 'object' ? data.value : {}) } as T, failed: false }
+    const loaded = await loadSettings()
+
+    // Neither the network nor a previous cache gave us anything to work with.
+    if (!loaded) return { value: fallback, failed: true }
+
+    const value = loaded.values[key]
+    // Key absent from the table — genuinely unconfigured, not a failure.
+    if (value == null) return { value: fallback, failed: false }
+
+    return {
+      value: { ...fallback, ...(typeof value === 'object' ? value : {}) } as T,
+      failed: false,
+    }
   } catch {
     return { value: fallback, failed: true }
   }
@@ -237,12 +353,36 @@ export async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
   return (await fetchSettingResult(key, fallback)).value
 }
 
+/**
+ * Raw cached value, for keys that store a scalar (a banner URL string) rather
+ * than an object. fetchSetting merges into an object fallback, so it cannot
+ * return these — which is why their call sites used to query the table directly
+ * and miss the cache entirely.
+ */
+export async function fetchRawSetting<T = unknown>(key: string): Promise<T | null> {
+  try {
+    const loaded = await loadSettings()
+    return (loaded?.values[key] ?? null) as T | null
+  } catch { return null }
+}
+
 export async function saveSetting(key: string, value: unknown): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('site_settings')
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    return !error
+    if (error) return false
+
+    // Reflect the write locally and bump past the version check, so the admin
+    // who just saved sees their own change without waiting for a revalidation.
+    if (snapshot) {
+      snapshot = { version: '', values: { ...snapshot.values, [key]: value } }
+      lastChecked = 0
+      persistSnapshot(snapshot)
+    } else {
+      invalidateSettingsCache()
+    }
+    return true
   } catch { return false }
 }
 

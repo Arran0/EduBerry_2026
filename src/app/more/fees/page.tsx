@@ -944,7 +944,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                           {inactiveHeads.length} inactive head{inactiveHeads.length === 1 ? '' : 's'} hidden. Search by name to manage them.
                         </p>
                       ) : matchingInactive.length === 0 ? (
-                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches "{inactiveQuery}".</p>
+                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches &ldquo;{inactiveQuery}&rdquo;.</p>
                       ) : (
                         <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
                           {matchingInactive.map(head => {

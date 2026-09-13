@@ -276,7 +276,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
                       <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
                       <span className={`font-medium ${a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'}`}>{LEAVE_STATUS_LABELS[a.status]}</span>
                     </div>
-                    {a.comments && <p className="mt-1 italic text-slate-600">"{a.comments}"</p>}
+                    {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
                   </div>
                 ))}
               </div>

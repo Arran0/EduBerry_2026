@@ -60,6 +60,7 @@ import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
+import { fetchRawSetting, saveSetting } from '@/lib/pageConfig'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
@@ -382,9 +383,8 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(({ data }) => {
-        const url = data?.value as string | undefined
+    fetchRawSetting<string>('welcome_banner')
+      .then(url => {
         if (url) {
           const img = new window.Image()
           img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
@@ -415,10 +415,9 @@ export default function HomePage() {
     // Show the new banner immediately — persisting it site-wide can finish in
     // the background instead of blocking the admin's own view of the change.
     setWelcomeBanner(publicUrl)
-    supabase.from('site_settings').upsert({ key: 'welcome_banner', value: publicUrl }, { onConflict: 'key' })
-      .then(({ error: upsertError }) => {
-        if (upsertError) console.error('Failed to save welcome banner:', upsertError)
-      })
+    saveSetting('welcome_banner', publicUrl).then(ok => {
+      if (!ok) console.error('Failed to save welcome banner')
+    })
   }
 
   const loadAnnouncements = useCallback(async () => {

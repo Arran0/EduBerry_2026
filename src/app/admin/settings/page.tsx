@@ -11,7 +11,7 @@ import {
   SiteBranding, BRANDING_DEFAULTS,
   LoginPageConfig, LOGIN_DEFAULTS,
   PageThemeMap, THEME_PALETTES,
-  savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes,
+  savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes, saveSetting,
   uploadSiteAsset,
   AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS,
   BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT,
@@ -1457,28 +1457,24 @@ export default function AdminSettingsPage() {
                 setUploading('home-banner', true)
                 const url = await uploadSiteAsset(f, 'welcome_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('welcome_banner', url)
                 }
                 setUploading('home-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('welcome_banner', '')
               }} />
             <UploadField label="Profile Page Banner Image" currentUrl={''} uploading={!!uploadingMap['profile-banner']}
               onUpload={async f => {
                 setUploading('profile-banner', true)
                 const url = await uploadSiteAsset(f, 'profile_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('profile_banner', url)
                 }
                 setUploading('profile-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'profile_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('profile_banner', '')
               }} />
           </div>
         </div>

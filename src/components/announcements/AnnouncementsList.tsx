@@ -211,8 +211,10 @@ export default function AnnouncementsList({
       if (append) setLoadingMore(false)
       else setLoading(false)
     }
-    // Visibility is resolved server-side from the caller's session, so the only
-    // thing that invalidates a loaded feed is the session changing.
+    // Visibility is resolved server-side from the caller's session, so nothing in
+    // this callback reads `userId` — it is listed only so that switching account
+    // reloads the feed rather than showing the previous user's page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   useEffect(() => { loadPage(0, false) }, [loadPage])
