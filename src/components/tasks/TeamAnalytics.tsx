@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, TrendingUp, AlertTriangle, BarChart3, Download, Star, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Search, Users, Crown } from 'lucide-react'
 import { fetchTeamAnalytics } from '@/lib/tasks'
 import { fetchAllTeams, TeamWithDetails } from '@/lib/teams'
+import {
+  MemberStats,
+  analyticsCache,
+  analyticsCacheKey,
+  toMonthParam,
+} from '@/lib/teamAnalyticsCache'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
@@ -12,17 +18,6 @@ interface TeamAnalyticsProps {
   userId: string
   userRole: UserRole
   isTeacher?: boolean
-}
-
-interface MemberStats {
-  user: UserProfile
-  stats: {
-    completed: number
-    bonus: number
-    overdue: number
-    total: number
-    completionRate: number
-  }
 }
 
 // Gold / Silver / Bronze — deliberately distinct so #1, #2, #3 read at a glance.
@@ -58,34 +53,11 @@ const MEMBER_PAGE_SIZE = 25
 
 const isAdminOrPrincipal = (role: UserRole) => role === 'admin' || role === 'principal'
 
-const toMonthParam = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-
-// ── Module-level caches ──────────────────────────────────────────────────────
-// The Team tab is conditionally rendered, so this component fully unmounts when
-// the user switches tabs and remounts when they return — discarding any
-// component-instance (useRef) cache and forcing a full refetch every visit.
-// Hoisting the caches to module scope lets them survive remounts: re-entering
-// the Team tab (or revisiting an already-loaded month) paints instantly.
-type AnalyticsEntry = { members: MemberStats[]; teamCompletionRate: number }
-const analyticsCache = new Map<string, AnalyticsEntry>()
-const analyticsCacheKey = (userId: string, month: string) => `${userId}:${month}`
-
-// Teams list rarely changes within a session; cache it module-wide too so the
-// admin/principal selector doesn't refetch on every mount.
+// Teams list rarely changes within a session; cache it module-wide so the
+// admin/principal selector doesn't refetch on every mount. (The analytics cache
+// itself lives in lib/teamAnalyticsCache so the tasks page can prefetch into it
+// without loading this component.)
 let teamsCache: TeamWithDetails[] | null = null
-
-// Warm the current month into the cache ahead of mount (e.g. on tab hover) so
-// the Team section can paint without a spinner when it's opened.
-export async function prefetchTeamAnalytics(userId: string, userRole: UserRole) {
-  const month = toMonthParam(new Date())
-  const key = analyticsCacheKey(userId, month)
-  if (analyticsCache.has(key)) return
-  const data = await fetchTeamAnalytics(userId, userRole, month)
-  // Only cache meaningful results — an empty payload is indistinguishable from
-  // a fetch failure, and caching it would suppress the spinner on real load.
-  if (data.members.length > 0) analyticsCache.set(key, data)
-}
 
 export default function TeamAnalytics({ userId, userRole, isTeacher = false }: TeamAnalyticsProps) {
   const [members, setMembers] = useState<MemberStats[]>([])

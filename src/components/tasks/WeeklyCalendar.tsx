@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -423,24 +423,55 @@ export default function WeeklyCalendar({
 
   const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
 
-  const getTasksForDay    = (dateStr: string) => tasks
-    .filter(t => t.due_date === dateStr)
-    .sort((a, b) => {
-      if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
-      if (!a.timing) return 1
-      if (!b.timing) return -1
-      return a.timing.localeCompare(b.timing)
-    })
-  const getSubtasksForDay = (dateStr: string) => subtasks.filter(s => s.due_date === dateStr)
+  // Bucket by due date once per data change. The grid asks for a day's items
+  // about sixty times per render (once per day column, then again per period
+  // row × day), and re-filtering + re-sorting the whole task list on each of
+  // those calls made every keystroke in the inline composer walk the week's
+  // tasks sixty times over.
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, TaskWithDetails[]>()
+    for (const task of tasks) {
+      if (!task.due_date) continue
+      const bucket = map.get(task.due_date)
+      if (bucket) bucket.push(task)
+      else map.set(task.due_date, [task])
+    }
+    // Timed tasks first in clock order, undated ones after in creation order.
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => {
+        if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
+        if (!a.timing) return 1
+        if (!b.timing) return -1
+        return a.timing.localeCompare(b.timing)
+      })
+    }
+    return map
+  }, [tasks])
+
+  const subtasksByDay = useMemo(() => {
+    const map = new Map<string, SubtaskWithProject[]>()
+    for (const sub of subtasks) {
+      if (!sub.due_date) continue
+      const bucket = map.get(sub.due_date)
+      if (bucket) bucket.push(sub)
+      else map.set(sub.due_date, [sub])
+    }
+    return map
+  }, [subtasks])
+
+  const EMPTY_TASKS: TaskWithDetails[] = useMemo(() => [], [])
+  const EMPTY_SUBTASKS: SubtaskWithProject[] = useMemo(() => [], [])
+  const getTasksForDay    = (dateStr: string) => tasksByDay.get(dateStr) ?? EMPTY_TASKS
+  const getSubtasksForDay = (dateStr: string) => subtasksByDay.get(dateStr) ?? EMPTY_SUBTASKS
 
   // Subtasks that are undated or overdue (and not completed)
-  const overdueUndatedSubtasks = subtasks.filter(s => {
+  const overdueUndatedSubtasks = useMemo(() => subtasks.filter(s => {
     if (s.status === 'dismissed') return false   // dismissed = deleted
     const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
     if (isCompleted) return false
     if (!s.due_date) return true
     return s.due_date < todayStr
-  })
+  }), [subtasks, todayStr])
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))

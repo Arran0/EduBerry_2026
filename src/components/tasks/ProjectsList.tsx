@@ -20,8 +20,10 @@ import ProjectCard from './ProjectCard'
 import Avatar from '@/components/Avatar'
 import NewProjectForm from './NewProjectForm'
 import {
+  ProjectStatus,
   ProjectWithDetails,
   fetchProjectsForUser,
+  getProjectStatus,
 } from '@/lib/projects'
 import {
   STATUS_DOT_COLORS,
@@ -68,34 +70,6 @@ function getProjectColor(index: number): string {
   return PROJECT_BAR_COLORS[index % PROJECT_BAR_COLORS.length]
 }
 
-function getProjectStatus(project: ProjectWithDetails): { label: string; color: string; isCompleted: boolean; isOverdue: boolean; isCompletedAfterDue: boolean } {
-  // Dismissed subtasks are treated as deleted — excluded from progress maths.
-  const subtasks = project.subtasks.filter(s => s.status !== 'dismissed')
-  const total = subtasks.length
-  const todayStr = new Date().toISOString().split('T')[0]
-
-  if (total === 0) return { label: 'No subtasks', color: 'text-slate-400', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
-
-  // "Completed" = verified ('checked') or finished where no verification is
-  // required ('done' + !require_check) — mirrors the per-subtask UI label.
-  const completed = subtasks.filter(s =>
-    s.status === 'checked' || (!s.require_check && s.status === 'done')
-  ).length
-  const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
-  const isPastDue = !!project.end_date && project.end_date < todayStr
-  const isCompleted = completed === total
-  // All subtasks done/checked but not all checked, and the deadline has passed
-  const isCompletedAfterDue = !isCompleted && done === total && isPastDue
-  const isOverdue = !isCompleted && !isCompletedAfterDue && isPastDue
-
-  if (isCompleted) return { label: 'Completed', color: 'text-blue-600', isCompleted: true, isOverdue: false, isCompletedAfterDue: false }
-  if (isCompletedAfterDue) return { label: 'Completed after due', color: 'text-orange-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: true }
-  if (isOverdue) return { label: 'Overdue', color: 'text-red-600', isCompleted: false, isOverdue: true, isCompletedAfterDue: false }
-  if (done === total) return { label: 'All Done', color: 'text-green-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
-  if (done > 0) return { label: 'In Progress', color: 'text-amber-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
-  return { label: 'Not Started', color: 'text-slate-500', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
-}
-
 export default function ProjectsList({
   userId,
   userRole,
@@ -138,11 +112,11 @@ export default function ProjectsList({
   }, [projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Separate active and completed projects
-  const activeProjects: (ProjectWithDetails & { _status: ReturnType<typeof getProjectStatus> })[] = []
-  const completedProjects: (ProjectWithDetails & { _status: ReturnType<typeof getProjectStatus> })[] = []
+  const activeProjects: (ProjectWithDetails & { _status: ProjectStatus })[] = []
+  const completedProjects: (ProjectWithDetails & { _status: ProjectStatus })[] = []
 
   projects.forEach(p => {
-    const status = getProjectStatus(p)
+    const status = getProjectStatus(p.end_date, p.subtasks)
     if (status.isCompleted || status.isCompletedAfterDue) {
       completedProjects.push({ ...p, _status: status })
     } else {
@@ -193,7 +167,7 @@ export default function ProjectsList({
   const isDateInMonth = (dateStr: string): boolean => dateStr >= monthStart && dateStr <= monthEnd
   const todayStr = new Date().toISOString().split('T')[0]
 
-  const renderProjectCard = (project: ProjectWithDetails & { _status: ReturnType<typeof getProjectStatus> }) => {
+  const renderProjectCard = (project: ProjectWithDetails & { _status: ProjectStatus }) => {
     const countable = project.subtasks.filter(s => s.status !== 'dismissed')
     const total = countable.length
     const done = countable.filter(s => s.status === 'done' || s.status === 'checked').length
