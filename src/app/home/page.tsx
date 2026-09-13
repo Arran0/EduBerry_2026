@@ -86,6 +86,13 @@ import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
+import FeesInfographicPanel, { HomeFeesSummary } from '@/components/home/desktop/FeesInfographicPanel'
+import AttendanceInfographicPanel, {
+  AttendanceTally,
+  HomeAttendanceCounts,
+} from '@/components/home/desktop/AttendanceInfographicPanel'
+import { fmtINR } from '@/lib/formatMoney'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
@@ -161,27 +168,30 @@ function SectionHeading({
   dark?: boolean
 }) {
   return (
-    <div className="flex items-end justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <div className={`icon-chip w-9 h-9 ${chipClass}`}>
+    /* Desktop tightens this header: several sections are visible at once in the
+       dashboard grid, so the titles step *down* a size and the row loses a
+       little height — the numbers inside the cards carry the scale instead. */
+    <div className="flex items-end justify-between mb-4 lg:mb-3">
+      <div className="flex items-center gap-3 lg:gap-2.5 min-w-0">
+        <div className={`icon-chip w-9 h-9 lg:w-8 lg:h-8 flex-shrink-0 ${chipClass}`}>
           <Icon size={16} className="relative z-10 text-white drop-shadow-sm" />
         </div>
-        <div>
+        <div className="min-w-0">
           {eyebrow && (
             <p
-              className={`eyebrow mb-1.5 ${dark ? 'text-white/70' : 'text-slate-400'}`}
+              className={`eyebrow mb-1.5 lg:mb-1 ${dark ? 'text-white/70' : 'text-slate-400'}`}
               style={dark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
             >
               {eyebrow}
             </p>
           )}
           <h2
-            className={`font-display text-[1.4rem] font-bold leading-none headline ${dark ? 'text-white' : 'text-slate-900'}`}
+            className={`font-display text-[1.4rem] lg:text-[1.2rem] font-bold leading-none headline truncate ${dark ? 'text-white' : 'text-slate-900'}`}
             style={dark ? { textShadow: '0 1px 4px rgba(0,0,0,0.5)' } : undefined}
           >
             {title}
           </h2>
-          {subtitle && <p className={`text-[10px] leading-none mt-1.5 ${dark ? 'text-white/60' : 'text-slate-400'}`}>{subtitle}</p>}
+          {subtitle && <p className={`text-[10px] lg:text-[11px] leading-none mt-1.5 truncate ${dark ? 'text-white/60' : 'text-slate-400'}`}>{subtitle}</p>}
         </div>
       </div>
       {action}
@@ -274,19 +284,109 @@ type AdminCardView =
   | 'overdue-fees' | 'notifications' | 'timetable' | 'exams'
   | 'teacher-attendance' | 'task-calendar' | 'grading'
 
-function fmtINR(amount: number): string {
-  const n = Number(amount) || 0
-  if (n >= 10000000) return '₹' + (n / 10000000).toFixed(1) + 'Cr'
-  if (n >= 100000) return '₹' + (n / 100000).toFixed(1) + 'L'
-  if (n >= 1000) return '₹' + (n / 1000).toFixed(0) + 'K'
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+/**
+ * One home card, described once and rendered two ways: as a slide in the mobile
+ * swipe strip, and as a cell in the desktop dashboard grid. `desktopBody` lets a
+ * statistic swap its stacked mobile tiles for an infographic panel on desktop;
+ * cards without one (feeds, lists, calendars) render the same body in both.
+ * `span` is the card's desktop grid width — `wide` for anything that reads
+ * side-by-side, `half` for everything else.
+ */
+interface HomeSlot {
+  key: AdminCardView
+  heading: React.ReactNode
+  body: React.ReactNode
+  desktopBody?: React.ReactNode
+  span: 'half' | 'wide'
 }
 
-interface HomeFeesSummary {
-  collected: number
-  outstanding: number
-  todayCollection: number
-  studentsWithDues: number
+/** Mobile stat-tile card for a fee ledger — the 2×2 grid of deep-linked tiles. */
+function FeeTilesCard({
+  summary, collectedHref, outstandingHref, todayHref, duesLabel,
+}: {
+  summary: HomeFeesSummary | null
+  collectedHref: string
+  outstandingHref: string
+  todayHref: string
+  duesLabel: string
+}) {
+  return (
+    <div className="pro-card h-[260px] p-4 flex items-center">
+      <div className="grid grid-cols-2 gap-3 w-full">
+        <Link href={collectedHref} className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
+          <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
+          <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(summary?.collected ?? 0)}</p>
+          <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
+        </Link>
+        <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+          <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(summary?.outstanding ?? 0)}</p>
+          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
+        </Link>
+        <Link href={todayHref} className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
+          <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(summary?.todayCollection ?? 0)}</p>
+          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+        </Link>
+        <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
+          <Users size={15} className="text-[#A1A1AA] mb-1.5" />
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{summary?.studentsWithDues ?? '—'}</p>
+          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">{duesLabel}</p>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/** Mobile stat-tile card for today's attendance — students over staff. */
+function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }) {
+  const scopes: { title: string; icon: React.ElementType; base: string; tally: AttendanceTally | null; anchors: [string, string, string] }[] = [
+    {
+      title: 'Students', icon: Users, base: '/more/attendance', tally: counts?.students ?? null,
+      anchors: ['student-present', 'student-absent', 'student-irregular'],
+    },
+    {
+      title: 'Staff', icon: Briefcase, base: '/more/staff-attendance', tally: counts?.staff ?? null,
+      anchors: ['staff-present', 'staff-absent', 'staff-exceptions'],
+    },
+  ]
+  return (
+    <div className="pro-card h-[260px] overflow-hidden">
+      {scopes.map((scope, i) => {
+        const Icon = scope.icon
+        return (
+          <div key={scope.title} className={`px-4 pt-3 pb-2 ${i === 0 ? 'border-b border-slate-200' : ''}`}>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Icon size={12} className="text-slate-500" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{scope.title}</span>
+              </div>
+              <Link href={scope.base} className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+                View report <ChevronRight size={11} />
+              </Link>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Link href={`${scope.base}#${scope.anchors[0]}`} className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
+                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
+                <span className="text-xl font-black text-emerald-600 leading-none">{scope.tally?.present ?? '—'}</span>
+                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+              </Link>
+              <Link href={`${scope.base}#${scope.anchors[1]}`} className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
+                <XCircle size={13} className="text-red-400 mb-1" />
+                <span className="text-xl font-black text-red-500 leading-none">{scope.tally?.absent ?? '—'}</span>
+                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+              </Link>
+              <Link href={`${scope.base}#${scope.anchors[2]}`} className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
+                <AlertTriangle size={12} className="text-amber-400 mb-1" />
+                <span className="text-xl font-black text-amber-500 leading-none">{scope.tally?.exception ?? '—'}</span>
+                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
+              </Link>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 const ICON_GRADIENTS = [
@@ -329,10 +429,10 @@ export default function HomePage() {
   const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [containerW, setContainerW] = useState(0)
-  const [attendanceCounts, setAttendanceCounts] = useState<{
-    students: { present: number; absent: number; exception: number }
-    staff: { present: number; absent: number; exception: number }
-  } | null>(null)
+  // ≥1024px: the cards stop being a swipe strip and become a dashboard grid.
+  // SSR-safe (false on the first paint, upgraded on mount).
+  const isDesktop = useIsDesktop()
+  const [attendanceCounts, setAttendanceCounts] = useState<HomeAttendanceCounts | null>(null)
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
   // Presence data for conditional carousel slots (resolved so the slot list is
@@ -567,64 +667,6 @@ export default function HomePage() {
   const showFees = hasFeesSummaryData(schoolFeesSummary)
   const showBusFees = hasFeesSummaryData(busFeesSummary)
 
-  // The slot list per role. Its ORDER must match the DOM order of the rendered
-  // slots below (each slot is one containerW-wide flex child; dragX*index picks
-  // it), so conditional slots are gated by the same flags in both places.
-  const CARD_VIEWS = useMemo<AdminCardView[]>(() => {
-    if (isStudent) {
-      const v: AdminCardView[] = []
-      if (hasOverdueFees) v.push('overdue-fees')
-      if (showNotifSlot) v.push('notifications')
-      if (showSchoolWork) v.push('calendar')
-      if (showAssessments) v.push('assessments')
-      if (showReportCards) v.push('report-cards')
-      if (showTimetable) v.push('timetable')
-      if (showExams) v.push('exams')
-      if (showAnnouncements) v.push('announcements')
-      return v
-    }
-    const v: AdminCardView[] = []
-    if (showNotifSlot) v.push('notifications')
-    if (isAttendanceViewer) {
-      if (showAttendanceViewerCard) v.push('attendance')
-    } else {
-      v.push('teacher-attendance')
-    }
-    if (showTaskCalendar) v.push('task-calendar')
-    if (hasGradingQueue) v.push('grading')
-    if (isAdmin && showFees) v.push('fees')
-    if (isAdmin && showBusFees) v.push('bus-fees')
-    if (showAnnouncements) v.push('announcements')
-    return v
-  }, [
-    isStudent, isAdmin, isAttendanceViewer, hasOverdueFees, hasGradingQueue, showTaskCalendar, showNotifSlot,
-    showSchoolWork, showAssessments, showReportCards, showTimetable, showExams, showAnnouncements,
-    showAttendanceViewerCard, showFees, showBusFees,
-  ])
-
-  // When the slot list changes (role resolved, or a conditional card appears/
-  // disappears), keep the carousel coherent: before the user has interacted,
-  // pin to the first slot (so e.g. overdue-fees lands first once it loads);
-  // after interaction, hold their current card at its new index.
-  useEffect(() => {
-    if (!interactedRef.current) {
-      setAdminCardView(CARD_VIEWS[0])
-      dragX.set(0)
-      return
-    }
-    const idx = CARD_VIEWS.indexOf(adminCardView)
-    if (idx === -1) {
-      setAdminCardView(CARD_VIEWS[0])
-      dragX.set(0)
-    } else {
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      dragX.set(-idx * W)
-    }
-    // Only realign when the slot list itself changes — not on every swipe
-    // (which updates adminCardView and would fight the swipe spring animation).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [CARD_VIEWS])
-
   const loadFeeSummaries = useCallback(async () => {
     if (!isAdmin) return
     const currentYear = currentAcademicYear()
@@ -660,6 +702,9 @@ export default function HomePage() {
     setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
   }, [isAdmin])
 
+  // Re-runs when the desktop grid hands the page back to the swipe track, so a
+  // carousel remounted by a window resize measures itself instead of reusing a
+  // stale width.
   useLayoutEffect(() => {
     const el = cardContainerRef.current
     if (!el) return
@@ -668,7 +713,7 @@ export default function HomePage() {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [isDesktop])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
@@ -801,8 +846,349 @@ export default function HomePage() {
     if (isAdmin && user) setShowTaskCalendarOnHomeState(getShowTaskCalendarOnHome(user.id))
   }, [isAdmin, user])
 
+  /* ────────────────────────────────────────────────────────────────────────
+     The home cards, as data. One list feeds both presentations: the mobile
+     swipe strip (one slot per screen, gesture-driven) and the desktop
+     dashboard grid (every slot visible at once, statistics rendered as
+     infographic panels). Deriving CARD_VIEWS from this list — rather than
+     maintaining a parallel array of keys — makes it impossible for the
+     carousel's index maths to drift out of step with the DOM order.
+     ──────────────────────────────────────────────────────────────────────── */
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+  const slots: HomeSlot[] = []
+
+  if (isStudent && hasOverdueFees) {
+    slots.push({
+      key: 'overdue-fees',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={AlertTriangle}
+          chipClass="bg-gradient-to-br from-red-400 to-rose-600"
+          eyebrow="Action needed"
+          title="Fees Due"
+          action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
+        />
+      ),
+      body: <OverdueFeesCard fees={overdueFees} />,
+    })
+  }
+
+  if (showNotifSlot) {
+    slots.push({
+      key: 'notifications',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={Bell}
+          chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+          eyebrow="For you"
+          title="Notifications"
+          // One switch for every notification this app sends — the same
+          // control the announcements banner carries.
+          action={<PushToggle onDark={false} compact />}
+        />
+      ),
+      body: notifLoading
+        ? <NotificationsCardSkeleton />
+        : (
+          <NotificationsSummaryCard
+            items={notifItems}
+            hasMore={notifHasMore}
+            loadingMore={notifLoadingMore}
+            onLoadMore={handleLoadMoreNotifications}
+            onRead={handleReadNotification}
+            onOpen={handleOpenNotification}
+          />
+        ),
+    })
+  }
+
+  if (isStaff && isAttendanceViewer && showAttendanceViewerCard) {
+    slots.push({
+      key: 'attendance',
+      // Two scopes of donuts side by side — this one earns the full width.
+      span: 'wide',
+      heading: (
+        <SectionHeading
+          icon={BarChart3}
+          chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
+          eyebrow="Today"
+          title="Attendance"
+          subtitle={isCoordinator ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team') : undefined}
+          action={
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-semibold text-emerald-700">Live</span>
+              </div>
+              <span className="text-xs font-medium text-slate-400">{today}</span>
+            </div>
+          }
+        />
+      ),
+      body: <AttendanceTilesCard counts={attendanceCounts} />,
+      desktopBody: <AttendanceInfographicPanel counts={attendanceCounts} />,
+    })
+  }
+
+  if (isStaff && !isAttendanceViewer && user) {
+    slots.push({
+      key: 'teacher-attendance',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={BarChart3}
+          chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
+          eyebrow="Today"
+          title="Attendance"
+          action={<span className="text-xs font-medium text-slate-400">{today}</span>}
+        />
+      ),
+      body: <TeacherAttendanceCard key={dayKey} userId={user.id} />,
+    })
+  }
+
+  if (isStaff && showTaskCalendar) {
+    slots.push({
+      key: 'task-calendar',
+      span: 'wide',
+      heading: (
+        <SectionHeading
+          icon={CalendarDays}
+          chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
+          eyebrow="This week"
+          title="My Tasks"
+          action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
+        />
+      ),
+      body: <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />,
+    })
+  }
+
+  if (isStaff && hasGradingQueue) {
+    slots.push({
+      key: 'grading',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={ClipboardCheck}
+          chipClass="bg-gradient-to-br from-indigo-400 to-violet-600"
+          eyebrow="Awaiting you"
+          title="Grading"
+          action={<ViewAllLink href="/more/exam" className="text-indigo-600 hover:text-indigo-700" />}
+        />
+      ),
+      body: <ExamGradingCard queues={gradingQueues} />,
+    })
+  }
+
+  if (isStudent && user && showSchoolWork) {
+    slots.push({
+      key: 'calendar',
+      span: 'wide',
+      heading: (
+        <SectionHeading
+          icon={CalendarDays}
+          chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
+          eyebrow="This week"
+          title="School Work"
+          action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
+        />
+      ),
+      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onEmptyChange={setSchoolWorkEmpty} />,
+    })
+  }
+
+  if (isStudent && user && showAssessments) {
+    slots.push({
+      key: 'assessments',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={ClipboardList}
+          chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+          eyebrow="Latest"
+          title="Assessments"
+        />
+      ),
+      body: <LatestAssessmentsMiniList classrooms={classrooms} onEmptyChange={setAssessmentsEmpty} />,
+    })
+  }
+
+  if (isStudent && user && showReportCards) {
+    slots.push({
+      key: 'report-cards',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={Award}
+          chipClass="bg-gradient-to-br from-rose-400 to-pink-600"
+          eyebrow="This year"
+          title="Report Cards"
+          action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
+        />
+      ),
+      body: <ReportCardsMiniList userId={user.id} onEmptyChange={setReportCardsEmpty} />,
+    })
+  }
+
+  if (isStudent && user && showTimetable) {
+    slots.push({
+      key: 'timetable',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={CalendarClock}
+          chipClass="bg-gradient-to-br from-indigo-400 to-blue-500"
+          eyebrow="Today"
+          title="Timetable"
+          action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
+        />
+      ),
+      body: <TodayTimetableCard userId={user.id} onEmptyChange={setTimetableEmpty} />,
+    })
+  }
+
+  if (isStudent && user && showExams) {
+    slots.push({
+      key: 'exams',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={FileSpreadsheet}
+          chipClass="bg-gradient-to-br from-purple-400 to-fuchsia-600"
+          eyebrow="Upcoming & results"
+          title="Exams"
+          action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
+        />
+      ),
+      body: <ExamsMiniCard userId={user.id} onEmptyChange={setExamsEmpty} />,
+    })
+  }
+
+  if (isAdmin && showFees) {
+    slots.push({
+      key: 'fees',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={CreditCard}
+          chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
+          eyebrow="School"
+          title="Fee Manager"
+          action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
+        />
+      ),
+      body: (
+        <FeeTilesCard
+          summary={schoolFeesSummary}
+          collectedHref="/more/fees?section=issued&filter=collected"
+          outstandingHref="/more/fees?section=issued&filter=outstanding"
+          todayHref="/more/fees?section=collection"
+          duesLabel="Students with Dues"
+        />
+      ),
+      desktopBody: (
+        <FeesInfographicPanel
+          summary={schoolFeesSummary}
+          collectedHref="/more/fees?section=issued&filter=collected"
+          outstandingHref="/more/fees?section=issued&filter=outstanding"
+          todayHref="/more/fees?section=collection"
+          duesLabel="Students with Dues"
+        />
+      ),
+    })
+  }
+
+  if (isAdmin && showBusFees) {
+    slots.push({
+      key: 'bus-fees',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={Bus}
+          chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
+          eyebrow="Transport"
+          title="Bus Fees"
+          action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
+        />
+      ),
+      body: (
+        <FeeTilesCard
+          summary={busFeesSummary}
+          collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
+          outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
+          todayHref="/more/bus?tab=fees&section=collection"
+          duesLabel="Passengers with Dues"
+        />
+      ),
+      desktopBody: (
+        <FeesInfographicPanel
+          summary={busFeesSummary}
+          collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
+          outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
+          todayHref="/more/bus?tab=fees&section=collection"
+          duesLabel="Passengers with Dues"
+        />
+      ),
+    })
+  }
+
+  if (showAnnouncements) {
+    slots.push({
+      key: 'announcements',
+      span: 'half',
+      heading: (
+        <SectionHeading
+          icon={Bell}
+          chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
+          eyebrow="Latest"
+          title="Announcements"
+          action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
+        />
+      ),
+      body: <AnnouncementsList items={announcements} />,
+    })
+  }
+
+  // The carousel's index space. Memoised on the joined keys so the array
+  // identity only changes when the slot list itself does — the effects below
+  // depend on it and must not re-run on every render.
+  const slotKeys = slots.map(s => s.key).join('|')
+  const CARD_VIEWS = useMemo<AdminCardView[]>(
+    () => (slotKeys ? slotKeys.split('|') as AdminCardView[] : []),
+    [slotKeys],
+  )
+
+  // When the slot list changes (role resolved, or a conditional card appears/
+  // disappears), keep the carousel coherent: before the user has interacted,
+  // pin to the first slot (so e.g. overdue-fees lands first once it loads);
+  // after interaction, hold their current card at its new index.
   useEffect(() => {
-    if (!showCardCarousel) return
+    if (!interactedRef.current) {
+      setAdminCardView(CARD_VIEWS[0])
+      dragX.set(0)
+      return
+    }
+    const idx = CARD_VIEWS.indexOf(adminCardView)
+    if (idx === -1) {
+      setAdminCardView(CARD_VIEWS[0])
+      dragX.set(0)
+    } else {
+      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
+      dragX.set(-idx * W)
+    }
+    // Only realign when the slot list itself changes — not on every swipe
+    // (which updates adminCardView and would fight the swipe spring animation).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [CARD_VIEWS])
+
+  useEffect(() => {
+    // Desktop shows every card at once, so the autoplay clock is switched off
+    // rather than left ticking behind a hidden carousel.
+    if (!showCardCarousel || isDesktop) return
     const t = setInterval(() => {
       const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
@@ -866,7 +1252,8 @@ export default function HomePage() {
   // (page or a nested list) behaves normally.
   useEffect(() => {
     const el = cardContainerRef.current
-    if (!el) return
+    // No swipe track on desktop — the grid shows every card at once.
+    if (!el || isDesktop) return
 
     const onStart = (e: TouchEvent) => {
       interactedRef.current = true
@@ -940,11 +1327,16 @@ export default function HomePage() {
       el.removeEventListener('touchcancel', onEnd)
       el.removeEventListener('click', onClick)
     }
-  }, [CARD_VIEWS, dragX])
+  }, [CARD_VIEWS, dragX, isDesktop])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
   const bannerOnDark = bannerLum !== null && bannerLum < 0.4
+
+  // Three deliberate tiers rather than one phone height stretched wide: a
+  // desktop hero is proportionally shorter relative to its width, so it gains
+  // height without swallowing the fold.
+  const bannerHeight = isMobileBanner ? 204 : isDesktop ? 296 : 255
 
   interface AppEntry {
     key: string
@@ -1062,7 +1454,7 @@ export default function HomePage() {
               <motion.div
                 key="home-banner"
                 initial={{ height: 0 }}
-                animate={{ height: isMobileBanner ? 204 : 255 }}
+                animate={{ height: bannerHeight }}
                 exit={{ height: 0 }}
                 transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
                 className="relative w-full overflow-hidden sheen sheen-animate"
@@ -1073,7 +1465,7 @@ export default function HomePage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
-                  style={{ height: isMobileBanner ? 204 : 255, willChange: 'transform, opacity' }}
+                  style={{ height: bannerHeight, willChange: 'transform, opacity' }}
                 >
 
               {/* Background: photo (slow Ken Burns drift) or vivid gradient */}
@@ -1189,420 +1581,55 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Admin dashboard cards (rotate every 7 s, swipe left/right to navigate,
-              resets on any touch/click) — the drag/swipe TRACK (this div plus
-              cardContainerRef below) is full-bleed, edge-to-edge on every screen
-              size, unlike the other max-w-7xl sections on this page. Each slide
-              still centers its own content in a max-w-7xl px-4 sm:px-6 lg:px-8
-              wrapper — the same box the old outer wrapper drew — so the visible
-              card is exactly the width it always was; only the swipeable hit
-              area around it got wider. ── */}
+          {/* ── Home cards — one slot list (see `slots` above), two presentations.
+              Below lg: a full-bleed swipe track, one card per screen, rotating
+              every 7 s. The track (this div plus cardContainerRef) is
+              edge-to-edge while each slide still centers its own content in the
+              page's max-w-7xl box, so the visible card is exactly the width it
+              always was and only the swipe hit area is wider.
+              At lg and up: the same slots as a dashboard grid — everything
+              visible at once, no gesture required, with the admin statistics
+              (attendance, school fees, bus fees) rendered as infographic panels
+              instead of stacked tiles. ── */}
+          {isDesktop ? (
+            /* Same max-w-7xl box as the banner text, classrooms grid and app
+               row below, so every region on the page shares one left edge. */
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2">
+              <motion.div variants={itemVariants} className="grid grid-cols-12 gap-x-5 gap-y-6 items-start">
+                {slots.map(slot => (
+                  <section
+                    key={slot.key}
+                    className={
+                      slot.span === 'wide'
+                        ? 'col-span-12 xl:col-span-8 flex flex-col'
+                        : 'col-span-6 xl:col-span-4 flex flex-col'
+                    }
+                  >
+                    {slot.heading}
+                    {/* Every card body is 260 px tall, so panels sitting in the
+                        same grid row line up instead of ending raggedly. */}
+                    <div className="h-[260px]">
+                      {slot.desktopBody ?? slot.body}
+                    </div>
+                  </section>
+                ))}
+              </motion.div>
+            </div>
+          ) : (
           <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               {showCardCarousel ? (
                 <div ref={cardContainerRef} className="overflow-hidden min-h-[330px] pb-6" style={{ touchAction: 'pan-y' }}>
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
-                  {(<>
-
-                    {/* ── Slot: Notifications (staff — when they have any, or still loading) ── */}
-                    {isStaff && showNotifSlot && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={Bell}
-                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-                        eyebrow="For you"
-                        title="Notifications"
-                        // One switch for every notification this app sends —
-                        // the same control the announcements banner carries.
-                        action={<PushToggle onDark={false} compact />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        {notifLoading
-                          ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard
-                              items={notifItems}
-                              hasMore={notifHasMore}
-                              loadingMore={notifLoadingMore}
-                              onLoadMore={handleLoadMoreNotifications}
-                              onRead={handleReadNotification}
-                              onOpen={handleOpenNotification}
-                            />}
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Overdue fees (students — first card, only when overdue) ── */}
-                    {isStudent && hasOverdueFees && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={AlertTriangle}
-                        chipClass="bg-gradient-to-br from-red-400 to-rose-600"
-                        eyebrow="Action needed"
-                        title="Fees Due"
-                        action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <OverdueFeesCard fees={overdueFees} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Notifications (students — when they have any, or still loading) ── */}
-                    {isStudent && showNotifSlot && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={Bell}
-                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-                        eyebrow="For you"
-                        title="Notifications"
-                        // One switch for every notification this app sends —
-                        // the same control the announcements banner carries.
-                        action={<PushToggle onDark={false} compact />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        {notifLoading
-                          ? <NotificationsCardSkeleton />
-                          : <NotificationsSummaryCard
-                              items={notifItems}
-                              hasMore={notifHasMore}
-                              loadingMore={notifLoadingMore}
-                              onLoadMore={handleLoadMoreNotifications}
-                              onRead={handleReadNotification}
-                              onOpen={handleOpenNotification}
-                            />}
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Attendance (attendance viewers only) ── */}
-                    {isAttendanceViewer && showAttendanceViewerCard && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={BarChart3}
-                        chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
-                        eyebrow="Today"
-                        title="Attendance"
-                        subtitle={isCoordinator ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team') : undefined}
-                        action={
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              <span className="text-[10px] font-semibold text-emerald-700">Live</span>
-                            </div>
-                            <span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                          </div>
-                        }
-                      />
-                      <div className="pro-card h-[260px] overflow-hidden mx-2 sm:mx-4">
-                        <div className="px-4 pt-3 pb-2 border-b border-slate-200">
-                          <div className="flex items-center justify-between mb-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <Users size={12} className="text-slate-500" />
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Students</span>
-                            </div>
-                            <Link href="/more/attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
-                              View report <ChevronRight size={11} />
-                            </Link>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Link href="/more/attendance#student-present" className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                              <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
-                              <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.students.present ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
-                            </Link>
-                            <Link href="/more/attendance#student-absent" className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                              <XCircle size={13} className="text-red-400 mb-1" />
-                              <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.students.absent ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
-                            </Link>
-                            <Link href="/more/attendance#student-irregular" className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                              <AlertTriangle size={12} className="text-amber-400 mb-1" />
-                              <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.students.exception ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
-                            </Link>
-                          </div>
-                        </div>
-                        <div className="px-4 pt-3 pb-2">
-                          <div className="flex items-center justify-between mb-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <Briefcase size={12} className="text-slate-500" />
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Staff</span>
-                            </div>
-                            <Link href="/more/staff-attendance" className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
-                              View report <ChevronRight size={11} />
-                            </Link>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Link href="/more/staff-attendance#staff-present" className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                              <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
-                              <span className="text-xl font-black text-emerald-600 leading-none">{attendanceCounts?.staff.present ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
-                            </Link>
-                            <Link href="/more/staff-attendance#staff-absent" className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                              <XCircle size={13} className="text-red-400 mb-1" />
-                              <span className="text-xl font-black text-red-500 leading-none">{attendanceCounts?.staff.absent ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
-                            </Link>
-                            <Link href="/more/staff-attendance#staff-exceptions" className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                              <AlertTriangle size={12} className="text-amber-400 mb-1" />
-                              <span className="text-xl font-black text-amber-500 leading-none">{attendanceCounts?.staff.exception ?? '—'}</span>
-                              <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
-                            </Link>
-                          </div>
+                    {slots.map(slot => (
+                      <div key={slot.key} style={{ width: containerW || '100%', flexShrink: 0 }}>
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                          {slot.heading}
+                          <div className="mx-2 sm:mx-4">{slot.body}</div>
                         </div>
                       </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Attendance (regular teachers — team + class-teacher homeroom) ── */}
-                    {isStaff && !isAttendanceViewer && user && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={BarChart3}
-                        chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
-                        eyebrow="Today"
-                        title="Attendance"
-                        action={<span className="text-xs font-medium text-slate-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <TeacherAttendanceCard key={dayKey} userId={user.id} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Task Weekly Calendar (staff — only when they have tasks) ── */}
-                    {isStaff && showTaskCalendar && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={CalendarDays}
-                        chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
-                        eyebrow="This week"
-                        title="My Tasks"
-                        action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Exam Grading (staff — when grading an under-grading exam) ── */}
-                    {isStaff && hasGradingQueue && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={ClipboardCheck}
-                        chipClass="bg-gradient-to-br from-indigo-400 to-violet-600"
-                        eyebrow="Awaiting you"
-                        title="Grading"
-                        action={<ViewAllLink href="/more/exam" className="text-indigo-600 hover:text-indigo-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <ExamGradingCard queues={gradingQueues} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: School Work Calendar (students only, hidden once known empty) ── */}
-                    {isStudent && user && showSchoolWork && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={CalendarDays}
-                        chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
-                        eyebrow="This week"
-                        title="School Work"
-                        action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onEmptyChange={setSchoolWorkEmpty} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Latest Assessments (students only, hidden once known empty) ── */}
-                    {isStudent && user && showAssessments && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={ClipboardList}
-                        chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
-                        eyebrow="Latest"
-                        title="Assessments"
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <LatestAssessmentsMiniList classrooms={classrooms} onEmptyChange={setAssessmentsEmpty} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Report Cards (students only, hidden once known empty) ── */}
-                    {isStudent && user && showReportCards && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={Award}
-                        chipClass="bg-gradient-to-br from-rose-400 to-pink-600"
-                        eyebrow="This year"
-                        title="Report Cards"
-                        action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <ReportCardsMiniList userId={user.id} onEmptyChange={setReportCardsEmpty} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Today's Timetable (students only, hidden once known empty) ── */}
-                    {isStudent && user && showTimetable && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={CalendarClock}
-                        chipClass="bg-gradient-to-br from-indigo-400 to-blue-500"
-                        eyebrow="Today"
-                        title="Timetable"
-                        action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <TodayTimetableCard userId={user.id} onEmptyChange={setTimetableEmpty} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Exams (students only, hidden once known empty) ── */}
-                    {isStudent && user && showExams && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={FileSpreadsheet}
-                        chipClass="bg-gradient-to-br from-purple-400 to-fuchsia-600"
-                        eyebrow="Upcoming & results"
-                        title="Exams"
-                        action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <ExamsMiniCard userId={user.id} onEmptyChange={setExamsEmpty} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                    {/* ── Slot: Fee Manager (admin only, hidden once all-zero) ── */}
-                    {isAdmin && showFees && (
-                        <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                          <SectionHeading
-                            icon={CreditCard}
-                            chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
-                            eyebrow="School"
-                            title="Fee Manager"
-                            action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
-                          />
-                          <div className="pro-card h-[260px] p-4 flex items-center mx-2 sm:mx-4">
-                            <div className="grid grid-cols-2 gap-3 w-full">
-                              <Link href="/more/fees?section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
-                                <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-                                <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.collected ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
-                              </Link>
-                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                                <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.outstanding ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
-                              </Link>
-                              <Link href="/more/fees?section=collection" className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
-                                <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(schoolFeesSummary?.todayCollection ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
-                              </Link>
-                              <Link href="/more/fees?section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                                <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{schoolFeesSummary?.studentsWithDues ?? '—'}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Students with Dues</p>
-                              </Link>
-                            </div>
-                          </div>
-                          </div>
-                        </div>
-                    )}
-
-                    {/* ── Slot: Bus Fees (admin only, hidden once all-zero) ── */}
-                    {isAdmin && showBusFees && (
-                        <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                          <SectionHeading
-                            icon={Bus}
-                            chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
-                            eyebrow="Transport"
-                            title="Bus Fees"
-                            action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
-                          />
-                          <div className="pro-card h-[260px] p-4 flex items-center mx-2 sm:mx-4">
-                            <div className="grid grid-cols-2 gap-3 w-full">
-                              <Link href="/more/bus?tab=fees&section=issued&filter=collected" className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
-                                <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-                                <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(busFeesSummary?.collected ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
-                              </Link>
-                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                                <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.outstanding ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
-                              </Link>
-                              <Link href="/more/bus?tab=fees&section=collection" className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
-                                <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(busFeesSummary?.todayCollection ?? 0)}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
-                              </Link>
-                              <Link href="/more/bus?tab=fees&section=issued&filter=outstanding" className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-                                <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-                                <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{busFeesSummary?.studentsWithDues ?? '—'}</p>
-                                <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Passengers with Dues</p>
-                              </Link>
-                            </div>
-                          </div>
-                          </div>
-                        </div>
-                    )}
-
-                    {/* ── Slot: Announcements (hidden once loaded empty) ── */}
-                    {showAnnouncements && (
-                    <div style={{ width: containerW || '100%', flexShrink: 0 }}>
-                      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                      <SectionHeading
-                        icon={Bell}
-                        chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-                        eyebrow="Latest"
-                        title="Announcements"
-                        action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
-                      />
-                      <div className="mx-2 sm:mx-4">
-                        <AnnouncementsList items={announcements} />
-                      </div>
-                      </div>
-                    </div>
-                    )}
-
-                  </>)}
+                    ))}
                   </motion.div>
                   {/* Slide indicator dots */}
                   <div className="flex justify-center gap-1.5 mt-3">
@@ -1647,6 +1674,7 @@ export default function HomePage() {
               )}
             </motion.div>
           </div>
+          )}
 
           {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom).
               Before classroomsLoaded resolves, hasClassrooms (a fast single-row
@@ -1732,17 +1760,21 @@ export default function HomePage() {
                   title="More Apps"
                 />
 
-                <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                  <div className="flex gap-2">
+                {/* Below lg this is a scrollable strip of phone-sized tiles; at
+                    lg it becomes a fixed grid across the full container width,
+                    with legible (11px) labels rather than the 9.5px ones that
+                    only work at arm's length on a phone. */}
+                <div className="overflow-x-auto lg:overflow-visible scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
+                  <div className="flex gap-2 lg:grid lg:grid-cols-8 lg:gap-3">
                     {moreApps.map((app, idx) => {
                       const Icon = app.icon
                       return (
                         <Link
                           key={app.key}
                           href={app.href}
-                          className="pressable glass-tile flex-1 min-w-[5.375rem] flex flex-col items-center gap-2 py-3 px-0.5 rounded-2xl"
+                          className="pressable glass-tile flex-1 min-w-[5.375rem] lg:min-w-0 flex flex-col items-center gap-2 py-3 lg:py-3.5 px-0.5 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
                         >
-                          <div className="relative w-full max-w-[2.6rem] aspect-square mx-auto">
+                          <div className="relative w-full max-w-[2.6rem] lg:max-w-[2.9rem] aspect-square mx-auto">
                             <div
                               className="icon-chip brand-fade w-full h-full"
                               style={{ background: ICON_GRADIENTS[idx % ICON_GRADIENTS.length] }}
@@ -1755,7 +1787,7 @@ export default function HomePage() {
                               </span>
                             )}
                           </div>
-                          <span className="text-[9.5px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
+                          <span className="text-[9.5px] lg:text-[11px] font-semibold text-slate-700 leading-tight text-center line-clamp-2 w-full px-0.5">{app.label}</span>
                         </Link>
                       )
                     })}
