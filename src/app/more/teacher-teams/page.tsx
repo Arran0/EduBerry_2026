@@ -9,10 +9,7 @@ import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import PageBanner from '@/components/PageBanner'
 import { useRouter } from 'next/navigation'
-import {
-  Users, Plus, X, UserMinus, ChevronDown, ChevronUp,
-  Calendar, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown,
-} from 'lucide-react'
+import { Users, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown } from 'lucide-react'
 import { TEAMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   TeamWithDetails, fetchAllTeams, createTeam, updateTeam, deleteTeam,
@@ -26,7 +23,6 @@ const containerVariants = {
 const itemVariants = { hidden: { opacity: 0 }, show: { opacity: 1 } }
 
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
 
 const ROLE_BADGE: Record<string, string> = {
   admin:       'bg-rose-50 text-rose-700 border-rose-200',
@@ -478,10 +474,6 @@ export default function TeacherTeamsPage() {
 }
 
 // ── TeamRow sub-component ────────────────────────────────────────────────────
-
-interface EditFormState {
-  name: string; description: string; start_date: string; end_date: string
-}
 
 interface TeamRowProps {
   team: TeamWithDetails

@@ -304,7 +304,7 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
 
   let { data: tasks, error } = await supabase.from('tasks').insert(rows).select()
   if (error?.code === UNDEFINED_COLUMN) {
-    const fallbackRows = rows.map(({ requires_submission, ...fallbackRow }) => fallbackRow)
+    const fallbackRows = rows.map(({ requires_submission: _requires_submission, ...fallbackRow }) => fallbackRow)
     ;({ data: tasks, error } = await supabase.from('tasks').insert(fallbackRows).select())
   }
 
@@ -626,7 +626,7 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 
   // Drop the embedded join column so the rows match the plain Task shape.
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
 
   const week = await hydrateTasksLight(cleanTasks)
@@ -660,7 +660,7 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
   if (error || !rawTasks) return []
 
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
   return hydrateTasksMinimal(cleanTasks)
 }
@@ -682,7 +682,7 @@ export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWi
   if (error || !rawTasks) return []
 
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
   return hydrateTasksMinimal(cleanTasks)
 }

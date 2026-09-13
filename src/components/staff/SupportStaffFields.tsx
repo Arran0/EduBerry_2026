@@ -120,11 +120,6 @@ export function formToSupportPatch(form: SupportStaffForm): SupportStaffPatch {
   return patch as SupportStaffPatch
 }
 
-/** True once the admin has typed anything at all into these fields. */
-export function hasAnySupportField(form: SupportStaffForm): boolean {
-  return SUPPORT_FIELD_KEYS.some(k => (form[k] ?? '').trim() !== '')
-}
-
 const INPUT = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
 const LABEL = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
 const SECTION_HEAD = 'text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mb-3 pb-1 border-b border-[#E4E4E7]'

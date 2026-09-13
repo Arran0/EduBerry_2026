@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { X, Loader2, Save, Users, CheckSquare, ChevronDown, ChevronUp, Lock, Unlock, Calendar, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react'
+import { X, Loader2, Save, Users, CheckSquare, ChevronUp, Lock, Unlock, Calendar, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react'
 import {
   AttendanceStatus,
   AttendanceSheetRow,

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { X, AlertCircle, IndianRupee, Check, Search, Users, UserPlus, Trash2 } from 'lucide-react'
+import { X, AlertCircle, IndianRupee, Search, Users, UserPlus, Trash2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { UserProfile } from '@/lib/supabase'
 import { Homeroom, homeroomGradeSectionBadge } from '@/lib/homerooms'

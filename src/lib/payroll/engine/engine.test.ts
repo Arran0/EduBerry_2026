@@ -1,11 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import {
-  engineInput, employee, assignment, structure, policyGroup, calendar, presentMonth,
-  STANDARD_COMPONENTS, ALL_RULES, PF_RULES, ESI_RULES, period,
-} from '../__fixtures__'
+import { engineInput, employee, assignment, structure, policyGroup, calendar, presentMonth, STANDARD_COMPONENTS, PF_RULES, ESI_RULES, period } from '../__fixtures__'
 import { calcLine, monthIndexInFinancialYear, financialYearOf } from './calcLine'
 import { calcLopDays, priceOccurrences } from './attendance'
-import { buildStructure, orderComponents, StructureError, assignmentOn } from './structure'
+import { buildStructure, StructureError, assignmentOn } from './structure'
 import { calcPf, calcEsi } from './statutory'
 import { resolveScoped, hasAmbiguousCoverage, BUILTIN_POLICY } from './resolvePolicy'
 import { canTransition, isImmutable } from './workflow'

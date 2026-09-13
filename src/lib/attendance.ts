@@ -226,9 +226,6 @@ export interface StaffMonthlyStats {
   present_pct: number    // (present + late + wfh + 0.5*half_day + e + holidays) / (working_days - on_leave)
 }
 
-// Statuses that count as the staff member having shown up for work.
-export const PRESENT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'wfh', 'half_day']
-
 // ============================================
 // Display Helpers
 // ============================================
@@ -251,16 +248,6 @@ export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, strin
   wfh: 'Work from Home',
   half_day: 'Half Day',
   e: 'Exception',
-}
-
-export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
-  present: 'bg-green-100 text-green-700 border-green-200',
-  absent: 'bg-red-100 text-red-700 border-red-200',
-  late: 'bg-amber-100 text-amber-700 border-amber-200',
-  on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
-  excused: 'bg-purple-100 text-purple-700 border-purple-200',
-  on_duty: 'bg-teal-100 text-teal-700 border-teal-200',
-  half_day: 'bg-orange-100 text-orange-700 border-orange-200',
 }
 
 export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, string> = {
@@ -1544,26 +1531,6 @@ export interface LocationAttempt {
   staff?: UserProfile
 }
 
-export interface LocationAttemptStats {
-  total: number
-  accepted: number
-  refused: number
-  uncertain: number
-  coarse: number
-  /** Accepted with no position at all, because the device could not get one. */
-  deviceIssue: number
-  /** Refused because location access was off — a setting, not a device fault. */
-  locationOff: number
-  /** No position, on rows written before the two cases above were separated. */
-  noFix: number
-  /** Median reported accuracy across attempts that produced a fix. */
-  medianAccuracyM: number | null
-  /** 95th-percentile accuracy — the tail that the threshold has to cope with. */
-  p95AccuracyM: number | null
-  /** Staff with the most refused or uncertain attempts, worst first. */
-  worstAffected: { staffId: string; name: string; problemCount: number; attempts: number }[]
-}
-
 export async function fetchLocationAttempts(
   startDate: string,
   endDate: string,
@@ -2533,12 +2500,6 @@ export async function fetchStudentAbsenteesByDate(
 // ── All-student attendance report (present + irregular, optionally per-homeroom) ──
 
 export type StudentAttendanceEntry = StudentAbsenteeRecord
-
-// Every status that is NOT a plain "present" — i.e. needs the manager's attention.
-// The report splits these further into "absent" and everything else ("irregular").
-export const STUDENT_NON_PRESENT_STATUSES: AttendanceStatus[] = [
-  'absent', 'late', 'half_day', 'on_leave', 'on_duty', 'excused',
-]
 
 // Attach profile + homeroom name to raw attendance rows (two cheap lookups, RLS-safe).
 async function hydrateStudentEntries(

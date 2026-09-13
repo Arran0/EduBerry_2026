@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
 
@@ -42,7 +42,7 @@ export default function SmartTypeahead<T>({
 
   const visible = suggestions.slice(0, MAX_SHOWN)
 
-  const updatePosition = () => {
+  const updatePosition = useCallback(() => {
     if (!inputRef.current) return
     const rect = inputRef.current.getBoundingClientRect()
     setDropdownStyle({
@@ -52,7 +52,7 @@ export default function SmartTypeahead<T>({
       width: rect.width,
       zIndex: 9999,
     })
-  }
+  }, [inputRef])
 
   useEffect(() => {
     if (visible.length > 0 && query.trim()) {
@@ -62,7 +62,7 @@ export default function SmartTypeahead<T>({
       setOpen(false)
     }
     setActiveIdx(0)
-  }, [visible.length, query])
+  }, [visible.length, query, updatePosition])
 
   useEffect(() => {
     if (!open) return
@@ -73,7 +73,7 @@ export default function SmartTypeahead<T>({
       window.removeEventListener('scroll', onReposition, true)
       window.removeEventListener('resize', onReposition)
     }
-  }, [open])
+  }, [open, updatePosition])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -86,7 +86,7 @@ export default function SmartTypeahead<T>({
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [inputRef])
 
   const handleSelect = (item: T) => {
     onSelect(item)

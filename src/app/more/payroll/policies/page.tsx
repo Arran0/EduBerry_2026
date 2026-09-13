@@ -2,15 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Users, CalendarDays, AlertTriangle, Check, Trash2, Search } from 'lucide-react'
+import { ArrowLeft, Plus, AlertTriangle, Trash2, Search } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { PUI } from '@/components/payroll/ui'
-import {
-  fetchPolicyGroups, savePolicyGroup, setPolicyGroupMembers, deletePolicyGroup,
-  fetchCalendars, saveCalendar, setCalendarMembers,
-} from '@/lib/payroll/admin'
+import { fetchPolicyGroups, savePolicyGroup, setPolicyGroupMembers, deletePolicyGroup, fetchCalendars, saveCalendar } from '@/lib/payroll/admin'
 import { resolvePolicyFor, resolveCalendarFor, explainCoverage, hasAmbiguousCoverage, BUILTIN_POLICY } from '@/lib/payroll/engine/resolvePolicy'
 import type { PolicyGroup, WorkingCalendar, EngineEmployee, PayrollPolicy, LopRule } from '@/lib/payroll/engine/types'
 
@@ -120,7 +117,7 @@ function Policies() {
 
 // ── Groups ────────────────────────────────────────────────────────────────
 
-function GroupsTab({ groups, staff, onEdit, onReload, createdBy }: {
+function GroupsTab({ groups, staff: _staff, onEdit, onReload, createdBy: _createdBy }: {
   groups: PolicyGroup[]; staff: StaffLite[]; onEdit: (g: PolicyGroup) => void
   onReload: () => Promise<void>; createdBy: string
 }) {
@@ -370,8 +367,7 @@ function LopEditor({ label, rule, onChange }: { label: string; rule: LopRule; on
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function CalendarsTab({ calendars, staff, onReload }: { calendars: WorkingCalendar[]; staff: StaffLite[]; onReload: () => Promise<void> }) {
-  const [editing, setEditing] = useState<WorkingCalendar | null>(null)
+function CalendarsTab({ calendars, staff: _staff, onReload }: { calendars: WorkingCalendar[]; staff: StaffLite[]; onReload: () => Promise<void> }) {
 
   const create = async () => {
     const res = await saveCalendar({

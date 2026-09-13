@@ -58,20 +58,11 @@ export interface PayoutSecrets extends BankConnectionSecrets {
   key_secret: string
 }
 
-/** Collection needs no debit account — money arrives rather than leaves. */
-export type BankCollectSecrets = BankConnectionSecrets
-
 /** Legacy scopes, unchanged. */
 export interface RazorpaySecrets {
   key_secret: string
   webhook_secret: string
 }
-export interface SmartCollectSecrets {
-  base_url: string
-  api_key: string
-  webhook_secret: string
-}
-
 export const BANK_CONNECTION_SECRET_DEFAULTS: BankConnectionSecrets = {
   api_key: '', client_id: '', client_secret: '', oauth_audience: '',
   signing_secret: '', webhook_secret: '',

@@ -77,10 +77,6 @@ function overlays(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.modal-portal'))
 }
 
-function openTitles(): (string | null)[] {
-  return Array.from(document.querySelectorAll('.modal-portal h2')).map(e => e.textContent)
-}
-
 function click(testId: string) {
   const el = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
   if (!el) throw new Error(`no element ${testId}`)

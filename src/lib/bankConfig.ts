@@ -261,33 +261,6 @@ export interface BankPreset {
   note: string
 }
 
-export const BANK_PRESETS: BankPreset[] = [
-  {
-    id: 'generic_api_key',
-    label: 'Generic — API key',
-    connection: { auth_mode: 'api_key', api_key_header: 'x-api-key', signature_header: 'x-signature', signature_encoding: 'hex' },
-    note: 'Start here if your bank issued a single API key and a webhook secret.',
-  },
-  {
-    id: 'generic_oauth2',
-    label: 'Generic — OAuth2 + mutual TLS',
-    connection: { auth_mode: 'oauth2', use_client_cert: true, signature_header: 'x-signature', signature_encoding: 'base64' },
-    note: 'Common for large-bank corporate APIs: a token endpoint plus a client certificate.',
-  },
-  {
-    id: 'generic_hmac',
-    label: 'Generic — HMAC signed requests',
-    connection: { auth_mode: 'hmac', signature_header: 'x-signature', signature_encoding: 'hex' },
-    note: 'Every request body is signed with a shared secret; no token exchange.',
-  },
-  {
-    id: 'file_handoff',
-    label: 'File hand-off (H2H / portal upload)',
-    connection: { auth_mode: 'none' },
-    note: 'No API. EduBerry generates the transfer file and you upload it in your bank portal.',
-  },
-]
-
 // ============================================================
 // Payout config — how salaries leave the school's account
 // ============================================================

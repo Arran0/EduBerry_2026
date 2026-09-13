@@ -131,15 +131,6 @@ export interface DiscussionPost {
   replies?: DiscussionPost[]
 }
 
-export interface FolderWithFiles extends ClassroomFolder {
-  files: ClassroomFile[]
-}
-
-export interface FileWithProgress extends ClassroomFile {
-  progress: FileProgress[]
-  submissions: FileSubmission[]
-}
-
 // --- Helpers ---
 
 /** Returns true if the classroom's end_date is in the past (classroom is closed). */
@@ -1146,21 +1137,6 @@ export async function fetchCoordinators(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
-/** Returns all users eligible to be set as responsible coordinator (coordinator, principal, admin). */
-export async function fetchCoordinatorEligible(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('role', ['coordinator', 'principal', 'admin'])
-    .order('full_name', { ascending: true })
-
-  if (error) {
-    console.error('Failed to fetch coordinator-eligible users:', error.message)
-    return []
-  }
-  return (data ?? []) as UserProfile[]
-}
-
 /** Fetches ALL file progress records across the given file IDs (any student). For staff use. */
 export async function fetchProgressForFiles(fileIds: string[]): Promise<FileProgress[]> {
   if (fileIds.length === 0) return []
@@ -1406,13 +1382,6 @@ export async function fetchClassroomFilesForDateRange(
 }
 
 // ── Report Card Titles & Remarks ─────────────────────────────────────────────
-
-export interface ReportCardTitle {
-  id: string
-  title: string
-  created_by: string | null
-  created_at: string
-}
 
 export interface ReportCardRemark {
   id: string

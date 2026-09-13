@@ -7,10 +7,8 @@ import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { usePageConfig } from '@/contexts/PageConfigContext'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { isStaffRole } from '@/lib/supabase'
 import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
@@ -205,7 +203,6 @@ function SectionHeading({
 export default function AcademicsPage() {
   const { user, profile } = useAuth()
   const router = useRouter()
-  const { pageIcons: pageConfig } = usePageConfig()
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -228,7 +225,6 @@ export default function AcademicsPage() {
   const [bannerLoaded, setBannerLoaded] = useState(false)
 
   const isStudent   = profile?.role === 'student'
-  const isStaff     = profile ? isStaffRole(profile.role) : false
   const isAdmin     = profile?.role === 'admin'
 
   // Homerooms this account is the class teacher of — null until the lookup

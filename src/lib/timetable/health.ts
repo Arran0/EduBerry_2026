@@ -9,9 +9,7 @@ import type {
   PlacedEntry, PeriodSlot, Requirement, TimetableConstraint, HomeroomLite, TimetableConfig, Weekday,
 } from './types'
 import { detectConflicts } from './generator'
-import {
-  buildConstraintIndex, cellKey, timeOffBlocked, limitBucketsFor,
-} from './constraints'
+import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
 import { teacherIdsOf } from './types'
 
 export interface HealthComponent {

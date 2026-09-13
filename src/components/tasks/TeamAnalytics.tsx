@@ -11,7 +11,7 @@ import {
   analyticsCacheKey,
   toMonthParam,
 } from '@/lib/teamAnalyticsCache'
-import { UserProfile, UserRole } from '@/lib/supabase'
+import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 
 interface TeamAnalyticsProps {
@@ -180,7 +180,6 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   const visibleMembers = members.slice(0, memberVisibleCount)
 
   // Aggregate stats
-  const totalCompleted = members.reduce((s, m) => s + m.stats.completed, 0)
   const totalBonus = members.reduce((s, m) => s + m.stats.bonus, 0)
   const totalTasks = members.reduce((s, m) => s + m.stats.total, 0)
   const totalOverdue = members.reduce((s, m) => s + m.stats.overdue, 0)

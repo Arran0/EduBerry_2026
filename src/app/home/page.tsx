@@ -3,10 +3,9 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
+import { isAdminRole } from '@/lib/supabase'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   Bell,
   Megaphone,
@@ -303,7 +302,6 @@ const ICON_GRADIENTS = [
 ]
 
 export default function HomePage() {
-  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const isCoordinator = profile?.role === 'coordinator'
@@ -1146,7 +1144,7 @@ export default function HomePage() {
               <div className="absolute inset-x-0 bottom-0 z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-7">
                   {(() => {
-                    const { line1, line2, icon } = getGreetingData()
+                    const { line1, icon } = getGreetingData()
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div

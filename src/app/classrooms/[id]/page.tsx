@@ -101,21 +101,27 @@ function ClassroomDetailPageContent() {
   // id) instead of every classroom sharing one fixed purple/blue/cyan combo.
   const palette = classroom ? pickClassroomPalette(classroom.id) : null
 
+  // Read the two fields the banner actually depends on, so the dependency list
+  // is the real one rather than the whole classroom object (which changes
+  // identity on every refetch and would re-run this for unrelated edits).
+  const classroomId  = classroom?.id
+  const classroomBanner = classroom?.banner_url
+
   useEffect(() => {
-    if (!classroom) return
+    if (!classroomId) return
     setBannerReady(false)
-    if (classroom.banner_url) {
-      sampleImageLuminance(classroom.banner_url, 0.6).then(setBannerLum)
+    if (classroomBanner) {
+      sampleImageLuminance(classroomBanner, 0.6).then(setBannerLum)
       const img = new window.Image()
       img.onload = () => setBannerReady(true)
       img.onerror = () => setBannerReady(true)
-      img.src = classroom.banner_url
+      img.src = classroomBanner
     } else {
-      const p = pickClassroomPalette(classroom.id)
+      const p = pickClassroomPalette(classroomId)
       setBannerLum((hexToLuminance(p.from) + hexToLuminance(p.to)) / 2)
       setBannerReady(true)
     }
-  }, [classroom?.banner_url, classroom?.id])
+  }, [classroomBanner, classroomId])
 
   if (!user || !profile) return null
 

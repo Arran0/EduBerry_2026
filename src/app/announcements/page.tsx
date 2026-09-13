@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import SmartboardLayout from '@/components/SmartboardLayout'
 import { useAuth } from '@/contexts/AuthContext'

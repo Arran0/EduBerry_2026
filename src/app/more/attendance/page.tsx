@@ -752,7 +752,12 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     return () => { cancelled = true }
   }, [scoped])
 
-  const pickerHomerooms = scoped ? (scopeHomerooms ?? []) : allHomerooms
+  // `scopeHomerooms ?? []` builds a new array every render, which would make the
+  // homeroomOptions memo below recompute every time. Memoise the choice itself.
+  const pickerHomerooms = useMemo(
+    () => (scoped ? (scopeHomerooms ?? []) : allHomerooms),
+    [scoped, scopeHomerooms, allHomerooms],
+  )
   const homeroomOptions: SmartOption[] = useMemo(() => {
     const opts = pickerHomerooms.map(h => ({
       value: h.id,

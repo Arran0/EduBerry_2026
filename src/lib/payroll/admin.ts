@@ -11,11 +11,8 @@ import type {
   ComponentRow, StructureRow, AssignmentRow, OverrideRow, PolicyGroupRow,
   CalendarRow, RuleSetRow, StatutoryRow,
 } from './rows'
-import {
-  toComponentDef, toEngineStructure, toEngineAssignment, toPolicyGroup,
-  toWorkingCalendar, toRuleSet,
-} from './rows'
-import type { ComponentDef, PolicyGroup, WorkingCalendar, RuleSet, EngineStructure } from './engine/types'
+import { toComponentDef, toPolicyGroup, toWorkingCalendar } from './rows'
+import type { ComponentDef, PolicyGroup, WorkingCalendar } from './engine/types'
 
 type Result = { success: boolean; error?: string }
 

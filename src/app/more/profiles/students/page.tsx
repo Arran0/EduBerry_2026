@@ -99,7 +99,7 @@ export default function StudentProfileManagerPage() {
   const [sortBy, setSortBy] = useState<SortKey>('name_asc')
   const [showBulkImport, setShowBulkImport] = useState(false)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)

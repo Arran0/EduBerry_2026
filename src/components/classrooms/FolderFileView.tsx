@@ -138,13 +138,11 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FolderFileView({
-  classroomId, userId, userRole, type, classroom,
+  classroomId, userId, userRole, type, classroom: _classroom,
 }: FolderFileViewProps) {
   const isStudent  = userRole === 'student'
   const isStaff    = !isStudent
-  const isSmartboard = userRole === 'smartboard'
   const canManage  = isStaff  // staff + smartboard can create/edit
-  const isHomework = type === 'homework'
 
   // Core data
   const [folders,           setFolders]           = useState<ClassroomFolder[]>([])

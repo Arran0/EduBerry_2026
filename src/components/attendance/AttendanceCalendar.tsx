@@ -95,6 +95,9 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     setRecords(data)
     setLeaveApps(apps)
     setLoading(false)
+    // refreshKey is not read here — it is the caller's way of asking for a
+    // refetch after marking attendance, so it belongs in the dependency list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, homeroomId, year, month, refreshKey])
 
   useEffect(() => { load() }, [load])

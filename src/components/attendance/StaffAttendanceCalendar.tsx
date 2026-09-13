@@ -117,7 +117,7 @@ interface Props {
 }
 
 export default function StaffAttendanceCalendar({
-  staffId, staffName, mode, refreshKey = 0, initialYear, initialMonth,
+  staffId, staffName, mode: _mode, refreshKey = 0, initialYear, initialMonth,
   onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false, fetchRecords,
 }: Props) {
   // Server clock in the school's timezone — "today" decides which days can turn

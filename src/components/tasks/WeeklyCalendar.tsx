@@ -3,75 +3,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  AlertTriangle,
-  FolderKanban,
-  Calendar,
-  Clock,
-  Star,
-  X,
-  Check,
-  Circle,
-  CircleDot,
-  CheckCircle2,
-  CheckSquare,
-  Square,
-  MessageSquare,
-  Send,
-  ShieldCheck,
-  Repeat,
-  Trash2,
-  Paperclip,
-  Link2,
-  Image as ImageIcon,
-  FileText,
-  ExternalLink,
-  Ban,
-  MinusCircle,
-  RotateCcw,
-  HelpCircle,
-  FileSpreadsheet,
-  Lock,
-  Maximize2,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, FolderKanban, Calendar, Clock, Star, X, Circle, CircleDot, CheckCircle2, CheckSquare, Square, MessageSquare, Send, ShieldCheck, Repeat, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, Ban, MinusCircle, RotateCcw, HelpCircle, FileSpreadsheet, Lock, Maximize2 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
-import {
-  fetchCalendarData,
-  fetchOverdueTasks,
-  fetchBonusTasksForCalendar,
-  fetchTaskDetails,
-  createTask,
-  TaskDetails,
-  Task,
-  TaskWithDetails,
-  TaskStatus,
-  STATUS_DOT_COLORS,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  RECURRENCE_LABELS,
-  getDynamicStatusLabel,
-  getDynamicStatusColors,
-  getDynamicDotColor,
-  getNextStatus,
-  canVerifyTask,
-  updateTaskStatus,
-  submitTaskWork,
-  needsSubmissionFirst,
-  toggleChecklistItem,
-  addChecklistItem,
-  addComment,
-  deleteTask,
-  uploadTaskAttachment,
-  isTaskCompleted,
-  formatDateTime,
-  TaskChecklistItem,
-  TaskComment,
-} from '@/lib/tasks'
+import { fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, fetchTaskDetails, createTask, TaskDetails, Task, TaskWithDetails, TaskStatus, RECURRENCE_LABELS, getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask, updateTaskStatus, submitTaskWork, needsSubmissionFirst, toggleChecklistItem, addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime, TaskChecklistItem, TaskComment } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
   Subtask,
@@ -1387,7 +1323,7 @@ function TaskCalendarModal({
   onStatusChange,
   onTaskDeleted,
   onTaskUpdated,
-  availableAssignees = [],
+  availableAssignees: _availableAssignees = [],
 }: {
   task: TaskWithDetails
   canCheck: boolean

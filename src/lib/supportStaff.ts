@@ -100,9 +100,6 @@ export const SUPPORT_ATTENDANCE_STATUS_PILL: Record<SupportAttendanceStatus, str
   e:        'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-/** Statuses that count as the person having worked the day. */
-export const SUPPORT_PRESENT_STATUSES: SupportAttendanceStatus[] = ['present', 'late', 'half_day', 'e']
-
 // ============================================
 // Roster
 // ============================================
@@ -360,18 +357,6 @@ export function computeSupportDayStats(
   }
   stats.present_pct = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0
   return stats
-}
-
-export interface SupportPersonStats {
-  marked_days: number
-  present: number
-  late: number
-  half_day: number
-  absent: number
-  on_leave: number
-  e: number
-  /** (present + late + e + ½·half_day) / (marked days − leave), over marked days only. */
-  present_pct: number
 }
 
 /**

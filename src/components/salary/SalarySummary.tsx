@@ -7,11 +7,7 @@ import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { formatPeriod } from '@/lib/salary'
 import { recomputePendingAttendance } from '@/lib/attendance'
-import {
-  EMPTY_PAYROLL_CONTEXT, MonthlyPayrollStats, PayrollContext,
-  fetchMonthlyPayrollStats, fetchPayrollContext, defaultPayrollMonth,
-  shiftMonth, monthIndex, percentChange, comparable,
-} from '@/lib/salaryStats'
+import { MonthlyPayrollStats, PayrollContext, fetchMonthlyPayrollStats, fetchPayrollContext, defaultPayrollMonth, shiftMonth, monthIndex, percentChange, comparable } from '@/lib/salaryStats'
 
 /** Which admin section a tile jumps to when clicked. */
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'

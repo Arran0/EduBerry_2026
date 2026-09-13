@@ -45,37 +45,6 @@ export const PAGE_DEFAULTS: PageIconMap = {
   more:          { iconName: 'Layers',        gradientFrom: 'from-pink-400',   gradientTo: 'to-purple-500' },
 }
 
-export const PAGE_LABELS: Record<PageId, string> = {
-  tasks: 'Task Manager', announcements: 'Announcements', academics: 'Academics',
-  home: 'Home', leave: 'Student OD/Leave', fees: 'Fee Manager', feedback: 'Feedback',
-  staffLeave: 'Staff OD / Leave', classrooms: 'Classroom Management',
-  teams: 'Teacher Teams', profiles: 'Profile Manager', more: 'More (All sub-pages)',
-}
-
-export const AVAILABLE_ICONS: string[] = [
-  'ClipboardList', 'Megaphone', 'GraduationCap', 'Home', 'BookOpen',
-  'Calendar', 'CalendarDays', 'Users', 'UserPlus', 'BarChart3',
-  'Bell', 'Star', 'Award', 'Target', 'Layers', 'Grid',
-  'FileText', 'MessageSquare', 'Settings', 'TrendingUp',
-  'CheckSquare', 'Zap', 'CreditCard', 'Pencil',
-  'FolderOpen', 'ListChecks', 'Lightbulb', 'Newspaper',
-]
-
-export const GRADIENT_OPTIONS = [
-  { label: 'Amber → Orange',  from: 'from-amber-400',  to: 'to-orange-500'  },
-  { label: 'Blue → Purple',   from: 'from-blue-400',   to: 'to-purple-500'  },
-  { label: 'Cyan → Teal',     from: 'from-cyan-500',   to: 'to-teal-500'    },
-  { label: 'Green → Emerald', from: 'from-green-400',  to: 'to-emerald-500' },
-  { label: 'Sky → Blue',      from: 'from-sky-400',    to: 'to-blue-500'    },
-  { label: 'Violet → Purple', from: 'from-violet-400', to: 'to-purple-500'  },
-  { label: 'Pink → Rose',     from: 'from-pink-400',   to: 'to-rose-500'    },
-  { label: 'Indigo → Blue',   from: 'from-indigo-400', to: 'to-blue-500'    },
-  { label: 'Teal → Cyan',     from: 'from-teal-400',   to: 'to-cyan-500'    },
-  { label: 'Orange → Amber',  from: 'from-orange-400', to: 'to-amber-500'   },
-  { label: 'Red → Rose',      from: 'from-red-400',    to: 'to-rose-500'    },
-  { label: 'Slate → Slate',   from: 'from-slate-400',  to: 'to-slate-600'   },
-]
-
 // ---- Branding ----
 
 export interface SiteBranding {
@@ -475,9 +444,6 @@ export const STAFF_LEAVE_BANNER_DEFAULT: AnnouncementBannerConfig = {
 }
 export const CLASSROOMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#0891b2', gradTo: '#0f766e', imageUrl: '',
-}
-export const PROFILES_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#dc2626', gradTo: '#f97316', imageUrl: '',
 }
 export const TEAMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#db2777', gradTo: '#7c3aed', imageUrl: '',

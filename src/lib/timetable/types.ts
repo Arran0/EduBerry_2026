@@ -201,16 +201,6 @@ export interface TimetableConstraint {
   updated_at: string
 }
 
-export const CONSTRAINT_TYPE_LABELS: Record<ConstraintType, string> = {
-  time_off: 'Time off',
-  min_per_day: 'Min / day',
-  max_per_day: 'Max / day',
-  min_per_week: 'Min / week',
-  max_per_week: 'Max / week',
-  max_in_a_row: 'Max in a row',
-  pin_class_teacher: 'Pin class teacher',
-}
-
 export interface Timetable {
   id: string
   config_id: string
@@ -334,28 +324,10 @@ export interface CombinedClassInput {
 // Used by src/lib/timetable/generator.ts (Round 3). Defined here
 // so the data layer and the engine share one contract.
 
-// A single placeable lesson unit expanded from a requirement
-// (a requirement of periods_per_week = 5 becomes 5 LessonUnits).
-export interface LessonUnit {
-  requirementId: string
-  homeroomId: string
-  subjectId: string
-  teacherId: string | null
-  teacherIds: string[]
-  roomType: RoomType
-  maxPerDay: number
-}
-
 // Minimal homeroom shape the solver needs (for pin_class_teacher).
 export interface HomeroomLite {
   id: string
   class_teacher_id: string | null
-}
-
-// A cell in the grid the solver can place a lesson into.
-export interface GridCell {
-  day: Weekday
-  slotId: string
 }
 
 // A draft placement produced by the solver (not yet persisted).

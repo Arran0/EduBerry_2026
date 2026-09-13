@@ -3,9 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  X, MapPin, Users, Plus, Trash2, AlertTriangle, Loader2, Navigation,
-} from 'lucide-react'
+import { X, MapPin, Users, Plus, Trash2, AlertTriangle, Loader2 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import { FenceShape, GeofenceZoneInput, fetchGeofenceZones, saveGeofenceZones } from '@/lib/attendance'
 import { LatLng, polygonCentroid } from '@/lib/geofence'

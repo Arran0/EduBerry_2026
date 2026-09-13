@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Award, Bookmark, FileText, GraduationCap,
   Loader2, MessageSquare, Printer, Save, Trash2,

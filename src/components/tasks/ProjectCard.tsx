@@ -3,26 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  X,
-  Calendar,
-  Clock,
-  Tag,
-  Plus,
-  Trash2,
-  Star,
-  Users,
-  ChevronRight,
-  ListOrdered,
-  FileText,
-  AlertCircle,
-  Edit3,
-  Check,
-  ShieldCheck,
-  UserPlus,
-  UserMinus,
-  Search,
-} from 'lucide-react'
+import { X, Calendar, Clock, Plus, Trash2, Star, Users, ChevronRight, ListOrdered, FileText, AlertCircle, Edit3, Check, ShieldCheck, UserPlus, Search } from 'lucide-react'
 import {
   ProjectWithDetails,
   ProjectMember,
@@ -36,14 +17,7 @@ import {
   addProjectMember,
   removeProjectMember,
 } from '@/lib/projects'
-import {
-  TaskStatus,
-  getDynamicStatusLabel,
-  getDynamicStatusColors,
-  getDynamicDotColor,
-  getNextStatus,
-  canVerifyTask,
-} from '@/lib/tasks'
+import { getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import SubtaskCard from './SubtaskCard'

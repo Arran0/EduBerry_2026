@@ -416,7 +416,7 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
 }
 
 function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } {
-  const { blocks, combined, locked, geo, index } = args
+  const { blocks, locked, geo, index } = args
   const state = new SolveState()
   for (const l of locked) {
     const idx = geo.slotOrder.get(l.slotId) ?? 0

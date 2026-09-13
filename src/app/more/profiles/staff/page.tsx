@@ -181,7 +181,7 @@ export default function StaffProfileManagerPage() {
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)

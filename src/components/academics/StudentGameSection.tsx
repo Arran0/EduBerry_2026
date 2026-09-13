@@ -105,57 +105,6 @@ function getShortMessage(s: EduStanding, idx: number, improved: boolean, delta: 
   return msgs[rot % msgs.length]
 }
 
-function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
-  const cls = s.classroom_title
-  const rot = DOY + idx
-  if (improved && s.points) {
-    const msgs = [
-      `${first} climbed ${delta} place${delta === 1 ? '' : 's'} in ${cls} this month!`,
-      `On the rise in ${cls}, ${first} — up ${delta} since last month.`,
-      `Momentum! ${first} jumped ${delta} spot${delta === 1 ? '' : 's'} in ${cls}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (!s.points) {
-    const msgs = [
-      `${cls} is waiting — earn your first EduPoints, ${first}!`,
-      `First task = first win in ${cls}, ${first}.`,
-      `Claim your spot on the ${cls} leaderboard, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank === 1) {
-    const msgs = [
-      `${first} owns ${cls}. Defend that crown!`,
-      `Unbeatable in ${cls}, ${first}. Stay #1.`,
-      `Nobody touches the top of ${cls}, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 3) {
-    const msgs = [
-      `Top 3 in ${cls} — that #1 is one push away, ${first}.`,
-      `${first} at #${s.rank} in ${cls}. Almost at the summit!`,
-      `Hunting the top of ${cls}, ${first} — #${s.rank} and climbing.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 10) {
-    const msgs = [
-      `#${s.rank} in ${cls}, ${first}. Top 3 is in range.`,
-      `${first} holds #${s.rank} in ${cls}. Keep it flowing.`,
-      `Every point lifts you in ${cls}, ${first}. #${s.rank} now.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  const msgs = [
-    `${s.points} pts in ${cls}, ${first}. The top 10 is reachable.`,
-    `Building momentum in ${cls} with ${s.points} pts, ${first}.`,
-    `Keep stacking in ${cls}, ${first} — climb the board.`,
-  ]
-  return msgs[rot % msgs.length]
-}
-
 /* ─────────────────────────── tier animation overlays ─────────────────────────── */
 
 const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#06b6d4']
@@ -381,7 +330,7 @@ const FLICK_VELOCITY = 0.35
  * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
  * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: string }) {
+export function EduPointsCarousel({ briefs, first: _first }: { briefs: Brief[]; first: string }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active

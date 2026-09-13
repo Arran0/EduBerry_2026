@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Scale, Plus, Check, Clock, FileText } from 'lucide-react'
+import { ArrowLeft, Scale, Plus, Check, Clock } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { PUI } from '@/components/payroll/ui'
@@ -32,7 +32,7 @@ function Compliance() {
   const { profile } = useAuth()
   const [rows, setRows] = useState<RuleSetRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<RuleSetRow | null>(null)
+  const [, setEditing] = useState<RuleSetRow | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
