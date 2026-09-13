@@ -100,9 +100,16 @@ export type LocationVerdict =
   | 'inside' | 'outside' | 'uncertain' | 'device_issue' | 'location_off'
   | 'no_fix' | 'exempt' | 'no_fence'
 
+/** The slice of an attendance row the student calendars actually render. */
+export type AttendanceDayRecord = Pick<AttendanceRecord, 'id' | 'date' | 'status'>
+
+/** The slice a mark sheet needs to seed its editor rows. */
+export type AttendanceSheetRecord =
+  Pick<AttendanceRecord, 'status' | 'remarks' | 'leave_application_id'>
+
 export interface AttendanceSheetRow {
   student: UserProfile
-  record: AttendanceRecord | null
+  record: AttendanceSheetRecord | null
 }
 
 export interface AttendanceSummary {
@@ -519,14 +526,14 @@ export async function fetchMyAttendanceByMonth(
   year: number,
   month: number, // 1-based
   homeroomId?: string
-): Promise<AttendanceRecord[]> {
+): Promise<AttendanceDayRecord[]> {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
   let query = supabase
     .from('attendance_records')
-    .select('*')
+    .select('id, date, status')
     .eq('student_id', studentId)
     .gte('date', startDate)
     .lte('date', endDate)
@@ -612,7 +619,7 @@ export async function fetchAttendanceSheet(
   // Fetch existing records for this homeroom+date
   const { data: records, error: recError } = await supabase
     .from('attendance_records')
-    .select('*')
+    .select('student_id, status, remarks, leave_application_id')
     .eq('homeroom_id', homeroomId)
     .eq('date', date)
 
@@ -620,7 +627,7 @@ export async function fetchAttendanceSheet(
     console.error('fetchAttendanceSheet records error:', recError)
   }
 
-  const recordByStudent: Record<string, AttendanceRecord> = {}
+  const recordByStudent: Record<string, AttendanceSheetRecord> = {}
   for (const r of records ?? []) {
     recordByStudent[r.student_id] = r
   }
@@ -1182,44 +1189,40 @@ export async function fetchStudentAttendanceStatusesForHomerooms(
 }
 
 // Present/absent status sets shared by every screen that tallies student
-// attendance (the report, the home dashboard, the class-teacher card) — late
-// and on-duty count as present, on-leave counts as absent, so results always
-// agree with the categorization the Student Attendance report displays.
+// attendance in the browser (the report, the class-teacher card) — late and
+// on-duty count as present, on-leave counts as absent, so results always agree
+// with the categorization the Student Attendance report displays.
+// The same split is encoded in the `student_attendance_tally` and
+// `homeroom_attendance_counts` functions, which do their counting in the
+// database; change both together.
 export const STUDENT_PRESENT_STATUSES = new Set<AttendanceStatus>(['present', 'late', 'on_duty'])
 export const STUDENT_ABSENT_STATUSES  = new Set<AttendanceStatus>(['absent', 'on_leave'])
 
 export interface StudentAttendanceTally { present: number; absent: number; irregular: number }
 
 /**
- * Whole-school present / absent / irregular tallies for a date, using exact
- * counts from small range-limited queries so the numbers stay correct even
- * once the day's row count passes PostgREST's 1000-row response cap — the
- * same trap `fetchStudentPresentByDate`'s total sidesteps by pairing
- * `{ count: 'exact' }` with a real data fetch. A head-only count can silently
- * return 0 for some enum values on this project's setup, so each query below
- * still asks for one row of data rather than a head-only request.
+ * Whole-school present / absent / irregular tallies for a date.
+ *
+ * Counted in the database (`student_attendance_tally`) rather than by three
+ * separate exact-count round trips from the browser: one query instead of
+ * three on a home-page tile every manager loads, and no dependence on
+ * PostgREST's row cap, since no rows travel at all. The function is
+ * SECURITY INVOKER, so RLS still decides which rows are countable — a student
+ * calling it sees exactly what they could already count for themselves.
  */
 export async function fetchStudentAttendanceTallyByDate(date: string): Promise<StudentAttendanceTally> {
-  const presentList = [...STUDENT_PRESENT_STATUSES]
-  const absentList  = [...STUDENT_ABSENT_STATUSES]
+  const { data, error } = await supabase
+    .rpc('student_attendance_tally', { p_date: date })
+    .maybeSingle<StudentAttendanceTally>()
 
-  const [
-    { count: total, error: e1 },
-    { count: present, error: e2 },
-    { count: absent, error: e3 },
-  ] = await Promise.all([
-    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).range(0, 0),
-    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).in('status', presentList).range(0, 0),
-    supabase.from('attendance_records').select('student_id', { count: 'exact' }).eq('date', date).in('status', absentList).range(0, 0),
-  ])
-  if (e1 || e2 || e3) console.error('fetchStudentAttendanceTallyByDate error:', e1 || e2 || e3)
-
-  const presentCount = present ?? 0
-  const absentCount = absent ?? 0
+  if (error) {
+    console.error('fetchStudentAttendanceTallyByDate error:', error)
+    return { present: 0, absent: 0, irregular: 0 }
+  }
   return {
-    present: presentCount,
-    absent: absentCount,
-    irregular: Math.max((total ?? 0) - presentCount - absentCount, 0),
+    present: data?.present ?? 0,
+    absent: data?.absent ?? 0,
+    irregular: data?.irregular ?? 0,
   }
 }
 
@@ -2435,71 +2438,17 @@ export function computeMonthlyStats(
 }
 
 // ============================================
-// Absentee Lists (for manager dashboard)
+// All-student attendance report
+// (present + irregular, optionally per-homeroom)
 // ============================================
 
-export interface StudentAbsenteeRecord {
+/** One student's status for one day, as the report lists it. */
+export interface StudentAttendanceEntry {
   student: UserProfile
   status: AttendanceStatus
   homeroom_id: string
   homeroom_name?: string
 }
-
-export async function fetchStudentAbsenteesByDate(
-  date: string
-): Promise<StudentAbsenteeRecord[]> {
-  // Step 1: fetch raw attendance records for the date
-  const { data: records, error: recError } = await supabase
-    .from('attendance_records')
-    .select('student_id, homeroom_id, status')
-    .eq('date', date)
-    .in('status', ['absent', 'late', 'on_leave'])
-
-  if (recError) {
-    console.error('fetchStudentAbsenteesByDate records error:', recError)
-    return []
-  }
-  if (!records || records.length === 0) return []
-
-  // Step 2: fetch student profiles for the returned IDs
-  const studentIds = [...new Set(records.map(r => r.student_id))]
-  const { data: profiles, error: profError } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, role, avatar_url, grade, section')
-    .in('id', studentIds)
-
-  if (profError) {
-    console.error('fetchStudentAbsenteesByDate profiles error:', profError)
-    return []
-  }
-
-  // Step 3: fetch homeroom names for unique homeroom IDs
-  const homeroomIds = [...new Set(records.map(r => r.homeroom_id))]
-  const { data: homerooms } = await supabase
-    .from('homerooms')
-    .select('id, name')
-    .in('id', homeroomIds)
-
-  const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
-  const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
-
-  const results: StudentAbsenteeRecord[] = []
-  for (const r of records) {
-    const student = profileById.get(r.student_id)
-    if (!student) continue
-    results.push({
-      student,
-      status: r.status as AttendanceStatus,
-      homeroom_id: r.homeroom_id,
-      homeroom_name: homeroomNameById.get(r.homeroom_id),
-    })
-  }
-  return results
-}
-
-// ── All-student attendance report (present + irregular, optionally per-homeroom) ──
-
-export type StudentAttendanceEntry = StudentAbsenteeRecord
 
 // Attach profile + homeroom name to raw attendance rows (two cheap lookups, RLS-safe).
 async function hydrateStudentEntries(
@@ -2616,32 +2565,36 @@ export interface HomeroomAttendanceCounts {
   marked: number
 }
 
-// PostgREST caps a single response at 1000 rows, so walk the range in pages.
-// Ordered by student_id so the paging window is stable between round-trips.
-async function fetchHomeroomStatusRowsPaged(
+interface HomeroomTallyRow {
+  homeroom_id: string
+  present: number
+  absent: number
+  irregular: number
+}
+
+/**
+ * Per-homeroom tallies for a date, counted in the database.
+ *
+ * This used to pull every attendance row for the homerooms on screen — paged
+ * 1000 at a time past PostgREST's response cap — purely to add three numbers
+ * per homeroom in the browser. `homeroom_attendance_counts` returns one row
+ * per homeroom instead, so a whole-school page moves ~30 rows rather than the
+ * whole day's roster. SECURITY INVOKER, so RLS still applies.
+ */
+async function fetchHomeroomTallies(
   date: string,
   homeroomIds: string[]
-): Promise<{ homeroom_id: string; status: string }[]> {
+): Promise<HomeroomTallyRow[]> {
   if (homeroomIds.length === 0) return []
-  const PAGE = 1000
-  const out: { homeroom_id: string; status: string }[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('attendance_records')
-      .select('homeroom_id, status, student_id')
-      .eq('date', date)
-      .in('homeroom_id', homeroomIds)
-      .order('student_id', { ascending: true })
-      .range(from, from + PAGE - 1)
-
-    if (error) {
-      console.error('fetchHomeroomStatusRowsPaged error:', error)
-      break
-    }
-    out.push(...(data ?? []))
-    if (!data || data.length < PAGE) break
+  const { data, error } = await supabase.rpc('homeroom_attendance_counts', {
+    p_date: date,
+    p_homeroom_ids: homeroomIds,
+  })
+  if (error) {
+    console.error('fetchHomeroomTallies error:', error)
+    return []
   }
-  return out
+  return (data ?? []) as HomeroomTallyRow[]
 }
 
 /**
@@ -2690,19 +2643,11 @@ export async function fetchHomeroomAttendanceCountsByDate(
   }
   if (!homerooms || homerooms.length === 0) return { rows: [], total: count ?? 0 }
 
-  const records = await fetchHomeroomStatusRowsPaged(date, homerooms.map(h => h.id))
-
   // Late and on-duty count as present, on leave counts as absent — matching
   // the student-wise report's split. Only half day (and the rarely-used
-  // "excused") remain genuinely irregular.
-  const tallyById = new Map<string, { present: number; absent: number; irregular: number }>()
-  for (const r of records) {
-    let t = tallyById.get(r.homeroom_id)
-    if (!t) { t = { present: 0, absent: 0, irregular: 0 }; tallyById.set(r.homeroom_id, t) }
-    if (r.status === 'present' || r.status === 'late' || r.status === 'on_duty') t.present++
-    else if (r.status === 'absent' || r.status === 'on_leave') t.absent++
-    else t.irregular++
-  }
+  // "excused") remain genuinely irregular. That split lives in the RPC now.
+  const tallies = await fetchHomeroomTallies(date, homerooms.map(h => h.id))
+  const tallyById = new Map(tallies.map(t => [t.homeroom_id, t]))
 
   const rows: HomeroomAttendanceCounts[] = homerooms.map(h => {
     const t = tallyById.get(h.id) ?? { present: 0, absent: 0, irregular: 0 }

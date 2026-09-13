@@ -3,7 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock3, BookOpen, ShieldCheck, HelpCircle, Briefcase, X, ExternalLink } from 'lucide-react'
-import { AttendanceRecord, AttendanceStatus, fetchMyAttendanceByMonth } from '@/lib/attendance'
+import {
+  AttendanceDayRecord,
+  AttendanceStatus,
+  ATTENDANCE_STATUS_LABELS,
+  fetchMyAttendanceByMonth,
+} from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
   fetchLeaveApplicationsForStudentByMonth,
@@ -30,12 +35,6 @@ const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
   excused:  <ShieldCheck size={11} />,
   on_duty:  <Briefcase size={11} />,
   half_day: <span className="text-[9px] font-extrabold leading-none">½</span>,
-}
-
-const STATUS_LABELS: Record<AttendanceStatus, string> = {
-  present: 'Present', absent: 'Absent', late: 'Late',
-  on_leave: 'On Leave (OL)', excused: 'Excused', on_duty: 'On Duty (OD)',
-  half_day: 'Half Day',
 }
 
 function monthName(year: number, month: number) {
@@ -80,7 +79,7 @@ interface AttendanceCalendarProps {
 }
 
 export default function AttendanceCalendar({ studentId, homeroomId, year, month, onMonthChange, onAppOpen, onEmptyDayClick, viewerUserId, viewerRole, refreshKey = 0 }: AttendanceCalendarProps) {
-  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [records, setRecords] = useState<AttendanceDayRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedApps, setSelectedApps] = useState<LeaveApplicationWithDetails[] | null>(null)
@@ -102,7 +101,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
   useEffect(() => { load() }, [load])
 
-  const byDay: Record<number, AttendanceRecord> = {}
+  const byDay: Record<number, AttendanceDayRecord> = {}
   for (const r of records) byDay[parseInt(r.date.split('-')[2], 10)] = r
 
   const totalDays = daysInMonth(year, month)
@@ -266,7 +265,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
           {(['present', 'absent', 'late', 'half_day'] as AttendanceStatus[]).map(s => (
             <div key={s} className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
-              <span className="text-[10px] text-slate-500 font-medium">{STATUS_LABELS[s]}</span>
+              <span className="text-[10px] text-slate-500 font-medium">{ATTENDANCE_STATUS_LABELS[s]}</span>
             </div>
           ))}
           <div className="flex items-center gap-1.5">

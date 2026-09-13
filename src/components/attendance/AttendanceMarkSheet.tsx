@@ -9,7 +9,7 @@ import {
   fetchAttendanceSheet,
   bulkMarkAttendance,
   fetchMyAttendanceByMonth,
-  AttendanceRecord,
+  AttendanceDayRecord,
 } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
@@ -123,7 +123,7 @@ interface StudentCalendarModalProps {
 function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, onClose }: StudentCalendarModalProps) {
   const [year, setYear] = useState(initialYear)
   const [month, setMonth] = useState(initialMonth)
-  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [records, setRecords] = useState<AttendanceDayRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
@@ -151,7 +151,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
   for (let d = 1; d <= totalDays; d++) cells.push(d)
   while (cells.length % 7 !== 0) cells.push(null)
 
-  const byDay: Record<number, AttendanceRecord> = {}
+  const byDay: Record<number, AttendanceDayRecord> = {}
   for (const r of records) byDay[parseInt(r.date.split('-')[2], 10)] = r
 
   const leaveByDay: Record<number, LeaveApplicationWithDetails[]> = {}
