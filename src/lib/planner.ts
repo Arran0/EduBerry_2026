@@ -85,12 +85,12 @@ export function periodColumnLabels(slots: TaskSlot[]): string[] {
 
 // ── Template / export ───────────────────────────────────────────────────────
 
-export interface PlannerSheetOptions {
+interface PlannerSheetOptions {
   periodLabels: string[]
   rows: PlannerRow[]
 }
 
-export function buildPlannerWorkbook({ periodLabels, rows }: PlannerSheetOptions): XLSX.WorkBook {
+function buildPlannerWorkbook({ periodLabels, rows }: PlannerSheetOptions): XLSX.WorkBook {
   const totalCols = 2 + periodLabels.length
 
   const aoa: string[][] = []

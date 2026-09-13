@@ -95,6 +95,14 @@ export interface NewTaskInput {
   checklist_items?: string[]
 }
 
+/**
+ * The only profile fields the assignee pickers, avatars and member lists in the
+ * Task Manager read. The profiles joins throughout this file have always
+ * selected exactly these; the places that used to select '*' were shipping all
+ * 15 columns of a profile row for the four that actually get rendered.
+ */
+const ASSIGNEE_PROFILE_COLUMNS = 'id, full_name, avatar_url, role'
+
 // ============================================
 // Status helpers
 // ============================================
@@ -313,16 +321,21 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
     return null
   }
 
-  await supabase.from('task_assignees').insert(
-    tasks.map((task, i) => ({ task_id: task.id, user_id: assigneeIds[i] }))
-  )
-
-  if (input.checklist_items && input.checklist_items.length > 0) {
-    const checklistRecords = tasks.flatMap(task =>
-      input.checklist_items!.map((text, i) => ({ task_id: task.id, text, sort_order: i }))
-    )
-    await supabase.from('task_checklist_items').insert(checklistRecords)
-  }
+  // Both inserts depend on the new task rows but not on each other, so they go
+  // out together — task creation is an interactive path (the grid's inline
+  // quick-add), where a saved round-trip is visible.
+  await Promise.all([
+    supabase.from('task_assignees').insert(
+      tasks.map((task, i) => ({ task_id: task.id, user_id: assigneeIds[i] }))
+    ),
+    input.checklist_items?.length
+      ? supabase.from('task_checklist_items').insert(
+          tasks.flatMap(task =>
+            input.checklist_items!.map((text, i) => ({ task_id: task.id, text, sort_order: i }))
+          )
+        )
+      : Promise.resolve(),
+  ])
 
   return tasks[0] as Task
 }
@@ -580,8 +593,12 @@ export async function fetchTaskDetails(taskId: string, createdBy: string, comple
     supabase.from('task_assignees').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId),
     supabase.from('task_checklist_items').select('*').eq('task_id', taskId).order('sort_order', { ascending: true }),
     supabase.from('task_comments').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId).order('created_at', { ascending: true }),
-    supabase.from('profiles').select('*').eq('id', createdBy).single(),
-    completedBy ? supabase.from('profiles').select('*').eq('id', completedBy).single() : Promise.resolve({ data: null }),
+    // Same four columns the sibling joins above select — the modal shows a
+    // name, an avatar and a role label for the creator/completer, nothing more.
+    supabase.from('profiles').select(ASSIGNEE_PROFILE_COLUMNS).eq('id', createdBy).single(),
+    completedBy
+      ? supabase.from('profiles').select(ASSIGNEE_PROFILE_COLUMNS).eq('id', completedBy).single()
+      : Promise.resolve({ data: null }),
   ])
 
   return {
@@ -921,25 +938,25 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
   if (userRole === 'admin') {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(ASSIGNEE_PROFILE_COLUMNS)
       .in('role', ['teacher', 'coordinator', 'principal'])
       .neq('id', userId)
       .order('full_name')
 
     if (error) return []
-    return (data || []) as UserProfile[]
+    return (data || []) as unknown as UserProfile[]
   }
 
   if (userRole === 'principal') {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(ASSIGNEE_PROFILE_COLUMNS)
       .in('role', ['teacher', 'coordinator'])
       .neq('id', userId)
       .order('full_name')
 
     if (error) return []
-    return (data || []) as UserProfile[]
+    return (data || []) as unknown as UserProfile[]
   }
 
   if (userRole === 'coordinator') {
