@@ -770,10 +770,16 @@ body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
     rgba(255, 255, 255, 0) 100%
   );
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  /* Lets a placeholder start its sweep late, so a row/column of them fills in
+     left to right instead of flashing as one block. Set `--sk-delay` inline. */
+  animation-delay: var(--sk-delay, 0s);
 }
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
 }
+/* Cool variant — for skeletons on a white card (the week calendar), where the
+   warm base above reads as a smudge rather than a placeholder. */
+.skeleton-cool { background: #E6ECF3; }
 @media (prefers-reduced-motion: reduce) {
   .skeleton::after { animation: none; }
 }
