@@ -456,7 +456,16 @@ export default function HomePage() {
   const swipeDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
   const baseOffsetRef = useRef(0)
   const dragX = useMotionValue(0)
-  const cardContainerRef = useRef<HTMLDivElement>(null)
+  const cardContainerRef = useRef<HTMLDivElement | null>(null)
+  // The strip is unmounted entirely when it has no cards (rather than left as
+  // an empty band), so the node comes and goes. Tracking it in state — set from
+  // a callback ref — lets the measure and touch effects re-run when it returns;
+  // keying them on the ref alone would leave them attached to nothing.
+  const [stripNode, setStripNode] = useState<HTMLDivElement | null>(null)
+  const attachStrip = useCallback((node: HTMLDivElement | null) => {
+    cardContainerRef.current = node
+    setStripNode(node)
+  }, [])
   const [autoplayResetKey, setAutoplayResetKey] = useState(0)
 
   useEffect(() => {
@@ -706,7 +715,7 @@ export default function HomePage() {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [isDesktop])
+  }, [isDesktop, stripNode])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   // The announcements page marks a page of notices read as it loads them;
@@ -1183,6 +1192,7 @@ export default function HomePage() {
   // pin to the first slot (so e.g. overdue-fees lands first once it loads);
   // after interaction, hold their current card at its new index.
   useEffect(() => {
+    if (CARD_VIEWS.length === 0) return
     if (!interactedRef.current) {
       setAdminCardView(CARD_VIEWS[0])
       dragX.set(0)
@@ -1202,7 +1212,7 @@ export default function HomePage() {
   }, [CARD_VIEWS])
 
   useEffect(() => {
-    if (!showCardCarousel) return
+    if (!showCardCarousel || CARD_VIEWS.length < 2) return
     const t = setInterval(() => {
       const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
@@ -1340,7 +1350,7 @@ export default function HomePage() {
       el.removeEventListener('touchcancel', onEnd)
       el.removeEventListener('click', onClick)
     }
-  }, [CARD_VIEWS, dragX, isDesktop])
+  }, [CARD_VIEWS, dragX, isDesktop, stripNode])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -1607,10 +1617,11 @@ export default function HomePage() {
               of their own below it: attendance across the full width, then the
               two fee ledgers side by side, each as an infographic panel rather
               than stacked tiles. ── */}
+          {carouselSlots.length > 0 && (
           <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
               <div
-                  ref={cardContainerRef}
+                  ref={attachStrip}
                   className="group/carousel strip-compact relative overflow-hidden min-h-[330px] pb-6"
                   style={{ touchAction: 'pan-y' }}
                 >
@@ -1651,12 +1662,13 @@ export default function HomePage() {
                 </div>
             </motion.div>
           </div>
+          )}
 
           {/* ── Desktop rows 2 and 3: the standing statistics, always on screen.
               Same max-w-7xl box as the banner text, classrooms grid and app row
               below, so every region on the page shares one left edge. ── */}
           {isDesktop && (attendanceSlot || feeSlots.length > 0) && (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2 space-y-6">
+            <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2 space-y-6 ${carouselSlots.length === 0 ? 'pt-6' : ''}`}>
               {attendanceSlot && (
                 <motion.section variants={itemVariants}>
                   {attendanceSlot.heading}
