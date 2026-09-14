@@ -27,14 +27,14 @@ export function TimeOffGrid({
     : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
 
   // Clicking a period in the left column applies it to the whole week: if every
-  // day is already on it clears the row, otherwise it fills the gaps. Toggles
-  // run one at a time so each write sees the previous one's state.
+  // day is already on it clears the row, otherwise it fills the gaps. Each day
+  // is its own constraint row, so which days need toggling is decided up front
+  // and the writes go out together — running them one at a time cost a full
+  // round trip per working day for no benefit.
   const toggleWeek = async (slotId: string) => {
     const allOn = days.every((d) => isOn(d, slotId))
-    for (const d of days) {
-      if (isOn(d, slotId) === !allOn) continue
-      await onToggle(d, slotId)
-    }
+    const changing = days.filter((d) => isOn(d, slotId) !== !allOn)
+    await Promise.all(changing.map((d) => onToggle(d, slotId)))
   }
 
   return (

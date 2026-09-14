@@ -150,12 +150,19 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     [combinedClasses],
   )
 
+  // One scan of the week per edit: the status line and the health panel both
+  // read it, and computeHealth would otherwise repeat it with the same inputs.
+  const allConflicts = useMemo(
+    () => detectConflicts(entries, unavailability, constraints, homeroomsLite),
+    [entries, unavailability, constraints, homeroomsLite],
+  )
+
   const liveConflicts = useMemo(
     () =>
-      detectConflicts(entries, unavailability, constraints, homeroomsLite).filter(
+      allConflicts.filter(
         (c) => c.kind !== 'unplaced_lesson' && c.kind !== 'block_unplaceable' && c.kind !== 'pin_unfilled',
       ),
-    [entries, unavailability, constraints, homeroomsLite],
+    [allConflicts],
   )
 
   const health = useMemo(() => {
@@ -164,11 +171,12 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     const sName = new Map(subjects.map((s) => [s.id, s.name]))
     return computeHealth({
       entries, requirements, constraints, slots, config, homerooms: homeroomsLite, unavailability,
+      conflicts: allConflicts,
       homeroomName: (id) => hrName.get(id) ?? 'Class',
       teacherName: (id) => tName.get(id) ?? 'Teacher',
       subjectName: (id) => sName.get(id) ?? 'Subject',
     })
-  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, homerooms, teachers, subjects])
+  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, allConflicts, homerooms, teachers, subjects])
 
   const groupName = useCallback(
     (groupId: string) => groups.find((g) => g.id === groupId)?.name,
