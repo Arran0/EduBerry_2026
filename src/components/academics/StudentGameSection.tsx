@@ -9,9 +9,6 @@ import {
 
 interface StudentGameSectionProps {
   userId: string
-  /** False when the carousel sits in a page column rather than spanning the
-   *  page — see the `fullBleed` note on EduPointsCarousel. */
-  fullBleed?: boolean
 }
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
@@ -331,14 +328,7 @@ const FLICK_VELOCITY = 0.35
  * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
  * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({
-  briefs,
-  // Full-bleed by default: stacked under the classroom grid the strip runs
-  // edge to edge, so the side cards are cut by the viewport rather than by a
-  // container. Beside the grid it has a column to live in, and breaking out of
-  // that column would lay it over the neighbouring one.
-  fullBleed = true,
-}: { briefs: Brief[]; fullBleed?: boolean }) {
+export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
@@ -366,10 +356,13 @@ export function EduPointsCarousel({
     const measure = () => {
       const w = el.offsetWidth
       const isMobile = w < 640
-      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square
+      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square.
+      // Wide: capped well below the phone-relative share it used to take —
+      // three cards of a readable size, not a band of the page. The strip is
+      // a glance at where the student stands, so it earns a strip's height.
       const cw = isMobile
         ? Math.round(Math.min(132, Math.max(72, w * 0.336)))
-        : Math.round(Math.min(260, Math.max(100, w * 0.22)))
+        : Math.round(Math.min(128, Math.max(96, w * 0.10)))
       const ch = cw  // always square
       const sp = Math.round(cw * 1.09)  // 9% gap (halved from previous 18%)
       setCardW(cw)
@@ -485,11 +478,11 @@ export function EduPointsCarousel({
   const activeBrief = briefs[active]
   return (
     <>
+      {/* The strip is clipped to its card rather than bleeding to the
+          viewport: it lives inside the section's bordered container now, and
+          the side cards are cut by that edge. */}
       <div style={{
-        position: 'relative',
-        ...(fullBleed
-          ? { left: '50%', width: '100vw', transform: 'translateX(-50%)' }
-          : { width: '100%' }),
+        position: 'relative', width: '100%',
         overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px',
       }}>
         <div
@@ -514,11 +507,11 @@ export function EduPointsCarousel({
             />
           ))}
 
-          {/* Prev/next, for the contained (desktop column) strip: dragging is
-              a touch affordance, so a mouse gets real controls. Anchored to
-              the card box and revealed on hover or keyboard focus. Full-bleed
-              (stacked, phone) keeps swipe and dots alone. */}
-          {!fullBleed && n > 1 && ([-1, 1] as const).map(dir => (
+          {/* Prev/next: dragging is a touch affordance, so a mouse gets real
+              controls. Anchored to the card box and revealed on hover or
+              keyboard focus, so touch (which has neither) keeps the swipe and
+              the dots alone. */}
+          {n > 1 && ([-1, 1] as const).map(dir => (
             <button
               key={dir}
               // The strip captures the pointer to drive dragging, and a
@@ -537,7 +530,7 @@ export function EduPointsCarousel({
 
         {/* Dots */}
         {n > 1 && (
-          <div className="flex justify-center items-center gap-1.5 mt-4">
+          <div className="flex justify-center items-center gap-1.5 mt-3">
             {n <= 10 ? (
               briefs.map((_, i) => (
                 <button
@@ -557,7 +550,7 @@ export function EduPointsCarousel({
       </div>
 
       {/* Per-card motivation — centered, below the carousel */}
-      <p className="text-center text-[13px] font-semibold text-slate-500 mt-3 leading-snug">
+      <p className="text-center text-[13px] font-semibold text-slate-500 mt-2 leading-snug">
         {getShortMessage(activeBrief, active, activeBrief.improved, activeBrief.delta)}
       </p>
     </>
@@ -566,7 +559,7 @@ export function EduPointsCarousel({
 
 /* ───────────────────────── data wrapper (default export) ───────────────────────── */
 
-export default function StudentGameSection({ userId, fullBleed = true }: StudentGameSectionProps) {
+export default function StudentGameSection({ userId }: StudentGameSectionProps) {
   const [rows, setRows] = useState<EduDashboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -612,5 +605,5 @@ export default function StudentGameSection({ userId, fullBleed = true }: Student
     )
   }
 
-  return <EduPointsCarousel briefs={briefs} fullBleed={fullBleed} />
+  return <EduPointsCarousel briefs={briefs} />
 }
