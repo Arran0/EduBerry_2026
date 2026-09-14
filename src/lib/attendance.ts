@@ -26,15 +26,30 @@ export interface AttendanceRecord {
   updated_at: string
 }
 
+/**
+ * Every column of a staff attendance row the app actually reads.
+ *
+ * Deliberately not `*`: the table also stores the raw latitude, longitude and
+ * accuracy of each of the four punches, and no screen has ever rendered them —
+ * the UI shows the server's verdict and the distance from the fence. Selecting
+ * `*` handed every viewer of the staff report their colleagues' precise
+ * check-in coordinates for the day, which is both a privacy leak and 12 needless
+ * columns on every row. Keep this list and the interface below in step.
+ */
+const STAFF_ATTENDANCE_COLUMNS =
+  'id, staff_id, date, status, ' +
+  'check_in_time, check_out_time, check_in_time_2, check_out_time_2, ' +
+  'check_in_distance_m, check_out_distance_m, check_in_distance_m_2, check_out_distance_m_2, ' +
+  'check_in_verdict, check_out_verdict, check_in_verdict_2, check_out_verdict_2, ' +
+  'geofence_passed, leave_application_id, marked_by, remarks, ' +
+  'forgotten_checkout_ack_at, created_at, updated_at'
+
 export interface StaffAttendanceRecord {
   id: string
   staff_id: string
   date: string
   status: StaffAttendanceStatus
   check_in_time: string | null
-  check_in_lat: number | null
-  check_in_lng: number | null
-  check_in_accuracy: number | null
   // Unsigned metres from the fence boundary at this punch, when a location
   // check ran (attendance_persist_off_campus_distance.sql) — null on a row
   // written before that migration, or when no check happened at all.
@@ -45,19 +60,10 @@ export interface StaffAttendanceRecord {
   // configured, no position taken, or the staff member is exempt.
   geofence_passed: boolean | null
   check_out_time: string | null
-  check_out_lat: number | null
-  check_out_lng: number | null
-  check_out_accuracy: number | null
   check_out_distance_m: number | null
   check_in_time_2: string | null
-  check_in_lat_2: number | null
-  check_in_lng_2: number | null
-  check_in_accuracy_2: number | null
   check_in_distance_m_2: number | null
   check_out_time_2: string | null
-  check_out_lat_2: number | null
-  check_out_lng_2: number | null
-  check_out_accuracy_2: number | null
   check_out_distance_m_2: number | null
   leave_application_id: string | null
   marked_by: string | null
@@ -313,7 +319,6 @@ export type LocationWarningKind = 'off_campus' | 'no_access' | 'device_issue'
 const KIND_SEVERITY: LocationWarningKind[] = ['off_campus', 'no_access', 'device_issue']
 
 /** Verdicts that mean "written, but the location was not confirmed". */
-export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['outside', 'location_off', 'device_issue']
 
 const VERDICT_KIND: Partial<Record<LocationVerdict, LocationWarningKind>> = {
   outside: 'off_campus',
@@ -838,7 +843,7 @@ function minutesFromCutoff(cutoff: string | null | undefined): number | null {
  * cutoff is actually configured in. Mirrors attendance_minute_of_day() in SQL,
  * which is what the punch itself is scored by.
  */
-export function isPastCutoff(
+function isPastCutoff(
   cutoff: string | null | undefined,
   now: Date,
   timezone?: string | null
@@ -1010,23 +1015,6 @@ export async function checkOutStaff(reading?: PunchReading, failure?: string | n
   return punch('checkout', reading, failure)
 }
 
-/** Staff edits the status of their own attendance entry (any date). */
-export async function staffUpdateOwnStatus(
-  staffId: string,
-  date: string,
-  status: StaffAttendanceStatus
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('staff_attendance_records')
-    .upsert({ staff_id: staffId, date, status }, { onConflict: 'staff_id,date' })
-
-  if (error) {
-    console.error('staffUpdateOwnStatus error:', error)
-    return false
-  }
-  return true
-}
-
 export async function fetchMyStaffAttendance(
   staffId: string,
   year: number,
@@ -1038,7 +1026,7 @@ export async function fetchMyStaffAttendance(
 
   const { data, error } = await supabase
     .from('staff_attendance_records')
-    .select('*')
+    .select(STAFF_ATTENDANCE_COLUMNS)
     .eq('staff_id', staffId)
     .gte('date', startDate)
     .lte('date', endDate)
@@ -1048,7 +1036,7 @@ export async function fetchMyStaffAttendance(
     console.error('fetchMyStaffAttendance error:', error)
     return []
   }
-  return data ?? []
+  return (data ?? []) as unknown as StaffAttendanceRecord[]
 }
 
 /**
@@ -1071,7 +1059,7 @@ export async function fetchOpenPunchRecords(
 
   const { data, error } = await supabase
     .from('staff_attendance_records')
-    .select('*')
+    .select(STAFF_ATTENDANCE_COLUMNS)
     .eq('staff_id', staffId)
     .lt('date', beforeDate)
     .gte('date', sinceDate)
@@ -1083,7 +1071,7 @@ export async function fetchOpenPunchRecords(
     console.error('fetchOpenPunchRecords error:', error)
     return []
   }
-  return data ?? []
+  return (data ?? []) as unknown as StaffAttendanceRecord[]
 }
 
 /**
@@ -1116,25 +1104,6 @@ export async function fetchProfileNameById(id: string): Promise<string | null> {
   return data?.full_name ?? null
 }
 
-export async function fetchAllStaffByDate(date: string): Promise<StaffAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select(`
-      *,
-      staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt
-      )
-    `)
-    .eq('date', date)
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    console.error('fetchAllStaffByDate error:', error)
-    return []
-  }
-  return data ?? []
-}
-
 // Roles that appear in the staff attendance report. Admins are included by
 // default; a specific staff member (any role) can be hidden from attendance
 // lists/counts individually via profiles.attendance_hidden (Settings → Attendance).
@@ -1152,7 +1121,7 @@ export async function fetchStaffAttendanceReportByDate(
   const { data, error } = await supabase
     .from('staff_attendance_records')
     .select(`
-      *,
+      ${STAFF_ATTENDANCE_COLUMNS},
       staff:profiles!staff_attendance_records_staff_id_fkey(
         id, email, full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
       )
@@ -1163,7 +1132,7 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r =>
+  return ((data ?? []) as unknown as StaffAttendanceRecord[]).filter(r =>
     r.staff && !r.staff.attendance_hidden && !r.staff.is_banned && STAFF_ROLES.includes(r.staff.role)
   )
 }
@@ -1443,7 +1412,7 @@ export async function saveGeofenceZones(
 }
 
 /** The zone one staff member belongs to, or null when they use the school-wide centre. */
-export async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
+async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
   const { data: member, error: memError } = await supabase
     .from('attendance_geofence_zone_members')
     .select('zone_id')
@@ -1510,58 +1479,6 @@ export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<E
 // the accuracy threshold tunable against evidence: without it there is no way
 // to answer "who is failing, how often, and at what accuracy" — which is the
 // question that should have set the original 75m cap and didn't.
-// ============================================
-
-export interface LocationAttempt {
-  id: string
-  staff_id: string
-  date: string
-  action: 'checkin' | 'checkout'
-  accuracy_m: number | null
-  best_accuracy_m: number | null
-  spread_m: number | null
-  sample_count: number | null
-  agreeing_count: number | null
-  acquisition_ms: number | null
-  coarse_lock: boolean
-  verdict: LocationVerdict
-  distance_m: number | null
-  margin_m: number | null
-  accepted: boolean
-  failure: string | null
-  user_agent: string | null
-  created_at: string
-  staff?: UserProfile
-}
-
-export async function fetchLocationAttempts(
-  startDate: string,
-  endDate: string,
-  staffId?: string,
-): Promise<LocationAttempt[]> {
-  let query = supabase
-    .from('attendance_location_attempts')
-    .select(`
-      *,
-      staff:profiles!attendance_location_attempts_staff_id_fkey(id, full_name, role, avatar_url)
-    `)
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .order('created_at', { ascending: false })
-    .limit(2000)
-
-  if (staffId) query = query.eq('staff_id', staffId)
-
-  const { data, error } = await query
-  if (error) {
-    console.error('fetchLocationAttempts error:', error)
-    return []
-  }
-  return (data ?? []) as unknown as LocationAttempt[]
-}
-
-// ============================================
-// Attendance Config (site_settings key: 'attendance_config')
 // ============================================
 
 export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
@@ -2349,7 +2266,7 @@ export async function fetchMonthlyAttendanceRecords(
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('staff_attendance_records')
-      .select('*')
+      .select(STAFF_ATTENDANCE_COLUMNS)
       .in('staff_id', staffIds)
       .gte('date', start)
       .lte('date', end)
@@ -2363,7 +2280,7 @@ export async function fetchMonthlyAttendanceRecords(
       console.error('fetchMonthlyAttendanceRecords error:', error)
       return []
     }
-    out.push(...(data ?? []))
+    out.push(...((data ?? []) as unknown as StaffAttendanceRecord[]))
     if (!data || data.length < PAGE) break
   }
   return out
@@ -2753,36 +2670,6 @@ export async function fetchStaffAbsenceStreaks(
   return result
 }
 
-export async function fetchStaffAbsenteesByDate(
-  date: string
-): Promise<StaffAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select(`
-      *,
-      staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url
-      )
-    `)
-    .eq('date', date)
-    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
-    .order('status')
-
-  if (error) {
-    console.error('fetchStaffAbsenteesByDate error:', error)
-    return []
-  }
-  return data ?? []
-}
-
-// ============================================
-// Late Summary Report (admin) — tabular late-arrival log across a date range,
-// in the spirit of the "Late Daily Attendance Logs" export from biometric
-// face-ID systems: one row per late check-in, with employee code/department
-// (from staff_details) and how late they were against the cutoff in effect
-// that day (day-timing overrides, falling back to the school-wide cutoff).
-// ============================================
-
 export interface LateSummaryRow {
   date: string
   staff_id: string
@@ -2825,7 +2712,7 @@ export function resolveLateCutoff(
 }
 
 /** Sibling to resolveLateCutoff, resolving checkout_cutoff instead. */
-export function resolveCheckoutCutoff(
+function resolveCheckoutCutoff(
   timings: DayTimingGroup[],
   staffId: string,
   fallback: string | null
