@@ -6,6 +6,16 @@ import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUn
 export * from './timetable/types'
 import { teacherIdsOf } from './timetable/types'
 
+// PostgREST puts `.in()` lists in the query string, so a long one (a CSV import
+// of a whole year group) overruns the URL length limit and the request fails
+// outright. Split anything unbounded into batches that comfortably fit.
+const IN_BATCH_SIZE = 150
+function chunk<T>(items: T[], size = IN_BATCH_SIZE): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
 // ============================================================
 // Subjects
 // ============================================================
@@ -842,15 +852,19 @@ export async function bulkAddGroupMembersByEmails(
     .single()
   if (gErr || !group) return { added: 0, failed: wanted }
 
-  const [{ data: profiles }, { data: roster }] = await Promise.all([
-    supabase.from('profiles').select('id, email').in('email', wanted),
+  const [profilePages, { data: roster }] = await Promise.all([
+    Promise.all(
+      chunk(wanted).map((batch) => supabase.from('profiles').select('id, email').in('email', batch)),
+    ),
     supabase.from('homeroom_members').select('student_id').eq('homeroom_id', group.homeroom_id),
   ])
 
   const inHomeroom = new Set((roster ?? []).map((r) => r.student_id))
   const idByEmail = new Map<string, string>()
-  for (const p of (profiles ?? []) as { id: string; email: string | null }[]) {
-    if (p.email && inHomeroom.has(p.id)) idByEmail.set(p.email.toLowerCase(), p.id)
+  for (const page of profilePages) {
+    for (const p of (page.data ?? []) as { id: string; email: string | null }[]) {
+      if (p.email && inHomeroom.has(p.id)) idByEmail.set(p.email.toLowerCase(), p.id)
+    }
   }
 
   const failed = wanted.filter((e) => !idByEmail.has(e))
@@ -885,12 +899,18 @@ export async function bulkAddGroupMembersByIds(
   if (unique.length === 0) return { added: 0 }
 
   // Which are already members? Only insert the rest.
-  const { data: existing } = await supabase
-    .from('timetable_group_members')
-    .select('student_id')
-    .eq('group_id', groupId)
-    .in('student_id', unique)
-  const have = new Set((existing ?? []).map((r) => r.student_id))
+  const existingPages = await Promise.all(
+    chunk(unique).map((batch) =>
+      supabase
+        .from('timetable_group_members')
+        .select('student_id')
+        .eq('group_id', groupId)
+        .in('student_id', batch),
+    ),
+  )
+  const have = new Set(
+    existingPages.flatMap((p) => (p.data ?? []).map((r) => r.student_id as string)),
+  )
   const toAdd = unique.filter((id) => !have.has(id))
   if (toAdd.length === 0) return { added: 0 }
 

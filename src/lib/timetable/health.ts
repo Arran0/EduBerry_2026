@@ -7,6 +7,7 @@
 
 import type {
   PlacedEntry, PeriodSlot, Requirement, TimetableConstraint, HomeroomLite, TimetableConfig, Weekday,
+  GeneratorConflict,
 } from './types'
 import { detectConflicts } from './generator'
 import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
@@ -45,6 +46,13 @@ export interface HealthInput {
   config: TimetableConfig
   homerooms: HomeroomLite[]
   unavailability?: { teacher_id: string; day: Weekday; slot_id: string; id: string; config_id: string; created_at: string }[]
+  /**
+   * detectConflicts() over the same entries, when the caller has already run it
+   * (the builder does, to highlight cells). Scanning is O(entries) and the
+   * result is identical, so re-running it here would just double the work on
+   * every edit. Omit it and this computes its own.
+   */
+  conflicts?: GeneratorConflict[]
   // Optional label resolvers for readable issues.
   homeroomName?: (id: string) => string
   teacherName?: (id: string) => string
@@ -71,7 +79,8 @@ export function computeHealth(input: HealthInput): HealthReport {
   const issues: HealthIssue[] = []
 
   // ── 1. Hard clashes (double-book / time-off / pin) ───────────
-  const hardConflicts = detectConflicts(entries, input.unavailability ?? [], constraints, homerooms)
+  const hardConflicts =
+    input.conflicts ?? detectConflicts(entries, input.unavailability ?? [], constraints, homerooms)
   const hardKinds = new Set([
     'teacher_double_booked', 'room_double_booked', 'homeroom_double_booked', 'time_off_violated',
   ])
