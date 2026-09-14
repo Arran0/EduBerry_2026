@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
-  Home, Award,
+  Home,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -28,7 +28,6 @@ const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolW
 const HomeroomWorkCalendar = dynamic(() => import('@/components/academics/HomeroomWorkCalendar'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
-const ReportCardsDigest = dynamic(() => import('@/components/academics/ReportCardsDigest'))
 import { fetchStreak } from '@/lib/gamification'
 import { getShowClassroomsOnHome, setShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import {
@@ -42,7 +41,7 @@ import {
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 
-/** Buttons per row once the grid shares its row with the report-card digest. */
+/** Buttons per row once the grid shares its row with the report cards. */
 const CLASSROOM_LG_COLUMNS = 2
 
 function getSessionVibes(name: string): string[] {
@@ -252,14 +251,22 @@ export default function AcademicsPage() {
   const [homerooms, setHomerooms] = useState<Homeroom[] | null>(null)
   const isClassTeacher = !isStudent && (homerooms?.length ?? 0) > 0
 
-  // The report-card digest is a desktop-only panel. Gating on the media query
-  // (rather than `hidden lg:block`) keeps it from mounting — and running its
-  // queries — on phones, where the full section below is the only copy.
+  // On a wide screen the classroom grid only needs half the page, so the
+  // section each role reaches for most moves up beside it: report cards for
+  // staff, who work them constantly, and EduPoints for a student, whose report
+  // cards are an occasional read and stay at the foot of the page. Gating on
+  // the media query (rather than a `hidden lg:block` class) means each section
+  // is rendered once, in one place or the other — never mounted twice.
   const isDesktop = useIsDesktop()
+  const reportCardsBesideClassrooms = isDesktop && !isStudent
+  const eduPointsBesideClassrooms   = isDesktop && isStudent
+  const classroomsShareTheirRow = reportCardsBesideClassrooms || eduPointsBesideClassrooms
 
-  // 2 at lg and up: from there the grid shares its row with the report-card
-  // digest, so it has half the page to fill (four rows of two buttons).
-  const classroomColumns = useGridColumns(CLASSROOM_LG_COLUMNS)
+  // 2 once the grid shares its row, 4 when it has the page to itself (four
+  // rows either way).
+  const classroomColumns = useGridColumns(
+    classroomsShareTheirRow ? CLASSROOM_LG_COLUMNS : 4,
+  )
   const CLASSROOM_VISIBLE_ROWS = 4
   const CLASSROOM_LIMIT = classroomColumns * CLASSROOM_VISIBLE_ROWS
   const CLASSROOM_COL_GAP = 12
@@ -533,10 +540,13 @@ export default function AcademicsPage() {
         {/* ── Page content (dims while the banner is being edited) ── */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 space-y-8" style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Classrooms, and (from lg up) the report-card digest beside them.
-              items-start keeps the two columns independent, so the digest's
-              own height follows the grid's rather than stretching the row. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+          {/* Classrooms — and, on a wide screen, the section that shares their
+              row: report cards for staff, EduPoints for a student. items-start
+              keeps the two columns independent, so the panel's height follows
+              the grid's rather than stretching the row. */}
+          <div className={classroomsShareTheirRow
+            ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start'
+            : undefined}>
             <section>
               <SectionHeading
                 icon={BookOpen}
@@ -545,10 +555,13 @@ export default function AcademicsPage() {
                 titleAction={
                   <button
                     onClick={toggleShowOnHome}
-                    className={`w-8 h-8 inline-flex items-center justify-center rounded-full border transition-colors ${
+                    // Bare glyph, no chrome: bright blue when the home page
+                    // shows the classrooms, grey when it doesn't. The 32px box
+                    // is invisible — it only keeps the target comfortable.
+                    className={`w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${
                       showOnHome
-                        ? 'bg-cyan-500 border-cyan-400 text-white shadow-sm'
-                        : 'bg-white/70 border-white/60 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50'
+                        ? 'text-sky-500 hover:text-sky-600'
+                        : 'text-slate-300 hover:text-slate-400'
                     }`}
                     title={showOnHome
                       ? 'Shown on the home page — click to hide'
@@ -558,7 +571,7 @@ export default function AcademicsPage() {
                       ? 'Hide classrooms on the home page'
                       : 'Show classrooms on the home page'}
                   >
-                    <Home size={14} />
+                    <Home size={15} />
                   </button>
                 }
                 action={
@@ -695,32 +708,52 @@ export default function AcademicsPage() {
               )}
             </section>
 
-            {/* Report card digest — lg and up only: below that the full Report
-                Cards section further down the page is the only copy, so a phone
-                never shows the same cards twice. Its height tracks the grid
-                beside it (same rows, same transition) so the two columns end
-                level, whether the grid is mid-reveal or holding four full rows. */}
-            {isDesktop && (
-              <section>
-                <SectionHeading
-                  icon={Award}
-                  chipClass="bg-gradient-to-br from-rose-400 to-pink-600"
-                  title="Report Cards"
-                />
-                <ReportCardsDigest
-                  userId={user.id}
-                  isStudent={isStudent}
-                  height={classroomGridHeight(
-                    loading ? 1 : Math.min(classroomRowCount, classroomRevealRows),
+            {/* The staff Report Cards section itself — tab toggle, search and
+                recently-opened shortcuts — so the panel is the working surface
+                rather than a second copy of it. Its idle height matches the
+                grid beside it (same rows, same transition); it grows past that
+                once a student or a marks matrix is loaded into it. */}
+            {reportCardsBesideClassrooms && (
+              <ReportCardsSection
+                user={{ id: user.id }}
+                profile={profile}
+                isStudent={isStudent}
+                minPanelHeight={classroomGridHeight(
+                  loading ? 1 : Math.min(classroomRowCount, classroomRevealRows),
                 )}
                 heightTransition={GRID_HEIGHT_TRANSITION}
               />
-            </section>
+            )}
+
+            {/* A student's EduPoints, in the grid's row rather than under it.
+                The carousel keeps its own size and is centred in a box as tall
+                as the grid, so the two columns end level. */}
+            {eduPointsBesideClassrooms && (
+              <section>
+                <SectionHeading
+                  icon={Trophy}
+                  chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
+                  title="My EduPoints"
+                />
+                <div
+                  className="flex flex-col justify-center"
+                  style={{
+                    minHeight: classroomGridHeight(
+                      loading ? 1 : Math.min(classroomRowCount, classroomRevealRows),
+                    ),
+                    transition: GRID_HEIGHT_TRANSITION,
+                  }}
+                >
+                  <StudentGameSection userId={user.id} fullBleed={false} />
+                </div>
+              </section>
             )}
           </div>
 
-          {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint briefs — students only */}
-          {isStudent && (
+          {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint
+              briefs — students only, and only when it isn't already sitting
+              beside the classroom grid above. */}
+          {isStudent && !eduPointsBesideClassrooms && (
             <section>
               <SectionHeading
                 icon={Trophy}
@@ -755,12 +788,16 @@ export default function AcademicsPage() {
             </section>
           )}
 
-          {/* Report Cards — expandable */}
-          <ReportCardsSection
-            user={{ id: user.id }}
-            profile={profile}
-            isStudent={isStudent}
-          />
+          {/* Report Cards — at the foot of the page for students, and for
+              staff on anything narrower than a desktop. On a staff desktop it
+              has already been rendered beside the classroom grid above. */}
+          {!reportCardsBesideClassrooms && (
+            <ReportCardsSection
+              user={{ id: user.id }}
+              profile={profile}
+              isStudent={isStudent}
+            />
+          )}
         </div>
       </div>
     </ProtectedLayout>

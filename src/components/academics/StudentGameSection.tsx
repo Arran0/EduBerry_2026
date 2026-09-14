@@ -2,13 +2,16 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, useMotionValue, useTransform, animate, MotionValue } from 'framer-motion'
-import { ArrowUp, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
+import { ArrowUp, ChevronLeft, ChevronRight, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
 import {
   fetchStudentEduDashboard, rankTrendOf, EduDashboardRow, EduStanding,
 } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
+  /** False when the carousel sits in a page column rather than spanning the
+   *  page — see the `fullBleed` note on EduPointsCarousel. */
+  fullBleed?: boolean
 }
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
@@ -328,7 +331,14 @@ const FLICK_VELOCITY = 0.35
  * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
  * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
+export function EduPointsCarousel({
+  briefs,
+  // Full-bleed by default: stacked under the classroom grid the strip runs
+  // edge to edge, so the side cards are cut by the viewport rather than by a
+  // container. Beside the grid it has a column to live in, and breaking out of
+  // that column would lay it over the neighbouring one.
+  fullBleed = true,
+}: { briefs: Brief[]; fullBleed?: boolean }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
@@ -475,10 +485,16 @@ export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
   const activeBrief = briefs[active]
   return (
     <>
-      <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
+      <div style={{
+        position: 'relative',
+        ...(fullBleed
+          ? { left: '50%', width: '100vw', transform: 'translateX(-50%)' }
+          : { width: '100%' }),
+        overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px',
+      }}>
         <div
           ref={wrapRef}
-          className="w-full relative"
+          className="w-full relative group/strip"
           style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -496,6 +512,26 @@ export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
               cardH={cardH}
               brief={b}
             />
+          ))}
+
+          {/* Prev/next, for the contained (desktop column) strip: dragging is
+              a touch affordance, so a mouse gets real controls. Anchored to
+              the card box and revealed on hover or keyboard focus. Full-bleed
+              (stacked, phone) keeps swipe and dots alone. */}
+          {!fullBleed && n > 1 && ([-1, 1] as const).map(dir => (
+            <button
+              key={dir}
+              // The strip captures the pointer to drive dragging, and a
+              // captured pointer delivers its click to the capture target
+              // rather than this button — so keep pointerdown from reaching it.
+              onPointerDown={e => e.stopPropagation()}
+              onClick={() => go(activeRef.current + dir)}
+              aria-label={dir < 0 ? 'Previous classroom' : 'Next classroom'}
+              style={{ [dir < 0 ? 'right' : 'left']: `calc(50% + ${cardW * 0.62}px)` }}
+              className="absolute top-1/2 -translate-y-1/2 z-[31] w-8 h-8 inline-flex items-center justify-center rounded-full bg-white/85 backdrop-blur-sm border border-white/70 text-slate-500 shadow-sm opacity-0 group-hover/strip:opacity-100 focus-visible:opacity-100 hover:text-amber-600 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+            >
+              {dir < 0 ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
           ))}
         </div>
 
@@ -530,7 +566,7 @@ export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
 
 /* ───────────────────────── data wrapper (default export) ───────────────────────── */
 
-export default function StudentGameSection({ userId }: StudentGameSectionProps) {
+export default function StudentGameSection({ userId, fullBleed = true }: StudentGameSectionProps) {
   const [rows, setRows] = useState<EduDashboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -576,5 +612,5 @@ export default function StudentGameSection({ userId }: StudentGameSectionProps) 
     )
   }
 
-  return <EduPointsCarousel briefs={briefs} />
+  return <EduPointsCarousel briefs={briefs} fullBleed={fullBleed} />
 }
