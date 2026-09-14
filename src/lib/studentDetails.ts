@@ -71,21 +71,6 @@ export async function fetchStudentDetails(studentId: string): Promise<StudentDet
   return (data as StudentDetails) ?? null
 }
 
-/** Bulk fetch for many students at once (e.g. a homeroom roster). */
-export async function fetchStudentDetailsMap(
-  studentIds: string[]
-): Promise<Record<string, StudentDetails>> {
-  if (studentIds.length === 0) return {}
-  const { data, error } = await supabase
-    .from('student_details')
-    .select('*')
-    .in('student_id', studentIds)
-  if (error) { console.error('fetchStudentDetailsMap failed:', error); return {} }
-  const map: Record<string, StudentDetails> = {}
-  for (const row of (data as StudentDetails[]) ?? []) map[row.student_id] = row
-  return map
-}
-
 export async function upsertStudentDetails(
   studentId: string,
   patch: StudentDetailsPatch

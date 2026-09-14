@@ -4,8 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Loader2, Search, GraduationCap, UserCog, Gauge } from 'lucide-react'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
-import { fetchAllProfiles } from '@/lib/admin'
-import { isStaffRole } from '@/lib/supabase'
+import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import type { TimetableConfig, Weekday } from '@/lib/timetable'
 import { SmartSelect, Section, Field } from '../../ui'
@@ -28,8 +27,8 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [profiles, hr] = await Promise.all([fetchAllProfiles(), fetchAllHomerooms()])
-    setTeachers(profiles.filter((p) => isStaffRole(p.role)))
+    const [profiles, hr] = await Promise.all([fetchStaffProfiles(), fetchAllHomerooms()])
+    setTeachers(profiles)
     setHomerooms(hr)
     setLoading(false)
   }, [])

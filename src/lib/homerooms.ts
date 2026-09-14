@@ -486,21 +486,28 @@ export async function unlinkSmartboardFromHomeroom(homeroomId: string): Promise<
   return true
 }
 
-/** Persists the customisable smart board banner for a homeroom. */
+/**
+ * Persists the customisable smart board banner for a homeroom.
+ *
+ * Goes through the set_smartboard_banner RPC rather than a table update: the
+ * homerooms UPDATE policy is admin-only, because granting a smart board account
+ * row-level update rights so it could save this one column also let it rewrite
+ * the homeroom's name, grade, section and class teacher.
+ */
 export async function updateSmartboardBanner(
   homeroomId: string,
   banner: SmartboardBanner
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('homerooms')
-    .update({ smartboard_banner: banner })
-    .eq('id', homeroomId)
+  const { data, error } = await supabase.rpc('set_smartboard_banner', {
+    p_homeroom: homeroomId,
+    p_banner: banner,
+  })
 
   if (error) {
     console.error('updateSmartboardBanner error:', error)
     return false
   }
-  return true
+  return data === true
 }
 
 export function homeroomGradeSectionBadge(homeroom: Homeroom): string | null {

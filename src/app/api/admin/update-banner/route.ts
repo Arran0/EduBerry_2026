@@ -42,7 +42,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 })
   }
 
-  const ext = file.name.split('.').pop() ?? 'jpg'
+  // The bucket is public and the extension used to come straight off the
+  // uploaded filename, so `banner.html` (or a `../`-bearing name) landed in the
+  // bucket served from the Supabase origin and was handed back with whatever
+  // content type the client claimed. Pin both to an image allowlist instead,
+  // and cap the size so a single request can't fill the bucket.
+  const EXT_BY_TYPE: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/avif': 'avif',
+  }
+  const MAX_BYTES = 5 * 1024 * 1024
+
+  const contentType = file.type.toLowerCase()
+  const ext = EXT_BY_TYPE[contentType]
+  if (!ext) {
+    return NextResponse.json(
+      { success: false, error: 'Banner must be a JPEG, PNG, WebP, GIF or AVIF image' },
+      { status: 400 },
+    )
+  }
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ success: false, error: 'Banner must be 5 MB or smaller' }, { status: 400 })
+  }
+
   const path = `site/profile_banner.${ext}`
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
@@ -51,7 +76,7 @@ export async function POST(request: NextRequest) {
   const { error: uploadError } = await adminClient.storage
     .from('classroom-files')
     .upload(path, buffer, {
-      contentType: file.type || 'image/jpeg',
+      contentType,
       upsert: true,
       cacheControl: '31536000',
     })

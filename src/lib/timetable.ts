@@ -6,6 +6,16 @@ import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUn
 export * from './timetable/types'
 import { teacherIdsOf } from './timetable/types'
 
+// PostgREST puts `.in()` lists in the query string, so a long one (a CSV import
+// of a whole year group) overruns the URL length limit and the request fails
+// outright. Split anything unbounded into batches that comfortably fit.
+const IN_BATCH_SIZE = 150
+function chunk<T>(items: T[], size = IN_BATCH_SIZE): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
 // ============================================================
 // Subjects
 // ============================================================
@@ -37,18 +47,6 @@ export async function createSubject(
     return null
   }
   return data
-}
-
-export async function updateSubject(
-  id: string,
-  patch: Partial<Pick<Subject, 'name' | 'code' | 'color'>>,
-): Promise<boolean> {
-  const { error } = await supabase.from('timetable_subjects').update(patch).eq('id', id)
-  if (error) {
-    console.error('updateSubject error:', error)
-    return false
-  }
-  return true
 }
 
 export async function deleteSubject(id: string): Promise<boolean> {
@@ -93,18 +91,6 @@ export async function createRoom(
   return data
 }
 
-export async function updateRoom(
-  id: string,
-  patch: Partial<Pick<Room, 'name' | 'room_type' | 'capacity'>>,
-): Promise<boolean> {
-  const { error } = await supabase.from('timetable_rooms').update(patch).eq('id', id)
-  if (error) {
-    console.error('updateRoom error:', error)
-    return false
-  }
-  return true
-}
-
 export async function deleteRoom(id: string): Promise<boolean> {
   const { error } = await supabase.from('timetable_rooms').delete().eq('id', id)
   if (error) {
@@ -129,22 +115,6 @@ export async function fetchConfigs(): Promise<TimetableConfig[]> {
     return []
   }
   return data ?? []
-}
-
-export async function fetchActiveConfig(): Promise<TimetableConfig | null> {
-  const { data, error } = await supabase
-    .from('timetable_configs')
-    .select('*')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    console.error('fetchActiveConfig error:', error)
-    return null
-  }
-  return data
 }
 
 export async function createConfig(
@@ -246,18 +216,6 @@ export async function createPeriodSlot(
   return data
 }
 
-export async function updatePeriodSlot(
-  id: string,
-  patch: Partial<Pick<PeriodSlot, 'position' | 'label' | 'start_time' | 'end_time' | 'is_break'>>,
-): Promise<boolean> {
-  const { error } = await supabase.from('timetable_period_slots').update(patch).eq('id', id)
-  if (error) {
-    console.error('updatePeriodSlot error:', error)
-    return false
-  }
-  return true
-}
-
 export async function deletePeriodSlot(id: string): Promise<boolean> {
   const { error } = await supabase.from('timetable_period_slots').delete().eq('id', id)
   if (error) {
@@ -271,12 +229,19 @@ export async function deletePeriodSlot(id: string): Promise<boolean> {
 // Requirements (solver input)
 // ============================================================
 
-export async function fetchRequirements(configId: string): Promise<Requirement[]> {
-  const { data, error } = await supabase
+// `homeroomId` narrows the fetch to one class — the Homeroom hub only ever
+// renders that class's requirements, so it shouldn't pull the whole config's.
+export async function fetchRequirements(
+  configId: string,
+  homeroomId?: string,
+): Promise<Requirement[]> {
+  let query = supabase
     .from('timetable_requirements')
     .select('*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), group:timetable_homeroom_groups(*)')
     .eq('config_id', configId)
-    .order('created_at', { ascending: true })
+  if (homeroomId) query = query.eq('homeroom_id', homeroomId)
+
+  const { data, error } = await query.order('created_at', { ascending: true })
 
   if (error) {
     console.error('fetchRequirements error:', error)
@@ -314,20 +279,6 @@ export async function createRequirement(
 let lastRequirementError: string | null = null
 export const requirementError = () => lastRequirementError
 
-export async function updateRequirement(
-  id: string,
-  patch: Partial<
-    Pick<Requirement, 'teacher_id' | 'teacher_ids' | 'periods_per_week' | 'room_type' | 'max_per_day' | 'subject_id' | 'min_block' | 'max_block' | 'group_id'>
-  >,
-): Promise<boolean> {
-  const { error } = await supabase.from('timetable_requirements').update(patch).eq('id', id)
-  if (error) {
-    console.error('updateRequirement error:', error)
-    return false
-  }
-  return true
-}
-
 export async function deleteRequirement(id: string): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').delete().eq('id', id)
   if (error) {
@@ -352,31 +303,6 @@ export async function fetchUnavailability(configId: string): Promise<TeacherUnav
     return []
   }
   return data ?? []
-}
-
-export async function addUnavailability(
-  input: Pick<TeacherUnavailability, 'config_id' | 'teacher_id' | 'day' | 'slot_id'>,
-): Promise<TeacherUnavailability | null> {
-  const { data, error } = await supabase
-    .from('teacher_unavailability')
-    .insert(input)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('addUnavailability error:', error)
-    return null
-  }
-  return data
-}
-
-export async function removeUnavailability(id: string): Promise<boolean> {
-  const { error } = await supabase.from('teacher_unavailability').delete().eq('id', id)
-  if (error) {
-    console.error('removeUnavailability error:', error)
-    return false
-  }
-  return true
 }
 
 // ============================================================
@@ -508,15 +434,6 @@ export async function createTimetable(
   return data
 }
 
-export async function deleteTimetable(id: string): Promise<boolean> {
-  const { error } = await supabase.from('timetables').delete().eq('id', id)
-  if (error) {
-    console.error('deleteTimetable error:', error)
-    return false
-  }
-  return true
-}
-
 export async function updateTimetableMeta(id: string, patch: { name?: string }): Promise<boolean> {
   const { error } = await supabase.from('timetables').update(patch).eq('id', id)
   if (error) {
@@ -524,18 +441,6 @@ export async function updateTimetableMeta(id: string, patch: { name?: string }):
     return false
   }
   return true
-}
-
-export async function fetchAllTimetablesWithConfig(): Promise<Array<Timetable & { config: TimetableConfig }>> {
-  const { data, error } = await supabase
-    .from('timetables')
-    .select('*, config:timetable_configs(*)')
-    .order('created_at', { ascending: false })
-  if (error) {
-    console.error('fetchAllTimetablesWithConfig error:', error)
-    return []
-  }
-  return (data ?? []) as Array<Timetable & { config: TimetableConfig }>
 }
 
 const ENTRY_SELECT =
@@ -561,26 +466,26 @@ export async function replaceEntries(
   timetableId: string,
   entries: PlacedEntry[],
 ): Promise<boolean> {
-  const del = await supabase.from('timetable_entries').delete().eq('timetable_id', timetableId)
+  // Resolve teacher display names (the caller — an admin — can read profiles)
+  // so students who cannot read staff profiles still see the teacher per period.
+  // Co-taught periods carry every teacher in teacher_ids / teacher_names, with
+  // the primary duplicated into the legacy singular columns. The name lookup
+  // doesn't depend on the delete, so the two round trips go out together.
+  const teacherIds = [...new Set(entries.flatMap((e) => teacherIdsOf(e)))]
+  const [del, profileRows] = await Promise.all([
+    supabase.from('timetable_entries').delete().eq('timetable_id', timetableId),
+    teacherIds.length > 0
+      ? supabase.from('profiles').select('id, full_name').in('id', teacherIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+  ])
   if (del.error) {
     console.error('replaceEntries (delete) error:', del.error)
     return false
   }
   if (entries.length === 0) return true
 
-  // Resolve teacher display names (the caller — an admin — can read profiles)
-  // so students who cannot read staff profiles still see the teacher per period.
-  // Co-taught periods carry every teacher in teacher_ids / teacher_names, with
-  // the primary duplicated into the legacy singular columns.
-  const teacherIds = [...new Set(entries.flatMap((e) => teacherIdsOf(e)))]
   const nameById = new Map<string, string>()
-  if (teacherIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .in('id', teacherIds)
-    for (const p of profiles ?? []) nameById.set(p.id, p.full_name)
-  }
+  for (const p of profileRows.data ?? []) nameById.set(p.id, p.full_name)
 
   const rows = entries.map((e) => {
     const ids = teacherIdsOf(e)
@@ -604,23 +509,6 @@ export async function replaceEntries(
   const { error } = await supabase.from('timetable_entries').insert(rows)
   if (error) {
     console.error('replaceEntries (insert) error:', error.code, error.message, error.details, error.hint)
-    return false
-  }
-  return true
-}
-
-export async function updateEntry(
-  id: string,
-  patch: Partial<{
-    subject_id: string | null
-    teacher_id: string | null
-    room_id: string | null
-    is_locked: boolean
-  }>,
-): Promise<boolean> {
-  const { error } = await supabase.from('timetable_entries').update(patch).eq('id', id)
-  if (error) {
-    console.error('updateEntry error:', error)
     return false
   }
   return true
@@ -665,28 +553,6 @@ export async function publishTimetable(timetable: Timetable): Promise<boolean> {
 // ============================================================
 // Viewer fetchers (student / staff)
 // ============================================================
-
-// Resolves the config + ordered period slots backing a given timetable.
-// Used internally and by admin components that need a single timetable's context.
-export async function fetchTimetableContext(
-  timetableId: string,
-): Promise<{ config: TimetableConfig; slots: PeriodSlot[] } | null> {
-  const { data: tt, error } = await supabase
-    .from('timetables')
-    .select('config_id')
-    .eq('id', timetableId)
-    .maybeSingle()
-  if (error || !tt) {
-    if (error) console.error('fetchTimetableContext error:', error)
-    return null
-  }
-  const [{ data: cfg }, slots] = await Promise.all([
-    supabase.from('timetable_configs').select('*').eq('id', tt.config_id).maybeSingle(),
-    fetchPeriodSlots(tt.config_id),
-  ])
-  if (!cfg) return null
-  return { config: cfg as TimetableConfig, slots }
-}
 
 // Shared helper: assembles TimetableViewData[] from a set of entries,
 // given the set of active configs and their published timetables.
@@ -798,9 +664,19 @@ export async function fetchTimetableForStudent(studentId: string): Promise<Timet
   return buildViewData(visible, activeConfigs, publishedTimetables)
 }
 
+// PostgREST's `.or()` takes a raw filter string, so anything interpolated into
+// one has to be proven safe first: a stray comma or paren in the value would
+// rewrite the filter rather than be compared against.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Returns one TimetableViewData per active config the teacher has a
 // published teaching schedule in.
 export async function fetchTimetableForStaff(teacherId: string): Promise<TimetableViewData[]> {
+  if (!UUID_RE.test(teacherId)) {
+    console.error('fetchTimetableForStaff: not a teacher id:', teacherId)
+    return []
+  }
+
   const { data: activeConfigsRaw, error: cErr } = await supabase
     .from('timetable_configs')
     .select('*')
@@ -955,54 +831,45 @@ export async function deleteGroup(id: string): Promise<boolean> {
   return true
 }
 
-// Adds a student to a group by email. The student must already be a member
-// of the group's parent homeroom (you can't group someone into a class they
-// don't belong to). Returns a typed result so the UI can report which emails
-// resolved and which didn't.
-export async function addGroupMemberByEmail(
+/**
+ * Adds students to a group from a column of emails. A student must already be
+ * a member of the group's parent homeroom (you can't group someone into a class
+ * they don't belong to); emails that don't match such a profile come back in
+ * `failed` so the CSV import can report them. Resolves the whole column in a
+ * fixed number of round trips rather than four per address.
+ */
+export async function bulkAddGroupMembersByEmails(
   groupId: string,
-  email: string,
-): Promise<{ success: boolean; error?: string }> {
-  const trimmed = email.trim().toLowerCase()
-  if (!trimmed) return { success: false, error: 'Empty email' }
+  emails: string[],
+): Promise<{ added: number; failed: string[] }> {
+  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
+  if (wanted.length === 0) return { added: 0, failed: [] }
 
-  // Resolve the group's parent homeroom.
   const { data: group, error: gErr } = await supabase
     .from('timetable_homeroom_groups')
     .select('homeroom_id')
     .eq('id', groupId)
     .single()
-  if (gErr || !group) return { success: false, error: 'Group not found' }
+  if (gErr || !group) return { added: 0, failed: wanted }
 
-  // Resolve the email to a profile.
-  const { data: profile, error: pErr } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('email', trimmed)
-    .single()
-  if (pErr || !profile) return { success: false, error: 'No user found with that email' }
+  const [profilePages, { data: roster }] = await Promise.all([
+    Promise.all(
+      chunk(wanted).map((batch) => supabase.from('profiles').select('id, email').in('email', batch)),
+    ),
+    supabase.from('homeroom_members').select('student_id').eq('homeroom_id', group.homeroom_id),
+  ])
 
-  // They must belong to the parent homeroom.
-  const { data: membership } = await supabase
-    .from('homeroom_members')
-    .select('id')
-    .eq('homeroom_id', group.homeroom_id)
-    .eq('student_id', profile.id)
-    .maybeSingle()
-  if (!membership) {
-    return { success: false, error: 'That student is not in this homeroom' }
+  const inHomeroom = new Set((roster ?? []).map((r) => r.student_id))
+  const idByEmail = new Map<string, string>()
+  for (const page of profilePages) {
+    for (const p of (page.data ?? []) as { id: string; email: string | null }[]) {
+      if (p.email && inHomeroom.has(p.id)) idByEmail.set(p.email.toLowerCase(), p.id)
+    }
   }
 
-  const { error: insErr } = await supabase
-    .from('timetable_group_members')
-    .insert({ group_id: groupId, student_id: profile.id })
-  if (insErr) {
-    // Unique-violation → already a member.
-    if (insErr.code === '23505') return { success: false, error: 'Already in this group' }
-    console.error('addGroupMemberByEmail error:', insErr)
-    return { success: false, error: 'Could not add student' }
-  }
-  return { success: true }
+  const failed = wanted.filter((e) => !idByEmail.has(e))
+  const { added } = await bulkAddGroupMembersByIds(groupId, [...idByEmail.values()])
+  return { added, failed }
 }
 
 export async function removeGroupMember(groupId: string, studentId: string): Promise<boolean> {
@@ -1032,12 +899,18 @@ export async function bulkAddGroupMembersByIds(
   if (unique.length === 0) return { added: 0 }
 
   // Which are already members? Only insert the rest.
-  const { data: existing } = await supabase
-    .from('timetable_group_members')
-    .select('student_id')
-    .eq('group_id', groupId)
-    .in('student_id', unique)
-  const have = new Set((existing ?? []).map((r) => r.student_id))
+  const existingPages = await Promise.all(
+    chunk(unique).map((batch) =>
+      supabase
+        .from('timetable_group_members')
+        .select('student_id')
+        .eq('group_id', groupId)
+        .in('student_id', batch),
+    ),
+  )
+  const have = new Set(
+    existingPages.flatMap((p) => (p.data ?? []).map((r) => r.student_id as string)),
+  )
   const toAdd = unique.filter((id) => !have.has(id))
   if (toAdd.length === 0) return { added: 0 }
 

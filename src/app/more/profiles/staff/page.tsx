@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -40,7 +40,7 @@ import {
   NewUserInput,
 } from '@/lib/admin'
 import { UserRole, getDisplayRole } from '@/lib/supabase'
-import { upsertStaffDetails, fetchStaffDetailsMap, StaffDetails } from '@/lib/staffDetails'
+import { upsertStaffDetails, fetchStaffDirectoryMap, StaffDirectoryEntry } from '@/lib/staffDetails'
 import {
   SupportStaff,
   fetchSupportStaff,
@@ -164,7 +164,7 @@ export default function StaffProfileManagerPage() {
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [supportStaff, setSupportStaff] = useState<SupportStaff[]>([])
-  const [details, setDetails] = useState<Record<string, StaffDetails>>({})
+  const [details, setDetails] = useState<Record<string, StaffDirectoryEntry>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -229,57 +229,76 @@ export default function StaffProfileManagerPage() {
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
-    const [data, support] = await Promise.all([fetchAllProfiles(), fetchSupportStaff()])
-    const staffList = data.filter(p => STAFF_ROLES.includes(p.role))
+    const [staffList, support] = await Promise.all([
+      fetchAllProfiles({ roles: STAFF_ROLES, withTeams: false }),
+      fetchSupportStaff(),
+    ])
     setProfiles(staffList)
     setSupportStaff(support)
-    const map = await fetchStaffDetailsMap(staffList.map(s => s.id))
+    // The list only ever shows an employee code, a designation and a
+    // department, so it asks for those rather than the whole HR record.
+    const map = await fetchStaffDirectoryMap(staffList.map(s => s.id))
     setDetails(map)
     setLoading(false)
   }, [])
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const searchedProfiles = profiles.filter(p => {
-    const q = searchQuery.toLowerCase()
-    const d = details[p.id]
-    return (
-      p.full_name?.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) ||
-      p.role?.toLowerCase().includes(q) ||
-      getDisplayRole(p).toLowerCase().includes(q) ||
-      d?.employee_id?.toLowerCase().includes(q) ||
-      d?.designation?.toLowerCase().includes(q) ||
-      d?.department?.toLowerCase().includes(q)
-    )
-  })
+  // Handed to the bulk-import modal; rebuilding the Set on every render made
+  // the modal re-check the whole roster for each keystroke behind it.
+  const existingEmails = useMemo(
+    () => new Set(profiles.map(p => p.email.toLowerCase())),
+    [profiles],
+  )
 
-  const searchedSupport = supportStaff.filter(s => {
+  // Both rosters are filtered, counted and sorted below. The Add Staff modal
+  // keeps ~35 inputs in this component's state, so without memoisation every
+  // keystroke in any of them re-ran all of it over the whole staff list.
+  const searchedProfiles = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    return (
+    return profiles.filter(p => {
+      const d = details[p.id]
+      return (
+        p.full_name?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.role?.toLowerCase().includes(q) ||
+        getDisplayRole(p).toLowerCase().includes(q) ||
+        d?.employee_id?.toLowerCase().includes(q) ||
+        d?.designation?.toLowerCase().includes(q) ||
+        d?.department?.toLowerCase().includes(q)
+      )
+    })
+  }, [profiles, details, searchQuery])
+
+  const searchedSupport = useMemo(() => {
+    const q = searchQuery.toLowerCase()
+    return supportStaff.filter(s => (
       s.full_name?.toLowerCase().includes(q) ||
       // Matches the way the staff rows above match on their role name.
       'support'.includes(q) ||
       s.employee_id?.toLowerCase().includes(q) ||
       s.designation?.toLowerCase().includes(q) ||
       s.department?.toLowerCase().includes(q)
-    )
-  })
+    ))
+  }, [supportStaff, searchQuery])
 
   // Counts for the role filter dropdown — computed off the search-filtered
   // set (not role/status-filtered) so switching the role filter never moves
   // the numbers the admin is reading right before they click it.
-  const roleCounts: Record<string, number> = {}
-  for (const p of searchedProfiles) {
-    const key = roleStyleKey(p)
-    roleCounts[key] = (roleCounts[key] ?? 0) + 1
-  }
-  roleCounts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of searchedProfiles) {
+      const key = roleStyleKey(p)
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    counts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+    return counts
+  }, [searchedProfiles, searchedSupport])
 
   const matchesStatus = (isInactive: boolean) =>
     statusFilter === 'all' || (statusFilter === 'inactive' ? isInactive : !isInactive)
 
-  const filteredProfiles = searchedProfiles
+  const filteredProfiles = useMemo(() => searchedProfiles
     .filter(p => (roleFilter === 'all' || roleFilter === roleStyleKey(p)) && matchesStatus(!!p.is_banned))
     .sort((a, b) => {
       if (sortBy === 'role') {
@@ -291,9 +310,11 @@ export default function StaffProfileManagerPage() {
       if (sortBy === 'designation') return compareBlanksLast(details[a.id]?.designation ?? '', details[b.id]?.designation ?? '')
       if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
       return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
-    })
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedProfiles, details, roleFilter, statusFilter, sortBy])
 
-  const filteredSupport = searchedSupport
+  const filteredSupport = useMemo(() => searchedSupport
     .filter(s => (roleFilter === 'all' || roleFilter === SUPPORT_ROLE_VALUE) && matchesStatus(!s.is_active))
     .sort((a, b) => {
       if (sortBy === 'name_desc') return b.full_name.localeCompare(a.full_name)
@@ -301,7 +322,9 @@ export default function StaffProfileManagerPage() {
       if (sortBy === 'designation') return compareBlanksLast(a.designation ?? '', b.designation ?? '')
       if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
       return a.full_name.localeCompare(b.full_name) // role and name_asc both fall back to name for support staff
-    })
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedSupport, roleFilter, statusFilter, sortBy])
 
   const totalRows = filteredProfiles.length + filteredSupport.length
   const filtersActive = roleFilter !== 'all' || statusFilter !== 'all'
@@ -889,7 +912,7 @@ export default function StaffProfileManagerPage() {
       {showBulkImport && (
         <BulkImportModal
           mode="staff"
-          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          existingEmails={existingEmails}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles() }}
         />
