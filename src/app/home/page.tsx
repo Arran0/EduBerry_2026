@@ -55,7 +55,7 @@ import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
   AnnouncementWithDetails,
-  fetchAnnouncementsForUser,
+  fetchUnreadAnnouncementsForUser,
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
@@ -78,6 +78,11 @@ import {
   type NotificationFeed,
 } from '@/lib/leaveNotifications'
 import PushToggle from '@/components/notifications/PushToggle'
+import {
+  getAnnouncementsReadAt,
+  markAnnouncementsRead,
+  onAnnouncementReadsChanged,
+} from '@/lib/announcementReads'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 import { fetchLeaveApplicationById, LeaveApplicationWithDetails } from '@/lib/leave'
 import TodayTimetableCard from '@/components/home/TodayTimetableCard'
@@ -213,75 +218,8 @@ function ViewAllLink({ href, className = '' }: { href: string; className?: strin
   )
 }
 
-/** Frosted announcements list — shared by the admin carousel and the
- *  student/staff standalone card so both stay pixel-identical. */
-function AnnouncementsList({ items }: { items: AnnouncementWithDetails[] }) {
-  return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden">
-      {items.length > 0 ? (
-        <div className="divide-y divide-white/25">
-          {items.slice(0, 4).map((announcement, i) => (
-            <Link key={announcement.id} href="/announcements">
-              <div className="flex items-center gap-3.5 px-5 py-4 hover:bg-white/45 transition-colors group cursor-pointer">
-                <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${announcementColors[i % announcementColors.length]}`} />
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{announcement.title}</h4>
-                </div>
-                <span className="flex-shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-white/55 text-slate-500 group-hover:bg-white/80 transition-colors">
-                  {formatRelativeDate(announcement.created_at)}
-                </span>
-                <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div className="h-full flex flex-col items-center justify-center">
-          <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
-            <Megaphone size={22} className="text-slate-300" />
-          </div>
-          <p className="text-sm font-medium text-slate-400">No announcements yet</p>
-          <p className="text-xs text-slate-300 mt-1">Check back later for updates</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now  = new Date()
-
-  // Compare calendar dates in local timezone (not raw elapsed ms)
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth()    === b.getMonth()    &&
-    a.getDate()     === b.getDate()
-
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-
-  if (sameDay(date, now))        return 'Today'
-  if (sameDay(date, yesterday))  return 'Yesterday'
-
-  const diffDays = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
-  )
-  if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-const announcementColors = [
-  'bg-sky-500',
-  'bg-violet-500',
-  'bg-emerald-500',
-  'bg-amber-500',
-  'bg-rose-500',
-]
-
 type AdminCardView =
-  | 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards' | 'announcements'
+  | 'attendance' | 'fees' | 'bus-fees' | 'calendar' | 'assessments' | 'report-cards'
   | 'overdue-fees' | 'notifications' | 'timetable' | 'exams'
   | 'teacher-attendance' | 'task-calendar' | 'grading'
 
@@ -316,7 +254,6 @@ const DOT_COLORS: Record<AdminCardView, string> = {
   timetable: 'bg-indigo-500',
   exams: 'bg-purple-500',
   grading: 'bg-indigo-500',
-  announcements: 'bg-sky-500',
 }
 
 /**
@@ -461,7 +398,7 @@ export default function HomePage() {
   // teachers, and attendance-viewers (admin/principal/coordinator) each get
   // their own set of slots.
   const showCardCarousel = isStudent || isStaff
-  const [announcements, setAnnouncements] = useState<AnnouncementWithDetails[]>([])
+  const [unreadAnnouncements, setUnreadAnnouncements] = useState<AnnouncementWithDetails[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
@@ -486,8 +423,9 @@ export default function HomePage() {
   // built before the strip settles, avoiding a visible resnap).
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
-  // Whether announcements have resolved yet — hides the slot outright once
-  // loaded empty, rather than showing its "No announcements yet" placeholder.
+  // Whether the unread-announcements pull has resolved yet — the notifications
+  // slot is reserved until it has, so the card doesn't settle to "all caught
+  // up" and then grow announcement rows underneath the user.
   const [announcementsLoaded, setAnnouncementsLoaded] = useState(false)
   // Student-only mini cards fetch their own data; each reports back whether it
   // ended up empty so its slot can be dropped from the carousel entirely
@@ -568,17 +506,28 @@ export default function HomePage() {
       })
   }
 
+  /**
+   * The announcements this user hasn't read, for the notifications card. Only
+   * unread ones: an announcement leaves the box for good once it has been read
+   * on the announcements page — whether the user got there from a headline
+   * here or went to the page directly.
+   *
+   * `getAnnouncementsReadAt` floors the list at this device's old "everything
+   * before this was seen" badge mark, so accounts that were already caught up
+   * before per-row read markers existed don't open to a box full of history.
+   */
   const loadAnnouncements = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const data = await fetchAnnouncementsForUser(
+      const data = await fetchUnreadAnnouncementsForUser(
         user.id,
         profile.role,
+        getAnnouncementsReadAt(user.id),
         profile.grade ?? undefined,
         profile.section ?? undefined,
         5,
       )
-      setAnnouncements(data)
+      setUnreadAnnouncements(data)
     } catch (err) {
       console.error('Failed to load announcements for home:', err)
     } finally {
@@ -687,7 +636,8 @@ export default function HomePage() {
   // know whether it will end up empty — settles to notifItems.length > 0 once
   // resolved. Keeps the first thing anyone sees from being a mismatched card
   // (e.g. Attendance) that then gets shoved aside once notifications load.
-  const showNotifSlot = notifLoading || notifItems.length > 0
+  const showNotifSlot = notifLoading || !announcementsLoaded ||
+    notifItems.length > 0 || unreadAnnouncements.length > 0
 
   // Student-only mini cards: shown until their own fetch reports back empty
   // (see the onEmptyChange props wired up below).
@@ -696,10 +646,6 @@ export default function HomePage() {
   const showReportCards = !reportCardsEmpty
   const showTimetable = !timetableEmpty
   const showExams = !examsEmpty
-
-  // Announcements: reserved while loading (unknown yet), dropped once loaded
-  // with nothing to show instead of rendering the "No announcements" placeholder.
-  const showAnnouncements = !announcementsLoaded || announcements.length > 0
 
   // Attendance-viewer summary: reserved while attendanceCounts is still
   // loading (null), dropped only once loaded and every count across both
@@ -763,6 +709,21 @@ export default function HomePage() {
   }, [isDesktop])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
+  // The announcements page marks a page of notices read as it loads them;
+  // that broadcast is what drops them from this box without a refresh.
+  useEffect(() => onAnnouncementReadsChanged(() => { loadAnnouncements() }), [loadAnnouncements])
+
+  /**
+   * A headline in the notifications box was followed to the announcements page.
+   * The marker is written here as well as on the page it opens, so the row
+   * disappears from the box straight away rather than after the navigation
+   * settles — and stays gone if the user turns back before the page loads.
+   */
+  const handleOpenAnnouncement = useCallback((announcement: { id: string }) => {
+    if (!user) return
+    setUnreadAnnouncements(prev => prev.filter(a => a.id !== announcement.id))
+    markAnnouncementsRead(user.id, [announcement.id])
+  }, [user])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
@@ -903,21 +864,19 @@ export default function HomePage() {
      ──────────────────────────────────────────────────────────────────────── */
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
-  /* On mobile a card with nothing in it is a wasted swipe, so the carousel
-     drops empty slots. The desktop grid has no such cost and a dashboard that
-     rearranges itself as data loads (or that quietly omits "Bus Fees" on a day
-     nothing was billed) is harder to read than one whose cards are always in
-     the same place — so every card the role is entitled to stays, showing its
-     own zero/empty state. Role and preference gates still apply: this relaxes
-     "has content", never "should this user see it". */
-  const showEmptyCards = isDesktop
-  // The admin's own "show my task calendar on home" preference is a choice, not
-  // an emptiness check, so it survives on desktop; only `hasTasks` is relaxed.
-  const showTaskCalendarSlot = showEmptyCards ? (!isAdmin || showTaskCalendarOnHome) : showTaskCalendar
+  /* A card with nothing in it is a wasted swipe, so the strip drops empty
+     slots at every width. The standing statistics are the exception: they sit
+     in fixed rows of their own on desktop, and a dashboard that quietly omits
+     "Bus Fees" on a day nothing was billed — moving every other panel as it
+     goes — is harder to read than one whose rows are always in the same place.
+     So emptiness is relaxed for those three cards only, and only on desktop
+     where they have left the strip. Role and preference gates always apply:
+     this relaxes "has content", never "should this user see it". */
+  const showEmptyStatCards = isDesktop
 
   const slots: HomeSlot[] = []
 
-  if (isStudent && (showEmptyCards || hasOverdueFees)) {
+  if (isStudent && hasOverdueFees) {
     slots.push({
       key: 'overdue-fees',
       span: 'half',
@@ -934,7 +893,7 @@ export default function HomePage() {
     })
   }
 
-  if (showEmptyCards || showNotifSlot) {
+  if (showNotifSlot) {
     slots.push({
       key: 'notifications',
       span: 'half',
@@ -954,17 +913,19 @@ export default function HomePage() {
         : (
           <NotificationsSummaryCard
             items={notifItems}
+            announcements={unreadAnnouncements}
             hasMore={notifHasMore}
             loadingMore={notifLoadingMore}
             onLoadMore={handleLoadMoreNotifications}
             onRead={handleReadNotification}
             onOpen={handleOpenNotification}
+            onAnnouncementOpen={handleOpenAnnouncement}
           />
         ),
     })
   }
 
-  if (isStaff && isAttendanceViewer && (showEmptyCards || showAttendanceViewerCard)) {
+  if (isStaff && isAttendanceViewer && (showEmptyStatCards || showAttendanceViewerCard)) {
     slots.push({
       key: 'attendance',
       // Two scopes of donuts side by side — this one earns the full width.
@@ -1009,7 +970,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && showTaskCalendarSlot) {
+  if (isStaff && showTaskCalendar) {
     slots.push({
       key: 'task-calendar',
       span: 'wide',
@@ -1026,7 +987,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && (showEmptyCards || hasGradingQueue)) {
+  if (isStaff && hasGradingQueue) {
     slots.push({
       key: 'grading',
       span: 'half',
@@ -1043,7 +1004,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && (showEmptyCards || showSchoolWork)) {
+  if (isStudent && user && showSchoolWork) {
     slots.push({
       key: 'calendar',
       span: 'wide',
@@ -1060,7 +1021,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && (showEmptyCards || showAssessments)) {
+  if (isStudent && user && showAssessments) {
     slots.push({
       key: 'assessments',
       span: 'half',
@@ -1076,7 +1037,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && (showEmptyCards || showReportCards)) {
+  if (isStudent && user && showReportCards) {
     slots.push({
       key: 'report-cards',
       span: 'half',
@@ -1093,7 +1054,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && (showEmptyCards || showTimetable)) {
+  if (isStudent && user && showTimetable) {
     slots.push({
       key: 'timetable',
       span: 'half',
@@ -1110,7 +1071,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && (showEmptyCards || showExams)) {
+  if (isStudent && user && showExams) {
     slots.push({
       key: 'exams',
       span: 'half',
@@ -1127,7 +1088,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && (showEmptyCards || showFees)) {
+  if (isAdmin && (showEmptyStatCards || showFees)) {
     slots.push({
       key: 'fees',
       span: 'half',
@@ -1161,7 +1122,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && (showEmptyCards || showBusFees)) {
+  if (isAdmin && (showEmptyStatCards || showBusFees)) {
     slots.push({
       key: 'bus-fees',
       span: 'half',
@@ -1192,23 +1153,6 @@ export default function HomePage() {
           duesLabel="Passengers with Dues"
         />
       ),
-    })
-  }
-
-  if (showEmptyCards || showAnnouncements) {
-    slots.push({
-      key: 'announcements',
-      span: 'half',
-      heading: (
-        <SectionHeading
-          icon={Bell}
-          chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-          eyebrow="Latest"
-          title="Announcements"
-          action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
-        />
-      ),
-      body: <AnnouncementsList items={announcements} />,
     })
   }
 
@@ -1665,10 +1609,9 @@ export default function HomePage() {
               than stacked tiles. ── */}
           <div className="w-full px-2 pt-6">
             <motion.div variants={itemVariants} className="mb-0">
-              {showCardCarousel ? (
-                <div
+              <div
                   ref={cardContainerRef}
-                  className="group/carousel relative overflow-hidden min-h-[330px] pb-6"
+                  className="group/carousel strip-compact relative overflow-hidden min-h-[330px] pb-6"
                   style={{ touchAction: 'pan-y' }}
                 >
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
@@ -1706,18 +1649,6 @@ export default function HomePage() {
                     ))}
                   </div>
                 </div>
-              ) : (
-                <>
-                  <SectionHeading
-                    icon={Bell}
-                    chipClass="bg-gradient-to-br from-sky-400 to-blue-500"
-                    eyebrow="Latest"
-                    title="Announcements"
-                    action={<ViewAllLink href="/announcements" className="text-sky-600 hover:text-sky-700" />}
-                  />
-                  <AnnouncementsList items={announcements} />
-                </>
-              )}
             </motion.div>
           </div>
 

@@ -173,7 +173,7 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
   const teamLabel = teamNames.length > 0 ? teamNames.join(', ') : 'My team'
 
   return (
-    <div className="pro-card h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />

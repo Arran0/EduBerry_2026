@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { markAnnouncementsRead } from '@/lib/announcementReads'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Megaphone, Plus, Pin } from 'lucide-react'
 import AnnouncementCard from './AnnouncementCard'
@@ -215,6 +216,13 @@ export default function AnnouncementsList({
 
       if (data.length > 0) {
         const ids = data.map(a => a.id)
+        // Reaching this page of the feed is what reading an announcement means
+        // — whether the user came from a headline in the home notifications box
+        // or straight to this page. Marking them here (rather than on the
+        // headline click alone) is what makes the second route work, and it is
+        // what drops them from the box, on this device and every other.
+        markAnnouncementsRead(userId, ids).catch(err =>
+          console.warn('Could not mark announcements read:', err))
         const { counts, liked } = await fetchLikesForAnnouncements(ids, userId)
         if (append) {
           setLikeCounts(prev => ({ ...prev, ...counts }))
@@ -233,6 +241,24 @@ export default function AnnouncementsList({
   }, [userId, userRole, userGrade, userSection])
 
   useEffect(() => { loadPage(0, false) }, [loadPage])
+
+  /**
+   * `?a=<id>` — a headline followed from the home notifications box. Once the
+   * first page is in, scroll that announcement into view so the user lands on
+   * the notice they clicked rather than the top of the feed. Read from
+   * window.location rather than useSearchParams so this stays a plain
+   * client-side effect with no Suspense boundary to thread through the page.
+   */
+  const scrolledToTarget = useRef(false)
+  useEffect(() => {
+    if (loading || scrolledToTarget.current) return
+    const targetId = new URLSearchParams(window.location.search).get('a')
+    if (!targetId) return
+    const el = document.getElementById(`announcement-${targetId}`)
+    if (!el) return
+    scrolledToTarget.current = true
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading, announcements])
 
   const handleLoadMore = () => loadPage(nextOffset, true)
   const handleDelete   = (id: string) => setAnnouncements(prev => prev.filter(a => a.id !== id))
@@ -312,7 +338,7 @@ export default function AnnouncementsList({
   const groups      = groupByDate(restItems)
 
   const renderCard = (ann: AnnouncementWithDetails) => (
-    <motion.div key={ann.id} variants={itemVariants} className="relative">
+    <motion.div key={ann.id} id={`announcement-${ann.id}`} variants={itemVariants} className="relative scroll-mt-24">
       <AnnouncementCard
         announcement={ann}
         canDelete={

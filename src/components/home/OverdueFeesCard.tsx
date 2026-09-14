@@ -29,7 +29,7 @@ export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
 
   if (fees.length === 0) {
     return (
-      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
         <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
           <CheckCircle2 size={22} className="text-emerald-300" />
         </div>
@@ -40,7 +40,7 @@ export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
   }
 
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col border border-red-200/60">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col border border-red-200/60">
       <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
@@ -51,7 +51,7 @@ export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
       <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
         {fees.map(fee => (
           <Link key={fee.id} href="/more/fees">
-            <div className="flex items-center gap-3 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
+            <div className="home-card-row flex items-center gap-3 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
               <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-red-500" />
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">

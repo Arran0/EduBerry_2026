@@ -78,7 +78,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
 
   return (
-    <div ref={rootRef} className={`${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} h-[260px] overflow-hidden flex flex-col`}>
+    <div ref={rootRef} className={`home-card ${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} h-[260px] overflow-hidden flex flex-col`}>
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />

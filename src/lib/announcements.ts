@@ -1,4 +1,5 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+import { fetchReadAnnouncementIds } from './announcementReads'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -320,6 +321,56 @@ export async function fetchAnnouncementsForUser(
 
   if (error) throw new Error(`Failed to fetch announcements: ${error.message}`)
   return (data ?? []) as AnnouncementWithDetails[]
+}
+
+/**
+ * The announcements this user has not read yet, newest first — the rows the
+ * home notifications box shows alongside their OD / Leave notifications.
+ *
+ * Three things are filtered out:
+ *   - the user's own announcements (you don't need telling about the notice
+ *     you just wrote — same rule the navbar badge uses),
+ *   - anything posted before `sinceIso`, the device's "everything before this
+ *     was seen" mark, so an account that had already caught up under the old
+ *     badge scheme doesn't open to the whole back catalogue,
+ *   - anything with a read marker in `announcement_reads`.
+ *
+ * `limit` is the number of unread rows wanted; a wider window is scanned
+ * first (read rows are dropped after the fetch, not in the query — the read
+ * markers live in a separate table this query can't join through PostgREST),
+ * so a user with a few recently-read announcements still gets a full list.
+ */
+export async function fetchUnreadAnnouncementsForUser(
+  userId: string,
+  userRole: UserRole,
+  sinceIso: string | null,
+  userGrade?: number,
+  userSection?: string,
+  limit = 5,
+): Promise<AnnouncementWithDetails[]> {
+  const scope = await resolveAnnouncementScope(userId, userRole, userGrade, userSection)
+  if (scope.kind === 'ids' && scope.ids.length === 0) return []
+
+  const { data, error } = await queryAnnouncements(
+    q => {
+      let scoped = scope.kind === 'all' ? q : q.in('id', scope.ids).in('type', scope.types)
+      scoped = scoped.neq('created_by', userId)
+      return sinceIso ? scoped.gt('created_at', sinceIso) : scoped
+    },
+    limit * 3,
+    0,
+  )
+
+  if (error) {
+    console.warn('Could not load unread announcements:', error.message)
+    return []
+  }
+
+  const rows = (data ?? []) as AnnouncementWithDetails[]
+  if (rows.length === 0) return []
+
+  const read = await fetchReadAnnouncementIds(userId, rows.map(a => a.id))
+  return rows.filter(a => !read.has(a.id)).slice(0, limit)
 }
 
 /**

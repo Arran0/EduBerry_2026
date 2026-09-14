@@ -62,6 +62,37 @@ Anti-patterns:
 - Whitespace used as decoration. Whitespace should separate *groups*; inside a
   group, tighten.
 
+## Re-densifying phone-sized cards
+
+A card tuned for a phone (fixed ~260px tall, rows on 12px of vertical padding)
+is right when it fills the screen and wrong when it is one band across a 1280px
+page: the height buys nothing and pushes everything below it down. On desktop
+such a card should lose about a quarter of its height *and* tighten its rows, so
+it shows **more** records in **less** space — not the same three records with air
+around them.
+
+When the same treatment applies to a whole family of card components, scope it in
+CSS rather than threading a `compact` prop through all of them:
+
+```css
+@media (min-width: 1024px) {
+  .strip-compact .home-card      { height: 195px; }          /* 260 × 0.75 */
+  .strip-compact .home-card-row  { padding-block: 0.4rem; }  /* from py-3 */
+  /* space-y-* is `> :not([hidden]) ~ :not([hidden])` — match that shape or
+     lose on specificity */
+  .strip-compact .home-card-stack > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+}
+```
+
+Each card carries `.home-card`, each record `.home-card-row`. The breakpoint is
+the only input, so nothing re-renders, and a card added to the family later picks
+the density up by carrying the class. Keep every rule exactly one class more
+specific than the Tailwind utility it overrides — that is what lets it win
+without `!important`.
+
+Remember the container too: a track with `min-h-[330px]` around 260px cards
+needs its own reduced minimum, or the slimmer cards just float in the old box.
+
 ## Touch vs pointer
 
 - Desktop click targets: 32–40px tall for rows and buttons; 24px is acceptable

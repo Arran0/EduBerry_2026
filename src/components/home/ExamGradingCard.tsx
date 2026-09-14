@@ -17,7 +17,7 @@ interface ExamGradingCardProps {
  *  so rather than leaving the card blank. */
 export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
   return (
-    <div className="pro-card h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
       <div className="px-5 pt-4 pb-3 border-b border-slate-200 flex items-center gap-2">
         <ClipboardCheck size={16} className="text-indigo-500" />
         <span className="text-sm font-bold text-slate-700">Grading</span>
@@ -37,7 +37,7 @@ export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
           const pct = total > 0 ? Math.round((q.gradedCount / total) * 100) : 0
           return (
             <Link key={q.examId} href={`/more/exam/${q.examId}?tab=grading`}>
-              <div className="px-5 py-3 hover:bg-slate-50 transition-colors group cursor-pointer">
+              <div className="home-card-row px-5 py-3 hover:bg-slate-50 transition-colors group cursor-pointer">
                 <div className="flex items-center gap-2 mb-1.5">
                   <h4 className="flex-1 min-w-0 font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{q.title}</h4>
                   <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />

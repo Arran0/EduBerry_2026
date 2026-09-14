@@ -64,7 +64,7 @@ export default function LatestAssessmentsMiniList({ classrooms, onEmptyChange }:
   useEffect(() => { if (!loading) onEmptyChange?.(items.length === 0) }, [loading, items, onEmptyChange])
 
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />
@@ -80,7 +80,7 @@ export default function LatestAssessmentsMiniList({ classrooms, onEmptyChange }:
         <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
           {items.map(({ assessment, classroomId, classroomTitle }) => (
             <Link key={assessment.id} href={`/classrooms/${classroomId}?tab=assessments`}>
-              <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
+              <div className="home-card-row flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${TAG_COLORS[assessment.tag]}`} />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{assessment.title}</h4>

@@ -71,7 +71,7 @@ export default function ReportCardsMiniList({ userId, onEmptyChange }: ReportCar
   const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount])
 
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />
@@ -92,7 +92,7 @@ export default function ReportCardsMiniList({ userId, onEmptyChange }: ReportCar
         >
           {visibleGroups.map(group => (
             <Link key={group.title} href="/academics?section=reportcards">
-              <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
+              <div className="home-card-row flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-rose-500" />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{group.title}</h4>

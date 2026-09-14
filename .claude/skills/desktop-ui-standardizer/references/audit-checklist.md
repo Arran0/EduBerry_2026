@@ -25,9 +25,9 @@ Run this before calling a desktop view done. Check at **1280px, 1440px and
 - [ ] A carousel that does *not* survive has its autoplay timers, drag listeners
       and observers disabled on desktop, not merely hidden.
 - [ ] Bottom sheets / full-screen pushes became modals or side panels.
-- [ ] Dashboard cards keep their position as data loads — empty ones show a real
-      empty state instead of dropping out of the grid (role and preference gates
-      still apply).
+- [ ] Cards in fixed rows keep their position as data loads — empty ones show a
+      real empty state instead of dropping out (role and preference gates still
+      apply); cards in a rotating strip drop out when empty, at every width.
 - [ ] `mobile → tablet → desktop` was designed deliberately; `md:` is not simply
       inherited from base.
 

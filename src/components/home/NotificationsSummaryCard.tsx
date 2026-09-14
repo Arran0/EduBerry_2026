@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useCallback, useRef } from 'react'
-import { CheckCircle2, XCircle, Inbox, Check, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, XCircle, Inbox, Check, Loader2, Megaphone, ChevronRight } from 'lucide-react'
 import { NotifItem, NotifTone, isApplicantDecision } from '@/lib/leaveNotifications'
 
 export const TONE_ICON: Record<NotifTone, React.ReactNode> = {
@@ -10,8 +11,17 @@ export const TONE_ICON: Record<NotifTone, React.ReactNode> = {
   incoming: <Inbox size={15} className="text-sky-500 flex-shrink-0" />,
 }
 
+/** An unread announcement, as this box shows it: a headline and when it landed. */
+export interface AnnouncementNotice {
+  id: string
+  title: string
+  created_at: string
+}
+
 interface NotificationsSummaryCardProps {
   items: NotifItem[]
+  /** Unread announcements, newest first — listed above the leave rows. */
+  announcements?: AnnouncementNotice[]
   /** More unread rows exist behind the ones currently listed. */
   hasMore: boolean
   /** A page is in flight — the footer shows a spinner instead of re-asking. */
@@ -22,6 +32,28 @@ interface NotificationsSummaryCardProps {
   onRead: (item: NotifItem) => void
   /** Opens the row's application in the shared popup, in place. */
   onOpen: (item: NotifItem) => void
+  /** Fired as an announcement headline is followed to the announcements page. */
+  onAnnouncementOpen?: (announcement: AnnouncementNotice) => void
+}
+
+/** "Today" / "Yesterday" / weekday / date — the same scale the feed rows use. */
+function formatNoticeDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+
+  if (sameDay(date, now)) return 'Today'
+  if (sameDay(date, yesterday)) return 'Yesterday'
+
+  const diffDays = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000
+  )
+  if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /**
@@ -35,10 +67,10 @@ interface NotificationsSummaryCardProps {
  */
 export function NotificationsCardSkeleton() {
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       <div className="flex-1 divide-y divide-white/25">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-start gap-2.5 px-5 py-3 animate-pulse">
+          <div key={i} className="home-card-row flex items-start gap-2.5 px-5 py-3 animate-pulse">
             <span className="mt-0.5 w-[15px] h-[15px] rounded-full bg-slate-300/60 flex-shrink-0" />
             <div className="flex-1 min-w-0 space-y-1.5 py-0.5">
               <div className="h-2.5 rounded-full bg-slate-300/60" style={{ width: `${85 - i * 8}%` }} />
@@ -65,7 +97,7 @@ export function NotificationsCardSkeleton() {
  * is approved or rejected, at which point it leaves the feed by itself.
  */
 export default function NotificationsSummaryCard({
-  items, hasMore, loadingMore, onLoadMore, onRead, onOpen,
+  items, announcements = [], hasMore, loadingMore, onLoadMore, onRead, onOpen, onAnnouncementOpen,
 }: NotificationsSummaryCardProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -75,11 +107,11 @@ export default function NotificationsSummaryCard({
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) onLoadMore()
   }, [hasMore, loadingMore, onLoadMore])
 
-  // The mobile carousel drops this slot when there is nothing unread; the
-  // desktop dashboard keeps every card, so an empty inbox says so.
-  if (items.length === 0) {
+  // The carousel drops this slot when there is nothing unread at all — which
+  // now means neither an announcement nor a leave notification.
+  if (items.length === 0 && announcements.length === 0) {
     return (
-      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
         <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
           <Inbox size={22} className="text-slate-300" />
         </div>
@@ -90,14 +122,38 @@ export default function NotificationsSummaryCard({
   }
 
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto overscroll-contain divide-y divide-white/25"
       >
+        {/* Announcements lead the box: they are school-wide news, and unlike a
+            leave row there is nothing to decide — the headline links straight
+            to the announcements page, which is where reading it marks it read
+            and drops it from here. */}
+        {announcements.map(a => (
+          <Link
+            key={a.id}
+            href={`/announcements?a=${a.id}`}
+            onClick={() => onAnnouncementOpen?.(a)}
+            className="home-card-row flex items-center gap-2.5 px-5 py-3 hover:bg-white/45 transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+          >
+            <Megaphone size={15} className="text-violet-500 flex-shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-[13px] font-semibold text-slate-700 truncate group-hover:text-slate-900 transition-colors" title={a.title}>
+                {a.title}
+              </span>
+            </span>
+            <span className="flex-shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-white/55 text-slate-500 group-hover:bg-white/80 transition-colors">
+              {formatNoticeDate(a.created_at)}
+            </span>
+            <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
+          </Link>
+        ))}
+
         {items.map(item => (
-          <div key={item.id} className="flex items-start gap-1 pr-2 hover:bg-white/45 transition-colors">
+          <div key={item.id} className="home-card-row flex items-start gap-1 pr-2 hover:bg-white/45 transition-colors">
             {/* Opening a decision on your own leave is the whole point of the
                 row, so reading it clears it — here and on the application. An
                 incoming request is not addressed just by being looked at; it
@@ -106,7 +162,7 @@ export default function NotificationsSummaryCard({
             <button
               type="button"
               onClick={() => onOpen(item)}
-              className="flex-1 min-w-0 flex items-start gap-2.5 pl-5 py-3 cursor-pointer text-left"
+              className="home-card-row flex-1 min-w-0 flex items-start gap-2.5 pl-5 py-3 cursor-pointer text-left"
             >
               <span className="mt-0.5">{TONE_ICON[item.tone]}</span>
               <p className="flex-1 min-w-0 text-[13px] leading-snug text-slate-600">{item.text}</p>

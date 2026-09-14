@@ -72,7 +72,7 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
 
   return (
     <Link href="/more/timetable">
-      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer group">
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer group">
         <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarClock size={16} className="text-indigo-500" />
@@ -94,7 +94,7 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
         ) : (
           <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
             {periods!.filter(p => p.entry?.subject_id).map(({ slot, entry }) => (
-              <div key={slot.id} className="flex items-center gap-3 px-5 py-2.5">
+              <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 py-2.5">
                 <span className="text-[11px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0">
                   {formatTime(slot.start_time)}
                 </span>

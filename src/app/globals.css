@@ -340,6 +340,57 @@ body {
     0 10px 24px -16px rgba(15, 23, 42, 0.28);
 }
 
+/* ============================================================ */
+/* Home card strip — desktop density                             */
+/* ============================================================ */
+
+/* The home cards are sized for a phone: 260px tall with rows on 12px of
+   vertical padding, which is right when the card is most of the screen. On a
+   desktop the same card is one band across a 1280px page, and that height buys
+   nothing — the strip just pushes the statistics below it down the page.
+
+   Inside `.strip-compact` (the desktop card strip), every card drops to 195px
+   (a quarter off) and its rows tighten, so the same card shows *more* rows in
+   *less* height rather than the same three rows with air around them.
+
+   Why CSS rather than a `compact` prop threaded through nine card components:
+   the breakpoint is the only input, and a media query already knows it — no
+   component needs to re-render, and a card dropped into the strip later picks
+   the density up for free by carrying `.home-card`.
+
+   The hooks:
+     .home-card       the card's own 260px box
+     .home-card-row   one record inside it (vertical padding)
+     .home-card-stack a scroll area whose records are spaced by margin, not
+                      padding (space-y-*), so it needs the sibling selector
+   Each rule is one class more specific than the Tailwind utility it overrides,
+   which is what lets it win without !important. */
+@media (min-width: 1024px) {
+  .strip-compact .home-card {
+    height: 195px;
+  }
+
+  /* The track reserves room for the tallest card plus the dots below it. */
+  .strip-compact.strip-compact {
+    min-height: 265px;
+  }
+
+  .strip-compact .home-card-row {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .strip-compact .home-card-stack {
+    padding: 0.625rem;
+  }
+
+  /* Matches space-y-*'s own `> :not([hidden]) ~ :not([hidden])` shape so it
+     outranks it; a plain `> * + *` would lose on specificity. */
+  .strip-compact .home-card-stack > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem;
+  }
+}
+
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work
    the academics page and the classrooms behind it as a tool, so every corner
    inside squares off: cards, day columns, icon chips, inputs, tabs and pill
