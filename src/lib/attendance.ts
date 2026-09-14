@@ -646,6 +646,12 @@ export async function fetchAttendanceSheet(
   })
 }
 
+/**
+ * Saves a homeroom's marked sheet in one upsert.
+ *
+ * As in adminMarkStaffAttendance, `markedBy` is informational — the
+ * `force_marked_by` trigger stores auth.uid() regardless of what is sent.
+ */
 export async function bulkMarkAttendance(
   homeroomId: string,
   date: string,
@@ -1210,6 +1216,13 @@ export async function fetchTrackedStaffCount(): Promise<number> {
   return count ?? 0
 }
 
+/**
+ * Admin / principal / coordinator sets a staff member's status for a day.
+ *
+ * `markedBy` is the caller's own id. It is sent for clarity, not for trust:
+ * a `force_marked_by` trigger overwrites the stored value with auth.uid(), so
+ * the row is always attributed to the session that actually wrote it.
+ */
 export async function adminMarkStaffAttendance(
   staffId: string,
   date: string,
