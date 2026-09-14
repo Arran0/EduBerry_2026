@@ -10,46 +10,13 @@ import PageBanner from '@/components/PageBanner'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
-import {
-  BookOpen,
-  Plus,
-  X,
-  UserMinus,
-  ChevronDown,
-  ChevronUp,
-  Calendar,
-  Edit3,
-  Save,
-  Loader2,
-  Users,
-  Lock,
-  LockOpen,
-  Trash2,
-  ExternalLink,
-  Search,
-  Tag,
-  Home,
-  MonitorPlay,
-  DownloadCloud,
-  CheckCircle2,
-} from 'lucide-react'
+import { BookOpen, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Lock, LockOpen, Trash2, ExternalLink, Search, Tag, Home, MonitorPlay, DownloadCloud, CheckCircle2 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
 import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom, fetchSmartboardIdsForGradeSection } from '@/lib/smartboard'
 import { UserProfile } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import {
-  ClassroomWithDetails,
-  fetchClassroomsForUser,
-  createClassroom,
-  updateClassroom,
-  fetchClassroomById,
-  addMemberByEmail,
-  addClassroomMember,
-  removeClassroomMember,
-  deleteClassroom,
-  isClassroomClosed,
-} from '@/lib/classrooms'
+import { ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
 import { supabase } from '@/lib/supabase'
 
 const containerVariants = {
@@ -64,7 +31,6 @@ const itemVariants = {
 
 // Admin input style helper
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 
 export default function ClassroomManagerPage() {
   const { user, profile } = useAuth()
@@ -606,10 +572,6 @@ const ROLE_BADGE: Record<string, string> = {
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
   student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
-}
-
-interface EditFormState {
-  title: string; description: string; academic_year: string; grade: string; section: string; subject: string
 }
 
 interface ClassroomRowProps {

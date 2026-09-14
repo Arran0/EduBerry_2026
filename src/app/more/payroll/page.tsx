@@ -7,11 +7,10 @@ import {
   ArrowLeft, Plus, Layers, SlidersHorizontal, Scale, Wallet, ChevronRight, Lock, FlaskConical, MapPin,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import { useAuth } from '@/contexts/AuthContext'
 import { fetchRuns, createRun, runPeriodLabel } from '@/lib/payroll/runs'
 import type { RunRow } from '@/lib/payroll/rows'
 import { RUN_STATUS_LABEL } from '@/lib/payroll/engine/workflow'
-import { PUI, STATUS_CHIP, inr } from '@/components/payroll/ui'
+import { PUI, STATUS_CHIP } from '@/components/payroll/ui'
 
 // The payroll hub: every run, and the way in to the five things that shape one
 // — structures, policies, work locations, compliance rules and the money owed
@@ -35,7 +34,6 @@ export default function PayrollHubPage() {
 
 function PayrollHub() {
   const router = useRouter()
-  const { profile } = useAuth()
   const [runs, setRuns] = useState<RunRow[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)

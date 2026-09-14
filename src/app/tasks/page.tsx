@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -20,14 +20,18 @@ import {
   X,
   Image as ImageIcon,
 } from 'lucide-react'
-import { usePageConfig } from '@/contexts/PageConfigContext'
 import dynamic from 'next/dynamic'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
 import VerificationAlerts from '@/components/tasks/VerificationAlerts'
-import TeamAnalytics, { prefetchTeamAnalytics } from '@/components/tasks/TeamAnalytics'
+// Only the Weekly tab renders on load, so every other tab's component is split
+// out of the initial bundle. The Team tab's prefetch helper is imported eagerly
+// from its own module (see teamAnalyticsCache) so hovering the tab can warm the
+// cache without pulling the component's code in first.
 const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'))
 const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'))
-import { fetchProjectsForUser } from '@/lib/projects'
+const TeamAnalytics = dynamic(() => import('@/components/tasks/TeamAnalytics'))
+import { prefetchTeamAnalytics } from '@/lib/teamAnalyticsCache'
+import { fetchActiveProjectCount } from '@/lib/projects'
 import {
   AnnouncementBannerConfig,
   TASK_BANNER_DEFAULT,
@@ -64,7 +68,6 @@ const tabs: Tab[] = [
 
 function TasksPageContent() {
   const { user, profile } = useAuth()
-  const { pageIcons: pageConfig } = usePageConfig()
   const searchParams = useSearchParams()
 
   const [activeTab,          setActiveTab]          = useState<TabId>('weekly')
@@ -123,24 +126,12 @@ function TasksPageContent() {
 
   // ── Load active project count for badge ──
 
+  // Both this count and the Projects tab's Active/Closed split derive from
+  // getProjectStatus in lib/projects, so the badge can't disagree with the list
+  // it sits above.
   useEffect(() => {
     if (!user || !profile) return
-    fetchProjectsForUser(user.id, profile.role).then(projects => {
-      const todayStr = new Date().toISOString().split('T')[0]
-      const count = projects.filter(p => {
-        // Dismissed subtasks are treated as deleted — ignored in progress maths.
-        const subtasks = p.subtasks.filter(s => s.status !== 'dismissed')
-        const total = subtasks.length
-        if (total === 0) return true
-        const completed = subtasks.filter(s => s.status === 'checked' || (!s.require_check && s.status === 'done')).length
-        if (completed === total) return false
-        const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
-        const isPastDue = !!p.end_date && p.end_date < todayStr
-        const isCompletedAfterDue = done === total && isPastDue
-        return !isCompletedAfterDue
-      }).length
-      setActiveProjectCount(count)
-    })
+    fetchActiveProjectCount(user.id, profile.role).then(setActiveProjectCount)
   }, [user, profile])
 
   // ── Load banner config ──
@@ -203,9 +194,16 @@ function TasksPageContent() {
     }
   }, [_imgUrl, _gradFrom, _gradTo])
 
-  if (!user || !profile) return null
+  // Stable identity matters: this array is a prop of both WeeklyCalendar and
+  // ProjectsList, and a fresh array on every render of this page would
+  // re-trigger their effects. Sits above the early return for the same
+  // hook-order reason as the banner values above.
+  const allAssignees = useMemo<UserProfile[]>(
+    () => (profile ? [profile, ...teamMembers] : []),
+    [profile, teamMembers],
+  )
 
-  const allAssignees: UserProfile[] = [profile, ...teamMembers]
+  if (!user || !profile) return null
 
   // Jump to the assignee's calendar, pointing at the task awaiting verification.
   const handleNavigateToVerification = (assigneeId: string, dueDate: string | null, taskId: string) => {
@@ -314,27 +312,30 @@ function TasksPageContent() {
           )}
 
           {/* Header row */}
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-9 pb-12 sm:pt-11 sm:pb-14">
+          {/* Padding, chip size and type scale are kept in lockstep with the
+              Academics banner (src/app/academics/page.tsx) so both pages open
+              to the same banner height. */}
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
             <motion.div
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
-              className="flex items-center gap-4 sm:gap-5"
+              className="flex items-center gap-3"
             >
               <div
-                className={`icon-chip w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'}`}
+                className={`icon-chip w-[50px] h-[50px] flex-shrink-0 transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'}`}
               >
-                <ClipboardList size={28} className={`relative z-10 transition-colors duration-300 ${bannerOnDark ? 'text-white drop-shadow-sm' : 'text-slate-700'}`} />
+                <ClipboardList size={26} className={`relative z-10 transition-colors duration-300 ${bannerOnDark ? 'text-white drop-shadow-sm' : 'text-slate-700'}`} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p
-                  className={`eyebrow mb-2 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
+                  className={`eyebrow mb-1.5 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
                   style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
                 >
                   Plan, Track, Verify Your Team
                 </p>
                 <h1
-                  className={`font-display text-[1.9rem] sm:text-[2.6rem] font-bold leading-[1.05] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                  className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
                   style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
                 >
                   Task Manager

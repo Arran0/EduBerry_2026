@@ -53,6 +53,12 @@ export default function FeesPage() {
   )
 }
 
+// The pre-rebuild fee page, kept deliberately: the default export above
+// renders UnderConstruction while these tools are rebuilt, and this is the
+// reference implementation that rebuild works against. It is the only thing
+// holding the rest of this file reachable — deleting it strips the whole
+// parked UI with it.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function FeesPageOriginal() {
   const { profile } = useAuth()
   const router = useRouter()
@@ -944,7 +950,7 @@ function AdminFeeHub({ onBack }: { onBack: () => void }) {
                           {inactiveHeads.length} inactive head{inactiveHeads.length === 1 ? '' : 's'} hidden. Search by name to manage them.
                         </p>
                       ) : matchingInactive.length === 0 ? (
-                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches "{inactiveQuery}".</p>
+                        <p className="text-xs text-[#A1A1AA] px-1">No inactive fee head matches &ldquo;{inactiveQuery}&rdquo;.</p>
                       ) : (
                         <div className="border border-[#E4E4E7] rounded-xl overflow-hidden bg-white">
                           {matchingInactive.map(head => {

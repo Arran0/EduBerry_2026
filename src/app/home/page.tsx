@@ -3,10 +3,9 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { getRoleDisplayName, isAdminRole } from '@/lib/supabase'
+import { isAdminRole } from '@/lib/supabase'
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   Bell,
   Megaphone,
@@ -54,13 +53,14 @@ import {
 import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
-  AnnouncementWithDetails,
-  fetchUnreadAnnouncementsForUser,
+  UnreadAnnouncement,
+  fetchUnreadAnnouncements,
 } from '@/lib/announcements'
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
+import { fetchRawSetting, saveSetting } from '@/lib/pageConfig'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
 import DailyQuoteCard from '@/components/home/DailyQuoteCard'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
@@ -386,7 +386,6 @@ const ICON_GRADIENTS = [
 ]
 
 export default function HomePage() {
-  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile ? isAdminRole(profile.role) : false
   const isCoordinator = profile?.role === 'coordinator'
@@ -398,7 +397,7 @@ export default function HomePage() {
   // teachers, and attendance-viewers (admin/principal/coordinator) each get
   // their own set of slots.
   const showCardCarousel = isStudent || isStaff
-  const [unreadAnnouncements, setUnreadAnnouncements] = useState<AnnouncementWithDetails[]>([])
+  const [unreadAnnouncements, setUnreadAnnouncements] = useState<UnreadAnnouncement[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
@@ -476,9 +475,8 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    supabase.from('site_settings').select('value').eq('key', 'welcome_banner').single()
-      .then(({ data }) => {
-        const url = data?.value as string | undefined
+    fetchRawSetting<string>('welcome_banner')
+      .then(url => {
         if (url) {
           const img = new window.Image()
           img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
@@ -509,10 +507,9 @@ export default function HomePage() {
     // Show the new banner immediately — persisting it site-wide can finish in
     // the background instead of blocking the admin's own view of the change.
     setWelcomeBanner(publicUrl)
-    supabase.from('site_settings').upsert({ key: 'welcome_banner', value: publicUrl }, { onConflict: 'key' })
-      .then(({ error: upsertError }) => {
-        if (upsertError) console.error('Failed to save welcome banner:', upsertError)
-      })
+    saveSetting('welcome_banner', publicUrl).then(ok => {
+      if (!ok) console.error('Failed to save welcome banner')
+    })
   }
 
   /**
@@ -528,15 +525,9 @@ export default function HomePage() {
   const loadAnnouncements = useCallback(async () => {
     if (!user || !profile) return
     try {
-      const data = await fetchUnreadAnnouncementsForUser(
-        user.id,
-        profile.role,
-        getAnnouncementsReadAt(user.id),
-        profile.grade ?? undefined,
-        profile.section ?? undefined,
-        5,
-      )
-      setUnreadAnnouncements(data)
+      // Visibility is RLS's job now (see lib/announcements) — the only thing
+      // this caller supplies is the read floor and how many rows it wants.
+      setUnreadAnnouncements(await fetchUnreadAnnouncements(getAnnouncementsReadAt(user.id), 5))
     } catch (err) {
       console.error('Failed to load announcements for home:', err)
     } finally {
@@ -1569,7 +1560,7 @@ export default function HomePage() {
               <div className="absolute inset-x-0 bottom-0 z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-7">
                   {(() => {
-                    const { line1, line2, icon } = getGreetingData()
+                    const { line1, icon } = getGreetingData()
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div

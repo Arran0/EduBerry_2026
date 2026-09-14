@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { TrendingUp, TrendingDown, Users, AlertTriangle, Check } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, Check } from 'lucide-react'
 import type { VarianceResult } from '@/lib/payroll/engine/variance'
 import type { RunTotals } from '@/lib/payroll/runs'
 import { inr, inrDelta, deltaColor, PUI } from './ui'

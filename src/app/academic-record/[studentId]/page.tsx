@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Award, Bookmark, FileText, GraduationCap,
   Loader2, MessageSquare, Printer, Save, Trash2,
@@ -21,24 +20,7 @@ import {
   deleteRemark,
 } from '@/lib/classrooms'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
-
-// ─── Grade helpers (mirrors ReportCardsSection) ────────────────────────────────
-function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-green-100',   fg: 'text-green-700'   }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-yellow-100',  fg: 'text-yellow-700'  }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-red-100',     fg: 'text-red-600'     }
-  return               { letter: 'E',  bg: 'bg-red-100',     fg: 'text-red-700'     }
-}
-
-function formatShort(d: string): string {
-  try {
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
-}
+import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function AcademicRecordPage() {
@@ -58,40 +40,43 @@ export default function AcademicRecordPage() {
   const [remarks, setRemarks] = useState<ReportCardRemark[]>([])
   const [loadingCards, setLoadingCards] = useState(false)
 
-  // Load student profile + branding
+  // Load student profile, branding, the academic-year list and the remarks.
+  // None of these depend on each other — only the report cards themselves need
+  // a year — so they all go out together instead of one waiting on the profile.
+  // Only the header fields are selected: this page renders no other profile
+  // column.
   useEffect(() => {
     fetchBranding().then(setBranding).catch(() => {})
-    supabase.from('profiles').select('*').eq('id', studentId).single()
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url, grade, section')
+      .eq('id', studentId)
+      .single()
       .then(({ data }) => {
-        setStudent(data as UserProfile ?? null)
+        setStudent((data as UserProfile | null) ?? null)
         setLoadingStudent(false)
       })
-  }, [studentId])
-
-  // Load available academic years once student is loaded
-  useEffect(() => {
-    if (!student) return
     fetchAvailableAcademicYearsForStudent(studentId).then(ys => {
       setYears(ys)
       if (ys.length > 0) setSelectedYear(ys[0])
     })
-  }, [student, studentId])
+  }, [studentId])
 
-  // Load report cards + remarks when year changes
+  // Remarks are per student, not per year, so a year switch leaves them alone.
+  const loadRemarks = useCallback(
+    () => fetchRemarksForStudent(studentId).then(setRemarks),
+    [studentId],
+  )
+  useEffect(() => { loadRemarks() }, [loadRemarks])
+
+  // Load report cards when the year changes
   const loadCards = useCallback(async (year: string | null) => {
     setLoadingCards(true)
-    const [cards, rmks] = await Promise.all([
-      fetchReportCardsForStudent(studentId, year),
-      fetchRemarksForStudent(studentId),
-    ])
-    setReportCards(cards)
-    setRemarks(rmks)
+    setReportCards(await fetchReportCardsForStudent(studentId, year))
     setLoadingCards(false)
   }, [studentId])
 
-  useEffect(() => {
-    if (selectedYear !== undefined) loadCards(selectedYear)
-  }, [selectedYear, loadCards])
+  useEffect(() => { loadCards(selectedYear) }, [selectedYear, loadCards])
 
   // Sort report card titles by most-recently-assessed date
   const sortedEntries = useMemo(() => {
@@ -208,7 +193,7 @@ export default function AcademicRecordPage() {
                       viewerId={viewerProfile!.id}
                       viewer={viewerProfile!}
                       canEditRemarks={isStaff}
-                      onRemarksChanged={() => loadCards(selectedYear)}
+                      onRemarksChanged={loadRemarks}
                     />
                   ))}
                 </div>
@@ -321,7 +306,7 @@ function ReportCardBlock({
         </InfoField>
         <InfoField label="Period">
           {dates.length > 0
-            ? `${formatShort(dates[0])} – ${formatShort(dates[dates.length - 1])}`
+            ? `${formatShortDate(dates[0])} – ${formatShortDate(dates[dates.length - 1])}`
             : '—'}
         </InfoField>
       </div>

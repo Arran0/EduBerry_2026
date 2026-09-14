@@ -95,12 +95,13 @@ export interface NewTaskInput {
   checklist_items?: string[]
 }
 
-export interface TaskFilter {
-  status?: TaskStatus
-  is_overdue?: boolean
-  due_date_from?: string
-  due_date_to?: string
-}
+/**
+ * The only profile fields the assignee pickers, avatars and member lists in the
+ * Task Manager read. The profiles joins throughout this file have always
+ * selected exactly these; the places that used to select '*' were shipping all
+ * 15 columns of a profile row for the four that actually get rendered.
+ */
+const ASSIGNEE_PROFILE_COLUMNS = 'id, full_name, avatar_url, role'
 
 // ============================================
 // Status helpers
@@ -311,7 +312,7 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
 
   let { data: tasks, error } = await supabase.from('tasks').insert(rows).select()
   if (error?.code === UNDEFINED_COLUMN) {
-    const fallbackRows = rows.map(({ requires_submission, ...fallbackRow }) => fallbackRow)
+    const fallbackRows = rows.map(({ requires_submission: _requires_submission, ...fallbackRow }) => fallbackRow)
     ;({ data: tasks, error } = await supabase.from('tasks').insert(fallbackRows).select())
   }
 
@@ -320,16 +321,21 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
     return null
   }
 
-  await supabase.from('task_assignees').insert(
-    tasks.map((task, i) => ({ task_id: task.id, user_id: assigneeIds[i] }))
-  )
-
-  if (input.checklist_items && input.checklist_items.length > 0) {
-    const checklistRecords = tasks.flatMap(task =>
-      input.checklist_items!.map((text, i) => ({ task_id: task.id, text, sort_order: i }))
-    )
-    await supabase.from('task_checklist_items').insert(checklistRecords)
-  }
+  // Both inserts depend on the new task rows but not on each other, so they go
+  // out together — task creation is an interactive path (the grid's inline
+  // quick-add), where a saved round-trip is visible.
+  await Promise.all([
+    supabase.from('task_assignees').insert(
+      tasks.map((task, i) => ({ task_id: task.id, user_id: assigneeIds[i] }))
+    ),
+    input.checklist_items?.length
+      ? supabase.from('task_checklist_items').insert(
+          tasks.flatMap(task =>
+            input.checklist_items!.map((text, i) => ({ task_id: task.id, text, sort_order: i }))
+          )
+        )
+      : Promise.resolve(),
+  ])
 
   return tasks[0] as Task
 }
@@ -506,89 +512,15 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 // Task queries
 // ============================================
 
-export async function fetchTasksForUser(userId: string): Promise<TaskWithDetails[]> {
-  const { data: assignees, error: aErr } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  if (aErr || !assignees) return []
-
-  const taskIds = assignees.map(a => a.task_id)
-  if (taskIds.length === 0) return []
-
-  return fetchTasksByIds(taskIds)
-}
-
-export async function fetchTasksByIds(taskIds: string[]): Promise<TaskWithDetails[]> {
-  if (taskIds.length === 0) return []
-
-  const { data: tasks, error } = await supabase
-    .from('tasks')
-    .select('*')
-    .in('id', taskIds)
-    .order('created_at', { ascending: false })
-
-  if (error || !tasks) return []
-
-  return hydrateTasks(tasks as Task[])
-}
-
-/**
- * Load the related rows (assignees, checklist, comments, creators) for a set of
- * already-fetched tasks and assemble them into TaskWithDetails. Shared by
- * fetchTasksByIds and fetchCalendarData so both produce identical, fully
- * populated task objects.
- */
-async function hydrateTasks(tasks: Task[]): Promise<TaskWithDetails[]> {
-  if (tasks.length === 0) return []
-
-  const taskIds = tasks.map(t => t.id)
-
-  const { data: allAssignees } = await supabase
-    .from('task_assignees')
-    .select('*, user:profiles(id, full_name, avatar_url, role)')
-    .in('task_id', taskIds)
-
-  const { data: allChecklists } = await supabase
-    .from('task_checklist_items')
-    .select('*')
-    .in('task_id', taskIds)
-    .order('sort_order', { ascending: true })
-
-  const { data: allComments } = await supabase
-    .from('task_comments')
-    .select('*, user:profiles(id, full_name, avatar_url, role)')
-    .in('task_id', taskIds)
-    .order('created_at', { ascending: true })
-
-  // Fetch creator + completer profiles (permission checking + audit display)
-  const profileIds = [...new Set([
-    ...tasks.map(t => t.created_by),
-    ...tasks.map(t => t.completed_by).filter((id): id is string => !!id),
-  ])]
-  const { data: taskProfiles } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', profileIds)
-
-  const profileMap = new Map<string, UserProfile>()
-  taskProfiles?.forEach(p => profileMap.set(p.id, p as UserProfile))
-
-  const todayStr = new Date().toISOString().split('T')[0]
-
-  return tasks.map(task => ({
-    ...task,
-    recurrence: task.recurrence || 'none',
-    require_check: task.require_check ?? false,
-    end_time: task.end_time || null,
-    is_overdue: !!(task.due_date && task.due_date < todayStr && task.status !== 'checked'),
-    assignees: (allAssignees || []).filter(a => a.task_id === task.id),
-    checklist: (allChecklists || []).filter(c => c.task_id === task.id),
-    comments: (allComments || []).filter(c => c.task_id === task.id),
-    creator: profileMap.get(task.created_by),
-    completer: task.completed_by ? profileMap.get(task.completed_by) : undefined,
-  }))
+/** Bucket rows carrying a task_id into a Map, preserving their query order. */
+function groupByTaskId<T extends { task_id: string }>(rows: T[] | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of rows ?? []) {
+    const bucket = map.get(row.task_id)
+    if (bucket) bucket.push(row)
+    else map.set(row.task_id, [row])
+  }
+  return map
 }
 
 /**
@@ -611,6 +543,7 @@ async function hydrateTasksLight(tasks: Task[]): Promise<TaskWithDetails[]> {
     .select('id, task_id, user_id, created_at')
     .in('task_id', taskIds)
 
+  const commentsByTask = groupByTaskId(commentMeta)
   const todayStr = new Date().toISOString().split('T')[0]
 
   return tasks.map(task => ({
@@ -621,7 +554,7 @@ async function hydrateTasksLight(tasks: Task[]): Promise<TaskWithDetails[]> {
     is_overdue: !!(task.due_date && task.due_date < todayStr && task.status !== 'checked'),
     assignees: [],
     checklist: [],
-    comments: ((commentMeta || []).filter(c => c.task_id === task.id) as unknown as TaskComment[]),
+    comments: (commentsByTask.get(task.id) ?? []) as unknown as TaskComment[],
     creator: undefined,
   }))
 }
@@ -660,8 +593,12 @@ export async function fetchTaskDetails(taskId: string, createdBy: string, comple
     supabase.from('task_assignees').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId),
     supabase.from('task_checklist_items').select('*').eq('task_id', taskId).order('sort_order', { ascending: true }),
     supabase.from('task_comments').select('*, user:profiles(id, full_name, avatar_url, role)').eq('task_id', taskId).order('created_at', { ascending: true }),
-    supabase.from('profiles').select('*').eq('id', createdBy).single(),
-    completedBy ? supabase.from('profiles').select('*').eq('id', completedBy).single() : Promise.resolve({ data: null }),
+    // Same four columns the sibling joins above select — the modal shows a
+    // name, an avatar and a role label for the creator/completer, nothing more.
+    supabase.from('profiles').select(ASSIGNEE_PROFILE_COLUMNS).eq('id', createdBy).single(),
+    completedBy
+      ? supabase.from('profiles').select(ASSIGNEE_PROFILE_COLUMNS).eq('id', completedBy).single()
+      : Promise.resolve({ data: null }),
   ])
 
   return {
@@ -671,22 +608,6 @@ export async function fetchTaskDetails(taskId: string, createdBy: string, comple
     creator: (creatorRes.data as UserProfile) || undefined,
     completer: (completerRes.data as UserProfile) || undefined,
   }
-}
-
-export async function fetchTodayTasks(userId: string): Promise<{ today: TaskWithDetails[]; overdueOrUndated: TaskWithDetails[] }> {
-  const allTasks = await fetchTasksForUser(userId)
-  const todayStr = new Date().toISOString().split('T')[0]
-
-  const today = allTasks.filter(t => t.due_date === todayStr)
-  const overdueOrUndated = allTasks.filter(t => {
-    const isCompleted = t.status === 'checked' || (t.status === 'done' && !t.require_check)
-    if (isCompleted) return false
-    if (!t.due_date) return true
-    if (t.due_date < todayStr) return true
-    return false
-  })
-
-  return { today, overdueOrUndated }
 }
 
 /**
@@ -722,7 +643,7 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 
   // Drop the embedded join column so the rows match the plain Task shape.
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
 
   const week = await hydrateTasksLight(cleanTasks)
@@ -756,7 +677,7 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
   if (error || !rawTasks) return []
 
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
   return hydrateTasksMinimal(cleanTasks)
 }
@@ -778,7 +699,7 @@ export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWi
   if (error || !rawTasks) return []
 
   const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees, ...task }) => task as Task
+    ({ task_assignees: _task_assignees, ...task }) => task as Task
   )
   return hydrateTasksMinimal(cleanTasks)
 }
@@ -831,18 +752,6 @@ export async function fetchTasksAwaitingVerification(userId: string): Promise<Ta
   return result
 }
 
-export async function fetchFilteredTasks(userId: string, filter: TaskFilter): Promise<TaskWithDetails[]> {
-  const allTasks = await fetchTasksForUser(userId)
-
-  return allTasks.filter(t => {
-    if (filter.status && t.status !== filter.status) return false
-    if (filter.is_overdue !== undefined && t.is_overdue !== filter.is_overdue) return false
-    if (filter.due_date_from && (!t.due_date || t.due_date < filter.due_date_from)) return false
-    if (filter.due_date_to && (!t.due_date || t.due_date > filter.due_date_to)) return false
-    return true
-  })
-}
-
 export interface TaskAnalyticsSummary {
   counts: Record<TaskStatus, number>
   total: number
@@ -880,41 +789,45 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
 
   type Row = { status: TaskStatus; require_check: boolean | null; due_date: string | null; bonus_points: number | null }
 
-  const taskRows: Row[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('status, require_check, due_date, bonus_points, task_assignees!inner(user_id)')
-      .eq('task_assignees.user_id', userId)
-      .neq('status', 'dismissed')
-      .or(dateFilter)
-      .range(from, from + PAGE - 1)
-    if (error) {
-      console.error('fetchAnalyticsData tasks error:', error)
-      break
+  /** Page through one table until a short page signals the end. */
+  const fetchAllPages = async (
+    label: string,
+    page: (from: number) => PromiseLike<{ data: unknown; error: unknown }>,
+  ): Promise<Row[]> => {
+    const rows: Row[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await page(from)
+      if (error) {
+        console.error(`fetchAnalyticsData ${label} error:`, error)
+        break
+      }
+      const batch = (data ?? []) as Row[]
+      rows.push(...batch)
+      if (batch.length < PAGE) break
     }
-    const rows = (data ?? []) as unknown as Row[]
-    taskRows.push(...rows)
-    if (rows.length < PAGE) break
+    return rows
   }
 
-  const subtaskRows: Row[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('subtasks')
-      .select('status, require_check, due_date, bonus_points')
-      .eq('assignee_id', userId)
-      .neq('status', 'dismissed')
-      .or(dateFilter)
-      .range(from, from + PAGE - 1)
-    if (error) {
-      console.error('fetchAnalyticsData subtasks error:', error)
-      break
-    }
-    const rows = (data ?? []) as Row[]
-    subtaskRows.push(...rows)
-    if (rows.length < PAGE) break
-  }
+  // Tasks and subtasks are independent tables — page through both at once so
+  // the Analytics tab waits on the slower of the two, not on their sum.
+  const [taskRows, subtaskRows] = await Promise.all([
+    fetchAllPages('tasks', from =>
+      supabase
+        .from('tasks')
+        .select('status, require_check, due_date, bonus_points, task_assignees!inner(user_id)')
+        .eq('task_assignees.user_id', userId)
+        .neq('status', 'dismissed')
+        .or(dateFilter)
+        .range(from, from + PAGE - 1)),
+    fetchAllPages('subtasks', from =>
+      supabase
+        .from('subtasks')
+        .select('status, require_check, due_date, bonus_points')
+        .eq('assignee_id', userId)
+        .neq('status', 'dismissed')
+        .or(dateFilter)
+        .range(from, from + PAGE - 1)),
+  ])
 
   const counts: Record<TaskStatus, number> = { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 }
   let overdue = 0
@@ -1025,25 +938,25 @@ export async function fetchTeamMembers(userId: string, userRole: UserRole): Prom
   if (userRole === 'admin') {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(ASSIGNEE_PROFILE_COLUMNS)
       .in('role', ['teacher', 'coordinator', 'principal'])
       .neq('id', userId)
       .order('full_name')
 
     if (error) return []
-    return (data || []) as UserProfile[]
+    return (data || []) as unknown as UserProfile[]
   }
 
   if (userRole === 'principal') {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(ASSIGNEE_PROFILE_COLUMNS)
       .in('role', ['teacher', 'coordinator'])
       .neq('id', userId)
       .order('full_name')
 
     if (error) return []
-    return (data || []) as UserProfile[]
+    return (data || []) as unknown as UserProfile[]
   }
 
   if (userRole === 'coordinator') {

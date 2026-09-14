@@ -1,77 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  AlertTriangle,
-  FolderKanban,
-  Calendar,
-  Clock,
-  Star,
-  X,
-  Check,
-  Circle,
-  CircleDot,
-  CheckCircle2,
-  CheckSquare,
-  Square,
-  MessageSquare,
-  Send,
-  ShieldCheck,
-  Repeat,
-  Trash2,
-  Paperclip,
-  Link2,
-  Image as ImageIcon,
-  FileText,
-  ExternalLink,
-  Ban,
-  MinusCircle,
-  RotateCcw,
-  HelpCircle,
-  FileSpreadsheet,
-  Lock,
-  Maximize2,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, FolderKanban, Calendar, Clock, Star, X, Circle, CircleDot, CheckCircle2, CheckSquare, Square, MessageSquare, Send, ShieldCheck, Repeat, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, Ban, MinusCircle, RotateCcw, HelpCircle, FileSpreadsheet, Lock, Maximize2 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
-import {
-  fetchCalendarData,
-  fetchOverdueTasks,
-  fetchBonusTasksForCalendar,
-  fetchTaskDetails,
-  createTask,
-  TaskDetails,
-  Task,
-  TaskWithDetails,
-  TaskStatus,
-  STATUS_DOT_COLORS,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  RECURRENCE_LABELS,
-  getDynamicStatusLabel,
-  getDynamicStatusColors,
-  getDynamicDotColor,
-  getNextStatus,
-  canVerifyTask,
-  updateTaskStatus,
-  submitTaskWork,
-  needsSubmissionFirst,
-  toggleChecklistItem,
-  addChecklistItem,
-  addComment,
-  deleteTask,
-  uploadTaskAttachment,
-  isTaskCompleted,
-  formatDateTime,
-  TaskChecklistItem,
-  TaskComment,
-} from '@/lib/tasks'
+import { fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, fetchTaskDetails, createTask, TaskDetails, Task, TaskWithDetails, TaskStatus, RECURRENCE_LABELS, getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask, updateTaskStatus, submitTaskWork, needsSubmissionFirst, toggleChecklistItem, addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime, TaskChecklistItem, TaskComment } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
   Subtask,
@@ -270,16 +206,20 @@ export default function WeeklyCalendar({
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
-    const [calendarData, subtaskData] = await Promise.all([
-      fetchCalendarData(targetUserId, weekStart),
-      fetchSubtasksForCalendar(targetUserId),
-    ])
+    const calendarData = await fetchCalendarData(targetUserId, weekStart)
     taskRenderKeys.current.clear()
     setTasks(calendarData.week)
-    setSubtasks(subtaskData)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
+
+  // Subtasks are fetched for the whole user, not the visible week, so this is
+  // deliberately keyed on targetUserId alone — bundling it into loadTasks meant
+  // every click of the week arrows refetched the user's entire subtask list to
+  // redisplay data already in state.
+  const loadSubtasks = useCallback(async () => {
+    setSubtasks(await fetchSubtasksForCalendar(targetUserId))
+  }, [targetUserId])
 
   // Silent background refresh — never clears taskRenderKeys or sets loading state.
   // Use this after optimistic inserts so existing items don't blink.
@@ -342,6 +282,8 @@ export default function WeeklyCalendar({
     initialLoadDone.current = false
     loadTasks()
   }, [loadTasks])
+
+  useEffect(() => { loadSubtasks() }, [loadSubtasks])
 
   // The grid's period rows come from the school's active Timetable, not the
   // viewed user specifically — fetch once.
@@ -423,24 +365,55 @@ export default function WeeklyCalendar({
 
   const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
 
-  const getTasksForDay    = (dateStr: string) => tasks
-    .filter(t => t.due_date === dateStr)
-    .sort((a, b) => {
-      if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
-      if (!a.timing) return 1
-      if (!b.timing) return -1
-      return a.timing.localeCompare(b.timing)
-    })
-  const getSubtasksForDay = (dateStr: string) => subtasks.filter(s => s.due_date === dateStr)
+  // Bucket by due date once per data change. The grid asks for a day's items
+  // about sixty times per render (once per day column, then again per period
+  // row × day), and re-filtering + re-sorting the whole task list on each of
+  // those calls made every keystroke in the inline composer walk the week's
+  // tasks sixty times over.
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, TaskWithDetails[]>()
+    for (const task of tasks) {
+      if (!task.due_date) continue
+      const bucket = map.get(task.due_date)
+      if (bucket) bucket.push(task)
+      else map.set(task.due_date, [task])
+    }
+    // Timed tasks first in clock order, undated ones after in creation order.
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => {
+        if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
+        if (!a.timing) return 1
+        if (!b.timing) return -1
+        return a.timing.localeCompare(b.timing)
+      })
+    }
+    return map
+  }, [tasks])
+
+  const subtasksByDay = useMemo(() => {
+    const map = new Map<string, SubtaskWithProject[]>()
+    for (const sub of subtasks) {
+      if (!sub.due_date) continue
+      const bucket = map.get(sub.due_date)
+      if (bucket) bucket.push(sub)
+      else map.set(sub.due_date, [sub])
+    }
+    return map
+  }, [subtasks])
+
+  const EMPTY_TASKS: TaskWithDetails[] = useMemo(() => [], [])
+  const EMPTY_SUBTASKS: SubtaskWithProject[] = useMemo(() => [], [])
+  const getTasksForDay    = (dateStr: string) => tasksByDay.get(dateStr) ?? EMPTY_TASKS
+  const getSubtasksForDay = (dateStr: string) => subtasksByDay.get(dateStr) ?? EMPTY_SUBTASKS
 
   // Subtasks that are undated or overdue (and not completed)
-  const overdueUndatedSubtasks = subtasks.filter(s => {
+  const overdueUndatedSubtasks = useMemo(() => subtasks.filter(s => {
     if (s.status === 'dismissed') return false   // dismissed = deleted
     const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
     if (isCompleted) return false
     if (!s.due_date) return true
     return s.due_date < todayStr
-  })
+  }), [subtasks, todayStr])
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
@@ -461,11 +434,26 @@ export default function WeeklyCalendar({
     const s = subtask as SubtaskWithProject
     const next = getNextStatus(s.status, canVerifyTask(s, user?.id, canCheck), true)
     if (next === s.status) return
-    const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
-    if (result.success) {
-      setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status: next } : sub))
-      setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status: next } : prev)
+
+    const apply = (status: TaskStatus) => {
+      setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status } : sub))
+      setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status } : prev)
     }
+
+    // In a sequential project the server legitimately refuses an out-of-order
+    // change, so painting `next` first would flash a state the user isn't
+    // allowed to reach. Everywhere else the only failure is a real error, so
+    // the chip updates on tap and rolls back if the write doesn't land.
+    if (s.project_sequential) {
+      const result = await updateSubtaskStatus(s.id, next, s.project_id, true)
+      if (result.success) apply(next)
+      return
+    }
+
+    const previous = s.status
+    apply(next)
+    const result = await updateSubtaskStatus(s.id, next, s.project_id, false)
+    if (!result.success) apply(previous)
   }
 
 
@@ -1356,7 +1344,7 @@ function TaskCalendarModal({
   onStatusChange,
   onTaskDeleted,
   onTaskUpdated,
-  availableAssignees = [],
+  availableAssignees: _availableAssignees = [],
 }: {
   task: TaskWithDetails
   canCheck: boolean

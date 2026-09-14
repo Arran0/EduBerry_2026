@@ -95,11 +95,3 @@ export default function MultiTeacherSelect({
     </div>
   )
 }
-
-/** Comma-joined teacher names for a list of ids — the shared read-only render. */
-export function teacherNames(teachers: UserProfile[], ids: string[], fallback = 'Unassigned'): string {
-  const names = ids
-    .map((id) => teachers.find((t) => t.id === id)?.full_name)
-    .filter((n): n is string => !!n)
-  return names.length > 0 ? names.join(', ') : fallback
-}

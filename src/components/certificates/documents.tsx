@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { View, Text } from '@react-pdf/renderer'
+import { Text } from '@react-pdf/renderer'
 import {
   CertContext, placeholderValues, fmtDate, numberToWordsDate, resolvePlaceholders,
 } from '@/lib/certificates'

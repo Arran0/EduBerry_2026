@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { Save, Loader2, Check, Users, UserPlus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { supabase, UserProfile } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { Homeroom } from '@/lib/homerooms'
 import { fetchAudience, setExamAudience, fetchProfilesByIds } from '@/lib/exam'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'

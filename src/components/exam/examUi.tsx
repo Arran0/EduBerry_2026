@@ -21,11 +21,7 @@ import type { ExamPhase } from '@/lib/exam'
  * button, an input and a select always line up on the same row.
  */
 export const GOLD = '#B8983C'
-export const GOLD_DARK = '#9C7F2C'
 export const INK = '#18181B'
-/** The single hairline used for every border and divider in the exam app. */
-export const RULE = '#E4E1D8'
-
 // Buttons are composed from a shared base + one size, so a caller never has
 // to append conflicting utilities to resize one (Tailwind resolves those by
 // stylesheet order, not by the order classes appear in the string).

@@ -268,7 +268,7 @@ export async function deleteHomeroom(id: string): Promise<boolean> {
 // Member Management
 // ============================================
 
-export async function addHomeroomMember(homeroomId: string, studentId: string): Promise<boolean> {
+async function addHomeroomMember(homeroomId: string, studentId: string): Promise<boolean> {
   const { error } = await supabase
     .from('homeroom_members')
     .insert({ homeroom_id: homeroomId, student_id: studentId })
@@ -431,21 +431,6 @@ export async function fetchHomeroomSmartboard(homeroomId: string): Promise<UserP
     .single()
 
   return (profile as UserProfile) ?? null
-}
-
-/** Returns the homeroom whose smart board account is the given profile id. */
-export async function fetchHomeroomForSmartboard(smartboardId: string): Promise<Homeroom | null> {
-  const { data, error } = await supabase
-    .from('homerooms')
-    .select('*')
-    .eq('smartboard_id', smartboardId)
-    .maybeSingle()
-
-  if (error) {
-    console.error('fetchHomeroomForSmartboard error:', error)
-    return null
-  }
-  return data ?? null
 }
 
 /** Links an existing smart board account (e.g. created in the Profile Manager)

@@ -46,7 +46,3 @@ export default function PageIcon({
     </div>
   )
 }
-
-export function getIconComponent(iconName: string): LucideIcon {
-  return ICON_MAP[iconName] ?? ClipboardList
-}

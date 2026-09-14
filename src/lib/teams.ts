@@ -1,4 +1,4 @@
-import { supabase, UserProfile, UserRole } from './supabase'
+import { supabase, UserProfile } from './supabase'
 
 // --- Types ---
 

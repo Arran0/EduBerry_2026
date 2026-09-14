@@ -3,10 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import {
-  ArrowLeft, Calculator, Lock, LockOpen, CheckCheck, Search, CalendarDays,
-  ChevronRight, AlertTriangle, ShieldCheck, History,
-} from 'lucide-react'
+import { ArrowLeft, Calculator, Lock, Search, CalendarDays, ChevronRight, ShieldCheck, History } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'

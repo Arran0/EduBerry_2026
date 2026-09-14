@@ -30,7 +30,7 @@ import { calcTds } from './tds'
 import { calcRecoveries } from './recoveries'
 import { arrearsTrace } from './arrears'
 import { calcLeaveEncashment, calcNoticeRecovery, calcGratuity, calcStatutoryBonus, settlementDayRate } from './ff'
-import { round2, round0, sum, applyRounding } from './money'
+import { round2, sum, applyRounding } from './money'
 
 /** A synthetic head for something the engine emits rather than a structure. */
 function systemDef(over: Partial<ComponentDef> & Pick<ComponentDef, 'code' | 'name' | 'kind'>): ComponentDef {

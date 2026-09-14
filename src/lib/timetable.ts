@@ -1,25 +1,6 @@
 import { supabase } from './supabase'
 import type { UserProfile } from './supabase'
-import type {
-  Subject,
-  Room,
-  RoomType,
-  TimetableConfig,
-  PeriodSlot,
-  Requirement,
-  TeacherUnavailability,
-  Timetable,
-  TimetableEntry,
-  TimetableStatus,
-  TimetableViewData,
-  Weekday,
-  PlacedEntry,
-  HomeroomGroup,
-  TimetableConstraint,
-  ConstraintScope,
-  ConstraintType,
-  CombinedClass,
-} from './timetable/types'
+import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Timetable, TimetableEntry, TimetableStatus, TimetableViewData, Weekday, PlacedEntry, HomeroomGroup, TimetableConstraint, ConstraintScope, ConstraintType, CombinedClass } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'

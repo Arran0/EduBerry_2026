@@ -1,32 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
-import { ICON_MAP } from '@/components/PageIcon'
-import {
-  PageId, PageIconMap, PAGE_DEFAULTS, PAGE_LABELS, AVAILABLE_ICONS, GRADIENT_OPTIONS,
-  SiteBranding, BRANDING_DEFAULTS,
-  LoginPageConfig, LOGIN_DEFAULTS,
-  PageThemeMap, THEME_PALETTES,
-  savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes,
-  uploadSiteAsset,
-  AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS,
-  BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT,
-  ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT,
-  LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT,
-  FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT,
-  BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT,
-} from '@/lib/pageConfig'
+import { PageIconMap, SiteBranding, LoginPageConfig, PageThemeMap, THEME_PALETTES, savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes, saveSetting, uploadSiteAsset, AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS, BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT, ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT, LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT, FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT, BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
-import {
-  Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
-  Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
-} from 'lucide-react'
+import { Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon, Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote, Monitor, Building2, Repeat, EyeOff } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -113,8 +94,6 @@ import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
 // reconciliation from either.
 type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'bus'
 
-const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
-
 // Per-page gradient banners — mirrors the Page Themes list (admin-space pages excluded;
 // they stay on the uncustomisable Edzee theme). Home is covered by the image banner above.
 const PAGE_BANNERS: { key: string; label: string; default: AnnouncementBannerConfig }[] = [
@@ -159,7 +138,7 @@ function TextInput({ value, onChange, placeholder, list }: { value: string; onCh
   )
 }
 
-function ColorInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+function ColorInput({ value, onChange, label: _label }: { value: string; onChange: (v: string) => void; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <input
@@ -212,90 +191,6 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
 
 // ── Inline payment-settings primitives (admin palette) ─────────────────────────
 
-const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-
-function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
-  return (
-    <button
-      role="switch" aria-checked={checked} disabled={disabled} onClick={onChange}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${checked ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
-    >
-      <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-    </button>
-  )
-}
-
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-white border border-[#E4E4E7]">
-      <span className="text-sm text-[#18181B]">{label}</span>
-      <Switch checked={checked} onChange={onChange} />
-    </div>
-  )
-}
-
-function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-[#F5F5F5] border border-[#E4E4E7] p-5">
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-8 h-8 bg-[#27272A] flex items-center justify-center flex-shrink-0">{icon}</div>
-        <h3 className="text-sm font-bold text-[#18181B]">{title}</h3>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function PwInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <input
-      type="password" autoComplete="off" value={value} onChange={e => onChange(e.target.value)}
-      placeholder={placeholder} className={ai}
-    />
-  )
-}
-
-// Read-only display of the app's full webhook endpoint that the school admin
-// pastes into their bank / PSP / Razorpay dashboard, with one-click copy. The
-// origin is resolved client-side so the URL always matches wherever the app is
-// deployed — no hardcoded domain to keep in sync.
-function WebhookUrlField({ path }: { path: string }) {
-  const [origin, setOrigin] = useState('')
-  const [copied, setCopied] = useState(false)
-  useEffect(() => { setOrigin(window.location.origin) }, [])
-  const url = origin ? `${origin}${path}` : path
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* clipboard unavailable — admin can still select the text manually */
-    }
-  }
-  return (
-    <Field label="Webhook URL (paste at your bank / gateway)">
-      <div className="flex items-center gap-2">
-        <input readOnly value={url} onFocus={e => e.target.select()}
-          className={`${ai} font-mono bg-[#FAFAFA] text-[#52525B]`} />
-        <button type="button" onClick={copy}
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors">
-          {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-        </button>
-      </div>
-    </Field>
-  )
-}
-
-function InfoNote({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'info' }) {
-  const Icon = tone === 'info' ? Info : ShieldCheck
-  return (
-    <div className="flex items-start gap-2 mt-4 p-3 bg-white border border-[#E4E4E7] text-xs text-[#71717A] leading-relaxed">
-      <Icon size={14} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
-      <span>{children}</span>
-    </div>
-  )
-}
 
 function SaveButton({ saving, saved, label, onClick }: { saving: boolean; saved: boolean; label: string; onClick: () => void }) {
   return (
@@ -380,7 +275,6 @@ export default function AdminSettingsPage() {
   const [draftLogin, setDraftLogin] = useState<LoginPageConfig>(loginConfig)
   const [draftThemes, setDraftThemes] = useState<PageThemeMap>(pageThemes)
 
-  const [selectedPage, setSelectedPage] = useState<PageId>('tasks')
   const [selectedThemePage, setSelectedThemePage] = useState<string>('home')
   const [uploadingMap, setUploadingMap] = useState<Record<string, boolean>>({})
 
@@ -479,9 +373,6 @@ export default function AdminSettingsPage() {
     setUploading(key, false)
   }
 
-  function updateIcon(pageId: PageId, patch: Partial<PageIconMap[PageId]>) {
-    setDraftIcons(prev => ({ ...prev, [pageId]: { ...prev[pageId], ...patch } }))
-  }
   function updateBranding(patch: Partial<SiteBranding>) { setDraftBranding(prev => ({ ...prev, ...patch })) }
   function updateLogin(patch: Partial<LoginPageConfig>) { setDraftLogin(prev => ({ ...prev, ...patch })) }
   function updateFeature(index: number, value: string) {
@@ -508,8 +399,6 @@ export default function AdminSettingsPage() {
     }
     setSaved(true); setTimeout(() => setSaved(false), 2500)
   }
-
-  const currentIcon = draftIcons[selectedPage]
 
   async function handleSaveGeofence() {
     setSavingGeofence(true)
@@ -747,100 +636,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderPageIcons() {
-    return (
-      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        {/* Page list */}
-        <div className="sm:w-44 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
-          {PAGE_IDS.map(pageId => {
-            const cfg = draftIcons[pageId]
-            const Icon = ICON_MAP[cfg.iconName]
-            return (
-              <button key={pageId} onClick={() => setSelectedPage(pageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
-                <div className={`p-0.5 bg-gradient-to-br ${cfg.gradientFrom} ${cfg.gradientTo} flex-shrink-0 overflow-hidden`} style={{ width: 18, height: 18 }}>
-                  {cfg.customImageUrl
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={cfg.customImageUrl} alt="" className="w-full h-full object-cover" />
-                    : Icon && <Icon size={12} className="text-white" />
-                  }
-                </div>
-                <span className="truncate">{PAGE_LABELS[pageId]}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Editor */}
-        <div className="flex-1 p-5 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#18181B]">{PAGE_LABELS[selectedPage]}</h3>
-            <button onClick={() => setDraftIcons(prev => ({ ...prev, [selectedPage]: PAGE_DEFAULTS[selectedPage] }))}
-              className="flex items-center gap-1 text-xs text-[#71717A] hover:text-[#18181B] transition-colors">
-              <RotateCcw size={10} /> Reset
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 p-3 bg-[#F5F5F5] border border-[#E4E4E7] mb-4">
-            <div className={`p-2 bg-gradient-to-br ${currentIcon.gradientFrom} ${currentIcon.gradientTo} overflow-hidden`}>
-              {currentIcon.customImageUrl
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={currentIcon.customImageUrl} alt="" className="w-6 h-6 object-cover" />
-                : (() => { const I = ICON_MAP[currentIcon.iconName]; return I ? <I className="text-white" size={22} /> : null })()
-              }
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[#18181B]">{PAGE_LABELS[selectedPage]}</p>
-              <p className="text-[10px] text-[#A1A1AA] uppercase tracking-widest">Live preview</p>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <SectionLabel>Custom Image (overrides icon)</SectionLabel>
-            <UploadField label="" currentUrl={currentIcon.customImageUrl ?? ''} uploading={!!uploadingMap[`icon-${selectedPage}`]}
-              onUpload={f => uploadAndSet(`icon-${selectedPage}`, f, url => updateIcon(selectedPage, { customImageUrl: url }))}
-              onClear={() => updateIcon(selectedPage, { customImageUrl: undefined })} />
-          </div>
-
-          <div className="mb-4">
-            <SectionLabel>Preset Icon</SectionLabel>
-            <div className="grid grid-cols-8 gap-1">
-              {AVAILABLE_ICONS.map(name => {
-                const Icon = ICON_MAP[name]
-                if (!Icon) return null
-                const isSelected = currentIcon.iconName === name && !currentIcon.customImageUrl
-                return (
-                  <button key={name} title={name}
-                    onClick={() => updateIcon(selectedPage, { iconName: name, customImageUrl: undefined })}
-                    className={`p-2 flex items-center justify-center transition-all border ${isSelected ? 'border-[#27272A] bg-[#27272A] text-white' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:border-[#525252] text-[#71717A]'}`}>
-                    <Icon size={13} />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div>
-            <SectionLabel>Icon Background Color</SectionLabel>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {GRADIENT_OPTIONS.map(opt => {
-                const isSelected = currentIcon.gradientFrom === opt.from && currentIcon.gradientTo === opt.to
-                return (
-                  <button key={opt.label}
-                    onClick={() => updateIcon(selectedPage, { gradientFrom: opt.from, gradientTo: opt.to })}
-                    className={`flex items-center gap-2 px-2.5 py-2 text-xs border transition-all ${isSelected ? 'border-[#27272A] bg-white shadow-sm' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-white hover:border-[#D4D4D8]'}`}>
-                    <div className={`w-4 h-4 bg-gradient-to-br ${opt.from} ${opt.to} flex-shrink-0`} />
-                    <span className="text-[#71717A] truncate">{opt.label}</span>
-                    {isSelected && <Check size={9} className="ml-auto text-[#525252] flex-shrink-0" />}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   function renderPageThemes() {
     const PAGE_THEME_LABELS: Record<string, string> = {
@@ -1457,28 +1252,24 @@ export default function AdminSettingsPage() {
                 setUploading('home-banner', true)
                 const url = await uploadSiteAsset(f, 'welcome_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('welcome_banner', url)
                 }
                 setUploading('home-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('welcome_banner', '')
               }} />
             <UploadField label="Profile Page Banner Image" currentUrl={''} uploading={!!uploadingMap['profile-banner']}
               onUpload={async f => {
                 setUploading('profile-banner', true)
                 const url = await uploadSiteAsset(f, 'profile_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('profile_banner', url)
                 }
                 setUploading('profile-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'profile_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('profile_banner', '')
               }} />
           </div>
         </div>

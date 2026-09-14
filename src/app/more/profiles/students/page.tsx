@@ -99,7 +99,7 @@ export default function StudentProfileManagerPage() {
   const [sortBy, setSortBy] = useState<SortKey>('name_asc')
   const [showBulkImport, setShowBulkImport] = useState(false)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -591,7 +591,7 @@ export default function StudentProfileManagerPage() {
                                 <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
                             ) : (
-                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the student's email address.</p>
+                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the student&rsquo;s email address.</p>
                             )}
                           </div>
 

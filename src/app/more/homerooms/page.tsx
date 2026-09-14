@@ -40,7 +40,6 @@ const itemVariants = {
 }
 
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
 
 function autoName(grade: number | '', section: string): string {
   if (grade && section) return `Grade ${grade} Section ${section}`

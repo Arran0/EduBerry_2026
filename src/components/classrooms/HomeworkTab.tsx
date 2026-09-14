@@ -102,7 +102,6 @@ interface HomeworkTabProps {
 
 export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkTabProps) {
   const isStudent    = userRole === 'student'
-  const isSmartboard = userRole === 'smartboard'
   const canManage    = !isStudent
 
   // ── Data state ─────────────────────────────────────────────────────────────

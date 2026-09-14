@@ -164,50 +164,6 @@ export async function fetchAdmins(): Promise<{ id: string; full_name: string; em
 // - principal  → all admins
 // ============================================
 
-export async function fetchApproversWithCalendarAccess(
-  applicantId: string,
-  applicantRole: UserRole
-): Promise<{ id: string; full_name: string; email: string }[]> {
-  if (applicantRole === 'coordinator') return fetchPrincipals()
-  if (applicantRole === 'principal') return fetchAdmins()
-
-  if (applicantRole === 'teacher') {
-    const { data: myTeams } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('user_id', applicantId)
-
-    if (!myTeams || myTeams.length === 0) return []
-
-    const teamIds = myTeams.map(t => t.team_id)
-
-    // Use each team's designated coordinators — a coordinator added as a
-    // regular member of another team should not appear as an approver there.
-    const { data: coordinatorRows } = await supabase
-      .from('team_coordinators')
-      .select('user_id')
-      .in('team_id', teamIds)
-
-    if (!coordinatorRows) return []
-
-    const coordinatorIds = [
-      ...new Set(coordinatorRows.map(r => r.user_id as string)),
-    ].filter(id => id !== applicantId)
-
-    if (coordinatorIds.length === 0) return []
-
-    const { data: coordinators } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', coordinatorIds)
-      .order('full_name')
-
-    return (coordinators ?? []) as { id: string; full_name: string; email: string }[]
-  }
-
-  return []
-}
-
 // ============================================
 // Search Recipients (teacher / coordinator / principal / admin)
 // ============================================
@@ -313,76 +269,6 @@ export async function createStudentLeaveApplication(
 // ============================================
 // Create Leave Application (staff)
 // ============================================
-
-export async function createLeaveApplication(
-  input: NewLeaveInput,
-  applicantId: string,
-  applicantRole: UserRole,
-  selectedApproverIds: string[] = [],
-  attachmentFile?: File
-): Promise<LeaveApplication | null> {
-  let attachment_url: string | null = null
-  let attachment_name: string | null = null
-
-  if (attachmentFile) {
-    const uploaded = await uploadLeaveFile(attachmentFile, 'applications')
-    if (uploaded) { attachment_url = uploaded.url; attachment_name = uploaded.name }
-  }
-
-  const { data: application, error } = await supabase
-    .from('leave_applications')
-    .insert({
-      applicant_id: applicantId,
-      leave_type: input.leave_type,
-      start_date: input.start_date,
-      end_date: input.end_date,
-      reason: input.reason,
-      status: 'pending',
-      attachment_url,
-      attachment_name,
-    })
-    .select()
-    .single()
-
-  if (error || !application) {
-    console.error('Failed to create leave application:', error)
-    return null
-  }
-
-  const approvalRecords: {
-    leave_application_id: string
-    approver_id?: string
-    approver_role: string
-  }[] = []
-
-  if (selectedApproverIds.length > 0) {
-    let approverRole = 'coordinator'
-    if (applicantRole === 'coordinator') approverRole = 'principal'
-    else if (applicantRole === 'principal') approverRole = 'admin'
-    for (const approverId of selectedApproverIds) {
-      approvalRecords.push({ leave_application_id: application.id, approver_id: approverId, approver_role: approverRole })
-    }
-  } else {
-    let approverRole = 'coordinator'
-    if (applicantRole === 'coordinator') approverRole = 'principal'
-    else if (applicantRole === 'principal') approverRole = 'admin'
-    approvalRecords.push({ leave_application_id: application.id, approver_role: approverRole })
-  }
-
-  if (approvalRecords.length > 0) {
-    const { error: approvalError } = await supabase.from('leave_approvals').insert(approvalRecords)
-    if (approvalError) {
-      console.error('Failed to create approval records:', approvalError)
-      await supabase.from('leave_applications').delete().eq('id', application.id)
-      return null
-    }
-  }
-
-  // Tell every reviewer's devices — see the note in the student version.
-  notifyLeaveEvent(application.id, 'submitted')
-
-  return application as LeaveApplication
-}
 
 // ============================================
 // Fetch Leave Applications

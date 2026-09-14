@@ -19,6 +19,11 @@ function localToday(): string {
   return `${y}-${m}-${day}`
 }
 
+/** The streak row `recordAppOpen` already returned this session. Sign-in calls
+ *  record_app_open once per user and the RPC hands back the updated row, so the
+ *  academics header can read that instead of issuing its own query. */
+let streakCache: UserStreak | null = null
+
 /** Records that the current user opened the app today (local date) and returns
  *  the updated streak. Safe to call once per session; same-day calls are no-ops
  *  server-side. */
@@ -29,11 +34,15 @@ export async function recordAppOpen(): Promise<UserStreak | null> {
     return null
   }
   // RPC returns a single composite row.
-  return (Array.isArray(data) ? data[0] : data) as UserStreak | null
+  const streak = (Array.isArray(data) ? data[0] : data) as UserStreak | null
+  if (streak) streakCache = streak
+  return streak
 }
 
-/** Reads the current user's streak row (does not mutate). */
+/** Reads the current user's streak row (does not mutate). Served from the row
+ *  `recordAppOpen` returned at sign-in when that is for the same user. */
 export async function fetchStreak(userId: string): Promise<UserStreak | null> {
+  if (streakCache?.user_id === userId) return streakCache
   const { data, error } = await supabase
     .from('user_activity_streaks')
     .select('*')
@@ -43,7 +52,9 @@ export async function fetchStreak(userId: string): Promise<UserStreak | null> {
     console.error('Failed to fetch streak:', error.message)
     return null
   }
-  return (data as UserStreak | null) ?? null
+  const streak = (data as UserStreak | null) ?? null
+  if (streak) streakCache = streak
+  return streak
 }
 
 // ─── EduPoints standings ────────────────────────────────────────────────────────
@@ -56,60 +67,15 @@ export interface EduStanding {
   total_students: number
 }
 
-/** Per-classroom EduPoints, rank and class size for a student (live-derived). */
-export async function fetchStudentEduStandings(studentId: string): Promise<EduStanding[]> {
-  const { data, error } = await supabase.rpc('get_student_edu_standings', { p_student_id: studentId })
-  if (error) {
-    console.error('Failed to fetch edu standings:', error.message)
-    return []
-  }
-  return (data ?? []) as EduStanding[]
-}
-
-/**
- * EduPoints earned from completed smartboard homework tasks, keyed by
- * classroom_id. Counts 'checked' always, and 'done' when require_check is
- * false. Excludes tasks with no classroom (homeroom-only tasks).
- */
-export async function fetchStudentHwEduPoints(
-  studentId: string,
-): Promise<Record<string, number>> {
-  const { data: comps } = await supabase
-    .from('smartboard_task_completions')
-    .select('task_id, status')
-    .eq('student_id', studentId)
-    .in('status', ['done', 'checked'])
-
-  if (!comps || comps.length === 0) return {}
-
-  type CompRow = { task_id: string; status: string }
-  const taskIds = (comps as CompRow[]).map(c => c.task_id)
-  const compByTask = new Map((comps as CompRow[]).map(c => [c.task_id, c.status]))
-
-  const { data: tasks } = await supabase
-    .from('smartboard_tasks')
-    .select('id, classroom_id, edu_points, require_check')
-    .in('id', taskIds)
-    .gt('edu_points', 0)
-
-  if (!tasks) return {}
-
-  type TaskRow = { id: string; classroom_id: string | null; edu_points: number; require_check: boolean }
-  const map: Record<string, number> = {}
-  for (const t of tasks as TaskRow[]) {
-    if (!t.classroom_id) continue
-    const status = compByTask.get(t.id)
-    const earned = t.require_check ? status === 'checked' : (status === 'done' || status === 'checked')
-    if (earned) map[t.classroom_id] = (map[t.classroom_id] ?? 0) + t.edu_points
-  }
-  return map
-}
-
-// ─── Rank trend (current vs. last month) ────────────────────────────────────────
-
-export interface EduRankTrend {
-  classroom_id: string
-  curr_rank: number
+/** One row per classroom the student is enrolled in, as returned by
+ *  `get_student_edu_dashboard`: coursework points, homework points, live rank
+ *  and class size, plus the rank as of the start of this month. */
+export interface EduDashboardRow extends EduStanding {
+  /** EduPoints from completed smart-board homework, added to `points` for
+   *  display (the leaderboard rank itself counts coursework only). */
+  hw_points: number
+  /** Rank as of the first of this month — the "rank up" celebration compares
+   *  this with `rank`. */
   prev_rank: number
 }
 
@@ -122,30 +88,25 @@ export interface RankTrendInfo {
 }
 
 /**
- * Per-classroom current vs. previous-month leaderboard rank for a student,
- * keyed by classroom_id. Powers the "rank up" celebration in the EduPoints
- * carousel. Degrades to an empty map if the trend RPC isn't deployed yet, so
- * the rest of the UI keeps working.
+ * Everything the academics EduPoints carousel needs, in one round trip:
+ * per-classroom coursework points, homework points, rank, class size and
+ * last month's rank. This replaced three separate calls (a standings RPC, a
+ * rank-trend RPC and a two-query client-side homework tally) that each
+ * re-derived the same leaderboard.
  */
-export async function fetchStudentEduRankTrend(
-  studentId: string,
-): Promise<Record<string, RankTrendInfo>> {
-  const { data, error } = await supabase.rpc('get_student_edu_rank_trend', { p_student_id: studentId })
+export async function fetchStudentEduDashboard(studentId: string): Promise<EduDashboardRow[]> {
+  const { data, error } = await supabase.rpc('get_student_edu_dashboard', { p_student_id: studentId })
   if (error) {
-    // Most likely the migration hasn't been run — no rank-up flags, no noise.
-    return {}
+    console.error('Failed to fetch edu dashboard:', error.message)
+    return []
   }
-  const map: Record<string, RankTrendInfo> = {}
-  for (const row of (data ?? []) as EduRankTrend[]) {
-    const delta = row.prev_rank - row.curr_rank // positive = climbed
-    map[row.classroom_id] = {
-      currRank: row.curr_rank,
-      prevRank: row.prev_rank,
-      improved: delta > 0,
-      delta,
-    }
-  }
-  return map
+  return (data ?? []) as EduDashboardRow[]
+}
+
+/** Rank movement since the start of the month for one dashboard row. */
+export function rankTrendOf(row: EduDashboardRow): RankTrendInfo {
+  const delta = row.prev_rank - row.rank // positive = climbed
+  return { currRank: row.rank, prevRank: row.prev_rank, improved: delta > 0, delta }
 }
 
 // ─── Monthly EduPoints (staff analysis) ─────────────────────────────────────────

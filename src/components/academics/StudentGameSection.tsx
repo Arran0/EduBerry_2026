@@ -4,13 +4,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { motion, useMotionValue, useTransform, animate, MotionValue } from 'framer-motion'
 import { ArrowUp, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
 import {
-  fetchStudentEduStandings, fetchStudentHwEduPoints, fetchStudentEduRankTrend,
-  EduStanding, RankTrendInfo,
+  fetchStudentEduDashboard, rankTrendOf, EduDashboardRow, EduStanding,
 } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
-  userName: string
 }
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
@@ -102,57 +100,6 @@ function getShortMessage(s: EduStanding, idx: number, improved: boolean, delta: 
     return msgs[rot % msgs.length]
   }
   const msgs = ['Keep stacking points and climb!', 'Every point gets you closer!']
-  return msgs[rot % msgs.length]
-}
-
-function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
-  const cls = s.classroom_title
-  const rot = DOY + idx
-  if (improved && s.points) {
-    const msgs = [
-      `${first} climbed ${delta} place${delta === 1 ? '' : 's'} in ${cls} this month!`,
-      `On the rise in ${cls}, ${first} — up ${delta} since last month.`,
-      `Momentum! ${first} jumped ${delta} spot${delta === 1 ? '' : 's'} in ${cls}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (!s.points) {
-    const msgs = [
-      `${cls} is waiting — earn your first EduPoints, ${first}!`,
-      `First task = first win in ${cls}, ${first}.`,
-      `Claim your spot on the ${cls} leaderboard, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank === 1) {
-    const msgs = [
-      `${first} owns ${cls}. Defend that crown!`,
-      `Unbeatable in ${cls}, ${first}. Stay #1.`,
-      `Nobody touches the top of ${cls}, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 3) {
-    const msgs = [
-      `Top 3 in ${cls} — that #1 is one push away, ${first}.`,
-      `${first} at #${s.rank} in ${cls}. Almost at the summit!`,
-      `Hunting the top of ${cls}, ${first} — #${s.rank} and climbing.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 10) {
-    const msgs = [
-      `#${s.rank} in ${cls}, ${first}. Top 3 is in range.`,
-      `${first} holds #${s.rank} in ${cls}. Keep it flowing.`,
-      `Every point lifts you in ${cls}, ${first}. #${s.rank} now.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  const msgs = [
-    `${s.points} pts in ${cls}, ${first}. The top 10 is reachable.`,
-    `Building momentum in ${cls} with ${s.points} pts, ${first}.`,
-    `Keep stacking in ${cls}, ${first} — climb the board.`,
-  ]
   return msgs[rot % msgs.length]
 }
 
@@ -381,7 +328,7 @@ const FLICK_VELOCITY = 0.35
  * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
  * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: string }) {
+export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
@@ -583,41 +530,37 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
 
 /* ───────────────────────── data wrapper (default export) ───────────────────────── */
 
-export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
-  const [standings, setStandings] = useState<EduStanding[]>([])
-  const [trend, setTrend] = useState<Record<string, RankTrendInfo>>({})
+export default function StudentGameSection({ userId }: StudentGameSectionProps) {
+  const [rows, setRows] = useState<EduDashboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
-    Promise.all([
-      fetchStudentEduStandings(userId),
-      fetchStudentHwEduPoints(userId),
-      fetchStudentEduRankTrend(userId),
-    ]).then(([std, hw, tr]) => {
+    fetchStudentEduDashboard(userId).then(data => {
       if (!alive) return
-      setStandings(std.map(s => ({ ...s, points: s.points + (hw[s.classroom_id] ?? 0) })))
-      setTrend(tr)
+      setRows(data)
       setLoading(false)
     })
     return () => { alive = false }
   }, [userId])
 
-  const first = useMemo(() => (userName || 'there').split(' ')[0], [userName])
-
   const briefs = useMemo<Brief[]>(() => {
-    return [...standings]
+    return [...rows]
       .sort((a, b) => a.rank - b.rank || b.points - a.points)
-      .map(s => {
-        const tr = trend[s.classroom_id]
+      .map(row => {
+        // Homework points count towards the displayed total; the rank itself is
+        // the leaderboard's own, which is derived from coursework.
+        const points = row.points + row.hw_points
+        const trend = rankTrendOf(row)
         return {
-          ...s,
-          tier: tierOf(s.rank, s.points),
-          improved: !!tr?.improved,
-          delta: tr?.delta ?? 0,
+          ...row,
+          points,
+          tier: tierOf(row.rank, points),
+          improved: trend.improved,
+          delta: trend.delta,
         }
       })
-  }, [standings, trend])
+  }, [rows])
 
   if (loading) {
     return (
@@ -633,5 +576,5 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     )
   }
 
-  return <EduPointsCarousel briefs={briefs} first={first} />
+  return <EduPointsCarousel briefs={briefs} />
 }

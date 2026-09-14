@@ -181,7 +181,7 @@ export default function StaffProfileManagerPage() {
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -861,7 +861,7 @@ export default function StaffProfileManagerPage() {
                                 <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
                             ) : (
-                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member's address.</p>
+                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member&rsquo;s address.</p>
                             )}
                           </div>
                           </>

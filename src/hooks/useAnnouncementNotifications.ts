@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { countUnreadAnnouncements } from '@/lib/announcements'
 import { getAnnouncementsReadAt, setAnnouncementsReadAt } from '@/lib/announcementReads'
-import { UserRole } from '@/lib/supabase'
 
 /**
  * Unread announcement count for the navbar badge.
@@ -17,16 +16,15 @@ import { UserRole } from '@/lib/supabase'
  * an account had already caught up on before those markers existed.
  */
 
-export function useAnnouncementNotifications(
-  userId: string | null,
-  userRole: UserRole | null,
-  userGrade?: number,
-  userSection?: string,
-) {
+/**
+ * Which announcements count as "aimed at this user" is decided by RLS on the
+ * server, so the caller only needs to say who is asking.
+ */
+export function useAnnouncementNotifications(userId: string | null) {
   const [unreadCount, setUnreadCount] = useState(0)
 
   const refresh = useCallback(async () => {
-    if (!userId || !userRole) { setUnreadCount(0); return }
+    if (!userId) { setUnreadCount(0); return }
 
     // First visit: treat everything already posted as seen, so a new account
     // doesn't open to a badge counting the school's entire history.
@@ -37,13 +35,11 @@ export function useAnnouncementNotifications(
     }
 
     try {
-      setUnreadCount(
-        await countUnreadAnnouncements(userId, userRole, readAt, userGrade, userSection)
-      )
+      setUnreadCount(await countUnreadAnnouncements(readAt))
     } catch {
       setUnreadCount(0)
     }
-  }, [userId, userRole, userGrade, userSection])
+  }, [userId])
 
   useEffect(() => { refresh() }, [refresh])
 

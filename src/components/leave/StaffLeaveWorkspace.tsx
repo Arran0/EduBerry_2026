@@ -28,7 +28,6 @@ import {
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
-  type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { fetchUnreadDecisionItems, onLeaveNotificationsChanged } from '@/lib/leaveNotifications'

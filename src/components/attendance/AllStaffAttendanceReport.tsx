@@ -171,7 +171,7 @@ function shortName(name: string, max = 11) {
 
 // ── Single staff row ──────────────────────────────────────────────────────────
 
-function StaffRow({
+const StaffRow = React.memo(function StaffRow({
   staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole, onViewLeave,
 }: {
   staff: UserProfile
@@ -199,12 +199,17 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  // Stays true through the closing animation, then clears — so the rows nobody
+  // opened never put a portal in the document. With a whole school listed that
+  // was one idle portal per row, re-rendered on every keystroke in the search box.
+  const [portalMounted, setPortalMounted] = useState(false)
   // A punch this staff member was allowed through with the location off
   // campus, unmeasured, or unavailable. Flagged here because "present" on
   // this row would otherwise be indistinguishable from a check-in that was
   // actually verified against the campus.
   const [showWarning, setShowWarning] = useState(false)
-  const warning = describeLocationWarning(record)
+  const warning = useMemo(() => describeLocationWarning(record), [record])
+  const openModal = useCallback(() => { setPortalMounted(true); setShowModal(true) }, [])
 
   return (
     <>
@@ -221,7 +226,7 @@ function StaffRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={openModal}
               title={staff.full_name}
               className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
             >
@@ -326,8 +331,8 @@ function StaffRow({
         />
       )}
 
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
+      {portalMounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
           {showModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -375,7 +380,7 @@ function StaffRow({
       )}
     </>
   )
-}
+})
 
 function RowList({ children }: { children: React.ReactNode }) {
   return (
@@ -807,16 +812,40 @@ export default function AllStaffAttendanceReport({
     return [...rows].sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
   }, [notMarked, query])
 
-  const handleSet = async (staffId: string, status: StaffAttendanceStatus) => {
+  /**
+   * Quick-set a status.
+   *
+   * The chosen status is known before the write resolves, so a row that
+   * already has a record is repainted immediately and the round trip runs
+   * behind it — marking someone used to block on the write *and* a full reload
+   * of the day (records, holidays, non-working days, timings, streaks) before
+   * anything moved. A row with no record yet still waits, because its id and
+   * marked_by only exist once the server has written it.
+   *
+   * The silent reload afterwards is the reconciliation: it also restores the
+   * true status if the write turns out to have failed.
+   */
+  const handleSet = useCallback(async (staffId: string, status: StaffAttendanceStatus) => {
     setSavingId(staffId)
+    let optimistic = false
+    setRecords(prev => {
+      const i = prev.findIndex(r => r.staff_id === staffId)
+      if (i === -1) return prev
+      optimistic = true
+      const next = [...prev]
+      next[i] = { ...next[i], status }
+      return next
+    })
+    if (optimistic) setSavingId(null)
+
     const ok = await adminMarkStaffAttendance(staffId, date, status, viewerId)
+    await loadRecords({ silent: true })
     if (ok) {
-      await loadRecords({ silent: true })
       if (!hasFixedRoster) fetchTrackedStaffCount().then(setTrackedTotal)
       onChanged?.()
     }
     setSavingId(null)
-  }
+  }, [date, viewerId, loadRecords, hasFixedRoster, onChanged])
 
   const teamOptions: SmartOption[] = useMemo(
     () => teams.map(t => ({ value: t.id, label: t.name })),

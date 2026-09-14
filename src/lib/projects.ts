@@ -75,6 +75,67 @@ export interface NewSubtaskInput {
 }
 
 // ============================================
+// Project progress
+// ============================================
+
+/** The only subtask fields project progress depends on. */
+export type ProjectProgressSubtask = Pick<Subtask, 'status' | 'require_check'>
+
+export interface ProjectStatus {
+  label: string
+  color: string
+  isCompleted: boolean
+  isOverdue: boolean
+  isCompletedAfterDue: boolean
+}
+
+/**
+ * Derive a project's headline status from its deadline and subtasks.
+ *
+ * "Completed" means every subtask is verified ('checked') or finished where no
+ * verification is required ('done' + !require_check) — mirroring the per-subtask
+ * UI label. Dismissed subtasks are treated as deleted and excluded from the
+ * maths entirely.
+ *
+ * Lives here rather than in ProjectsList because the Projects tab badge counts
+ * open projects with exactly these rules; two copies of this logic would drift
+ * and show a badge that disagrees with the list beneath it.
+ */
+export function getProjectStatus(
+  endDate: string | null,
+  allSubtasks: ProjectProgressSubtask[],
+): ProjectStatus {
+  const subtasks = allSubtasks.filter(s => s.status !== 'dismissed')
+  const total = subtasks.length
+
+  if (total === 0) {
+    return { label: 'No subtasks', color: 'text-slate-400', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+  }
+
+  const completed = subtasks.filter(s => s.status === 'checked' || (!s.require_check && s.status === 'done')).length
+  const done = subtasks.filter(s => s.status === 'done' || s.status === 'checked').length
+  const isPastDue = !!endDate && endDate < new Date().toISOString().split('T')[0]
+  const isCompleted = completed === total
+  // All subtasks done/checked but not all checked, and the deadline has passed
+  const isCompletedAfterDue = !isCompleted && done === total && isPastDue
+  const isOverdue = !isCompleted && !isCompletedAfterDue && isPastDue
+
+  if (isCompleted)          return { label: 'Completed', color: 'text-blue-600', isCompleted: true, isOverdue: false, isCompletedAfterDue: false }
+  if (isCompletedAfterDue)  return { label: 'Completed after due', color: 'text-orange-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: true }
+  if (isOverdue)            return { label: 'Overdue', color: 'text-red-600', isCompleted: false, isOverdue: true, isCompletedAfterDue: false }
+  if (done === total)       return { label: 'All Done', color: 'text-green-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+  if (done > 0)             return { label: 'In Progress', color: 'text-amber-600', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+  return { label: 'Not Started', color: 'text-slate-500', isCompleted: false, isOverdue: false, isCompletedAfterDue: false }
+}
+
+/** A project is open (shown under "Active", counted in the badge) until it is
+ *  completed — whether on time or after its deadline. */
+function isProjectOpen(endDate: string | null, subtasks: ProjectProgressSubtask[]): boolean {
+  const status = getProjectStatus(endDate, subtasks)
+  return !status.isCompleted && !status.isCompletedAfterDue
+}
+
+// ============================================
 // Project CRUD
 // ============================================
 
@@ -284,53 +345,67 @@ export async function deleteSubtask(subtaskId: string): Promise<boolean> {
 // Project queries
 // ============================================
 
-export async function fetchProjectsForUser(
-  userId: string,
-  userRole: UserRole
-): Promise<ProjectWithDetails[]> {
-  let projectIds: string[] = []
-
+/**
+ * Load the projects visible to a user: everything for principals and admins,
+ * and for everyone else only the projects they are a member of.
+ */
+async function fetchVisibleProjects(userId: string, userRole: UserRole): Promise<Project[]> {
   if (userRole === 'principal' || userRole === 'admin') {
-    // Principals and admins see all projects
-    const { data: projects, error } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .select('*')
       .order('created_at', { ascending: false })
-
-    if (error || !projects) return []
-
-    return enrichProjects(projects as Project[])
+    return error || !data ? [] : (data as Project[])
   }
 
-  if (userRole === 'coordinator') {
-    // Coordinators only see projects they are directly a member of
-    const { data: memberships } = await supabase
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', userId)
+  // Coordinators and teachers alike see only projects they belong to.
+  const { data: memberships } = await supabase
+    .from('project_members')
+    .select('project_id')
+    .eq('user_id', userId)
 
-    projectIds = (memberships || []).map(m => m.project_id)
-  } else {
-    // Teachers: only projects they are a member of
-    const { data: memberships } = await supabase
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', userId)
-
-    projectIds = (memberships || []).map(m => m.project_id)
-  }
-
+  const projectIds = (memberships || []).map(m => m.project_id)
   if (projectIds.length === 0) return []
 
-  const { data: projects, error } = await supabase
+  const { data, error } = await supabase
     .from('projects')
     .select('*')
     .in('id', projectIds)
     .order('created_at', { ascending: false })
+  return error || !data ? [] : (data as Project[])
+}
 
-  if (error || !projects) return []
+export async function fetchProjectsForUser(
+  userId: string,
+  userRole: UserRole
+): Promise<ProjectWithDetails[]> {
+  return enrichProjects(await fetchVisibleProjects(userId, userRole))
+}
 
-  return enrichProjects(projects as Project[])
+/**
+ * Count the projects that are still open for a user — what the Projects tab
+ * badge shows. Deliberately does NOT go through fetchProjectsForUser: the badge
+ * needs three subtask columns, while full enrichment also pulls every project
+ * member plus an assignee and creator profile join per subtask, none of which
+ * the badge renders.
+ */
+export async function fetchActiveProjectCount(userId: string, userRole: UserRole): Promise<number> {
+  const projects = await fetchVisibleProjects(userId, userRole)
+  if (projects.length === 0) return 0
+
+  const { data: subtaskRows } = await supabase
+    .from('subtasks')
+    .select('project_id, status, require_check')
+    .in('project_id', projects.map(p => p.id))
+
+  const byProject = new Map<string, ProjectProgressSubtask[]>()
+  for (const row of (subtaskRows || []) as (ProjectProgressSubtask & { project_id: string })[]) {
+    const bucket = byProject.get(row.project_id)
+    if (bucket) bucket.push(row)
+    else byProject.set(row.project_id, [row])
+  }
+
+  return projects.filter(p => isProjectOpen(p.end_date, byProject.get(p.id) ?? [])).length
 }
 
 export interface SubtaskWithProject extends Subtask {
@@ -508,22 +583,37 @@ async function enrichProjects(projects: Project[]): Promise<ProjectWithDetails[]
 
   const projectIds = projects.map(p => p.id)
 
-  // Fetch all members for these projects
-  const { data: allMembers } = await supabase
-    .from('project_members')
-    .select('*, user:profiles(id, full_name, avatar_url, role)')
-    .in('project_id', projectIds)
+  // Members and subtasks are independent queries — run them together so the
+  // Projects tab waits on one round-trip rather than two.
+  const [{ data: allMembers }, { data: allSubtasks }] = await Promise.all([
+    supabase
+      .from('project_members')
+      .select('*, user:profiles(id, full_name, avatar_url, role)')
+      .in('project_id', projectIds),
+    supabase
+      .from('subtasks')
+      .select('*, assignee:profiles!subtasks_assignee_id_fkey(id, full_name, avatar_url, role), creator:profiles!subtasks_created_by_fkey(id, full_name, avatar_url, role)')
+      .in('project_id', projectIds)
+      .order('sort_order', { ascending: true }),
+  ])
 
-  // Fetch all subtasks for these projects
-  const { data: allSubtasks } = await supabase
-    .from('subtasks')
-    .select('*, assignee:profiles!subtasks_assignee_id_fkey(id, full_name, avatar_url, role), creator:profiles!subtasks_created_by_fkey(id, full_name, avatar_url, role)')
-    .in('project_id', projectIds)
-    .order('sort_order', { ascending: true })
+  const membersByProject  = groupByProjectId<ProjectMember>(allMembers)
+  const subtasksByProject = groupByProjectId<Subtask>(allSubtasks)
 
   return projects.map(project => ({
     ...project,
-    members: (allMembers || []).filter(m => m.project_id === project.id) as ProjectMember[],
-    subtasks: (allSubtasks || []).filter(s => s.project_id === project.id) as Subtask[],
+    members: membersByProject.get(project.id) ?? [],
+    subtasks: subtasksByProject.get(project.id) ?? [],
   }))
+}
+
+/** Bucket rows carrying a project_id into a Map, preserving their query order. */
+function groupByProjectId<T extends { project_id: string }>(rows: unknown[] | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of (rows ?? []) as T[]) {
+    const bucket = map.get(row.project_id)
+    if (bucket) bucket.push(row)
+    else map.set(row.project_id, [row])
+  }
+  return map
 }

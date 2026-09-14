@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import {
-  PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
+  PayrollCalibration, mergeCalibration, fetchPayrollCalibration,
   computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth,
   PAYROLL_ITEM_LABELS, isAutoPayrollLabel,
 } from './payroll'
@@ -291,13 +291,6 @@ export async function fetchPayrollContext(today?: string | null): Promise<Payrol
     today: today ?? new Date().toISOString().split('T')[0],
     hidden: new Set(hiddenIds),
   }
-}
-
-export const EMPTY_PAYROLL_CONTEXT: PayrollContext = {
-  calibration: DEFAULT_PAYROLL_CALIBRATION,
-  baseMap: {},
-  today: new Date().toISOString().split('T')[0],
-  hidden: new Set(),
 }
 
 // ============================================

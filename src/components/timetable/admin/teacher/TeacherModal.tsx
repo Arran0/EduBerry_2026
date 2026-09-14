@@ -119,7 +119,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
 
             {config
               ? <TeacherConstraintsPanel config={config} teacher={selected} homerooms={homerooms} />
-              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to edit this teacher's constraints.</p>}
+              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to edit this teacher&rsquo;s constraints.</p>}
           </div>
         )}
       </div>

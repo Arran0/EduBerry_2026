@@ -364,7 +364,9 @@ function GroupCard({
   classrooms: Classroom[]
   onChanged: () => void
 }) {
-  const members = group.members ?? []
+  // `group.members ?? []` is a fresh array on every render when members is
+  // undefined, which would defeat the memo below.
+  const members = useMemo(() => group.members ?? [], [group.members])
   const memberIds = useMemo(() => new Set(members.map((m) => m.student_id)), [members])
 
   const [mode, setMode] = useState<'type' | 'bulk' | 'csv'>('type')

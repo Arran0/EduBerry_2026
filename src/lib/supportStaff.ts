@@ -100,9 +100,6 @@ export const SUPPORT_ATTENDANCE_STATUS_PILL: Record<SupportAttendanceStatus, str
   e:        'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-/** Statuses that count as the person having worked the day. */
-export const SUPPORT_PRESENT_STATUSES: SupportAttendanceStatus[] = ['present', 'late', 'half_day', 'e']
-
 // ============================================
 // Roster
 // ============================================
@@ -362,18 +359,6 @@ export function computeSupportDayStats(
   return stats
 }
 
-export interface SupportPersonStats {
-  marked_days: number
-  present: number
-  late: number
-  half_day: number
-  absent: number
-  on_leave: number
-  e: number
-  /** (present + late + e + ½·half_day) / (marked days − leave), over marked days only. */
-  present_pct: number
-}
-
 /**
  * Adapts one support-staff attendance row into the shape
  * computeStaffAttendanceStats (src/lib/payroll.ts) and deriveDayStatus /
@@ -390,14 +375,10 @@ export function supportRecordToStaffShape(r: SupportAttendanceRecord): StaffAtte
     staff_id: r.support_staff_id,
     date: r.date,
     status: r.status as StaffAttendanceStatus,
-    check_in_time: null, check_in_lat: null, check_in_lng: null, check_in_accuracy: null,
-    check_in_distance_m: null, geofence_passed: null,
-    check_out_time: null, check_out_lat: null, check_out_lng: null, check_out_accuracy: null,
-    check_out_distance_m: null,
-    check_in_time_2: null, check_in_lat_2: null, check_in_lng_2: null, check_in_accuracy_2: null,
-    check_in_distance_m_2: null,
-    check_out_time_2: null, check_out_lat_2: null, check_out_lng_2: null, check_out_accuracy_2: null,
-    check_out_distance_m_2: null,
+    check_in_time: null, check_in_distance_m: null, geofence_passed: null,
+    check_out_time: null, check_out_distance_m: null,
+    check_in_time_2: null, check_in_distance_m_2: null,
+    check_out_time_2: null, check_out_distance_m_2: null,
     leave_application_id: null, marked_by: r.marked_by, remarks: r.remarks,
     created_at: r.created_at ?? '', updated_at: r.updated_at ?? '',
     check_in_verdict: null, check_out_verdict: null, check_in_verdict_2: null, check_out_verdict_2: null,

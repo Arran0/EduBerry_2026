@@ -72,12 +72,7 @@ export default function Navbar() {
   const scrolled = useScrolled()
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
-  const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(
-    user?.id ?? null,
-    profile?.role ?? null,
-    profile?.grade,
-    profile?.section,
-  )
+  const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(user?.id ?? null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

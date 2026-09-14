@@ -108,7 +108,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       setEntries([])
     }
     setLoading(false)
-  }, [config.id])
+  }, [config.id, config.name])
 
   useEffect(() => {
     load()
