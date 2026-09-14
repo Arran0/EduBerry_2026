@@ -223,10 +223,19 @@ export default function SalaryCycleDetailPage() {
     setLoading(true)
     // Late and Half Day are LOP occurrences, so an attendance rule edited after
     // the day it covers moves real money on this sheet. Settle any such change
-    // before the month's attendance is read, rather than computing a payslip
+    // before the month's ATTENDANCE is read, rather than computing a payslip
     // from statuses the attendance app has already stopped agreeing with. Costs
     // one read of an empty queue when nothing has changed.
-    await recomputePendingAttendance()
+    //
+    // Only the attendance fetch below depends on it, so it runs alongside the
+    // cycle/records/config round trips rather than in front of them — waiting
+    // for it there delayed everything on the page, including the rows and
+    // totals that have nothing to do with attendance.
+    // Kept settled even on the branch below that never awaits it (a cycle with
+    // no rows reads no attendance), so a failure can't surface as an unhandled
+    // rejection — the recompute is best-effort either way.
+    const recompute = recomputePendingAttendance()
+      .catch(e => { console.error('recomputePendingAttendance failed:', e); return null })
     const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, supportBases, supportBanks, globalCal, hiddenIds] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
       fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(),
@@ -312,6 +321,8 @@ export default function SalaryCycleDetailPage() {
       // staffIds.
       const staffIds = recs.filter(r => r.staff_id).map(r => r.staff_id as string)
       const supportStaffIds = new Set(recs.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))
+      // Here is where the recompute started above actually has to have landed.
+      await recompute
       const [staffAttRecs, hols, nonWorking, bonusPts, supportAttRecs] = await Promise.all([
         fetchMonthlyAttendanceRecords(staffIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
@@ -731,17 +742,23 @@ export default function SalaryCycleDetailPage() {
       // Freeze who this record is for and its attendance-derived counts, so
       // once locked nothing about this row recomputes again — see
       // computedRows and load()'s roster filter for the read side of this.
-      // A field the admin had already hand-overridden is left out: that
-      // value is already fixed and typing it into the snapshot too would
-      // just duplicate it.
+      // A field the admin had already hand-overridden keeps whatever the
+      // record already carries rather than taking a freshly derived value:
+      // the override is what fixes that figure, and the snapshot must not
+      // move it. (computedRows reads the override ahead of the snapshot
+      // either way, so the stored value only matters if the override is
+      // ever cleared.)
       snapshots.push({
         id: r.id,
+        cycle_id: r.cycle_id,
+        staff_id: r.staff_id,
+        support_staff_id: r.support_staff_id,
         person_name_snapshot: recordPersonName(r) || null,
         person_role_snapshot: r.support_staff_id ? 'support' : (r.staff?.role ?? r.person_role_snapshot ?? null),
-        ...(r.working_days_override == null ? { working_days_snapshot: c.workingDays } : {}),
-        ...(r.leave_override == null ? { leave_snapshot: c.leaveCount } : {}),
-        ...(r.late_override == null ? { late_snapshot: c.lateCount } : {}),
-        ...(r.half_day_override == null ? { half_day_snapshot: c.halfDayCount } : {}),
+        working_days_snapshot: r.working_days_override == null ? c.workingDays : r.working_days_snapshot,
+        leave_snapshot: r.leave_override == null ? c.leaveCount : r.leave_snapshot,
+        late_snapshot: r.late_override == null ? c.lateCount : r.late_snapshot,
+        half_day_snapshot: r.half_day_override == null ? c.halfDayCount : r.half_day_snapshot,
         bonus_points_snapshot: c.bonusPoints,
       })
     }

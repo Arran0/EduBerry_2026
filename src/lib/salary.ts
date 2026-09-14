@@ -341,23 +341,17 @@ export interface CycleTally { total: number; paid: number }
  * since — matching the same page's behavior once locked.
  */
 export async function fetchCycleTallies(): Promise<Record<string, CycleTally>> {
-  const [{ data, error }, hiddenIds] = await Promise.all([
-    supabase
-      .from('salary_records')
-      .select('cycle_id, status, staff_id, support_staff_id, ' +
-        'staff:profiles!staff_id(is_banned), support_staff:support_staff!support_staff_id(is_active), ' +
-        'cycle:salary_cycles!cycle_id(status)'),
-    fetchHiddenSalaryMemberIds(),
-  ])
+  // Counted in Postgres — one row per cycle — rather than by pulling every
+  // salary record ever written into the browser to count them here. The rules
+  // (and the reason a closed cycle is exempt from them) live in
+  // supabase-migrations/salary_cycle_tally_rpcs.sql, ported verbatim from the
+  // loop this replaced; recordPersonLeft above is still the client-side half of
+  // the same rule for the screens that hold the records themselves.
+  const { data, error } = await supabase.rpc('salary_cycle_tallies')
   if (error) { console.error('fetchCycleTallies failed:', error); return {} }
-  const hidden = new Set(hiddenIds)
   const out: Record<string, CycleTally> = {}
-  for (const r of (data ?? []) as unknown as (Pick<SalaryRecord, 'cycle_id' | 'status' | 'staff_id' | 'support_staff_id' | 'staff' | 'support_staff'> & { cycle: { status: SalaryCycleStatus } | null })[]) {
-    const closed = r.cycle?.status === 'closed'
-    if (!closed && (recordPersonLeft(r) || hidden.has(recordPersonId(r)))) continue
-    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
-    t.total += 1
-    if (r.status === 'paid') t.paid += 1
+  for (const r of (data ?? []) as { cycle_id: string; total: number; paid: number }[]) {
+    out[r.cycle_id] = { total: Number(r.total) || 0, paid: Number(r.paid) || 0 }
   }
   return out
 }
@@ -406,13 +400,14 @@ export async function ensureDriverRecordsInCycle(
       .map(b => [b.driver_id, b]),
   )
   const already = ((existingRes.data ?? []) as { id: string; staff_id: string; base_amount: number }[])
+  const alreadyIds = new Set(already.map(r => r.staff_id))
   const hidden = new Set(hiddenIds)
 
   const rows = ((driversRes.data ?? []) as { id: string }[])
     // A driver explicitly marked inactive or resigned (banned), or hidden
     // from the salary app, stays off payroll; one with no base row at all is
     // still included, at zero, to be filled in on the cycle page.
-    .filter(d => !already.some(r => r.staff_id === d.id) && (bases.get(d.id)?.active ?? true) && !hidden.has(d.id))
+    .filter(d => !alreadyIds.has(d.id) && (bases.get(d.id)?.active ?? true) && !hidden.has(d.id))
     .map(d => ({
       cycle_id: cycleId,
       staff_id: d.id,
@@ -428,12 +423,18 @@ export async function ensureDriverRecordsInCycle(
   // Catch up drivers whose cycle row was created before a base salary
   // existed and is still sitting at that zero default, now that a base is on
   // file — otherwise a base added after the cycle opened never shows up.
-  for (const r of already) {
+  // One upsert for the whole catch-up rather than an UPDATE per driver: this
+  // runs on every load of an open cycle, and a round trip per row is a round
+  // trip per row whether or not any of them turn out to need syncing.
+  const resync = already.flatMap(r => {
     const base = bases.get(r.staff_id)
-    if (Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0) {
-      const { error } = await supabase.from('salary_records').update({ base_amount: base.base_amount }).eq('id', r.id)
-      if (error) console.error('ensureDriverRecordsInCycle base sync failed:', error)
-    }
+    return Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0
+      ? [{ id: r.id, cycle_id: cycleId, staff_id: r.staff_id, base_amount: base.base_amount }]
+      : []
+  })
+  if (resync.length > 0) {
+    const { error } = await supabase.from('salary_records').upsert(resync, { onConflict: 'id' })
+    if (error) console.error('ensureDriverRecordsInCycle base sync failed:', error)
   }
 
   return { success: true, added: rows.length }
@@ -469,10 +470,11 @@ export async function ensureSupportStaffRecordsInCycle(
       .map(b => [b.support_staff_id, b]),
   )
   const already = ((existingRes.data ?? []) as { id: string; support_staff_id: string; base_amount: number }[])
+  const alreadyIds = new Set(already.map(r => r.support_staff_id))
   const hidden = new Set(hiddenIds)
 
   const rows = ((supportRes.data ?? []) as { id: string }[])
-    .filter(s => !already.some(r => r.support_staff_id === s.id) && (bases.get(s.id)?.active ?? true) && !hidden.has(s.id))
+    .filter(s => !alreadyIds.has(s.id) && (bases.get(s.id)?.active ?? true) && !hidden.has(s.id))
     .map(s => ({
       cycle_id: cycleId,
       support_staff_id: s.id,
@@ -486,14 +488,17 @@ export async function ensureSupportStaffRecordsInCycle(
   }
 
   // Catch up support staff whose cycle row was created before a base salary
-  // existed and is still sitting at that zero default, now that a base is on
-  // file — otherwise a base added after the cycle opened never shows up.
-  for (const r of already) {
+  // existed and is still sitting at that zero default — one upsert for the
+  // whole catch-up, same as ensureDriverRecordsInCycle above.
+  const resync = already.flatMap(r => {
     const base = bases.get(r.support_staff_id)
-    if (Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0) {
-      const { error } = await supabase.from('salary_records').update({ base_amount: base.base_amount }).eq('id', r.id)
-      if (error) console.error('ensureSupportStaffRecordsInCycle base sync failed:', error)
-    }
+    return Number(r.base_amount) === 0 && base && Number(base.base_amount) !== 0
+      ? [{ id: r.id, cycle_id: cycleId, support_staff_id: r.support_staff_id, base_amount: base.base_amount }]
+      : []
+  })
+  if (resync.length > 0) {
+    const { error } = await supabase.from('salary_records').upsert(resync, { onConflict: 'id' })
+    if (error) console.error('ensureSupportStaffRecordsInCycle base sync failed:', error)
   }
 
   return { success: true, added: rows.length }
@@ -550,15 +555,6 @@ export async function deleteSalaryItem(itemId: string): Promise<{ success: boole
   return { success: true }
 }
 
-export async function setSalaryRecordStatus(
-  recordId: string,
-  status: SalaryStatus,
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('salary_records').update({ status }).eq('id', recordId)
-  if (error) { console.error('setSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
 /** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
 export async function updateSalaryRecordOverrides(
   recordId: string,
@@ -572,13 +568,22 @@ export async function updateSalaryRecordOverrides(
 /** One record's figures, frozen onto it the moment a cycle is locked — see freezeCycleRecordSnapshots. */
 export interface CycleRecordSnapshot {
   id: string
+  /** The record's own cycle and person, carried so the freeze can go out as one
+   *  upsert — PostgREST evaluates salary_records' NOT NULL and person-check
+   *  constraints against the row it forms before the id conflict resolves it
+   *  into an UPDATE, so both have to be on every row. */
+  cycle_id: string
+  staff_id: string | null
+  support_staff_id: string | null
   person_name_snapshot: string | null
   person_role_snapshot: string | null
-  /** Omitted for a field the admin had already hand-overridden before the lock — that value is already fixed. */
-  working_days_snapshot?: number
-  leave_snapshot?: number
-  late_snapshot?: number
-  half_day_snapshot?: number
+  /** For a field the admin had already hand-overridden before the lock, the
+   *  caller passes the value the record already carries rather than a freshly
+   *  derived one — that figure is fixed by the override and must not move. */
+  working_days_snapshot: number | null
+  leave_snapshot: number | null
+  late_snapshot: number | null
+  half_day_snapshot: number | null
   bonus_points_snapshot: number
 }
 
@@ -588,19 +593,21 @@ export interface CycleRecordSnapshot {
  * snapshotting the rupee amounts. Without this, a closed cycle's Working
  * Days/Leave/Late/Half Day/bonus-point columns kept recomputing from
  * whatever attendance, holidays and task points look like *today* — and a
- * hard-deleted or since-renamed person's row went blank. One update per
- * record (values differ per row, so this can't be a single bulk query), same
- * as the other per-record loops in this module.
+ * hard-deleted or since-renamed person's row went blank.
+ *
+ * The values differ per row, so this cannot be one UPDATE — but it can be one
+ * request: an upsert keyed on the primary key writes every row's own figures
+ * in a single statement. It used to fire one UPDATE per record, which on a
+ * hundred-person cycle meant a hundred round trips inside the lock, any one of
+ * which failing left the cycle half-frozen. Every column is sent on every row
+ * (see CycleRecordSnapshot) so the rows share one column list.
  */
 export async function freezeCycleRecordSnapshots(
   snapshots: CycleRecordSnapshot[],
 ): Promise<{ success: boolean; error?: string }> {
   if (snapshots.length === 0) return { success: true }
-  const results = await Promise.all(snapshots.map(({ id, ...patch }) =>
-    supabase.from('salary_records').update(patch).eq('id', id),
-  ))
-  const failed = results.find(r => r.error)
-  if (failed?.error) { console.error('freezeCycleRecordSnapshots failed:', failed.error); return { success: false, error: failed.error.message } }
+  const { error } = await supabase.from('salary_records').upsert(snapshots, { onConflict: 'id' })
+  if (error) { console.error('freezeCycleRecordSnapshots failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 
@@ -756,12 +763,6 @@ export async function upsertBankAccount(input: BankAccountInput): Promise<{ succ
     .from('staff_bank_accounts')
     .upsert({ ...input, created_by: user?.id }, { onConflict: 'staff_id' })
   if (error) { console.error('upsertBankAccount failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function deleteBankAccount(staffId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('staff_bank_accounts').delete().eq('staff_id', staffId)
-  if (error) { console.error('deleteBankAccount failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 
