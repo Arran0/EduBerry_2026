@@ -1270,17 +1270,23 @@ export async function fetchStudentMembers(classroomId: string): Promise<(Classro
 // Batch-fetch profiles for a set of ids (e.g. the `created_by` of a page's
 // folders/files/assessments) and return them keyed by id, so callers can look
 // up "created by" names without one round trip per row.
-export async function fetchProfilesByIds(ids: (string | null | undefined)[]): Promise<Record<string, UserProfile>> {
+export async function fetchProfilesByIds(
+  ids: (string | null | undefined)[],
+  // Callers that render a name and an avatar (rather than a whole profile) can
+  // narrow this; the default keeps every existing caller's shape unchanged.
+  columns = '*',
+): Promise<Record<string, UserProfile>> {
   const uniqueIds = [...new Set(ids.filter((id): id is string => !!id))]
   if (uniqueIds.length === 0) return {}
 
   const { data } = await supabase
     .from('profiles')
-    .select('*')
+    .select(columns)
     .in('id', uniqueIds)
 
   const map: Record<string, UserProfile> = {}
-  for (const p of (data ?? []) as UserProfile[]) map[p.id] = p
+  // `columns` is a runtime string, so supabase-js can't infer the row shape.
+  for (const p of ((data ?? []) as unknown as UserProfile[])) map[p.id] = p
   return map
 }
 
@@ -1522,10 +1528,32 @@ function startsInAcademicYear(
   return parseInt(classroom.start_date.split('-')[0]) === parseInt(academicYear.split('-')[0])
 }
 
+/** Requests in flight right now, keyed by function + arguments.
+ *
+ *  The academics page renders the report-card digest and the full Report Cards
+ *  section together, and a student's copy of each asks for the same year list
+ *  and the same cards at the same moment. Coalescing means they share one
+ *  request instead of issuing two identical ones. Nothing is kept once the
+ *  request settles — this de-duplicates concurrent callers, it is not a cache,
+ *  so no caller can be handed a stale result. */
+const inFlight = new Map<string, Promise<unknown>>()
+
+function coalesce<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(key) as Promise<T> | undefined
+  if (existing) return existing
+  const p = run().finally(() => { inFlight.delete(key) })
+  inFlight.set(key, p)
+  return p
+}
+
 /** Returns distinct academic years (e.g. ["2026-27", "2025-26"]) for all
  *  classrooms the student belongs to that have a start_date set.
  *  Sorted descending so the most recent year comes first. */
-export async function fetchAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
+export function fetchAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
+  return coalesce(`years:${studentId}`, () => loadAvailableAcademicYearsForStudent(studentId))
+}
+
+async function loadAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
   // One round trip: the membership rows carry their classroom's start_date via
   // an inner join, so there is no second query keyed on the ids from the first.
   const { data, error } = await supabase
@@ -1577,7 +1605,17 @@ async function fetchStudentMarksForClassrooms(
  *  for each. When `academicYear` (e.g. "2025-26") is provided, classrooms with
  *  a matching start_date year are used (active or not). When omitted, only
  *  active classrooms (end_date null or in future) are used. */
-export async function fetchReportCardsForStudent(
+export function fetchReportCardsForStudent(
+  studentId: string,
+  academicYear?: string | null,
+): Promise<Map<string, StudentReportCardEntry[]>> {
+  return coalesce(
+    `cards:${studentId}:${academicYear ?? ''}`,
+    () => loadReportCardsForStudent(studentId, academicYear),
+  )
+}
+
+async function loadReportCardsForStudent(
   studentId: string,
   academicYear?: string | null,
 ): Promise<Map<string, StudentReportCardEntry[]>> {

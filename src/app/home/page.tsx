@@ -8,7 +8,6 @@ import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
-  Megaphone,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -59,6 +58,7 @@ import {
 import { ClassroomWithDetails, fetchClassroomsForUser } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
 import { getShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
+import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { fetchRawSetting, saveSetting } from '@/lib/pageConfig'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
@@ -449,6 +449,10 @@ export default function HomePage() {
   const [taskItemsByDay, setTaskItemsByDay] = useState<Map<string, MiniCalendarItem[]>>(new Map())
   const [taskCalendarLoading, setTaskCalendarLoading] = useState(true)
   const [showTaskCalendarOnHome, setShowTaskCalendarOnHomeState] = useState(false)
+  // Off unless the account opted in from the Academics classrooms heading.
+  // Starts false so the server render and the first client render agree —
+  // the stored preference is read right after mount, like the one above.
+  const [showClassroomsOnHome, setShowClassroomsOnHomeState] = useState(false)
   const interactedRef = useRef(false)
   const swipeStartXRef = useRef<number | null>(null)
   const swipeStartYRef = useRef(0)
@@ -1203,6 +1207,10 @@ export default function HomePage() {
   }, [CARD_VIEWS])
 
   useEffect(() => {
+    if (user) setShowClassroomsOnHomeState(getShowClassroomsOnHome(user.id))
+  }, [user])
+
+  useEffect(() => {
     if (!showCardCarousel || CARD_VIEWS.length < 2) return
     const t = setInterval(() => {
       const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
@@ -1682,12 +1690,15 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* ── Classrooms (hidden entirely for accounts not enrolled in any classroom).
-              Before classroomsLoaded resolves, hasClassrooms (a fast single-row
+          {/* ── Classrooms — off by default, shown when the account turns it on
+              from the Academics classrooms heading (home leads with the day's
+              work, and the same buttons live on Academics either way).
+              Still hidden entirely for accounts not enrolled in any classroom:
+              before classroomsLoaded resolves, hasClassrooms (a fast single-row
               check) decides whether to reserve the section's space with a
               skeleton grid, so enrolled accounts don't see the section pop in
               and shift the page below it. ── */}
-          {(classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
+          {showClassroomsOnHome && (classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
               <motion.div variants={itemVariants}>
                 <SectionHeading

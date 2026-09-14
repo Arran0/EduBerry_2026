@@ -21,6 +21,7 @@ import {
 } from '@/lib/classrooms'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
+import { recordReportCardVisit } from '@/lib/reportCardVisits'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function AcademicRecordPage() {
@@ -95,6 +96,13 @@ export default function AcademicRecordPage() {
     if (!viewerProfile) return
     if (!isSelf && !isStaff) router.replace('/')
   }, [viewerProfile, isSelf, isStaff, router])
+
+  // Feeds the "recently opened" report-card digest on Academics. Recorded
+  // after the guard above, so a redirected visit never counts as an open.
+  useEffect(() => {
+    if (!viewerProfile || !isStaff || isSelf) return
+    recordReportCardVisit(viewerProfile.id, studentId)
+  }, [viewerProfile, isStaff, isSelf, studentId])
 
   return (
     <ProtectedLayout>

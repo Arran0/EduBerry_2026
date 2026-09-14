@@ -28,6 +28,7 @@ import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
+import { recordReportCardVisit } from '@/lib/reportCardVisits'
 import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
@@ -372,7 +373,7 @@ function StaffReportCardSearch({
           {results.map(s => (
             <button
               key={s.id}
-              onClick={() => setSelected(s)}
+              onClick={() => { recordReportCardVisit(viewerId, s.id); setSelected(s) }}
               className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-colors text-left"
             >
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={36} userId={s.id} />
