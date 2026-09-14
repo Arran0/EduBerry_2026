@@ -40,6 +40,13 @@ import {
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 
+/** Softens the bottom edge of a scrollable grid, so an overflowing grid hints
+ *  at the rows below instead of ending on a hard crop. */
+const GRID_FADE_MASK: React.CSSProperties = {
+  maskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
+  WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
+}
+
 function getSessionVibes(name: string): string[] {
   const h = new Date().getHours()
   const session = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
@@ -171,39 +178,102 @@ function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
 
 /**
  * Unified section heading — a frosted gradient icon chip beside a single-line
- * display title, with an optional right-aligned action. Every academics
- * section uses the exact same chip size and title size so the four headers
- * line up vertically and read as one family.
+ * display title, a hairline rule running out to the section's action, and an
+ * optional right-aligned action. Every academics section uses the exact same
+ * chip size and title size so the four headers line up vertically and read as
+ * one family; the rule is what ties a heading to the full width of the panel
+ * beneath it without costing a pixel of height.
  */
 function SectionHeading({
   icon: Icon,
   chipClass,
   title,
+  count,
   titleAction,
   action,
 }: {
   icon: React.ElementType
   chipClass: string
   title: string
+  /** Optional tally shown as a quiet pill beside the title. */
+  count?: number
   titleAction?: React.ReactNode
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`icon-chip w-10 h-10 flex-shrink-0 ${chipClass}`}>
-          <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
-        </div>
-        {/* Title and its action share a baseline row, so a glyph beside the
-            title sits on the title's baseline rather than floating at the
-            centre of the taller chip row. */}
-        <div className="flex items-baseline gap-2 min-w-0">
-          <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
-          {titleAction && <span className="flex-shrink-0 inline-flex">{titleAction}</span>}
-        </div>
+    <div className="flex items-center gap-3 mb-4 min-h-[2.5rem]">
+      <div className={`icon-chip w-10 h-10 flex-shrink-0 ${chipClass}`}>
+        <Icon size={18} className="relative z-10 text-white drop-shadow-sm" />
       </div>
+      {/* Title and its action share a baseline row, so a glyph beside the
+          title sits on the title's baseline rather than floating at the
+          centre of the taller chip row. */}
+      <div className="flex items-baseline gap-2 min-w-0">
+        <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
+        {count !== undefined && count > 0 && (
+          <span className="flex-shrink-0 text-[11px] font-bold text-slate-500 bg-white/70 border border-white/80 px-2 py-0.5 rounded-full tabular-nums shadow-sm">
+            {count}
+          </span>
+        )}
+        {titleAction && <span className="flex-shrink-0 inline-flex">{titleAction}</span>}
+      </div>
+      {/* Hairline rule — fades out as it travels, so it reads as the heading
+          settling onto the panel rather than a divider bolted across it. */}
+      <div
+        className="flex-1 h-px min-w-[1rem]"
+        style={{ background: 'linear-gradient(to right, rgba(148,163,184,0.45), rgba(148,163,184,0))' }}
+        aria-hidden
+      />
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
+  )
+}
+
+/**
+ * An empty state with the weight of a panel rather than a stray line of grey
+ * text — the same frosted card the sections themselves sit in.
+ */
+function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+  action,
+}: {
+  icon: React.ElementType
+  title: string
+  hint?: string
+  action?: React.ReactNode
+}) {
+  return (
+    // Near-solid rather than the frosted .glass-card: over the page's own cyan
+    // wash a 30%-white card all but disappears, and an empty state that reads
+    // as an empty box is worse than the line of text it replaced.
+    <div className="rounded-[1.5rem] px-6 py-9 text-center bg-white/85 backdrop-blur-xl border border-white/70 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]">
+      <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-center mx-auto mb-3">
+        <Icon size={22} className="text-slate-400" />
+      </div>
+      <p className="text-sm font-semibold text-slate-700">{title}</p>
+      {hint && <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">{hint}</p>}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
+/** Sections rise into place in order on first paint — a quarter-second of
+ *  sequence that makes the page feel assembled rather than dumped.
+ *  `wrapper` renders a plain div for a child that is already a <section>. */
+function RevealSection({
+  index, wrapper = false, children,
+}: { index: number; wrapper?: boolean; children: React.ReactNode }) {
+  const Tag = wrapper ? motion.div : motion.section
+  return (
+    <Tag
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.07 }}
+    >
+      {children}
+    </Tag>
   )
 }
 
@@ -252,7 +322,9 @@ export default function AcademicsPage() {
   const [homerooms, setHomerooms] = useState<Homeroom[] | null>(null)
   const isClassTeacher = !isStudent && (homerooms?.length ?? 0) > 0
 
-  const classroomColumns = useGridColumns()
+  // A full-page grid: it keeps adding columns past `lg` rather than stretching
+  // four pills across a 1536px page.
+  const classroomColumns = useGridColumns(true)
   const CLASSROOM_VISIBLE_ROWS = 4
   const CLASSROOM_LIMIT = classroomColumns * CLASSROOM_VISIBLE_ROWS
   const CLASSROOM_COL_GAP = 12
@@ -279,6 +351,9 @@ export default function AcademicsPage() {
   const classroomGridHeight = (rows: number) =>
     classroomGridMaxHeight(Math.max(1, Math.min(CLASSROOM_VISIBLE_ROWS, rows)), CLASSROOM_ROW_GAP)
   const GRID_HEIGHT_TRANSITION = 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+  // True once the grid holds more rows than it can show — see GRID_FADE_MASK.
+  const classroomGridScrolls =
+    Math.ceil(filteredClassrooms.length / classroomColumns) > CLASSROOM_VISIBLE_ROWS
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -529,7 +604,7 @@ export default function AcademicsPage() {
           {/* School Work Calendar — a student's own work across their
               classrooms, or, for a class teacher, their homeroom's homework. */}
           {(isStudent || isClassTeacher) && (
-            <section>
+            <RevealSection index={0}>
               <SectionHeading
                 icon={CalendarDays}
                 chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
@@ -547,15 +622,16 @@ export default function AcademicsPage() {
               ) : (
                 <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
               )}
-            </section>
+            </RevealSection>
           )}
 
           {/* Classrooms */}
-          <section>
+          <RevealSection index={1}>
             <SectionHeading
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
               title={isStudent ? 'My Classrooms' : 'Classrooms'}
+              count={loading || classroomSearch ? undefined : classrooms.length}
               titleAction={
                 <button
                   onClick={toggleShowOnHome}
@@ -679,9 +755,25 @@ export default function AcademicsPage() {
                 />
               </div>
             ) : classrooms.length === 0 ? (
-              <p className="text-sm text-slate-500">You are not enrolled in any classrooms yet.</p>
+              <EmptyState
+                icon={BookOpen}
+                title="No classrooms yet"
+                hint="You are not enrolled in any classrooms. Once a teacher adds you, they will appear here."
+              />
             ) : filteredClassrooms.length === 0 && classroomSearch ? (
-              <p className="text-sm text-slate-500">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
+              <EmptyState
+                icon={Search}
+                title={`No classrooms match “${classroomSearch}”`}
+                hint="Try a shorter search, or clear it to see all of your classrooms."
+                action={
+                  <button
+                    onClick={() => setClassroomSearch('')}
+                    className="text-xs font-semibold text-cyan-700 bg-white/80 border border-white/80 shadow-sm px-3 py-1.5 rounded-full hover:bg-white transition-colors"
+                  >
+                    Clear search
+                  </button>
+                }
+              />
             ) : (
               <div
                 ref={classroomSearch ? undefined : classroomsScrollRef}
@@ -696,6 +788,10 @@ export default function AcademicsPage() {
                   paddingBottom: CLASSROOM_ROW_GAP,
                   scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
                   scrollPaddingBottom: CLASSROOM_ROW_GAP,
+                  // The scrollbar is hidden, so a grid deeper than its four
+                  // visible rows softens out at the bottom edge instead of
+                  // ending on a hard crop that reads as the last row.
+                  ...(classroomGridScrolls ? GRID_FADE_MASK : null),
                 }}
                 className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-2 lg:px-2"
               >
@@ -711,14 +807,14 @@ export default function AcademicsPage() {
                 />
               </div>
             )}
-          </section>
+          </RevealSection>
 
           {/* Gamified dashboard — 3-card coverflow of per-classroom EduPoint
               briefs — students only. The strip sits in a bordered card rather
               than running loose across the page, so it reads as one section
               and sizes its cards to that card. */}
           {isStudent && (
-            <section>
+            <RevealSection index={2}>
               <SectionHeading
                 icon={Trophy}
                 chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
@@ -727,15 +823,17 @@ export default function AcademicsPage() {
               <div className="glass-card rounded-[1.5rem] px-3 py-4 sm:px-5">
                 <StudentGameSection userId={user.id} />
               </div>
-            </section>
+            </RevealSection>
           )}
 
           {/* Report Cards — the foot of the page, for every role. */}
-          <ReportCardsSection
-            user={{ id: user.id }}
-            profile={profile}
-            isStudent={isStudent}
-          />
+          <RevealSection index={3} wrapper>
+            <ReportCardsSection
+              user={{ id: user.id }}
+              profile={profile}
+              isStudent={isStudent}
+            />
+          </RevealSection>
         </div>
       </div>
     </ProtectedLayout>

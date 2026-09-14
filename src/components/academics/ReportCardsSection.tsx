@@ -233,11 +233,18 @@ function HeaderShell({
       <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">
         Report Cards
       </h2>
+      {/* The same fading hairline the other academics headings carry (see
+          SectionHeading), so all four headers read as one family. */}
+      <div
+        className="flex-1 h-px min-w-[1rem]"
+        style={{ background: 'linear-gradient(to right, rgba(148,163,184,0.45), rgba(148,163,184,0))' }}
+        aria-hidden
+      />
     </>
   )
 
   if (!asButton) {
-    return <div className="flex items-center gap-3 min-w-0">{inner}</div>
+    return <div className="flex items-center gap-3 min-w-0 flex-1">{inner}</div>
   }
 
   return (
