@@ -153,6 +153,31 @@ interface SchoolWorkManagerProps {
 const LIST_LIMIT = 5
 /** How far either side of today homework is loaded in one go. */
 const WINDOW_DAYS = 180
+/** Overdue is shown as "9+" past this — an exact count of a long backlog is
+ *  neither useful to a student nor worth the render churn. */
+const OVERDUE_COUNT_CAP = 9
+/** Overdue rows are mounted a page at a time, so a backlog of hundreds still
+ *  costs a handful of DOM nodes. */
+const OVERDUE_PAGE = 6
+
+/** One missed piece of work — classwork or homework — with its due date
+ *  resolved once, so the list can be sorted without re-parsing. */
+type OverdueEntry =
+  | { kind: 'cw'; item: WorkItem; dueMs: number }
+  | { kind: 'hw'; task: StudentHomeroomTask; dueMs: number }
+
+/** Whole days between a due date and today, for the "3d late" chip. */
+function daysLate(dueMs: number, today: Date): number {
+  return Math.max(1, Math.round((today.getTime() - dueMs) / 86_400_000))
+}
+
+/** The chip darkens with the delay: a day late is a nudge, a month is not. */
+function lateTone(days: number): string {
+  if (days <= 2)  return 'bg-amber-50 text-amber-700 border-amber-200'
+  if (days <= 7)  return 'bg-orange-50 text-orange-700 border-orange-200'
+  if (days <= 30) return 'bg-rose-50 text-rose-700 border-rose-200'
+  return 'bg-rose-600 text-white border-rose-600'
+}
 
 export default function SchoolWorkManager({
   classrooms, userId,
@@ -164,7 +189,6 @@ export default function SchoolWorkManager({
   const [progressMap, setProgressMap] = useState<Record<string, FileStatus>>({})
   const [filesLoading, setFilesLoading] = useState(true)
   const [hwLoading, setHwLoading]   = useState(true)
-  const [showMoreOverdue, setShowMoreOverdue] = useState(false)
   const [showMoreUndated, setShowMoreUndated] = useState(false)
   const [detailItem, setDetailItem] = useState<WorkItem | null>(null)
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
@@ -256,6 +280,9 @@ export default function SchoolWorkManager({
   // ── Computed ─────────────────────────────────────────────────────────────────
 
   const today = new Date(); today.setHours(0, 0, 0, 0)
+  // A stable dependency for the memo below — `today` is a new object every
+  // render, but midnight-anchored, so this number only moves with the date.
+  const todayMs = today.getTime()
 
   // Bucket every dated item by day up front, so the calendar's repeated
   // per-day lookups (pickers, counts, columns) are map reads rather than a
@@ -278,18 +305,50 @@ export default function SchoolWorkManager({
     [entriesByDay],
   )
 
-  const overdueItems = workItems.filter(f =>
-    f.due_date && parseDate(f.due_date) < today && (progressMap[f.id] || 'not_done') !== 'completed'
-  )
-  const overdueHomework = homeworkItems.filter(t =>
-    t.due_date && parseDate(t.due_date) < today && !hwIsCompleted(t.my_status, t.require_check)
-  )
-  const undatedItems = workItems.filter(f =>
+  // Overdue work, classwork and homework merged into one list, most recently
+  // missed first. Memoised and built in a single pass per source: a student
+  // with a long backlog can have hundreds of these, and this used to re-filter
+  // both lists on every render (every status toggle, every day tap).
+  const overdue = useMemo(() => {
+    const entries: OverdueEntry[] = []
+    for (const item of workItems) {
+      if (!item.due_date) continue
+      if ((progressMap[item.id] || 'not_done') === 'completed') continue
+      const due = parseDate(item.due_date)
+      if (due.getTime() >= todayMs) continue
+      entries.push({ kind: 'cw', item, dueMs: due.getTime() })
+    }
+    for (const task of homeworkItems) {
+      if (!task.due_date) continue
+      if (hwIsCompleted(task.my_status, task.require_check)) continue
+      const due = parseDate(task.due_date)
+      if (due.getTime() >= todayMs) continue
+      entries.push({ kind: 'hw', task, dueMs: due.getTime() })
+    }
+    entries.sort((a, b) => b.dueMs - a.dueMs)
+    return {
+      entries,
+      total: entries.length,
+      // Past the cap the exact number stops being useful and starts being
+      // discouraging — "9+" says "a backlog" without counting it out.
+      label: entries.length > OVERDUE_COUNT_CAP ? `${OVERDUE_COUNT_CAP}+` : String(entries.length),
+      capped: entries.length > OVERDUE_COUNT_CAP,
+    }
+  }, [workItems, homeworkItems, progressMap, todayMs])
+
+  const undatedItems = useMemo(() => workItems.filter(f =>
     !f.due_date && (progressMap[f.id] || 'not_done') !== 'completed'
-  )
-  const undatedHomework = homeworkItems.filter(t =>
+  ), [workItems, progressMap])
+  const undatedHomework = useMemo(() => homeworkItems.filter(t =>
     !t.due_date && !hwIsCompleted(t.my_status, t.require_check)
-  )
+  ), [homeworkItems])
+
+  // A big backlog opens collapsed — a wall of red is not a to-do list.
+  const [overdueOpen, setOverdueOpen] = useState<boolean | null>(null)
+  const isOverdueOpen = overdueOpen ?? !overdue.capped
+  // How many overdue rows are mounted. Only this many exist in the DOM,
+  // however long the backlog is.
+  const [overdueShown, setOverdueShown] = useState(OVERDUE_PAGE)
 
   // ── Item renderers ───────────────────────────────────────────────────────────
   // Shared by the phone agenda and the desktop per-day columns, so both stay in
@@ -499,78 +558,127 @@ export default function SchoolWorkManager({
         rootClassName={BLEED_CARD_INSET}
       />
 
-      {/* ── Overdue Tasks ────────────────────────────────────────────────────── */}
-      {(overdueItems.length > 0 || overdueHomework.length > 0) && (
-        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-red-100 bg-red-50/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-red-100">
-            <AlertTriangle size={14} className="text-red-500" />
-            <h3 className="text-sm font-semibold text-red-700">Overdue</h3>
-            <span className="text-xs font-bold text-white bg-red-400 px-2 py-0.5 rounded-full ml-0.5">
-              {overdueItems.length + overdueHomework.length}
+      {/* ── Overdue ───────────────────────────────────────────────────────────
+           Collapsible, and paged: however deep the backlog runs only a page of
+           rows is ever mounted, and the badge stops counting at 9+. Rows carry
+           a "days late" chip that darkens with the delay, which reads faster
+           than a bare date and sorts the urgent from the ancient. ── */}
+      {overdue.total > 0 && (
+        <div className="-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl border-rose-200/80 bg-white overflow-hidden">
+          <button
+            onClick={() => { setOverdueOpen(!isOverdueOpen); setOverdueShown(OVERDUE_PAGE) }}
+            aria-expanded={isOverdueOpen}
+            className="w-full flex items-center gap-2.5 px-3 sm:px-4 py-3 text-left transition-colors hover:bg-rose-50/70"
+            style={{ background: isOverdueOpen ? 'linear-gradient(to bottom, rgba(255,241,242,0.9), rgba(255,255,255,0))' : undefined }}
+          >
+            <span className="w-7 h-7 !rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle size={14} className="text-rose-600" />
             </span>
-          </div>
-          <div className="px-1 py-1">
-            {(showMoreOverdue ? overdueItems : overdueItems.slice(0, LIST_LIMIT)).map(item => {
-              const status = progressMap[item.id] || 'not_done'
-              const vs     = fileVS(status)
-              return (
-                <div key={item.id} className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors">
-                  <button onClick={() => handleToggle(item)} className="flex-shrink-0 hover:scale-110 transition-transform">
-                    {VSTATUS_ICON[vs]}
-                  </button>
-                  <button onClick={() => setDetailItem(item)} className="flex-1 min-w-0 text-left">
-                    <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{item.title}</p>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                      {item.edu_points > 0 && (
-                        <EduPointsBadge points={item.edu_points} earned={false} reason="Points not awarded — completed after due date" />
-                      )}
-                      <span className="truncate">{item.classroomTitle}</span>
+            <h3 className="text-sm font-semibold text-rose-700">Overdue</h3>
+            <span
+              title={`${overdue.total} overdue item${overdue.total === 1 ? '' : 's'}`}
+              className="text-[11px] font-bold text-white bg-rose-500 px-2 py-0.5 !rounded-full tabular-nums flex-shrink-0"
+            >
+              {overdue.label}
+            </span>
+            <span className="flex-1" />
+            <span className="text-[11px] font-semibold text-rose-500">
+              {isOverdueOpen ? 'Hide' : 'Show'}
+            </span>
+            <ChevronDown
+              size={14}
+              className={`text-rose-400 transition-transform ${isOverdueOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {isOverdueOpen && (
+            <>
+              <div className="border-t border-rose-100 divide-y divide-slate-100">
+                {overdue.entries.slice(0, overdueShown).map(entry => {
+                  const late    = daysLate(entry.dueMs, today)
+                  const points  = entry.kind === 'cw' ? entry.item.edu_points : entry.task.edu_points
+                  const vs      = entry.kind === 'cw'
+                    ? fileVS(progressMap[entry.item.id] || 'not_done')
+                    : hwVS(entry.task.my_status, entry.task.require_check)
+                  const saving  = entry.kind === 'hw' && hwSavingId === entry.task.id
+                  const title   = entry.kind === 'cw' ? entry.item.title : entry.task.title
+                  const source  = entry.kind === 'cw'
+                    ? entry.item.classroomTitle
+                    : (entry.task.classroom_title ?? entry.task.homeroom_name)
+                  return (
+                    <div
+                      key={entry.kind === 'cw' ? entry.item.id : entry.task.id}
+                      className="flex items-center gap-3 py-2.5 px-3 sm:px-4 transition-colors hover:bg-rose-50/40"
+                    >
+                      <button
+                        onClick={() => entry.kind === 'cw' ? handleToggle(entry.item) : cycleHwStatus(entry.task)}
+                        className="flex-shrink-0 hover:scale-110 transition-transform"
+                        disabled={saving}
+                        aria-label="Change status"
+                      >
+                        {saving
+                          ? <Loader2 size={14} className="animate-spin text-slate-400" />
+                          : VSTATUS_ICON[vs]}
+                      </button>
+                      <button
+                        onClick={() => entry.kind === 'cw' ? setDetailItem(entry.item) : setDetailHomework(entry.task)}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                          {title}
+                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight ${
+                            entry.kind === 'cw' ? 'bg-cyan-100 text-cyan-700' : 'bg-purple-100 text-purple-600'
+                          }`}>
+                            {entry.kind === 'cw' ? 'CW' : 'HW'}
+                          </span>
+                          {points > 0 && (
+                            <EduPointsBadge points={points} earned={false} reason="Points not awarded — completed after due date" />
+                          )}
+                          <span className="truncate">{source}</span>
+                        </div>
+                      </button>
+                      <span
+                        title={new Date(entry.dueMs).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                        className={`text-[10px] font-bold flex-shrink-0 whitespace-nowrap border px-2 py-0.5 !rounded-full tabular-nums ${lateTone(late)}`}
+                      >
+                        {late}d late
+                      </span>
                     </div>
-                  </button>
-                  {item.due_date && (
-                    <span className="text-xs text-red-500 flex-shrink-0 font-semibold whitespace-nowrap bg-red-50 px-2 py-0.5 rounded-lg">
-                      {parseDate(item.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </span>
+                  )
+                })}
+              </div>
+
+              {/* Paging — "show more" mounts another page rather than the
+                  whole backlog, and the exact remainder stays uncounted. */}
+              {(overdue.total > overdueShown || overdueShown > OVERDUE_PAGE) && (
+                <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 border-t border-rose-100 bg-rose-50/40">
+                  {overdue.total > overdueShown && (
+                    <button
+                      onClick={() => setOverdueShown(n => n + OVERDUE_PAGE)}
+                      className="text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1"
+                    >
+                      Show more <ChevronDown size={12} />
+                    </button>
                   )}
-                </div>
-              )
-            })}
-            {(showMoreOverdue ? overdueHomework : overdueHomework.slice(0, Math.max(0, LIST_LIMIT - overdueItems.length))).map(task => {
-              const vs = hwVS(task.my_status, task.require_check)
-              return (
-                <div key={task.id} className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-colors">
-                  <button onClick={() => cycleHwStatus(task)} className="flex-shrink-0 hover:scale-110 transition-transform" disabled={hwSavingId === task.id}>
-                    {hwSavingId === task.id ? <Loader2 size={14} className="animate-spin text-slate-400" /> : VSTATUS_ICON[vs]}
-                  </button>
-                  <button onClick={() => setDetailHomework(task)} className="flex-1 min-w-0 text-left">
-                    <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.title}</p>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">HW</span>
-                      {task.edu_points > 0 && (
-                        <EduPointsBadge points={task.edu_points} earned={false} reason="Points not awarded — completed after due date" />
-                      )}
-                      <span className="truncate">{task.classroom_title ?? task.homeroom_name}</span>
-                    </div>
-                  </button>
-                  {task.due_date && (
-                    <span className="text-xs text-red-500 flex-shrink-0 font-semibold whitespace-nowrap bg-red-50 px-2 py-0.5 rounded-lg">
-                      {parseDate(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </span>
+                  {overdueShown > OVERDUE_PAGE && (
+                    <button
+                      onClick={() => setOverdueShown(OVERDUE_PAGE)}
+                      className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                    >
+                      Collapse
+                    </button>
                   )}
+                  <span className="flex-1" />
+                  <span className="text-[11px] text-slate-400 tabular-nums">
+                    {overdueShown >= overdue.total
+                      ? 'All shown'
+                      : `${overdueShown} of ${overdue.label}`}
+                  </span>
                 </div>
-              )
-            })}
-          </div>
-          {(overdueItems.length + overdueHomework.length) > LIST_LIMIT && (
-            <div className="px-4 pb-3">
-              <button
-                onClick={() => setShowMoreOverdue(v => !v)}
-                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-medium"
-              >
-                {showMoreOverdue ? 'Show less' : `Show ${overdueItems.length + overdueHomework.length - LIST_LIMIT} more`}
-                <ChevronDown size={12} className={`transition-transform ${showMoreOverdue ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

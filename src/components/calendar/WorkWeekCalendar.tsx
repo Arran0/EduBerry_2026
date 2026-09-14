@@ -244,8 +244,10 @@ export default function WorkWeekCalendar<T>({
         className={`min-w-0 flex flex-col ${!isLastCol ? 'border-r border-slate-100' : ''}`}
       >
         {/* Day header — click to expand this day. Every column renders the
-            same three lines at the same sizes, so expanding one day never
-            leaves the header row ragged. */}
+            same two lines at the same sizes, so expanding one day never
+            leaves the header row ragged. No per-day count line: the column
+            below already shows the day's work, and dropping it buys back a
+            row of height across all seven columns. */}
         <button
           onClick={() => onSelectDay(day)}
           className={`px-2 py-2.5 text-center border-b transition-all ${
@@ -273,9 +275,6 @@ export default function WorkWeekCalendar<T>({
             {day.getDate()}
             {isExpanded && isToday && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-white/80 align-middle">Today</span>}
           </p>
-          <span className={`block text-[10px] font-medium leading-tight ${isExpanded ? 'text-white/80' : 'text-slate-400'}`}>
-            {isExpanded ? `${items.length} scheduled` : items.length}
-          </span>
         </button>
 
         {/* Day content. A closed sliver column is a twelfth of the screen, so
@@ -284,8 +283,8 @@ export default function WorkWeekCalendar<T>({
         <div className={`flex-1 overflow-y-auto max-h-[32rem] ${
           isExpanded ? 'divide-y divide-slate-100' : sliver ? 'px-0.5 py-1 space-y-1 bg-slate-50/30' : 'p-1.5 space-y-1.5 bg-slate-50/30'
         }`}>
-          {/* An empty narrow column says nothing — its header already
-              shows a count of 0, so the add button sits straight under
+          {/* An empty narrow column says nothing — an empty strip reads as
+              "nothing due" on its own, so the add button sits straight under
               the header instead of below a placeholder dash. */}
           {items.length === 0 && isExpanded && (
             <p className="text-slate-500 text-center py-7 text-sm">{emptyDayLabel}</p>
@@ -327,31 +326,28 @@ export default function WorkWeekCalendar<T>({
   return (
     <div className={rootClassName}>
 
-      {/* Week navigation — shared by both layouts */}
-      <div
-        className="flex items-center gap-2 px-2 py-2.5"
-        style={{ background: `linear-gradient(to right, ${theme.gradFrom}, ${theme.gradTo})` }}
-      >
+      {/* Week navigation — shared by both layouts. Deliberately unpainted: the
+          themed strip used to shout louder than the week itself, so the bar is
+          transparent and carries only the week label (one line, no count
+          subtext — the day columns already show the week's work). */}
+      <div className="flex items-center gap-2 px-2 py-2 bg-transparent border-b border-slate-200">
         <button
           onClick={() => { onWeekStartChange(addDays(weekStart, -7)); onSelectDay(null) }}
-          className="p-1.5 !rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
+          className="p-1.5 !rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 transition-all flex-shrink-0"
           aria-label="Previous week"
         >
           <ChevronLeft size={18} />
         </button>
         <button
           onClick={goToToday}
-          className="flex-1 min-w-0 text-center leading-tight"
+          className="flex-1 min-w-0 text-center !rounded-full py-0.5 hover:bg-slate-50 transition-colors"
           title="Jump to this week"
         >
-          <span className="block text-sm font-bold text-white truncate">{weekLabel}</span>
-          <span className="block text-[10px] font-medium text-white/80">
-            {weekCount} item{weekCount !== 1 ? 's' : ''} this week · tap for today
-          </span>
+          <span className="block text-sm font-bold text-slate-800 truncate">{weekLabel}</span>
         </button>
         <button
           onClick={() => { onWeekStartChange(addDays(weekStart, 7)); onSelectDay(null) }}
-          className="p-1.5 !rounded-full text-white/80 hover:text-white hover:bg-white/15 active:scale-90 transition-all flex-shrink-0"
+          className="p-1.5 !rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 transition-all flex-shrink-0"
           aria-label="Next week"
         >
           <ChevronRight size={18} />
@@ -479,15 +475,47 @@ export default function WorkWeekCalendar<T>({
 // ── Skeleton ─────────────────────────────────────────────────────────────────
 
 /** How many chips each day of the skeleton week shows — an uneven week reads as
- *  a calendar filling in rather than a loading bar. Mirrors the Task Manager's
- *  own calendar skeleton. */
+ *  a calendar filling in rather than a loading bar. */
 const SKELETON_CHIPS = [2, 1, 2, 3, 1, 2, 1]
 
+/** A shimmering placeholder block. `delay` staggers its sweep so a row or
+ *  column of them fills in left to right (see `--sk-delay` in globals.css). */
+function Sk({ className = '', delay = 0 }: { className?: string; delay?: number }) {
+  return (
+    <span
+      className={`block skeleton skeleton-cool ${className}`}
+      style={{ '--sk-delay': `${delay}ms` } as React.CSSProperties}
+    />
+  )
+}
+
+/** One placeholder agenda row — the shape of a real full-width work row: colour
+ *  rail, status circle, title, and a meta line of chips. */
+function SkAgendaRow({ delay, width }: { delay: number; width: string }) {
+  return (
+    <div className="flex items-start gap-3 px-3 sm:px-4 py-3">
+      <Sk className="self-stretch w-1 !rounded-full" delay={delay} />
+      <Sk className="w-3.5 h-3.5 !rounded-full mt-0.5 flex-shrink-0" delay={delay} />
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <Sk className={`h-3 !rounded-full ${width}`} delay={delay} />
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <Sk className="h-3 w-14 !rounded" delay={delay + 60} />
+          <Sk className="h-3 w-10 !rounded-full" delay={delay + 120} />
+          <Sk className="h-3 w-20 !rounded-full" delay={delay + 180} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
- * Placeholder for the calendar while its work loads. Like the Task Manager's,
- * it renders the real shell — the week bar with the real week label, the view
- * toggle, and this week's actual day headers — so only the rows themselves
- * animate in, and nothing shifts when the data lands.
+ * Placeholder for the calendar while its work loads. It renders the real shell
+ * — the week bar with the real week label and this week's actual day headers —
+ * and, crucially, the *same layout per breakpoint* as the loaded calendar:
+ * phones get the Daily view (toggle, day picker, day heading, agenda rows) the
+ * calendar opens on, desktop gets seven columns with today's expanded to 4x. So
+ * nothing jumps when the data lands, and the shape on screen is already the
+ * shape the user is waiting for.
  */
 export function WorkWeekCalendarSkeleton({
   weekStart = getWeekStart(new Date()),
@@ -504,59 +532,126 @@ export function WorkWeekCalendarSkeleton({
     const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     return `${fmt(weekDays[0])} – ${fmt(weekDays[6])}`
   })()
+  // The day the loaded calendar would open on — today when this week holds it,
+  // otherwise the first day, exactly as `activeDay` resolves above.
+  const todayIdx = weekDays.findIndex(d => isSameDay(d, today))
+  const openIdx  = todayIdx === -1 ? 0 : todayIdx
+  const openDay  = weekDays[openIdx]
+
+  /** A day header, matching the loaded calendar's two-line header exactly. */
+  const dayHeader = (day: Date, i: number, open: boolean) => {
+    const isToday = isSameDay(day, today)
+    return (
+      <div
+        className={`px-2 py-2.5 text-center border-b ${
+          open ? 'border-transparent' : isToday ? 'border-slate-200' : 'bg-slate-50 border-slate-200'
+        }`}
+        style={open
+          ? { background: `linear-gradient(to bottom, ${theme.gradFrom}, ${theme.gradTo})` }
+          : isToday ? { background: theme.primaryLight } : undefined}
+      >
+        <p
+          className={`text-[10px] font-bold uppercase tracking-wide ${open ? 'text-white/80' : 'text-slate-500'}`}
+          style={!open && isToday ? { color: theme.primary } : undefined}
+        >
+          {DAY_NAMES[i]}
+        </p>
+        <p className={`text-sm font-bold leading-tight ${open ? 'text-white' : 'text-slate-700'}`}>
+          {day.getDate()}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className={rootClassName} aria-busy="true">
-      {/* Week bar — the real label, so it doesn't change when data lands */}
-      <div
-        className="flex items-center gap-2 px-2 py-2.5"
-        style={{ background: `linear-gradient(to right, ${theme.gradFrom}, ${theme.gradTo})` }}
-      >
-        <ChevronLeft size={18} className="text-white/50 flex-shrink-0" />
-        <div className="flex-1 min-w-0 text-center leading-tight">
-          <span className="block text-sm font-bold text-white truncate">{weekLabel}</span>
-          <span className="block h-2.5 mt-1 mx-auto w-32 max-w-full !rounded-full bg-white/25 animate-pulse" />
+      <span className="sr-only">Loading this week&rsquo;s school work…</span>
+
+      {/* Week bar — transparent, with the real label, as the loaded one is */}
+      <div className="flex items-center gap-2 px-2 py-2 border-b border-slate-200">
+        <ChevronLeft size={18} className="text-slate-300 flex-shrink-0" />
+        <span className="flex-1 min-w-0 text-center text-sm font-bold text-slate-800 truncate">
+          {weekLabel}
+        </span>
+        <ChevronRight size={18} className="text-slate-300 flex-shrink-0" />
+      </div>
+
+      {/* ── Phone/tablet: the Daily view the calendar opens on ── */}
+      <div className="lg:hidden">
+        {/* Toggle row */}
+        <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50 border-b border-slate-200">
+          <Sk className="h-6 w-32 !rounded-full" />
+          <Sk className="h-3 w-16 !rounded-full" delay={120} />
         </div>
-        <ChevronRight size={18} className="text-white/50 flex-shrink-0" />
+
+        {/* Day picker — real day names and dates, dots pulsing in */}
+        <div className="grid grid-cols-7 gap-1 px-1.5 py-2 bg-slate-50 border-b border-slate-200">
+          {weekDays.map((day, i) => {
+            const open = i === openIdx
+            return (
+              <div
+                key={day.toISOString()}
+                className="flex flex-col items-center gap-0.5 py-1.5 !rounded-xl"
+                style={open
+                  ? { background: `linear-gradient(to bottom, ${theme.gradFrom}, ${theme.gradTo})` }
+                  : undefined}
+              >
+                <span className={`text-[9px] font-bold uppercase tracking-wide ${open ? 'text-white/80' : 'text-slate-500'}`}>
+                  {DAY_NAMES[i]}
+                </span>
+                <span className={`text-[15px] font-bold leading-none ${open ? 'text-white' : 'text-slate-700'}`}>
+                  {day.getDate()}
+                </span>
+                <span className="h-1.5 flex items-center gap-0.5">
+                  {Array.from({ length: Math.min(SKELETON_CHIPS[i], 3) }).map((_, d) => (
+                    <Sk key={d} className="w-1 h-1 !rounded-full" delay={i * 70 + d * 40} />
+                  ))}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Selected day heading — the real date, so it doesn't change */}
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 truncate">
+            {openDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+          </h3>
+          <Sk className="h-4 w-20 !rounded-full flex-shrink-0" delay={140} />
+        </div>
+
+        {/* Agenda rows */}
+        <div className="divide-y divide-slate-100">
+          {['w-3/4', 'w-1/2', 'w-2/3'].map((w, i) => (
+            <SkAgendaRow key={i} width={w} delay={i * 140} />
+          ))}
+        </div>
       </div>
 
-      {/* Toggle row — phone-only, exactly as the loaded calendar has it */}
-      <div className="lg:hidden flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50 border-b border-slate-200">
-        <div className="h-6 w-32 !rounded-full bg-slate-200 animate-pulse" />
-        <div className="h-3 w-16 !rounded-full bg-slate-200 animate-pulse" />
-      </div>
-
-      {/* Day columns — real headers, chips pulsing in left to right */}
-      <div className="flex">
+      {/* ── Desktop: seven columns, today's expanded to 4x ── */}
+      <div className="hidden lg:flex">
         {weekDays.map((day, i) => {
-          const isToday = isSameDay(day, today)
+          const open = i === openIdx
           return (
             <div
               key={day.toISOString()}
-              className={`flex-1 min-w-0 flex flex-col ${i < 6 ? 'border-r border-slate-100' : ''}`}
+              style={{ flex: `${open ? 4 : 1} ${open ? 4 : 1} 0%` }}
+              className={`min-w-0 flex flex-col ${i < 6 ? 'border-r border-slate-100' : ''}`}
             >
-              <div
-                className={`px-2 py-2.5 text-center border-b ${isToday ? 'border-slate-200' : 'bg-slate-50 border-slate-200'}`}
-                style={isToday ? { background: theme.primaryLight } : undefined}
-              >
-                <p
-                  className="text-[10px] font-bold uppercase tracking-wide text-slate-500"
-                  style={isToday ? { color: theme.primary } : undefined}
-                >
-                  {DAY_NAMES[i]}
-                </p>
-                <p className="text-sm font-bold leading-tight text-slate-700">{day.getDate()}</p>
-                <span className="block h-2.5 mt-0.5 mx-auto w-3 !rounded-full bg-slate-200" />
-              </div>
-              <div className="p-1.5 space-y-1.5 min-h-[7rem] bg-slate-50/30">
-                {Array.from({ length: SKELETON_CHIPS[i] }).map((_, j) => (
-                  <div
-                    key={j}
-                    className="h-8 w-full !rounded-lg bg-slate-200/80 animate-pulse"
-                    style={{ animationDelay: `${(i * 3 + j) * 60}ms` }}
-                  />
-                ))}
-              </div>
+              {dayHeader(day, i, open)}
+              {open ? (
+                <div className="divide-y divide-slate-100 min-h-[7rem]">
+                  {['w-3/5', 'w-2/5', 'w-1/2'].map((w, j) => (
+                    <SkAgendaRow key={j} width={w} delay={j * 140} />
+                  ))}
+                </div>
+              ) : (
+                <div className="p-1.5 space-y-1.5 min-h-[7rem] bg-slate-50/30">
+                  {Array.from({ length: SKELETON_CHIPS[i] }).map((_, j) => (
+                    <Sk key={j} className="h-9 w-full !rounded-lg" delay={i * 90 + j * 60} />
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
