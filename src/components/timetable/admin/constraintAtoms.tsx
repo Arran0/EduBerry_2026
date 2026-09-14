@@ -143,7 +143,7 @@ const LIMIT_LABELS: Record<LimitType, string> = {
  * the impossible combination explained rather than silently saved and then
  * blamed on the generator for producing nothing.
  */
-export function limitConflicts(
+function limitConflicts(
   values: Record<LimitType, number>,
   workingDays: number,
 ): { fields: Set<LimitType>; messages: string[] } {

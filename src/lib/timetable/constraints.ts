@@ -127,7 +127,7 @@ export function placementTeachers(p: PlacementLite): string[] {
   return out
 }
 
-export function limitApplies(rule: LimitRule, p: PlacementLite): boolean {
+function limitApplies(rule: LimitRule, p: PlacementLite): boolean {
   if (rule.homeroomId && rule.homeroomId !== p.homeroomId) return false
   if (rule.scope === 'teacher') {
     const teachers = placementTeachers(p)

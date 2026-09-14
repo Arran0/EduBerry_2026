@@ -22,8 +22,7 @@ import { exportTimetableToExcel } from '@/lib/timetable/export'
 import HealthPanel from '../HealthPanel'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
-import { fetchAllProfiles } from '@/lib/admin'
-import { isStaffRole } from '@/lib/supabase'
+import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import EditableTimetableGrid from '../EditableTimetableGrid'
 import MasterTimetableEditor from '../MasterTimetableEditor'
@@ -82,7 +81,7 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
       fetchRooms(),
       fetchSubjects(),
       fetchAllHomerooms(),
-      fetchAllProfiles(),
+      fetchStaffProfiles(),
       fetchTimetables(config.id),
     ])
     setSlots(sl)
@@ -93,20 +92,21 @@ export default function GenerateTab({ config }: { config: TimetableConfig }) {
     setRooms(rms)
     setSubjects(subs)
     setHomerooms(hrs)
-    setTeachers(profiles.filter((p) => isStaffRole(p.role)))
-    // Group names for the split-lesson badges in both grid editors.
-    setGroups(await fetchGroupsForHomerooms(hrs.map((h) => h.id)))
+    setTeachers(profiles)
 
     // Adopt the most recent timetable version (draft preferred) and its entries.
     const existing = timetables[0] ?? null
     setTimetable(existing)
     setTimetableName(existing?.name ?? config.name)
-    if (existing) {
-      const e = await fetchEntries(existing.id)
-      setEntries(e.map(toPlaced))
-    } else {
-      setEntries([])
-    }
+
+    // Second wave: the group names for the split-lesson badges and the adopted
+    // version's entries. Neither depends on the other, so they go together.
+    const [grps, savedEntries] = await Promise.all([
+      fetchGroupsForHomerooms(hrs.map((h) => h.id)),
+      existing ? fetchEntries(existing.id) : Promise.resolve([]),
+    ])
+    setGroups(grps)
+    setEntries(savedEntries.map(toPlaced))
     setLoading(false)
   }, [config.id, config.name])
 

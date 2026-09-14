@@ -10,7 +10,7 @@ import {
   fetchSubjects, fetchRooms, fetchPeriodSlots, fetchRequirements, fetchConstraints, teacherIdsOf,
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
-  addGroupMemberByEmail, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
+  bulkAddGroupMembersByEmails, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
   addConstraint, deleteConstraint, requirementError, ROOM_TYPE_LABELS,
 } from '@/lib/timetable'
 import type {
@@ -21,8 +21,7 @@ import { fetchAllHomerooms, fetchHomeroomWithMembers, updateHomeroomClassTeacher
 import type { Homeroom, HomeroomMember } from '@/lib/homerooms'
 import { fetchAllClassrooms } from '@/lib/classrooms'
 import type { Classroom } from '@/lib/classrooms'
-import { fetchAllProfiles } from '@/lib/admin'
-import { isStaffRole } from '@/lib/supabase'
+import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import useDebounce from '@/hooks/useDebounce'
 import { INPUT, BTN_PRIMARY, SECTION_LABEL, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
@@ -66,10 +65,10 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   const loadRefs = useCallback(async () => {
     setLoading(true)
     const [hr, profiles, subj, rms, cls] = await Promise.all([
-      fetchAllHomerooms(), fetchAllProfiles(), fetchSubjects(), fetchRooms(), fetchAllClassrooms(),
+      fetchAllHomerooms(), fetchStaffProfiles(), fetchSubjects(), fetchRooms(), fetchAllClassrooms(),
     ])
     setHomerooms(hr)
-    setTeachers(profiles.filter((p) => isStaffRole(p.role)))
+    setTeachers(profiles)
     setSubjects(subj)
     setRooms(rms)
     setClassrooms(cls)
@@ -417,7 +416,12 @@ function GroupCard({
     })
   }, [classroomId, homeroom.id])
 
-  const shownPool = (classroomId ? pool : rosterPool).filter((s) => !memberIds.has(s.id))
+  // Recomputed on every keystroke of the typeahead above without this — the
+  // roster of a big homeroom is not a list to re-filter that often.
+  const shownPool = useMemo(
+    () => (classroomId ? pool : rosterPool).filter((s) => !memberIds.has(s.id)),
+    [classroomId, pool, rosterPool, memberIds],
+  )
   const toggleCheck = (id: string) =>
     setChecked((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -445,13 +449,7 @@ function GroupCard({
           if (/e-?mail/i.test(k) && String(v).trim()) emails.push(String(v).trim())
         }
       }
-      let added = 0
-      const failed: string[] = []
-      for (const email of emails) {
-        const res = await addGroupMemberByEmail(group.id, email)
-        if (res.success) added++
-        else failed.push(email)
-      }
+      const { added, failed } = await bulkAddGroupMembersByEmails(group.id, emails)
       setMsg(`Added ${added} from CSV${failed.length ? `, ${failed.length} skipped` : ''}.`)
       onChanged()
     } catch {
@@ -733,13 +731,13 @@ function RequirementsPanel({
   const load = useCallback(async () => {
     setLoading(true)
     const [reqs, cmb, g, sl, cons] = await Promise.all([
-      fetchRequirements(config.id),
+      fetchRequirements(config.id, homeroom.id),
       fetchCombinedClasses(config.id),
       fetchGroupsForHomeroom(homeroom.id),
       fetchPeriodSlots(config.id),
       fetchConstraints(config.id),
     ])
-    setRequirements(reqs.filter((r) => r.homeroom_id === homeroom.id))
+    setRequirements(reqs)
     setCombined(cmb.filter((c) => (c.members ?? []).some((m) => m.homeroom_id === homeroom.id)))
     setGroups(g)
     setSlots(sl.filter((s) => !s.is_break))

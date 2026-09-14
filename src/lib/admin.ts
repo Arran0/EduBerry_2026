@@ -23,6 +23,29 @@ export interface NewUserInput {
 // Fetch all profiles with team memberships
 const PROFILE_PAGE_SIZE = 1000
 
+// The roles isStaffRole() accepts, as a DB-side filter.
+const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin']
+
+/**
+ * Staff profiles only, with just the columns a picker needs. The timetable
+ * builder used to pull every profile (students included, paged 1000 at a time)
+ * plus the whole team_members table only to filter it down to staff in the
+ * browser; this asks Postgres for the ~50 rows it actually renders.
+ */
+export async function fetchStaffProfiles(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section')
+    .in('role', STAFF_ROLES)
+    .order('full_name', { ascending: true })
+
+  if (error) {
+    console.error('fetchStaffProfiles error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
 export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
   // PostgREST caps a plain select at 1000 rows. Past that the list silently
   // truncates, which makes existing members look absent — e.g. the bulk
