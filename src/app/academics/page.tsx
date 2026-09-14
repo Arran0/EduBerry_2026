@@ -264,7 +264,9 @@ export default function AcademicsPage() {
     if (!user || !profile) return
     setLoading(true)
     try {
-      const enrolled = await fetchClassroomsForUser(user.id, profile.role)
+      // The grid shows title/banner only — no member count, so skip the
+      // classroom_members roll-up that pulls every membership row.
+      const enrolled = await fetchClassroomsForUser(user.id, profile.role, false, undefined, false)
       setClassrooms(sortByLastVisited(enrolled))
     } catch (error) {
       console.error('Failed to load classrooms:', error)
@@ -649,7 +651,7 @@ export default function AcademicsPage() {
                 chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
                 title="My EduPoints"
               />
-              <StudentGameSection userId={user.id} userName={profile.full_name ?? 'there'} />
+              <StudentGameSection userId={user.id} />
             </section>
           )}
 

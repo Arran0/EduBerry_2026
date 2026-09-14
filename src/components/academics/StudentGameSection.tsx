@@ -4,13 +4,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { motion, useMotionValue, useTransform, animate, MotionValue } from 'framer-motion'
 import { ArrowUp, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
 import {
-  fetchStudentEduStandings, fetchStudentHwEduPoints, fetchStudentEduRankTrend,
-  EduStanding, RankTrendInfo,
+  fetchStudentEduDashboard, rankTrendOf, EduDashboardRow, EduStanding,
 } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
-  userName: string
 }
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
@@ -330,7 +328,7 @@ const FLICK_VELOCITY = 0.35
  * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
  * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({ briefs, first: _first }: { briefs: Brief[]; first: string }) {
+export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
@@ -532,41 +530,37 @@ export function EduPointsCarousel({ briefs, first: _first }: { briefs: Brief[]; 
 
 /* ───────────────────────── data wrapper (default export) ───────────────────────── */
 
-export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
-  const [standings, setStandings] = useState<EduStanding[]>([])
-  const [trend, setTrend] = useState<Record<string, RankTrendInfo>>({})
+export default function StudentGameSection({ userId }: StudentGameSectionProps) {
+  const [rows, setRows] = useState<EduDashboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
-    Promise.all([
-      fetchStudentEduStandings(userId),
-      fetchStudentHwEduPoints(userId),
-      fetchStudentEduRankTrend(userId),
-    ]).then(([std, hw, tr]) => {
+    fetchStudentEduDashboard(userId).then(data => {
       if (!alive) return
-      setStandings(std.map(s => ({ ...s, points: s.points + (hw[s.classroom_id] ?? 0) })))
-      setTrend(tr)
+      setRows(data)
       setLoading(false)
     })
     return () => { alive = false }
   }, [userId])
 
-  const first = useMemo(() => (userName || 'there').split(' ')[0], [userName])
-
   const briefs = useMemo<Brief[]>(() => {
-    return [...standings]
+    return [...rows]
       .sort((a, b) => a.rank - b.rank || b.points - a.points)
-      .map(s => {
-        const tr = trend[s.classroom_id]
+      .map(row => {
+        // Homework points count towards the displayed total; the rank itself is
+        // the leaderboard's own, which is derived from coursework.
+        const points = row.points + row.hw_points
+        const trend = rankTrendOf(row)
         return {
-          ...s,
-          tier: tierOf(s.rank, s.points),
-          improved: !!tr?.improved,
-          delta: tr?.delta ?? 0,
+          ...row,
+          points,
+          tier: tierOf(row.rank, points),
+          improved: trend.improved,
+          delta: trend.delta,
         }
       })
-  }, [standings, trend])
+  }, [rows])
 
   if (loading) {
     return (
@@ -582,5 +576,5 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     )
   }
 
-  return <EduPointsCarousel briefs={briefs} first={first} />
+  return <EduPointsCarousel briefs={briefs} />
 }

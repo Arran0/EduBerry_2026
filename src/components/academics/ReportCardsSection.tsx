@@ -28,18 +28,7 @@ import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
-
-// ─── Grade colour palette — green → yellow → orange → red ────────────────────
-function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-green-100',   fg: 'text-green-700'   }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-yellow-100',  fg: 'text-yellow-700'  }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-red-100',     fg: 'text-red-600'     }
-  return               { letter: 'E',  bg: 'bg-red-100',     fg: 'text-red-700'     }
-}
+import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
 const CONGRATS_MESSAGES = [
@@ -823,16 +812,21 @@ function ReportCardForStudent({
 
   const load = useCallback(async (year: string | null) => {
     setLoading(true)
-    const [g, r] = await Promise.all([
-      selfView
-        ? fetchReportCardsForStudent(studentProfile.id, year)
-        : fetchReportCardsForStudentAsViewer(studentProfile.id, viewerId, viewerRole),
-      fetchRemarksForStudent(studentProfile.id),
-    ])
+    const g = selfView
+      ? await fetchReportCardsForStudent(studentProfile.id, year)
+      : await fetchReportCardsForStudentAsViewer(studentProfile.id, viewerId, viewerRole)
     setGroups(g)
-    setRemarks(r)
     setLoading(false)
   }, [studentProfile.id, viewerId, viewerRole, selfView])
+
+  // Remarks are per student, not per academic year, so they load on their own
+  // rather than behind the year lookup — and switching years (or saving a
+  // remark) no longer refetches them along with every card.
+  const loadRemarks = useCallback(
+    () => fetchRemarksForStudent(studentProfile.id).then(setRemarks),
+    [studentProfile.id],
+  )
+  useEffect(() => { loadRemarks() }, [loadRemarks])
 
   // Fetch available years once, then auto-select the most recent.
   useEffect(() => {
@@ -918,7 +912,7 @@ function ReportCardForStudent({
             viewer={viewer}
             canEditRemarks={!selfView}
             branding={branding}
-            onRemarksChanged={() => load(selfView ? selectedYear : null)}
+            onRemarksChanged={loadRemarks}
           />
         ))
       )}
@@ -1046,7 +1040,7 @@ function ReportCard({
         </Field>
         <Field label="Period">
           {periodStart && periodEnd
-            ? `${formatShort(periodStart)} – ${formatShort(periodEnd)}`
+            ? `${formatShortDate(periodStart)} – ${formatShortDate(periodEnd)}`
             : '—'}
         </Field>
       </div>
@@ -1236,12 +1230,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <p className="text-sm font-medium text-slate-700 truncate mt-0.5">{children}</p>
     </div>
   )
-}
-
-function formatShort(d: string): string {
-  try {
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
 }
 
 // ─── Remarks panel ────────────────────────────────────────────────────────────
