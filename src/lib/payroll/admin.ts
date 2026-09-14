@@ -8,7 +8,7 @@
 
 import { supabase } from '@/lib/supabase'
 import type {
-  ComponentRow, StructureRow, AssignmentRow, OverrideRow, PolicyGroupRow,
+  ComponentRow, StructureRow, AssignmentRow, PolicyGroupRow,
   CalendarRow, RuleSetRow, StatutoryRow,
 } from './rows'
 import { toComponentDef, toPolicyGroup, toWorkingCalendar } from './rows'
@@ -33,18 +33,6 @@ export async function fetchComponents(): Promise<ComponentDef[]> {
     .from('payroll_components').select(COMPONENT_COLUMNS).order('sequence')
   if (error) { console.error('fetchComponents failed:', error); return [] }
   return ((data ?? []) as unknown as ComponentRow[]).map(toComponentDef)
-}
-
-export async function upsertComponent(c: Partial<ComponentRow> & { code: string; name: string }): Promise<Result> {
-  const { error } = await supabase.from('payroll_components').upsert(c, { onConflict: 'code' })
-  return fail('upsertComponent', error)
-}
-
-export async function deleteComponent(id: string): Promise<Result> {
-  // System heads are emitted by the engine itself; deleting one would leave a
-  // run unable to name its own PF line.
-  const { error } = await supabase.from('payroll_components').delete().eq('id', id).eq('is_system', false)
-  return fail('deleteComponent', error)
 }
 
 // ── Structures ──────────────────────────────────────────────────────────
@@ -75,44 +63,6 @@ export interface StructureInput {
   components: { componentId: string; calcType: string | null; value: number | null; formula: string | null; sequence: number }[]
 }
 
-/**
- * Create a structure, or fork the next version of an existing one.
- *
- * An active structure is never edited in place. A run that already paid against
- * v1 has to be able to say what v1 contained, and the only way to guarantee that
- * is for v1 to still exist. `supersedes_id` links the chain so the UI can show a
- * version diff.
- */
-export async function saveStructureVersion(
-  input: StructureInput, supersedesId: string | null, createdBy: string,
-): Promise<{ success: boolean; error?: string; id?: string }> {
-  const { data: existing } = await supabase
-    .from('payroll_structures').select('version').eq('code', input.code)
-    .order('version', { ascending: false }).limit(1)
-  const version = (existing?.[0]?.version ?? 0) + 1
-
-  const { data: created, error } = await supabase
-    .from('payroll_structures')
-    .insert({
-      code: input.code, name: input.name, employee_category: input.employeeCategory,
-      version, supersedes_id: supersedesId, status: 'draft',
-      effective_from: input.effectiveFrom, notes: input.notes, created_by: createdBy,
-    })
-    .select('id').single()
-  if (error || !created) { console.error('saveStructureVersion failed:', error); return { success: false, error: error?.message } }
-
-  if (input.components.length > 0) {
-    const { error: cErr } = await supabase.from('payroll_structure_components').insert(
-      input.components.map(c => ({
-        structure_id: created.id, component_id: c.componentId,
-        calc_type: c.calcType, value: c.value, formula: c.formula, sequence: c.sequence,
-      })),
-    )
-    if (cErr) { console.error('saveStructureVersion components failed:', cErr); return { success: false, error: cErr.message } }
-  }
-  return { success: true, id: created.id }
-}
-
 /** Publish a draft and close the version it supersedes the day before it starts. */
 export async function activateStructure(id: string): Promise<Result> {
   const { data: s } = await supabase
@@ -137,14 +87,6 @@ export async function activateStructure(id: string): Promise<Result> {
 const ASSIGNMENT_SELECT =
   'id, employee_id, structure_id, effective_from, effective_to, anchor_amount, ' +
   'revision_id, reason, created_at, structure:payroll_structures(name, version, code)'
-
-export async function fetchAssignments(employeeId: string): Promise<AssignmentRow[]> {
-  const { data, error } = await supabase
-    .from('payroll_employee_structures').select(ASSIGNMENT_SELECT)
-    .eq('employee_id', employeeId).order('effective_from', { ascending: false })
-  if (error) { console.error('fetchAssignments failed:', error); return [] }
-  return (data ?? []) as unknown as AssignmentRow[]
-}
 
 export async function fetchAllAssignments(): Promise<AssignmentRow[]> {
   const { data, error } = await supabase
@@ -183,15 +125,6 @@ export async function assignStructure(input: {
   return fail('assignStructure', error)
 }
 
-export async function fetchOverrides(employeeId: string): Promise<OverrideRow[]> {
-  const { data, error } = await supabase
-    .from('payroll_employee_overrides')
-    .select('id, employee_id, component_id, calc_type, value, formula, effective_from, effective_to, reason, component:payroll_components(code)')
-    .eq('employee_id', employeeId).order('effective_from', { ascending: false })
-  if (error) { console.error('fetchOverrides failed:', error); return [] }
-  return (data ?? []) as unknown as OverrideRow[]
-}
-
 // ── Revisions ───────────────────────────────────────────────────────────
 
 export interface RevisionInput {
@@ -215,15 +148,6 @@ export async function createRevision(input: RevisionInput, createdBy: string): P
   }).select('id').single()
   if (error || !data) { console.error('createRevision failed:', error); return { success: false, error: error?.message } }
   return { success: true, id: data.id }
-}
-
-export async function fetchRevisions() {
-  const { data, error } = await supabase
-    .from('payroll_revisions')
-    .select('id, label, kind, basis, value, effective_from, arrears_from, status, reason, applied_at, created_at')
-    .order('effective_from', { ascending: false })
-  if (error) { console.error('fetchRevisions failed:', error); return [] }
-  return data ?? []
 }
 
 /** What a revision would do to each person, before anybody commits to it. */
@@ -364,15 +288,6 @@ export async function saveCalendar(c: Partial<CalendarRow> & { name: string }): 
   const { data, error } = await supabase.from('payroll_calendars').upsert(row).select('id').single()
   if (error || !data) { console.error('saveCalendar failed:', error); return { success: false, error: error?.message } }
   return { success: true, id: data.id }
-}
-
-export async function setCalendarMembers(calendarId: string, employeeIds: string[]): Promise<Result> {
-  const { error: delErr } = await supabase.from('payroll_calendar_members').delete().eq('calendar_id', calendarId)
-  if (delErr) return fail('setCalendarMembers (clear)', delErr)
-  if (employeeIds.length === 0) return { success: true }
-  const { error } = await supabase.from('payroll_calendar_members')
-    .insert(employeeIds.map(employee_id => ({ calendar_id: calendarId, employee_id })))
-  return fail('setCalendarMembers', error)
 }
 
 // ── Statutory rule sets ─────────────────────────────────────────────────

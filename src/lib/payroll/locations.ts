@@ -173,11 +173,6 @@ export async function assignToLocation(
   )).error)
 }
 
-export async function removeFromLocation(memberRowId: string): Promise<Result> {
-  return fail('removeFromLocation', (await supabase.from('payroll_location_members')
-    .delete().eq('id', memberRowId)).error)
-}
-
 /** The school-wide fallback state, used only when someone has no location at all. */
 export async function fetchDefaultJurisdiction(): Promise<string> {
   const { data } = await supabase.from('site_settings')

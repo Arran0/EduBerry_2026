@@ -99,7 +99,7 @@ export function epfSheetPreviewRows(rows: EcrRow[]): (string | number)[][] {
  * There is no header row: the sheet mirrors the ECR's own column order, which
  * starts at the first member.
  */
-export async function epfWageSheetBytes(
+async function epfWageSheetBytes(
   rows: EcrRow[],
   cfg: StatutoryConfig,
   sheetName: string,
@@ -172,7 +172,7 @@ export function esiSheetPreviewRows(rows: EsiRow[]): string[][] {
  * stored as text. A numeric cell is the usual reason an otherwise correct
  * upload is rejected.
  */
-export async function esiContributionSheetBytes(rows: EsiRow[]): Promise<ArrayBuffer> {
+async function esiContributionSheetBytes(rows: EsiRow[]): Promise<ArrayBuffer> {
   const XLSX = await import('xlsx')
   const filable = filableEsiRows(rows)
 
