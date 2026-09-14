@@ -46,21 +46,44 @@ export async function fetchStaffProfiles(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
-export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
+export interface FetchProfilesOptions {
+  /**
+   * Restrict to these roles DB-side. The profile managers each render one side
+   * of the roster — asking Postgres for that side beats pulling every student
+   * row across the wire so the browser can filter them back out.
+   */
+  roles?: UserRole[]
+  /**
+   * Whether to join each profile's team memberships. Defaults to true for
+   * backward compatibility; callers that never render `teams` (the student and
+   * staff managers, the certificate typeahead) skip a whole extra query by
+   * passing false.
+   */
+  withTeams?: boolean
+}
+
+export async function fetchAllProfiles(
+  options: FetchProfilesOptions = {},
+): Promise<ProfileWithTeams[]> {
+  const { roles, withTeams = true } = options
+
   // PostgREST caps a plain select at 1000 rows. Past that the list silently
   // truncates, which makes existing members look absent — e.g. the bulk
   // import preview would mark them "new" and try to re-create them.
-  const fetchProfilePage = (page: number) =>
-    supabase
-      .from('profiles')
-      .select('*')
+  const fetchProfilePage = (page: number) => {
+    let q = supabase.from('profiles').select('*')
+    if (roles?.length) q = q.in('role', roles)
+    return q
       .order('role', { ascending: true })
       .order('full_name', { ascending: true })
       .range(page * PROFILE_PAGE_SIZE, page * PROFILE_PAGE_SIZE + PROFILE_PAGE_SIZE - 1)
+  }
 
   const [{ data: firstPage, error }, { data: memberships }] = await Promise.all([
     fetchProfilePage(0),
-    supabase.from('team_members').select('user_id, team:teams(id, name)'),
+    withTeams
+      ? supabase.from('team_members').select('user_id, team:teams(id, name)')
+      : Promise.resolve({ data: [] as { user_id: string; team: unknown }[] }),
   ])
 
   if (error) {

@@ -1,5 +1,5 @@
 import { supabase, UserProfile } from './supabase'
-import { fetchStaffDetailsMap } from './staffDetails'
+import { fetchStaffDirectoryMap } from './staffDetails'
 import { DEFAULT_TRUSTED_ACCURACY_M, LatLng, haversineDistance as haversine } from './geofence'
 import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
 
@@ -2862,7 +2862,7 @@ export async function fetchLateSummaryReport(
   const [globalConfig, timingsPerDate, detailsMap, timezone] = await Promise.all([
     fetchAttendanceConfig(),
     Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
-    fetchStaffDetailsMap(uniqueStaffIds),
+    fetchStaffDirectoryMap(uniqueStaffIds),
     fetchAttendanceTimezone(),
   ])
   const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))

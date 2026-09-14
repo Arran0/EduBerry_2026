@@ -10,7 +10,7 @@ import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchRawSetting } from '@/lib/pageConfig'
 import { fetchStudentDetails } from '@/lib/studentDetails'
-import { fetchStaffDetails } from '@/lib/staffDetails'
+import { fetchStaffDirectory } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { currentAcademicYear } from '@/lib/fees'
 import Avatar from '@/components/Avatar'
@@ -152,7 +152,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
         setRollNo(d?.roll_no ?? null)
       })
     } else {
-      fetchStaffDetails(targetProfile.id).then(d => {
+      fetchStaffDirectory(targetProfile.id).then(d => {
         setPhone(d?.phone ?? null)
         setEmployeeId(d?.employee_id ?? null)
         setDesignation(d?.designation ?? null)

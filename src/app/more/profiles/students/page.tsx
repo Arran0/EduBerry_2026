@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -131,51 +131,68 @@ export default function StudentProfileManagerPage() {
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
-    const data = await fetchAllProfiles()
-    setProfiles(data.filter(p => STUDENT_ROLES.includes(p.role)))
+    // Students only, and no team join: this page renders neither staff rows
+    // nor team chips, so both were pure wire overhead.
+    const data = await fetchAllProfiles({ roles: STUDENT_ROLES, withTeams: false })
+    setProfiles(data)
     setLoading(false)
   }, [])
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const searchedProfiles = profiles.filter(p => {
+  // Handed to the bulk-import modal; rebuilding the Set on every render made
+  // the modal re-check the whole roster for each keystroke behind it.
+  const existingEmails = useMemo(
+    () => new Set(profiles.map(p => p.email.toLowerCase())),
+    [profiles],
+  )
+
+  // The whole roster is filtered, counted and sorted below. Every one of the
+  // ~30 inputs in the Add Student modal lives in this component's state, so
+  // without memoisation each keystroke in any of them re-ran the lot over
+  // every student on the roll.
+  const searchedProfiles = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    return (
+    return profiles.filter(p => (
       p.full_name?.toLowerCase().includes(q) ||
       p.email?.toLowerCase().includes(q) ||
       (p.grade && gradeLabel(p.grade).toLowerCase().includes(q)) ||
       (p.section && p.section.toLowerCase().includes(q))
-    )
-  })
+    ))
+  }, [profiles, searchQuery])
 
   // Counts for the grade/section filter dropdowns — computed off the
   // search-filtered set (not grade/section/status-filtered) so switching one
   // filter never moves the numbers the admin is reading right before they
   // click it. Sections aren't a fixed list like grades are, so the dropdown
   // only ever offers the ones actually in use, alphabetically.
-  const gradeCounts: Record<string, number> = {}
-  const sectionCounts: Record<string, number> = {}
-  for (const p of searchedProfiles) {
-    const gradeKey = String(p.grade ?? '')
-    if (gradeKey) gradeCounts[gradeKey] = (gradeCounts[gradeKey] ?? 0) + 1
-    if (p.section) sectionCounts[p.section] = (sectionCounts[p.section] ?? 0) + 1
-  }
-  const sectionFilterOptions = Object.keys(sectionCounts).sort()
+  const { gradeCounts, sectionCounts, sectionFilterOptions } = useMemo(() => {
+    const gradeCounts: Record<string, number> = {}
+    const sectionCounts: Record<string, number> = {}
+    for (const p of searchedProfiles) {
+      const gradeKey = String(p.grade ?? '')
+      if (gradeKey) gradeCounts[gradeKey] = (gradeCounts[gradeKey] ?? 0) + 1
+      if (p.section) sectionCounts[p.section] = (sectionCounts[p.section] ?? 0) + 1
+    }
+    return { gradeCounts, sectionCounts, sectionFilterOptions: Object.keys(sectionCounts).sort() }
+  }, [searchedProfiles])
 
-  const matchesStatus = (isBanned: boolean) =>
-    statusFilter === 'all' || (statusFilter === 'inactive' ? isBanned : !isBanned)
+  const filteredProfiles = useMemo(() => {
+    const matchesStatus = (isBanned: boolean) =>
+      statusFilter === 'all' || (statusFilter === 'inactive' ? isBanned : !isBanned)
 
-  const filteredProfiles = searchedProfiles
-    .filter(p =>
-      (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) &&
-      (sectionFilter === 'all' || sectionFilter === (p.section ?? '')) &&
-      matchesStatus(!!p.is_banned))
-    .sort((a, b) => {
-      if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
-      if (sortBy === 'grade') return (a.grade ?? 0) - (b.grade ?? 0) || (a.full_name ?? '').localeCompare(b.full_name ?? '')
-      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
-      return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
-    })
+    return searchedProfiles
+      .filter(p =>
+        (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) &&
+        (sectionFilter === 'all' || sectionFilter === (p.section ?? '')) &&
+        matchesStatus(!!p.is_banned))
+      .sort((a, b) => {
+        if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
+        if (sortBy === 'grade') return (a.grade ?? 0) - (b.grade ?? 0) || (a.full_name ?? '').localeCompare(b.full_name ?? '')
+        if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+        return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
+      })
+  }, [searchedProfiles, gradeFilter, sectionFilter, statusFilter, sortBy])
 
   const filtersActive = gradeFilter !== 'all' || sectionFilter !== 'all' || statusFilter !== 'all'
   const clearFilters = () => { setGradeFilter('all'); setSectionFilter('all'); setStatusFilter('all') }
@@ -615,7 +632,7 @@ export default function StudentProfileManagerPage() {
       {showBulkImport && (
         <BulkImportModal
           mode="student"
-          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          existingEmails={existingEmails}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles() }}
         />

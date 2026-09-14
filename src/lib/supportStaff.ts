@@ -211,22 +211,6 @@ export async function setSupportStaffActive(
 // Attendance
 // ============================================
 
-/** Every support attendance row for one date. */
-export async function fetchSupportAttendanceByDate(
-  date: string,
-): Promise<SupportAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('support_staff_attendance')
-    .select('*')
-    .eq('date', date)
-  if (error) {
-    if (isMissingRelation(error)) return []
-    console.error('fetchSupportAttendanceByDate error:', error)
-    return []
-  }
-  return (data ?? []) as SupportAttendanceRecord[]
-}
-
 /**
  * Every support attendance row in a date window (inclusive). One query backs
  * both the day's list and the month-to-date statistics beside each name.

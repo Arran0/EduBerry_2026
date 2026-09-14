@@ -256,13 +256,6 @@ export async function registerCertificate(
   return data as CertificateRecord
 }
 
-/** Mark an issued certificate revoked (verification page then shows "Revoked"). */
-export async function revokeCertificate(id: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('certificates').update({ status: 'revoked' }).eq('id', id)
-  if (error) { console.error('revokeCertificate failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
 /** Recently issued certificates for a student (registry view in the UI). */
 export async function fetchCertificatesForStudent(studentId: string): Promise<CertificateRecord[]> {
   const { data, error } = await supabase

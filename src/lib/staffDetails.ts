@@ -69,7 +69,47 @@ export async function fetchStaffDetails(staffId: string): Promise<StaffDetails |
   return (data as StaffDetails) ?? null
 }
 
-/** Bulk fetch for many staff at once (e.g. the staff profile manager). */
+/**
+ * The four columns any non-admin screen actually renders: the staff list, the
+ * profile card and the attendance reports all show an employee code, a
+ * designation, a department and a phone number and nothing else.
+ *
+ * These come from the `staff_directory` RPC rather than the table, because the
+ * table also holds Aadhaar, PAN, EPF/NPS and bank account + IFSC numbers and is
+ * now only readable in full by the owner and by coordinator/principal/admin —
+ * see supabase migration restrict_staff_details_pii_and_add_staff_directory.
+ */
+export interface StaffDirectoryEntry {
+  staff_id: string
+  employee_id: string | null
+  designation: string | null
+  department: string | null
+  phone: string | null
+}
+
+/** Directory columns for one staff member, for any signed-in staff account. */
+export async function fetchStaffDirectory(staffId: string): Promise<StaffDirectoryEntry | null> {
+  const map = await fetchStaffDirectoryMap([staffId])
+  return map[staffId] ?? null
+}
+
+/** Bulk directory lookup (the staff profile manager, attendance reports). */
+export async function fetchStaffDirectoryMap(
+  staffIds: string[]
+): Promise<Record<string, StaffDirectoryEntry>> {
+  if (staffIds.length === 0) return {}
+  const { data, error } = await supabase.rpc('staff_directory', { p_ids: staffIds })
+  if (error) { console.error('fetchStaffDirectoryMap failed:', error); return {} }
+  const map: Record<string, StaffDirectoryEntry> = {}
+  for (const row of (data as StaffDirectoryEntry[]) ?? []) map[row.staff_id] = row
+  return map
+}
+
+/**
+ * Bulk fetch of the FULL record, sensitive columns included. Only reachable by
+ * the row's owner and by coordinator/principal/admin — prefer
+ * fetchStaffDirectoryMap unless the caller genuinely renders the HR fields.
+ */
 export async function fetchStaffDetailsMap(
   staffIds: string[]
 ): Promise<Record<string, StaffDetails>> {

@@ -29,7 +29,7 @@ import {
   clearStaffAttendance,
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
-import { fetchStaffDetailsMap } from '@/lib/staffDetails'
+import { fetchStaffDirectoryMap } from '@/lib/staffDetails'
 
 // Loaded on demand — the same read-only month calendar the main staff report
 // opens when you click a name (see AllStaffAttendanceReport.tsx). Ground
@@ -326,7 +326,7 @@ export default function SupportStaffAttendanceReport({
     const [year, month] = date.split('-').map(Number)
     const [groundMonth, driverDetails, driverMonth] = await Promise.all([
       fetchSupportAttendanceRange(monthStartOf(date), date),
-      fetchStaffDetailsMap(driverIds),
+      fetchStaffDirectoryMap(driverIds),
       fetchMonthlyAttendanceRecords(driverIds, year, month),
     ])
     setGroundRoster(ground)

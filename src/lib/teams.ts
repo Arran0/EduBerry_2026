@@ -125,7 +125,9 @@ export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
   if (allUserIds.size > 0) {
     const { data: profilesData } = await supabase
       .from('profiles')
-      .select('*')
+      // Only what a member/coordinator chip renders — the full row carried a
+      // dozen columns this page never reads.
+      .select('id, email, full_name, role, avatar_url, is_non_teaching, display_role')
       .in('id', [...allUserIds])
     profiles = (profilesData ?? []) as UserProfile[]
   }
@@ -178,9 +180,9 @@ export async function updateTeam(
 }
 
 export async function deleteTeam(teamId: string): Promise<boolean> {
-  // Delete members first
-  await supabase.from('team_members').delete().eq('team_id', teamId)
-
+  // team_members and team_coordinators are both ON DELETE CASCADE on
+  // team_id, so removing the team takes its rows with it — the separate
+  // member delete this used to issue first was a wasted round trip.
   const { error } = await supabase
     .from('teams')
     .delete()
