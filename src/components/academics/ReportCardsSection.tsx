@@ -72,14 +72,6 @@ interface ReportCardsSectionProps {
   user: { id: string }
   profile: UserProfile
   isStudent: boolean
-  /** Minimum panel height, in px. Set when the section sits in the column
-   *  beside the classroom grid, so the two columns end level while the panel
-   *  is idle; it still grows past this once a student or a marks matrix is
-   *  loaded into it. */
-  minPanelHeight?: number
-  /** Applied to the panel's min-height, so it keeps step with the classroom
-   *  grid's row-by-row reveal rather than snapping to full height. */
-  heightTransition?: string
 }
 
 /** How many recently-opened students the idle search offers as shortcuts. */
@@ -88,9 +80,7 @@ const RECENT_LIMIT = 5
 /** Breathing room left between a focused field and the top of the keyboard. */
 const KEYBOARD_GAP = 12
 
-function ReportCardsSectionInner({
-  user, profile, isStudent, minPanelHeight, heightTransition,
-}: ReportCardsSectionProps) {
+function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectionProps) {
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
   // Staff open on load; a student expands when they want their cards.
   const [expanded, setExpanded] = useState(!isStudent)
@@ -192,10 +182,7 @@ function ReportCardsSectionInner({
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div
-              className="glass-card rounded-[1.5rem] p-4 sm:p-5"
-              style={minPanelHeight ? { minHeight: minPanelHeight, transition: heightTransition } : undefined}
-            >
+            <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
