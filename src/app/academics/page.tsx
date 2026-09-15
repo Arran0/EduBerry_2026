@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+} from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
@@ -23,8 +25,14 @@ import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import {
   WorkWeekCalendarSkeleton, BLEED_CARD_INSET, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
-const SchoolWorkManager  = dynamic(() => import('@/components/classrooms/SchoolWorkManager'))
-const HomeroomWorkCalendar = dynamic(() => import('@/components/academics/HomeroomWorkCalendar'))
+// Lazy, not next/dynamic: a `dynamic` component renders NOTHING while its
+// chunk is in flight, which collapsed the calendar section to zero height the
+// moment its data was ready — the page's own skeleton vanished, the classrooms
+// jumped to the top, and the calendar's internal skeleton then pushed them back
+// down. React.lazy lets the page own that gap with a Suspense fallback: the
+// same skeleton, with the same theme, so nothing moves at all.
+const SchoolWorkManager  = lazy(() => import('@/components/classrooms/SchoolWorkManager'))
+const HomeroomWorkCalendar = lazy(() => import('@/components/academics/HomeroomWorkCalendar'))
 const ReportCardsSection = dynamic(() => import('@/components/academics/ReportCardsSection'))
 const StudentGameSection = dynamic(() => import('@/components/academics/StudentGameSection'))
 import { fetchStreak } from '@/lib/gamification'
@@ -45,6 +53,21 @@ import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerSty
 const GRID_FADE_MASK: React.CSSProperties = {
   maskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
   WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
+}
+
+/**
+ * Columns to lay `count` items out in, given the most the width allows.
+ *
+ * Packing left to right strands a short last row — six items across six
+ * columns is five and a lonely one. Spreading the same items over the rows
+ * they already need (`ceil(count / rows)`) gives 3 + 3 instead, 4 + 3 for
+ * seven, and leaves a full grid untouched. A single row is left alone: two
+ * items should stay two pills, not stretch to half the page each.
+ */
+function balancedColumns(count: number, maxColumns: number): number {
+  if (count <= maxColumns) return maxColumns
+  const rows = Math.ceil(count / maxColumns)
+  return Math.ceil(count / rows)
 }
 
 function getSessionVibes(name: string): string[] {
@@ -188,15 +211,12 @@ function SectionHeading({
   icon: Icon,
   chipClass,
   title,
-  count,
   titleAction,
   action,
 }: {
   icon: React.ElementType
   chipClass: string
   title: string
-  /** Optional tally shown as a quiet pill beside the title. */
-  count?: number
   titleAction?: React.ReactNode
   action?: React.ReactNode
 }) {
@@ -210,11 +230,6 @@ function SectionHeading({
           centre of the taller chip row. */}
       <div className="flex items-baseline gap-2 min-w-0">
         <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">{title}</h2>
-        {count !== undefined && count > 0 && (
-          <span className="flex-shrink-0 text-[11px] font-bold text-slate-500 bg-white/70 border border-white/80 px-2 py-0.5 rounded-full tabular-nums shadow-sm">
-            {count}
-          </span>
-        )}
         {titleAction && <span className="flex-shrink-0 inline-flex">{titleAction}</span>}
       </div>
       {/* Hairline rule — fades out as it travels, so it reads as the heading
@@ -255,6 +270,47 @@ function EmptyState({
       <p className="text-sm font-semibold text-slate-700">{title}</p>
       {hint && <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">{hint}</p>}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
+/**
+ * Animates its own height to whatever its content currently needs, so a slot
+ * whose contents swap — skeleton → real calendar, or a panel opening inside it
+ * — eases between the two sizes instead of snapping and shoving the rest of the
+ * page. Height is measured off the content, never guessed.
+ *
+ * The horizontal padding/negative-margin pair is what lets `overflow: hidden`
+ * (needed to clip during a shrink) coexist with a child that deliberately
+ * breaks out of the page gutter: the clip box is widened to exactly where that
+ * child's full-bleed edge lands, so nothing is actually cut off.
+ */
+function SmoothHeight({ children }: { children: React.ReactNode }) {
+  const inner = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState<number | undefined>(undefined)
+
+  useLayoutEffect(() => {
+    const el = inner.current
+    if (!el) return
+    const measure = () => setHeight(el.getBoundingClientRect().height)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div
+      // Until the first measurement lands, height is `auto` — the content must
+      // never animate up from nothing on first paint.
+      style={{
+        height,
+        overflow: 'hidden',
+        transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+      className="-mx-4 px-4 sm:-mx-1 sm:px-1"
+    >
+      <div ref={inner}>{children}</div>
     </div>
   )
 }
@@ -330,7 +386,6 @@ export default function AcademicsPage() {
   const CLASSROOM_COL_GAP = 12
   const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
   const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
-  const classroomItemWidthCss = classroomItemWidth(classroomColumns, CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
@@ -340,12 +395,20 @@ export default function AcademicsPage() {
     ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
     : classrooms.slice(0, classroomVisibleCount)
 
+  // Columns are balanced across the rows they actually fill rather than packed
+  // left to right: six classrooms in a six-wide grid used to run five across
+  // and one stranded underneath, where 3 + 3 reads as a block. Only ever
+  // narrows the grid, and only when it wraps — a single row keeps the full
+  // count so two classrooms stay two pills rather than stretching to halves.
+  const gridColumns = balancedColumns(filteredClassrooms.length, classroomColumns)
+  const classroomItemWidthCss = classroomItemWidth(gridColumns, CLASSROOM_COL_GAP)
+
   // The grid deals its rows out one at a time on first load (up to the four it
   // scrolls at), and the container's height follows a row at a time with it —
   // that easing is what carries the sections below the grid down the page.
   const classroomRowCount = Math.min(
     CLASSROOM_VISIBLE_ROWS,
-    Math.max(1, Math.ceil(filteredClassrooms.length / classroomColumns)),
+    Math.max(1, Math.ceil(filteredClassrooms.length / gridColumns)),
   )
   const classroomRevealRows = useStaggeredRows(classroomRowCount, !loading)
   const classroomGridHeight = (rows: number) =>
@@ -353,7 +416,7 @@ export default function AcademicsPage() {
   const GRID_HEIGHT_TRANSITION = 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)'
   // True once the grid holds more rows than it can show — see GRID_FADE_MASK.
   const classroomGridScrolls =
-    Math.ceil(filteredClassrooms.length / classroomColumns) > CLASSROOM_VISIBLE_ROWS
+    Math.ceil(filteredClassrooms.length / gridColumns) > CLASSROOM_VISIBLE_ROWS
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -426,6 +489,16 @@ export default function AcademicsPage() {
   }
 
   const activeCfg = editingBanner ? pendingCfg : bannerCfg
+
+  // One skeleton element for both the "still loading" and the "chunk in
+  // flight" states, so the two are pixel-identical and swapping between them
+  // is invisible.
+  const calendarSkeleton = (
+    <WorkWeekCalendarSkeleton
+      theme={themeFromGradient(bannerCfg.gradFrom, bannerCfg.gradTo)}
+      rootClassName={BLEED_CARD_INSET}
+    />
+  )
 
   const _imgUrl   = activeCfg.imageUrl  ?? ''
   const _gradFrom = activeCfg.gradFrom
@@ -611,17 +684,23 @@ export default function AcademicsPage() {
                 title="School Work Calendar"
               />
               {/* No card wrapper — the calendar brings its own chrome and runs
-                  edge-to-edge on phones (it cancels this container's gutter). */}
-              {loading ? (
-                <WorkWeekCalendarSkeleton
-                  theme={themeFromGradient(bannerCfg.gradFrom, bannerCfg.gradTo)}
-                  rootClassName={BLEED_CARD_INSET}
-                />
-              ) : isStudent ? (
-                <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
-              ) : (
-                <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
-              )}
+                  edge-to-edge on phones (it cancels this container's gutter).
+                  SmoothHeight eases the slot between the skeleton's height and
+                  the loaded calendar's, and the Suspense fallback is that same
+                  skeleton, so the swap is a resize and never a gap. */}
+              <SmoothHeight>
+                {loading ? (
+                  calendarSkeleton
+                ) : (
+                  <Suspense fallback={calendarSkeleton}>
+                    {isStudent ? (
+                      <SchoolWorkManager classrooms={classrooms} userId={user.id} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+                    ) : (
+                      <HomeroomWorkCalendar userId={user.id} homerooms={homerooms!} themeGradFrom={bannerCfg.gradFrom} themeGradTo={bannerCfg.gradTo} />
+                    )}
+                  </Suspense>
+                )}
+              </SmoothHeight>
             </RevealSection>
           )}
 
@@ -631,7 +710,6 @@ export default function AcademicsPage() {
               icon={BookOpen}
               chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
               title={isStudent ? 'My Classrooms' : 'Classrooms'}
-              count={loading || classroomSearch ? undefined : classrooms.length}
               titleAction={
                 <button
                   onClick={toggleShowOnHome}
@@ -800,7 +878,7 @@ export default function AcademicsPage() {
                   skeletonCount={classroomColumns}
                   heightClass="h-[64px]"
                   itemWidth={classroomItemWidthCss}
-                  columns={classroomColumns}
+                  columns={gridColumns}
                   maxRows={classroomRevealRows}
                   navigatingId={navigatingId}
                   onNavigate={setNavigatingId}

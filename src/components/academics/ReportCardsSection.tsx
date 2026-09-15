@@ -255,11 +255,18 @@ function HeaderShell({
       className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 group"
     >
       {inner}
+      {/* A labelled pill, not a bare chevron: a glyph on its own never said
+          what tapping the heading would do. */}
       <span
-        className={`w-7 h-7 flex-shrink-0 inline-flex items-center justify-center rounded-full text-slate-400 group-hover:text-rose-500 transition-all ${expanded ? 'rotate-180' : ''}`}
+        className={`keep-round flex-shrink-0 inline-flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold border shadow-sm transition-colors ${
+          expanded
+            ? 'bg-rose-50 border-rose-200 text-rose-600'
+            : 'bg-white/80 border-white/80 text-slate-600 group-hover:text-rose-600 group-hover:border-rose-200'
+        }`}
         aria-hidden
       >
-        <ChevronDown size={16} />
+        {expanded ? 'Hide' : 'View'}
+        <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </span>
       <span className="sr-only">{expanded ? 'Collapse report cards' : 'Expand report cards'}</span>
     </button>
