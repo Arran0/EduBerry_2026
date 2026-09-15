@@ -89,33 +89,75 @@ export function withSecretDefaults<T extends object>(
   return out as T
 }
 
-/** Read the stored secrets for a scope (admin only). Returns {} if none/blocked. */
-export async function fetchPaymentSecrets(scope: PaymentSecretScope): Promise<Record<string, string>> {
-  const { data, error } = await supabase
-    .from('payment_secrets')
-    .select('value')
-    .eq('key', scope)
-    .maybeSingle()
-  if (error) { console.error(`fetchPaymentSecrets(${scope}) failed:`, error); return {} }
-  return (data?.value as Record<string, string> | null) ?? {}
+/**
+ * The fields that are genuinely secret: they are never sent back to the
+ * browser, only overwritten. Everything else in a scope is an identifier the
+ * admin needs to read back to check they configured the right account — the
+ * corporate id, the client id, the OAuth audience, the debit account and its
+ * IFSC, and the *public* half of the TLS pair.
+ *
+ * Enforced server-side by payment_secrets_read(); this copy only drives the
+ * "Configured" affordance and the blank-means-unchanged save logic.
+ */
+export const WRITE_ONLY_SECRET_KEYS: ReadonlySet<string> = new Set([
+  'api_key', 'client_secret', 'signing_secret', 'webhook_secret',
+  'client_key_pem', 'client_cert_passphrase', 'key_secret',
+])
+
+export interface StoredSecrets {
+  /** Values safe to render back into the form. Write-only keys are absent. */
+  values: Record<string, string>
+  /** Every key that currently holds a non-empty value server-side. */
+  configured: Set<string>
 }
 
-/** Upsert the full secret object for a scope (admin only). */
+export const EMPTY_STORED_SECRETS: StoredSecrets = { values: {}, configured: new Set() }
+
+/**
+ * Read a scope's stored credentials (admin only).
+ *
+ * Goes through the payment_secrets_read RPC rather than selecting the row: the
+ * form used to receive every secret it displayed, so opening Fee Settings or
+ * Payroll Settings shipped the school's client secret, callback secret and
+ * client PRIVATE KEY to the browser. Now it gets the identifiers plus a list of
+ * which secrets are set, which is all the UI actually needs.
+ */
+export async function fetchPaymentSecrets(scope: PaymentSecretScope): Promise<StoredSecrets> {
+  const { data, error } = await supabase.rpc('payment_secrets_read', { p_scope: scope })
+  if (error) { console.error(`fetchPaymentSecrets(${scope}) failed:`, error); return EMPTY_STORED_SECRETS }
+  const row = (data ?? {}) as { values?: Record<string, string>; configured?: string[] }
+  return {
+    values: row.values ?? {},
+    configured: new Set(row.configured ?? []),
+  }
+}
+
+/**
+ * Save a scope's credentials (admin only).
+ *
+ * A blank write-only field means "leave whatever is stored alone" — the form
+ * never held the real value, so sending the blank would erase it. Clearing a
+ * credential on purpose goes through `clear`, which drops those keys outright.
+ * Non-secret fields still round-trip, so blanking one clears it as before.
+ */
 export async function savePaymentSecrets<T extends object>(
   scope: PaymentSecretScope,
   value: T,
+  clear: string[] = [],
 ): Promise<{ success: boolean; error?: string }> {
-  // Blank fields are persisted rather than dropped, so an admin can actually
-  // clear a credential they no longer use (e.g. after switching auth mode).
-  // The server-side reader treats a blank as "not set in the DB" and falls
-  // back to the env var, which is the same meaning as an absent key.
-  const cleaned: Record<string, string> = {}
+  const patch: Record<string, string> = {}
   for (const [k, v] of Object.entries(value)) {
-    if (typeof v === 'string') cleaned[k] = v.trim()
+    if (typeof v !== 'string') continue
+    const trimmed = v.trim()
+    if (WRITE_ONLY_SECRET_KEYS.has(k) && trimmed === '') continue // unchanged
+    patch[k] = trimmed
   }
-  const { error } = await supabase
-    .from('payment_secrets')
-    .upsert({ key: scope, value: cleaned }, { onConflict: 'key' })
+
+  const { error } = await supabase.rpc('payment_secrets_write', {
+    p_scope: scope,
+    p_patch: patch,
+    p_clear: clear,
+  })
   if (error) { console.error(`savePaymentSecrets(${scope}) failed:`, error); return { success: false, error: error.message } }
   return { success: true }
 }

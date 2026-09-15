@@ -36,6 +36,11 @@ export default function BankPayoutSettings({ ctx }: Props) {
   const [loaded, setLoaded] = useState(false)
   const [cfg, setCfg] = useState<PayoutConfig>(PAYOUT_CONFIG_DEFAULTS)
   const [secrets, setSecrets] = useState<PayoutSecrets>(PAYOUT_SECRET_DEFAULTS)
+  // Which credentials exist server-side, and which the admin asked to erase.
+  // Stored secrets are never sent to the browser, so those inputs always start
+  // blank and a blank one means "leave it alone" on save.
+  const [configured, setConfigured] = useState<Set<string>>(new Set())
+  const [clearKeys, setClearKeys] = useState<string[]>([])
   const [mapText, setMapText] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -44,12 +49,21 @@ export default function BankPayoutSettings({ ctx }: Props) {
   const load = useCallback(async () => {
     const [c, s] = await Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout')])
     setCfg(c)
-    setSecrets(withSecretDefaults(PAYOUT_SECRET_DEFAULTS, s))
+    setSecrets(withSecretDefaults(PAYOUT_SECRET_DEFAULTS, s.values))
+    setConfigured(s.configured)
+    setClearKeys([])
     setMapText(Object.keys(c.request_map).length ? JSON.stringify(c.request_map, null, 2) : '')
     setLoaded(true)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // "Clear" only marks the credential; it is erased when the form is saved, so
+  // the admin can still back out by leaving the page.
+  const queueClear = (key: string) => {
+    setClearKeys(ks => (ks.includes(key) ? ks : [...ks, key]))
+    setConfigured(c => { const next = new Set(c); next.delete(key); return next })
+  }
 
   const save = async () => {
     const { map, error: mapError } = parseFieldMap(mapText)
@@ -60,10 +74,11 @@ export default function BankPayoutSettings({ ctx }: Props) {
     setSaving(true)
     const [res] = await Promise.all([
       savePayoutConfig({ ...cfg, request_map: map }),
-      savePaymentSecrets('payout', { ...secrets }),
+      savePaymentSecrets('payout', { ...secrets }, clearKeys),
     ])
     setSaving(false)
     if (!res.success) { setError(res.error ?? 'Could not save'); return }
+    await load()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
     // Unknown column tokens are emitted verbatim, which is legitimate for
@@ -171,6 +186,8 @@ export default function BankPayoutSettings({ ctx }: Props) {
             onConnection={c => set('connection', c)}
             secrets={secrets}
             onSecrets={s => setSecrets({ ...secrets, ...s })}
+            configured={configured}
+            onClear={queueClear}
           />
 
           <div className="mt-4 space-y-3">

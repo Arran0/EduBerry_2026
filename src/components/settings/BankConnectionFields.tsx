@@ -22,17 +22,33 @@ import {
 interface Props {
   connection: BankConnection
   onConnection: (next: BankConnection) => void
+  /**
+   * What the admin has typed this session. Write-only credentials always start
+   * blank here — the stored value is never sent to the browser — so `configured`
+   * is what tells the field whether one exists.
+   */
   secrets: BankConnectionSecrets
   onSecrets: (next: BankConnectionSecrets) => void
+  /** Keys that hold a value server-side, from payment_secrets_read. */
+  configured: Set<string>
+  /** Queue a stored credential for deletion on the next save. */
+  onClear: (key: string) => void
   /** Collections never debit an account, so the caller adds those fields. */
   children?: React.ReactNode
 }
 
-export default function BankConnectionFields({ connection, onConnection, secrets, onSecrets, children }: Props) {
+export default function BankConnectionFields({
+  connection, onConnection, secrets, onSecrets, configured, onClear, children,
+}: Props) {
   const set = <K extends keyof BankConnection>(key: K, value: BankConnection[K]) =>
     onConnection({ ...connection, [key]: value })
   const setSecret = <K extends keyof BankConnectionSecrets>(key: K, value: BankConnectionSecrets[K]) =>
     onSecrets({ ...secrets, [key]: value })
+  /** Props every write-only field needs: is one stored, and how to erase it. */
+  const secretProps = (key: keyof BankConnectionSecrets) => ({
+    configured: configured.has(key),
+    onClear: () => onClear(key),
+  })
 
   const mode = connection.auth_mode
   const activeHint = BANK_AUTH_MODES.find(m => m.value === mode)?.hint
@@ -72,7 +88,7 @@ export default function BankConnectionFields({ connection, onConnection, secrets
             <TextInput value={connection.api_key_header} onChange={v => set('api_key_header', v)} placeholder="x-api-key" mono />
           </Field>
           <Field label="API key">
-            <PwInput value={secrets.api_key} onChange={v => setSecret('api_key', v)} placeholder="Key issued by the bank" />
+            <PwInput value={secrets.api_key} onChange={v => setSecret('api_key', v)} placeholder="Key issued by the bank" {...secretProps('api_key')} />
           </Field>
         </div>
       )}
@@ -83,7 +99,7 @@ export default function BankConnectionFields({ connection, onConnection, secrets
             <TextInput value={secrets.client_id} onChange={v => setSecret('client_id', v)} placeholder="Consumer / client key" />
           </Field>
           <Field label="Client secret">
-            <PwInput value={secrets.client_secret} onChange={v => setSecret('client_secret', v)} placeholder="Consumer / client secret" />
+            <PwInput value={secrets.client_secret} onChange={v => setSecret('client_secret', v)} placeholder="Consumer / client secret" {...secretProps('client_secret')} />
           </Field>
         </div>
       )}
@@ -107,7 +123,7 @@ export default function BankConnectionFields({ connection, onConnection, secrets
       {mode === 'hmac' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Request signing secret">
-            <PwInput value={secrets.signing_secret} onChange={v => setSecret('signing_secret', v)} placeholder="Shared secret used to sign each request" />
+            <PwInput value={secrets.signing_secret} onChange={v => setSecret('signing_secret', v)} placeholder="Shared secret used to sign each request" {...secretProps('signing_secret')} />
           </Field>
           <Field label="Client ID" hint="Sent alongside the signature when your bank expects it.">
             <TextInput value={secrets.client_id} onChange={v => setSecret('client_id', v)} placeholder="Optional" />
@@ -117,7 +133,7 @@ export default function BankConnectionFields({ connection, onConnection, secrets
 
       {/* Callback verification — needed in every mode. */}
       <Field label="Callback secret" hint="Verifies that a payment notification really came from your bank.">
-        <PwInput value={secrets.webhook_secret} onChange={v => setSecret('webhook_secret', v)} placeholder="HMAC secret for incoming callbacks" />
+        <PwInput value={secrets.webhook_secret} onChange={v => setSecret('webhook_secret', v)} placeholder="HMAC secret for incoming callbacks" {...secretProps('webhook_secret')} />
       </Field>
 
       {children}
@@ -134,10 +150,10 @@ export default function BankConnectionFields({ connection, onConnection, secrets
             <PemInput value={secrets.client_cert_pem} onChange={v => setSecret('client_cert_pem', v)} />
           </Field>
           <Field label="Client private key (PEM)">
-            <PemInput value={secrets.client_key_pem} onChange={v => setSecret('client_key_pem', v)} placeholder="-----BEGIN PRIVATE KEY-----" />
+            <PemInput value={secrets.client_key_pem} onChange={v => setSecret('client_key_pem', v)} placeholder="-----BEGIN PRIVATE KEY-----" {...secretProps('client_key_pem')} />
           </Field>
           <Field label="Certificate passphrase" hint="Leave blank if the key is not encrypted.">
-            <PwInput value={secrets.client_cert_passphrase} onChange={v => setSecret('client_cert_passphrase', v)} placeholder="Optional" />
+            <PwInput value={secrets.client_cert_passphrase} onChange={v => setSecret('client_cert_passphrase', v)} placeholder="Optional" {...secretProps('client_cert_passphrase')} />
           </Field>
           <InfoNote tone="info">
             Convert a <code>.p12</code> / <code>.pfx</code> bundle to PEM before pasting it —

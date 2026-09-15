@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -182,45 +182,40 @@ export default function ClassroomManagerPage() {
       const gradeNum = newClassroom.grade ? parseInt(newClassroom.grade) : null
       const section  = newClassroom.section.trim().toUpperCase()
 
-      // Fetch default members and students in parallel; fire teacher add concurrently
-      const [defaultRes, studentsRes] = await Promise.all([
+      // Every roster lookup is independent of the others, so they go together
+      // rather than the smart board query waiting behind two inserts.
+      const [defaultRes, studentsRes, boardIds] = await Promise.all([
         supabase.from('profiles').select('id, role').in('role', ['principal', 'admin']),
         gradeNum && section
           ? supabase.from('profiles').select('id').eq('role', 'student').eq('grade', gradeNum).eq('section', section)
           : Promise.resolve({ data: [] as { id: string }[] }),
+        gradeNum && section
+          ? fetchSmartboardIdsForGradeSection(gradeNum, section)
+          : Promise.resolve([] as string[]),
       ])
       if (newClassroom.teacher_email.trim()) {
         await addMemberByEmail(result.id, newClassroom.teacher_email.trim())
       }
 
-      // Bulk-insert admins/principals in one query instead of N sequential ones
-      const defaultRows = ((defaultRes.data ?? []) as { id: string; role: string }[])
-        .filter(m => m.id !== user.id && m.id !== coordinatorId)
-        .map(m => ({ classroom_id: result.id, user_id: m.id, role: m.role }))
-      if (defaultRows.length > 0) {
-        const { error } = await supabase.from('classroom_members').insert(defaultRows)
-        if (error && error.code !== '23505') console.error('Failed to add default members:', error.message)
+      // One insert for the whole starting roster — admins/principals, the
+      // grade+section's students, and its smart board(s) — instead of three.
+      // (classroom_members is UNIQUE (classroom_id, user_id), and a duplicate
+      // *within* a single statement fails the whole insert rather than just
+      // that row, so the same id appearing in two of these lists is dropped
+      // here. First writer wins, which keeps the admin/principal role over the
+      // teacher-level access a smart board would otherwise be given.)
+      const memberRows = new Map<string, { classroom_id: string; user_id: string; role: string }>()
+      const addRow = (id: string, role: string) => {
+        if (id === user.id || id === coordinatorId || memberRows.has(id)) return
+        memberRows.set(id, { classroom_id: result.id, user_id: id, role })
       }
+      for (const m of (defaultRes.data ?? []) as { id: string; role: string }[]) addRow(m.id, m.role)
+      for (const s of (studentsRes.data ?? []) as { id: string }[]) addRow(s.id, 'student')
+      for (const id of boardIds) addRow(id, 'teacher')
 
-      // Bulk-insert matching students in one query instead of N sequential ones
-      const studentRows = ((studentsRes.data ?? []) as { id: string }[])
-        .map(s => ({ classroom_id: result.id, user_id: s.id, role: 'student' }))
-      if (studentRows.length > 0) {
-        const { error } = await supabase.from('classroom_members').insert(studentRows)
-        if (error && error.code !== '23505') console.error('Failed to bulk-add students:', error.message)
-      }
-
-      // Auto-enrol the grade/section's smart board(s) with teacher-level access,
-      // mirroring the student auto-enrolment above.
-      if (gradeNum && section) {
-        const boardIds = await fetchSmartboardIdsForGradeSection(gradeNum, section)
-        const boardRows = boardIds
-          .filter(id => id !== user.id && id !== coordinatorId)
-          .map(id => ({ classroom_id: result.id, user_id: id, role: 'teacher' }))
-        if (boardRows.length > 0) {
-          const { error } = await supabase.from('classroom_members').insert(boardRows)
-          if (error && error.code !== '23505') console.error('Failed to add smart board(s):', error.message)
-        }
+      if (memberRows.size > 0) {
+        const { error } = await supabase.from('classroom_members').insert([...memberRows.values()])
+        if (error && error.code !== '23505') console.error('Failed to add starting roster:', error.message)
       }
 
       setNewClassroom({ title: '', description: '', grade: '', section: '', subject: '', academic_year: '', coordinator_email: '', teacher_email: '' })
@@ -257,14 +252,22 @@ export default function ClassroomManagerPage() {
     }
   }
 
-  if (!user || !profile) return null
-
   const searchLower = classroomSearch.trim().toLowerCase()
-  const filteredClassrooms = searchLower
-    ? classrooms.filter(c => c.title.toLowerCase().includes(searchLower) || (c.description && c.description.toLowerCase().includes(searchLower)))
-    : classrooms
-  const activeClassrooms = filteredClassrooms.filter(c => !isClassroomClosed(c))
-  const closedClassrooms = filteredClassrooms.filter(c => isClassroomClosed(c))
+  // The create-classroom form keeps eight inputs in this component's state, so
+  // without memoisation every keystroke in one re-filtered and re-partitioned
+  // the whole classroom list. Must stay above the `!user` early return — hooks
+  // cannot be called conditionally.
+  const { activeClassrooms, closedClassrooms } = useMemo(() => {
+    const filtered = searchLower
+      ? classrooms.filter(c => c.title.toLowerCase().includes(searchLower) || (c.description && c.description.toLowerCase().includes(searchLower)))
+      : classrooms
+    return {
+      activeClassrooms: filtered.filter(c => !isClassroomClosed(c)),
+      closedClassrooms: filtered.filter(c => isClassroomClosed(c)),
+    }
+  }, [classrooms, searchLower])
+
+  if (!user || !profile) return null
 
   return (
     <ProtectedLayout adminOnly>
@@ -409,7 +412,7 @@ export default function ClassroomManagerPage() {
                 </button>
               )}
             </div>
-          ) : filteredClassrooms.length === 0 && classroomSearch ? (
+          ) : activeClassrooms.length + closedClassrooms.length === 0 && classroomSearch ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-10 text-center">
               <p className="text-sm text-[#71717A]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
             </div>
