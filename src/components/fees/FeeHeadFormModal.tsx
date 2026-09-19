@@ -52,10 +52,10 @@ export default function FeeHeadFormModal({ head, onClose, onSaved }: FeeHeadForm
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
         <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-slate-100 rounded-lg"><Tag size={16} className="text-slate-600" /></div>
+            <div className="p-1.5 bg-slate-100 "><Tag size={16} className="text-slate-600" /></div>
             <h2 className="font-bold text-slate-800">{editing ? 'Edit fee head' : 'New fee head'}</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ">
             <X size={16} />
           </button>
         </div>
@@ -83,7 +83,7 @@ export default function FeeHeadFormModal({ head, onClose, onSaved }: FeeHeadForm
           </label>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
@@ -91,7 +91,7 @@ export default function FeeHeadFormModal({ head, onClose, onSaved }: FeeHeadForm
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
             <button onClick={submit} disabled={saving}
-              className="flex-1 text-sm font-semibold py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
+              className="flex-1 text-sm font-semibold py-2 bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Create fee head'}
             </button>
           </div>
@@ -101,7 +101,7 @@ export default function FeeHeadFormModal({ head, onClose, onSaved }: FeeHeadForm
   )
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
+const inputCls = 'w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

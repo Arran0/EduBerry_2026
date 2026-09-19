@@ -119,9 +119,9 @@ export default function CollectSheet({
       iconClassName="bg-[#27272A] text-[#B8983C]"
     >
       <div className="space-y-4">
-        <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg px-4 py-3 flex items-baseline justify-between">
+        <div className="bg-[#FAF8F2] border border-[#E3DFD3] px-4 py-3 flex items-baseline justify-between">
           <span className={ADMIN.label}>Outstanding</span>
-          <span className="text-lg font-bold text-[#27272A]">
+          <span className="text-lg font-bold text-[#18181B]">
             {showAmounts ? formatPaise(outstanding) : '••••'}
           </span>
         </div>
@@ -137,7 +137,7 @@ export default function CollectSheet({
               className={`${ADMIN.inputPlain} text-lg font-semibold`}
               autoFocus
             />
-            <p className="text-xs text-[#A1A1AA] mt-1">
+            <p className="text-xs text-[#8C8878] mt-1">
               Leave it blank to take the full outstanding amount.
             </p>
           </div>
@@ -151,7 +151,7 @@ export default function CollectSheet({
         </div>
 
         {needsInstrument && (
-          <div className="border border-[#E4E4E7] rounded-lg p-3 space-y-3">
+          <div className="border border-[#E3DFD3] p-3 space-y-3">
             <h4 className={ADMIN.label}>{method === 'dd' ? 'Demand draft' : 'Cheque'} details</h4>
             <div className="grid sm:grid-cols-2 gap-3">
               <input value={cheque.number} onChange={e => setCheque({ ...cheque, number: e.target.value })}
@@ -184,7 +184,7 @@ export default function CollectSheet({
                   <input type="date" value={cheque.present_on}
                          onChange={e => setCheque({ ...cheque, present_on: e.target.value })}
                          className={`${ADMIN.inputPlain} max-w-[200px]`} />
-                  <p className="text-xs text-amber-700 mt-1.5 flex items-start gap-1.5">
+                  <p className="text-xs text-[#7A6220] mt-1.5 flex items-start gap-1.5">
                     <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
                     The bill stays unpaid until this cheque clears. A receipt is issued now, and
                     it will read &ldquo;not yet cleared&rdquo; if anyone scans it.
@@ -201,9 +201,9 @@ export default function CollectSheet({
             <input type="date" value={paidOn} max={today}
                    disabled={!canBackdate}
                    onChange={e => setPaidOn(e.target.value)}
-                   className={`${ADMIN.inputPlain} disabled:bg-[#FAFAFA] disabled:text-[#A1A1AA]`} />
+                   className={`${ADMIN.inputPlain} disabled:bg-[#FAF8F2] disabled:text-[#8C8878]`} />
             {!canBackdate && (
-              <p className="text-xs text-[#A1A1AA] mt-1">
+              <p className="text-xs text-[#8C8878] mt-1">
                 Backdating needs a separate permission.
               </p>
             )}
@@ -222,25 +222,25 @@ export default function CollectSheet({
         </div>
 
         {showAmounts && entered > 0 && (
-          <div className="bg-[#FBF6E9] border border-[#EFE3C4] rounded-lg px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-[#8A6D1F] mb-1">
+          <div className="bg-[#FAF3DF] border border-[#E7D9AE] px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#7A6220] mb-1">
               What this will do
             </div>
-            <p className="text-sm text-[#8A6D1F] leading-relaxed">
+            <p className="text-sm text-[#7A6220] leading-relaxed">
               {describeAllocation(preview, formatPaise)}
             </p>
           </div>
         )}
 
         {!validation.ok && entered > 0 && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg flex items-start gap-2">
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 flex items-start gap-2">
             <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
             <span>{validation.reason}</span>
           </div>
         )}
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
         )}
 
         <div className="flex items-center gap-2 pt-1">
@@ -271,19 +271,19 @@ export function CollectedReceipt({
 }) {
   return (
     <div className="text-center py-4 space-y-4">
-      <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-        <Check size={22} className="text-emerald-600" />
+      <div className="w-12 h-12 mx-auto rounded-full bg-[#EAF5EE] border border-[#C6E3D2] flex items-center justify-center">
+        <Check size={22} className="text-[#1F6B42]" />
       </div>
       <div>
-        <p className="text-sm text-[#71717A]">Taken from {studentName}</p>
-        <p className="text-xl font-bold text-[#27272A] font-mono mt-1">{result.receipt_no}</p>
+        <p className="text-sm text-[#6B675A]">Taken from {studentName}</p>
+        <p className="text-xl font-bold text-[#18181B] font-mono mt-1">{result.receipt_no}</p>
         {result.status === 'pending' && (
-          <p className="text-xs text-amber-700 mt-2 max-w-sm mx-auto">
+          <p className="text-xs text-[#7A6220] mt-2 max-w-sm mx-auto">
             Held against an uncleared instrument. The bill stays open until it clears.
           </p>
         )}
         {showAmounts && result.credited > 0 && (
-          <p className="text-xs text-[#71717A] mt-2">
+          <p className="text-xs text-[#6B675A] mt-2">
             {inr(result.credited)} more than was outstanding — held as a credit for the next bill.
           </p>
         )}

@@ -28,6 +28,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import LateFeeRuleBuilder, { type ScopeOption } from '@/components/fees/charges/LateFeeRuleBuilder'
 import { gradeLabel } from '@/lib/grades'
@@ -153,171 +154,162 @@ function ChargesInner() {
   }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!canManage && !canFine) return <NoAccess what="manage late fees or fines" />
 
   const liveRules = rules.filter(r => r.enabled)
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees" className="text-zinc-500 hover:text-white"><ArrowLeft size={16} /></Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-white tracking-tight">Charges</h1>
-            <p className="text-xs text-zinc-500">
-              Late fees and fines · {liveRules.length} rule{liveRules.length === 1 ? '' : 's'} live
-            </p>
-          </div>
-          <YearScope tone="dark" />
-        </div>
-      </div>
+    <FeeScreen
+      title="Charges"
+      subtitle={<>Late fees and fines · {liveRules.length} rule{liveRules.length === 1 ? '' : 's'} live</>}
+      icon={<Timer size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<YearScope />}
+    >
+      <TabBar<Tab>
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'rules', label: 'Late-fee rules', icon: Timer },
+          { key: 'charged', label: 'Charged', icon: AlertTriangle },
+          { key: 'fines', label: 'Fines', icon: Gavel },
+        ]}
+      />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {([
-            ['rules', 'Late-fee rules', Timer],
-            ['charged', 'What has been charged', AlertTriangle],
-            ['fines', 'Fines', Gavel],
-          ] as [Tab, string, React.ElementType][]).map(([key, label, Icon]) => (
-            <button key={key} onClick={() => setTab(key)}
-                    className={tab === key ? tabOn : tabOff}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
+      {error && (
+        <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>
+      )}
 
-        {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>
-        )}
-
-        {loading ? (
-          <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : tab === 'rules' ? (
-          <>
-            <div className={`${ADMIN.card} p-4 flex flex-wrap items-start gap-3`}>
-              <div className="flex-1 min-w-[240px]">
-                <h2 className="text-sm font-bold text-[#27272A]">The nightly sweep</h2>
-                <p className="text-xs text-[#A1A1AA] mt-1 leading-relaxed">
-                  Runs on its own every night. Preview it here first — the preview is the same
-                  calculation with committing switched off, so what it shows is what it will charge.
-                </p>
-              </div>
-              {canManage && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => void runSweep(false)} disabled={sweeping}
-                          className={ADMIN.ghostBtn}>
-                    {sweeping ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                    Preview
-                  </button>
-                  <button onClick={() => void runSweep(true)}
-                          disabled={sweeping || !sweep || sweep.bills === 0}
-                          title={!sweep ? 'Preview it first' : undefined}
-                          className={ADMIN.darkBtn}>
-                    Charge now
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {sweep && (
-              <div className={`${ADMIN.card} p-4`}>
-                <div className="flex items-center gap-2">
-                  {sweep.committed
-                    ? <CheckCircle2 size={14} className="text-emerald-600" />
-                    : <Play size={14} className="text-[#A1A1AA]" />}
-                  <span className="text-sm font-semibold text-[#27272A]">
-                    {sweep.committed ? 'Charged' : 'Preview'} as at {fmtDate(sweep.as_of)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
-                  <Stat label="Bills" value={String(sweep.bills)} />
-                  <Stat label="Total" value={inr(sweep.total, showAmounts)} tone="amber" />
-                  <Stat label="Exempt" value={String(sweep.exempt)} />
-                </div>
-                {Object.keys(sweep.by_class ?? {}).length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-[#F4F4F5]">
-                    <span className={ADMIN.label}>By class</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      {Object.entries(sweep.by_class).map(([klass, amount]) => (
-                        <span key={klass}
-                              className="text-[11px] px-2 py-1 bg-[#F4F4F5] border border-[#E4E4E7] text-[#52525B]">
-                          {klass} · {inr(amount, showAmounts)}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {!sweep.committed && sweep.bills > 0 && (
-                  <p className="mt-3 text-[11px] text-[#8A6D1F]">
-                    Nothing has been charged yet. Press Charge now to write these to the bills.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className={ADMIN.card}>
-              <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
-                <h3 className={ADMIN.label}>Rules</h3>
-                {canManage && (
-                  <button onClick={() => setEditing('new')} className={ADMIN.ghostBtn}>
-                    <Plus size={13} /> New rule
-                  </button>
-                )}
-              </div>
-              {rules.length === 0 ? (
-                <p className="px-4 py-8 text-sm text-[#A1A1AA]">
-                  No late-fee rules. Bills fall overdue but nothing is charged.
-                </p>
-              ) : rules.map(r => (
-                <div key={r.id}
-                     className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F4F4F5] last:border-0">
-                  <div className="flex-1 min-w-[200px]">
-                    <div className="text-sm font-semibold text-[#27272A]">{r.name}</div>
-                    <p className="text-[11px] text-[#A1A1AA] mt-0.5">
-                      {describeRule(r)}
-                      {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
-                    </p>
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-                    r.enabled
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
-                    {r.enabled ? 'Live' : 'Off'}
-                  </span>
-                  {canManage && (
-                    <>
-                      <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Edit</button>
-                      <button onClick={() => void toggleRule(r)}
-                              title={r.enabled ? 'Switch off' : 'Switch on from today'}
-                              className={r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn}>
-                        <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
-              <p className="px-4 py-2.5 text-[11px] text-[#A1A1AA] border-t border-[#F4F4F5]">
-                Switching a rule on always starts it from today. Days before that are never charged,
-                so turning one on in October cannot back-charge a term.
+      {loading ? (
+        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : tab === 'rules' ? (
+        <>
+          <div className={`${ADMIN.card} p-4 flex flex-wrap items-start gap-3`}>
+            <div className="flex-1 min-w-[240px]">
+              <h2 className="text-sm font-bold text-[#18181B]">The nightly sweep</h2>
+              <p className="text-xs text-[#8C8878] mt-1 leading-relaxed">
+                Runs on its own every night. Preview it here first — the preview is the same
+                calculation with committing switched off, so what it shows is what it will charge.
               </p>
             </div>
-          </>
-        ) : tab === 'charged' ? (
-          <ChargedList
-            charges={charges} invoices={byInvoice} names={names}
-            showAmounts={showAmounts} canManage={canManage}
-            onChanged={load}
-          />
-        ) : (
-          <FinesList
-            fines={fines} categories={categories} names={names}
-            showAmounts={showAmounts} canFine={canFine}
-            onAdd={() => setFining(true)} onChanged={load}
-          />
-        )}
-      </div>
+            {canManage && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => void runSweep(false)} disabled={sweeping}
+                        className={ADMIN.ghostBtn}>
+                  {sweeping ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                  Preview
+                </button>
+                <button onClick={() => void runSweep(true)}
+                        disabled={sweeping || !sweep || sweep.bills === 0}
+                        title={!sweep ? 'Preview it first' : undefined}
+                        className={ADMIN.darkBtn}>
+                  Charge now
+                </button>
+              </div>
+            )}
+          </div>
+
+          {sweep && (
+            <div className={`${ADMIN.card} p-4`}>
+              <div className="flex items-center gap-2">
+                {sweep.committed
+                  ? <CheckCircle2 size={14} className="text-[#1F6B42]" />
+                  : <Play size={14} className="text-[#8C8878]" />}
+                <span className="text-sm font-semibold text-[#18181B]">
+                  {sweep.committed ? 'Charged' : 'Preview'} as at {fmtDate(sweep.as_of)}
+                </span>
+              </div>
+              <div className="mt-3">
+                <StatStrip stats={[
+                  { label: 'Bills', value: String(sweep.bills) },
+                  { label: 'Total', value: inr(sweep.total, showAmounts), tone: '#7A6220', strong: true },
+                  { label: 'Exempt', value: String(sweep.exempt) },
+                ]} />
+              </div>
+              {Object.keys(sweep.by_class ?? {}).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-[#F0ECE2]">
+                  <span className={ADMIN.label}>By class</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {Object.entries(sweep.by_class).map(([klass, amount]) => (
+                      <span key={klass}
+                            className="text-[11px] px-2 py-1 bg-[#F4F1E7] border border-[#E3DFD3] text-[#52525B]">
+                        {klass} · {inr(amount, showAmounts)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!sweep.committed && sweep.bills > 0 && (
+                <p className="mt-3 text-[11px] text-[#7A6220]">
+                  Nothing has been charged yet. Press Charge now to write these to the bills.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className={ADMIN.card}>
+            <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
+              <h3 className={ADMIN.label}>Rules</h3>
+              {canManage && (
+                <button onClick={() => setEditing('new')} className={ADMIN.ghostBtn}>
+                  <Plus size={13} /> New rule
+                </button>
+              )}
+            </div>
+            {rules.length === 0 ? (
+              <p className="px-4 py-8 text-sm text-[#8C8878]">
+                No late-fee rules. Bills fall overdue but nothing is charged.
+              </p>
+            ) : rules.map(r => (
+              <div key={r.id}
+                   className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="text-sm font-semibold text-[#18181B]">{r.name}</div>
+                  <p className="text-[11px] text-[#8C8878] mt-0.5">
+                    {describeRule(r)}
+                    {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
+                  </p>
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
+                  r.enabled
+                    ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                    : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                  {r.enabled ? 'Live' : 'Off'}
+                </span>
+                {canManage && (
+                  <>
+                    <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Edit</button>
+                    <button onClick={() => void toggleRule(r)}
+                            title={r.enabled ? 'Switch off' : 'Switch on from today'}
+                            className={r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn}>
+                      <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+            <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
+              Switching a rule on always starts it from today. Days before that are never charged,
+              so turning one on in October cannot back-charge a term.
+            </p>
+          </div>
+        </>
+      ) : tab === 'charged' ? (
+        <ChargedList
+          charges={charges} invoices={byInvoice} names={names}
+          showAmounts={showAmounts} canManage={canManage}
+          onChanged={load}
+        />
+      ) : (
+        <FinesList
+          fines={fines} categories={categories} names={names}
+          showAmounts={showAmounts} canFine={canFine}
+          onAdd={() => setFining(true)} onChanged={load}
+        />
+      )}
+
 
       {editing && year && (
         <LateFeeRuleBuilder
@@ -341,12 +333,10 @@ function ChargesInner() {
           onDone={() => { setFining(false); void load() }}
         />
       )}
-    </div>
+    </FeeScreen>
   )
 }
 
-const tabOn = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[#27272A] text-white'
-const tabOff = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A]'
 
 function describeRule(r: LateFeeRuleRow): string {
   const amount = r.charge_type === 'flat' ? `₹${r.rate}` : `${r.rate}%`
@@ -357,18 +347,6 @@ function describeRule(r: LateFeeRuleRow): string {
   return `${amount} ${when} after ${r.grace_days} grace day${r.grace_days === 1 ? '' : 's'}, on ${scope}${cap}`
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'amber' }) {
-  return (
-    <div className="bg-[#FAFAFA] border border-[#E4E4E7] p-3">
-      <div className={ADMIN.label}>{label}</div>
-      <div className={`text-lg font-bold mt-0.5 ${tone === 'amber' ? 'text-amber-700' : 'text-[#27272A]'}`}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
-// ── What has been charged ─────────────────────────────────────────────────
 function ChargedList({
   charges, invoices, names, showAmounts, canManage, onChanged,
 }: {
@@ -395,34 +373,34 @@ function ChargedList({
 
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Late fees charged</h3>
-        <span className="text-xs text-[#71717A]">
+        <span className="text-xs text-[#6B675A]">
           {live.length} charge{live.length === 1 ? '' : 's'} · {inr(total, showAmounts)}
         </span>
       </div>
       {charges.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">Nothing has been charged.</p>
+        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing has been charged.</p>
       ) : charges.map(c => {
         const inv = invoices.get(c.invoice_id)
         const who = inv ? names.get(inv.student_id) : undefined
         return (
           <div key={c.id}
-               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
+               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
             <div className="flex-1 min-w-[190px]">
-              <div className="text-sm text-[#27272A]">{who?.full_name ?? 'Student'}</div>
-              <div className="text-[11px] text-[#A1A1AA] font-mono">
+              <div className="text-sm text-[#18181B]">{who?.full_name ?? 'Student'}</div>
+              <div className="text-[11px] text-[#8C8878] font-mono">
                 {inv?.number ?? '—'} · {c.days_late} days late at {fmtDate(c.as_of)}
               </div>
             </div>
             {c.status !== 'charged' && (
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                               bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]">
+                               bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
                 {c.status === 'waived' ? 'Waived' : 'Recalculated'}
               </span>
             )}
             <span className={`text-sm font-semibold w-24 text-right ${
-              c.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
+              c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
               {inr(c.amount, showAmounts)}
             </span>
             {canManage && c.status === 'charged' && (
@@ -473,31 +451,31 @@ function FinesList({
 
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Fines</h3>
         {canFine && (
           <button onClick={onAdd} className={ADMIN.ghostBtn}><Plus size={13} /> Add a fine</button>
         )}
       </div>
       {fines.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">No fines this session.</p>
+        <p className="px-4 py-8 text-sm text-[#8C8878]">No fines this session.</p>
       ) : fines.map(f => (
         <div key={f.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
+             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
           <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#27272A]">{names.get(f.student_id)?.full_name ?? 'Student'}</div>
-            <div className="text-[11px] text-[#A1A1AA]">
+            <div className="text-sm text-[#18181B]">{names.get(f.student_id)?.full_name ?? 'Student'}</div>
+            <div className="text-[11px] text-[#8C8878]">
               {cat(f.category_id)}{f.reason ? ` · ${f.reason}` : ''}
             </div>
           </div>
           {f.status === 'waived' && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                             bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]">
+                             bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
               Waived {f.waived_amount ? inr(f.waived_amount, showAmounts) : ''}
             </span>
           )}
           <span className={`text-sm font-semibold w-24 text-right ${
-            f.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
+            f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
             {inr(f.amount, showAmounts)}
           </span>
           {canFine && f.status === 'applied' && (
@@ -583,7 +561,7 @@ function AddFineSheet({
   return (
     <ModalShell
       onClose={onClose} sharp size="md" title="Add a fine"
-      icon={<Gavel size={15} />} iconClassName="bg-[#FBF6E9] text-[#8A6D1F]"
+      icon={<Gavel size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
         <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
@@ -598,13 +576,13 @@ function AddFineSheet({
         <label className="block">
           <span className={ADMIN.label}>Student</span>
           {student ? (
-            <div className="mt-1 flex items-center justify-between gap-2 bg-[#FAFAFA] border border-[#E4E4E7] px-3 py-2">
-              <span className="text-sm text-[#27272A]">
+            <div className="mt-1 flex items-center justify-between gap-2 bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2">
+              <span className="text-sm text-[#18181B]">
                 {student.full_name}
-                <span className="text-[#A1A1AA]"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
+                <span className="text-[#8C8878]"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
               </span>
               <button onClick={() => { setStudent(null); setAttachTo('') }}
-                      className="text-xs text-[#71717A] hover:text-[#27272A]">Change</button>
+                      className="text-xs text-[#6B675A] hover:text-[#18181B]">Change</button>
             </div>
           ) : (
             <>
@@ -612,12 +590,12 @@ function AddFineSheet({
                      placeholder="Type a name or admission number"
                      className={`${ADMIN.inputPlain} mt-1`} autoFocus />
               {matches.length > 0 && (
-                <div className="mt-1 border border-[#E4E4E7] divide-y divide-[#F4F4F5]">
+                <div className="mt-1 border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
                   {matches.map(p => (
                     <button key={p.student_id} onClick={() => { setStudent(p); setQuery('') }}
-                            className="w-full text-left px-3 py-2 text-sm text-[#27272A] hover:bg-[#FAFAFA]">
+                            className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#FAF8F2]">
                       {p.full_name}
-                      <span className="text-[#A1A1AA]"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
+                      <span className="text-[#8C8878]"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
                     </button>
                   ))}
                 </div>
@@ -657,24 +635,24 @@ function AddFineSheet({
         <div>
           <span className={ADMIN.label}>Bill it how</span>
           <div className="mt-1 space-y-1.5">
-            <label className="flex items-start gap-2 p-2.5 border border-[#E4E4E7] cursor-pointer hover:bg-[#FAFAFA]">
+            <label className="flex items-start gap-2 p-2.5 border border-[#E3DFD3] cursor-pointer hover:bg-[#FAF8F2]">
               <input type="radio" checked={attachTo === ''} onChange={() => setAttachTo('')}
                      className="mt-0.5" />
-              <span className="text-xs text-[#27272A]">
+              <span className="text-xs text-[#18181B]">
                 Its own slip
-                <span className="block text-[11px] text-[#A1A1AA] mt-0.5">
+                <span className="block text-[11px] text-[#8C8878] mt-0.5">
                   A separate bill the family can pay on its own.
                 </span>
               </span>
             </label>
             {openBills.map(i => (
               <label key={i.id}
-                     className="flex items-start gap-2 p-2.5 border border-[#E4E4E7] cursor-pointer hover:bg-[#FAFAFA]">
+                     className="flex items-start gap-2 p-2.5 border border-[#E3DFD3] cursor-pointer hover:bg-[#FAF8F2]">
                 <input type="radio" checked={attachTo === i.id} onChange={() => setAttachTo(i.id)}
                        className="mt-0.5" />
-                <span className="text-xs text-[#27272A]">
+                <span className="text-xs text-[#18181B]">
                   Add to {i.number}
-                  <span className="block text-[11px] text-[#A1A1AA] mt-0.5">
+                  <span className="block text-[11px] text-[#8C8878] mt-0.5">
                     Due {fmtDate(i.due_date)} · {inr(i.balance, showAmounts)} still owing. The family
                     pays it with the fees they were already about to pay.
                   </span>
@@ -682,14 +660,14 @@ function AddFineSheet({
               </label>
             ))}
             {student && openBills.length === 0 && (
-              <p className="text-[11px] text-[#A1A1AA]">
+              <p className="text-[11px] text-[#8C8878]">
                 Nothing outstanding to add it to, so this fine will raise its own slip.
               </p>
             )}
           </div>
         </div>
 
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -711,12 +689,12 @@ function ReasonDialog({
 
   return (
     <ModalShell onClose={onClose} sharp size="sm" title={title}
-                icon={<Ban size={15} />} iconClassName="bg-rose-50 text-rose-600">
-      <p className="text-sm text-[#71717A] leading-relaxed">{body}</p>
+                icon={<Ban size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
+      <p className="text-sm text-[#6B675A] leading-relaxed">{body}</p>
       <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder="Why — this goes on the audit trail."
                 className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
-      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
       <div className="flex items-center justify-end gap-2 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button

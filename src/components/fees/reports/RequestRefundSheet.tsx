@@ -45,14 +45,14 @@ export default function RequestRefundSheet({
   if (done) {
     return (
       <ModalShell onClose={onDone} sharp size="sm" title="Sent for approval"
-                  icon={<Undo2 size={15} />} iconClassName="bg-emerald-50 text-emerald-700">
-        <p className="text-sm text-[#71717A] leading-relaxed">
+                  icon={<Undo2 size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
+        <p className="text-sm text-[#6B675A] leading-relaxed">
           The request is in the refund queue on the Collection Center&rsquo;s Instruments tab.
           Nothing has left the school and the family&rsquo;s balance has not changed — that happens
           when somebody approves it and then pays it out.
         </p>
         {done.warning && (
-          <p className="mt-3 text-xs text-[#8A6D1F] bg-[#FBF6E9] border border-[#EFE3C4] p-3">
+          <p className="mt-3 text-xs text-[#7A6220] bg-[#FAF3DF] border border-[#E7D9AE] p-3">
             {done.warning}
           </p>
         )}
@@ -67,7 +67,7 @@ export default function RequestRefundSheet({
     <ModalShell
       onClose={onClose} sharp size="sm" title="Request a refund"
       subtitle={studentName}
-      icon={<Undo2 size={15} />} iconClassName="bg-[#FBF6E9] text-[#8A6D1F]"
+      icon={<Undo2 size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
         <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
@@ -97,8 +97,8 @@ export default function RequestRefundSheet({
     >
       <div className="space-y-3">
         {stillOwing > 0 && (
-          <div className="p-3 bg-[#FBF6E9] border border-[#EFE3C4]">
-            <p className="text-xs text-[#7A5F16] leading-relaxed">
+          <div className="p-3 bg-[#FAF3DF] border border-[#E7D9AE]">
+            <p className="text-xs text-[#7A6220] leading-relaxed">
               This family still owes {inr(stillOwing, showAmounts)} on other bills. Refunding while
               a bill is open is sometimes right — a withdrawn student owed a deposit, say — but
               check it is what you mean.
@@ -124,7 +124,7 @@ export default function RequestRefundSheet({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-[#A1A1AA] leading-snug">
+          <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">
             Naming the receipt lets whoever approves it check the refund against what was taken.
           </p>
         </label>
@@ -136,7 +136,7 @@ export default function RequestRefundSheet({
                     className={`${ADMIN.inputPlain} resize-none mt-1`} />
         </label>
 
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )

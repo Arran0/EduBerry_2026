@@ -21,7 +21,7 @@ import { amountInWords } from '@/lib/fees/engine/words'
 
 const INK = '#27272A'
 const MUTED = '#71717A'
-const LINE = '#E4E4E7'
+const LINE = '#E3DFD3'
 
 export interface InvoiceDocLine {
   label: string

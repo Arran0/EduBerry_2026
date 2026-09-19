@@ -107,11 +107,11 @@ export default function FeeSearch({
     <ModalShell onClose={onClose} sharp size="lg" minHClass="sm:min-h-[30rem]"
                 title="Search the fee records"
                 subtitle="A name, a bill number, a receipt, a UTR, a cheque — or a question."
-                icon={<Search size={15} />} iconClassName="bg-[#F4F4F5] text-[#52525B]">
+                icon={<Search size={15} />} iconClassName="bg-[#F4F1E7] text-[#52525B]">
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
             <input value={term}
                    onChange={e => { setTerm(e.target.value); setAnswer(null) }}
                    onKeyDown={e => { if (e.key === 'Enter' && question) void ask() }}
@@ -127,34 +127,34 @@ export default function FeeSearch({
         </div>
 
         {question && !answer && (
-          <div className="flex items-start gap-2 p-3 bg-[#FBF6E9] border border-[#EFE3C4]">
-            <Sparkles size={13} className="text-[#8A6D1F] mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-[#7A5F16] leading-relaxed">
+          <div className="flex items-start gap-2 p-3 bg-[#FAF3DF] border border-[#E7D9AE]">
+            <Sparkles size={13} className="text-[#7A6220] mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-[#7A6220] leading-relaxed">
               Read as: <strong>{question.label}</strong>. Press Answer to run it.
             </p>
           </div>
         )}
 
         {term.trim().length >= 4 && !question && hits.length === 0 && !busy && (
-          <p className="text-xs text-[#A1A1AA] leading-relaxed">
+          <p className="text-xs text-[#8C8878] leading-relaxed">
             Nothing matched, and that did not read as a question I know. Try one of these:{' '}
             {EXAMPLES.map((ex, i) => (
               <React.Fragment key={ex}>
                 {i > 0 && ' · '}
                 <button onClick={() => setTerm(ex.replace(/’/g, "'"))}
-                        className="text-[#71717A] underline hover:text-[#27272A]">{ex}</button>
+                        className="text-[#6B675A] underline hover:text-[#18181B]">{ex}</button>
               </React.Fragment>
             ))}
           </p>
         )}
 
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
-        {note && <div className="p-3 bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">{note}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {note && <div className="p-3 bg-[#EAF5EE] border border-[#C6E3D2] text-xs text-[#1F6B42]">{note}</div>}
 
         {answer ? (
-          <div className="border border-[#E4E4E7]">
-            <div className="px-3 py-2 bg-[#FAFAFA] border-b border-[#E4E4E7] flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-[#27272A] flex-1">
+          <div className="border border-[#E3DFD3]">
+            <div className="px-3 py-2 bg-[#FAF8F2] border-b border-[#E3DFD3] flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[#18181B] flex-1">
                 {answer.label} · {answer.rows.length} row{answer.rows.length === 1 ? '' : 's'}
               </span>
               {canRemind && answer.studentIds.length > 0 && (
@@ -172,13 +172,13 @@ export default function FeeSearch({
             </div>
             <div className="max-h-[22rem] overflow-auto">
               {answer.rows.length === 0 ? (
-                <p className="px-3 py-8 text-sm text-[#A1A1AA] text-center">Nothing matched that.</p>
+                <p className="px-3 py-8 text-sm text-[#8C8878] text-center">Nothing matched that.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="bg-white sticky top-0">
-                    <tr className="text-[10px] uppercase tracking-widest text-[#A1A1AA]">
+                    <tr className="text-[10px] uppercase tracking-widest text-[#8C8878]">
                       {answer.columns.map(c => (
-                        <th key={c} className="text-left px-3 py-2 font-bold border-b border-[#E4E4E7]">
+                        <th key={c} className="text-left px-3 py-2 font-bold border-b border-[#E3DFD3]">
                           {c}
                         </th>
                       ))}
@@ -186,9 +186,9 @@ export default function FeeSearch({
                   </thead>
                   <tbody>
                     {answer.rows.map((row, i) => (
-                      <tr key={i} className="border-b border-[#F4F4F5] last:border-0">
+                      <tr key={i} className="border-b border-[#F0ECE2] last:border-0">
                         {answer.columns.map(c => (
-                          <td key={c} className="px-3 py-1.5 text-[#27272A]">
+                          <td key={c} className="px-3 py-1.5 text-[#18181B]">
                             {typeof row[c] === 'number'
                               ? row[c].toLocaleString('en-IN')
                               : String(row[c] ?? '')}
@@ -202,19 +202,19 @@ export default function FeeSearch({
             </div>
           </div>
         ) : hits.length > 0 ? (
-          <div className="border border-[#E4E4E7] max-h-[24rem] overflow-auto">
+          <div className="border border-[#E3DFD3] max-h-[24rem] overflow-auto">
             {hits.map(hit => {
               const Icon = ICONS[hit.kind]
               const href = hit.student_id ? `/more/fees/students/${hit.student_id}` : '/more/fees'
               return (
                 <Link key={`${hit.kind}-${hit.id}`} href={href} onClick={onClose}
-                      className="flex items-center gap-3 px-3 py-2 border-b border-[#F4F4F5]
-                                 last:border-0 hover:bg-[#FAFAFA]">
-                  <Icon size={14} className="text-[#A1A1AA] flex-shrink-0" />
-                  <span className="text-sm text-[#27272A] flex-1 min-w-0 truncate">{hit.title}</span>
-                  <span className="text-[11px] text-[#A1A1AA]">{hit.subtitle}</span>
+                      className="flex items-center gap-3 px-3 py-2 border-b border-[#F0ECE2]
+                                 last:border-0 hover:bg-[#FAF8F2]">
+                  <Icon size={14} className="text-[#8C8878] flex-shrink-0" />
+                  <span className="text-sm text-[#18181B] flex-1 min-w-0 truncate">{hit.title}</span>
+                  <span className="text-[11px] text-[#8C8878]">{hit.subtitle}</span>
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                                   bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]">
+                                   bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
                     {KIND_LABEL[hit.kind]}
                   </span>
                 </Link>

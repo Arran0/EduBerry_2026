@@ -17,6 +17,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { supabase } from '@/lib/supabase'
 import { fetchFeeConfig, setAutogen, type FeeConfigBundle } from '@/lib/fees/config'
@@ -86,130 +87,117 @@ function InvoicesInner() {
   }, [invoices, filter, query, names])
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see bills" />
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees" className="p-1.5 text-zinc-500 hover:text-zinc-300 flex-shrink-0">
-            <ArrowLeft size={16} />
-          </Link>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-              <FileText size={16} className="text-[#B8983C]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight">Bills</h1>
-              <p className="text-xs text-zinc-500">{invoices.length} issued for {year?.code}</p>
-            </div>
-          </div>
-          <YearScope tone="dark" />
+    <FeeScreen
+      title="Bills"
+      subtitle={<>{invoices.length} issued for {year?.code}</>}
+      icon={<FileText size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<YearScope />}
+    >
+      {error && (
+        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+      )}
+
+      {perms.can('fees.invoice.generate') && config && (
+        <GenerationPanel
+          config={config}
+          canAutogen={perms.can('fees.invoice.autogen')}
+          showAmounts={showAmounts}
+          generating={generating}
+          setGenerating={setGenerating}
+          onDone={() => void load()}
+          onError={setError}
+        />
+      )}
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
+          <input value={query} onChange={e => setQuery(e.target.value)}
+                 placeholder="Bill number or student" className={ADMIN.input} />
+        </div>
+        <div className="flex gap-1 flex-wrap">
+          {FILTERS.map(f => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+                    className={filter === f.key
+                      ? 'px-2.5 py-1.5 text-xs font-semibold bg-[#27272A] text-white'
+                      : 'px-2.5 py-1.5 text-xs font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
-        )}
-
-        {perms.can('fees.invoice.generate') && config && (
-          <GenerationPanel
-            config={config}
-            canAutogen={perms.can('fees.invoice.autogen')}
-            showAmounts={showAmounts}
-            generating={generating}
-            setGenerating={setGenerating}
-            onDone={() => void load()}
-            onError={setError}
-          />
-        )}
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
-            <input value={query} onChange={e => setQuery(e.target.value)}
-                   placeholder="Bill number or student" className={ADMIN.input} />
-          </div>
-          <div className="flex gap-1 flex-wrap">
-            {FILTERS.map(f => (
-              <button key={f.key} onClick={() => setFilter(f.key)}
-                      className={filter === f.key
-                        ? 'px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-[#27272A] text-white'
-                        : 'px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A]'}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+      {loading ? (
+        <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : filtered.length === 0 ? (
+        <div className={`${ADMIN.card} py-16 text-center`}>
+          <p className="text-sm text-[#8C8878]">
+            {invoices.length === 0 ? 'No bills issued yet this session.' : 'No bills match that.'}
+          </p>
         </div>
-
-        {loading ? (
-          <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : filtered.length === 0 ? (
-          <div className={`${ADMIN.card} py-16 text-center`}>
-            <p className="text-sm text-[#A1A1AA]">
-              {invoices.length === 0 ? 'No bills issued yet this session.' : 'No bills match that.'}
-            </p>
-          </div>
-        ) : (
-          <div className={`${ADMIN.card} overflow-hidden`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7]">
-                    <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Bill</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Student</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Due</th>
-                    <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Status</th>
-                    <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Total</th>
-                    <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Due</th>
-                    <th className="w-10" />
+      ) : (
+        <div className={`${ADMIN.card} overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Bill</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Student</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Due</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Status</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Total</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Due</th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 300).map(i => (
+                  <tr key={i.id} className="border-b border-[#F0ECE2] last:border-0 hover:bg-[#FAF8F2]">
+                    <td className="px-4 py-2.5 font-mono text-xs text-[#6B675A]">{i.number}</td>
+                    <td className="px-4 py-2.5">
+                      <Link href={`/more/fees/students/${i.student_id}`}
+                            className="text-[#18181B] hover:underline">
+                        {names.get(i.student_id) ?? '—'}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2.5 text-[#6B675A]">{fmtDate(i.due_date)}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                        {INVOICE_LABEL[i.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(i.net, showAmounts)}</td>
+                    <td className={`px-4 py-2.5 text-right font-semibold ${
+                      (i.balance ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
+                      {inr(i.balance, showAmounts)}
+                    </td>
+                    <td className="px-2">
+                      {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
+                        <button onClick={() => setCancelling(i)} title="Cancel this bill"
+                                className="p-1.5 text-[#C9C4B4] hover:text-[#A93232]">
+                          <Ban size={13} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.slice(0, 300).map(i => (
-                    <tr key={i.id} className="border-b border-[#F4F4F5] last:border-0 hover:bg-[#FAFAFA]">
-                      <td className="px-4 py-2.5 font-mono text-xs text-[#71717A]">{i.number}</td>
-                      <td className="px-4 py-2.5">
-                        <Link href={`/more/fees/students/${i.student_id}`}
-                              className="text-[#27272A] hover:underline">
-                          {names.get(i.student_id) ?? '—'}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5 text-[#71717A]">{fmtDate(i.due_date)}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
-                          {INVOICE_LABEL[i.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[#71717A]">{inr(i.net, showAmounts)}</td>
-                      <td className={`px-4 py-2.5 text-right font-semibold ${
-                        (i.balance ?? 0) > 0 ? 'text-amber-700' : 'text-[#A1A1AA]'}`}>
-                        {inr(i.balance, showAmounts)}
-                      </td>
-                      <td className="px-2">
-                        {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
-                          <button onClick={() => setCancelling(i)} title="Cancel this bill"
-                                  className="p-1.5 text-[#D4D4D8] hover:text-rose-500">
-                            <Ban size={13} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filtered.length > 300 && (
-              <p className="px-4 py-3 text-xs text-[#A1A1AA] border-t border-[#F4F4F5]">
-                Showing the first 300 of {filtered.length}. Narrow the search to see the rest.
-              </p>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+          {filtered.length > 300 && (
+            <p className="px-4 py-3 text-xs text-[#8C8878] border-t border-[#F0ECE2]">
+              Showing the first 300 of {filtered.length}. Narrow the search to see the rest.
+            </p>
+          )}
+        </div>
+      )}
+
 
       {cancelling && (
         <CancelDialog
@@ -219,7 +207,7 @@ function InvoicesInner() {
           onDone={() => { setCancelling(null); void load() }}
         />
       )}
-    </div>
+    </FeeScreen>
   )
 }
 
@@ -263,7 +251,7 @@ function GenerationPanel({
   if (rows.length === 0) {
     return (
       <div className={`${ADMIN.card} p-5`}>
-        <p className="text-sm text-[#71717A]">
+        <p className="text-sm text-[#6B675A]">
           No published structure has an installment to bill. Build the price list in{' '}
           <Link href="/more/fees/config" className="underline">Fee Configuration</Link>, then publish it.
         </p>
@@ -273,8 +261,8 @@ function GenerationPanel({
 
   return (
     <div className={`${ADMIN.card} p-4`}>
-      <h3 className="text-sm font-bold text-[#27272A] mb-1">Generate bills</h3>
-      <p className="text-xs text-[#A1A1AA] mb-3">
+      <h3 className="text-sm font-bold text-[#18181B] mb-1">Generate bills</h3>
+      <p className="text-xs text-[#8C8878] mb-3">
         Preview first — it counts exactly what a run would do without writing anything. Running
         twice never bills a family twice.
       </p>
@@ -284,13 +272,13 @@ function GenerationPanel({
           const p = preview[i.id]
           const busy = generating === i.id
           return (
-            <div key={i.id} className="border border-[#E4E4E7] rounded-lg p-3">
+            <div key={i.id} className="border border-[#E3DFD3] p-3">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex-1 min-w-[200px]">
-                  <div className="text-sm font-medium text-[#27272A]">
-                    {i.name} <span className="text-[#A1A1AA] font-normal">· {structureName(i.structure_id)}</span>
+                  <div className="text-sm font-medium text-[#18181B]">
+                    {i.name} <span className="text-[#8C8878] font-normal">· {structureName(i.structure_id)}</span>
                   </div>
-                  <div className="text-xs text-[#A1A1AA]">
+                  <div className="text-xs text-[#8C8878]">
                     due {fmtDate(i.due_date)}
                     {i.percent !== null ? ` · ${Number(i.percent)}% of the year` : ''}
                     {i.amount !== null ? ` · ${inr(i.amount, showAmounts)}` : ''}
@@ -305,8 +293,8 @@ function GenerationPanel({
                       : 'Generated by hand'}
                     className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
                       i.autogen_enabled
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-white text-[#A1A1AA] border border-[#E4E4E7] hover:border-[#A1A1AA]'
+                        ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                        : 'bg-white text-[#8C8878] border border-[#E3DFD3] hover:border-[#C9C4B4]'
                     }`}
                   >
                     {i.autogen_enabled ? `Auto −${i.autogen_days_before}d` : 'Manual'}
@@ -328,9 +316,9 @@ function GenerationPanel({
               </div>
 
               {p && (
-                <div className="mt-2.5 pt-2.5 border-t border-[#F4F4F5] text-xs text-[#71717A] space-y-1">
+                <div className="mt-2.5 pt-2.5 border-t border-[#F0ECE2] text-xs text-[#6B675A] space-y-1">
                   <p>
-                    <strong className="text-[#27272A]">{p.will_create}</strong> new bill
+                    <strong className="text-[#18181B]">{p.will_create}</strong> new bill
                     {p.will_create === 1 ? '' : 's'} at {inr(p.per_student, showAmounts)} each
                     {showAmounts && p.total_amount > 0 ? ` — ${inr(p.total_amount)} in total` : ''}.
                   </p>
@@ -345,7 +333,7 @@ function GenerationPanel({
                     <p>Skipping {p.skipped_joined_late} who joined after this term ended.</p>
                   )}
                   {p.will_create === 0 && (
-                    <p className="text-[#A1A1AA]">Nothing to do — everyone eligible already has this bill.</p>
+                    <p className="text-[#8C8878]">Nothing to do — everyone eligible already has this bill.</p>
                   )}
                 </div>
               )}
@@ -374,7 +362,7 @@ function CancelDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title={`Cancel ${invoice.number}`}>
       <div className="space-y-4">
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 rounded-lg flex items-start gap-2">
+        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-sm px-4 py-3 flex items-start gap-2">
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
           <span>
             This bill for {inr(invoice.net, showAmounts)} will be marked cancelled and stop counting
@@ -388,7 +376,7 @@ function CancelDialog({
                     className={`${ADMIN.inputPlain} resize-none`} autoFocus />
         </div>
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
         )}
         <div className="flex gap-2">
           <button onClick={() => void submit()} disabled={busy || reason.trim().length < 3}

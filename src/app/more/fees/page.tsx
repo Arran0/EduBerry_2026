@@ -19,13 +19,14 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   BadgePercent, BarChart3, ChevronRight, CreditCard, FileText, GraduationCap,
-  Layers, Loader2, Lock, MessageSquare, Settings, Timer, Wallet,
+  Layers, Lock, MessageSquare, Settings, Timer, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
-import { ADMIN, inr } from '@/components/fees/ui'
+import { inr } from '@/components/fees/ui'
+import { FeeScreen, StatStrip, Notice, Loading } from '@/components/fees/shell'
 import YearScope from '@/components/fees/config/YearScope'
 import StudentFeeCard from '@/components/fees/StudentFeeCard'
 import { isStaffRole } from '@/lib/supabase'
@@ -115,9 +116,13 @@ function FeesHub() {
 
   const staff = profile ? isStaffRole(profile.role) : false
   const showAmounts = !perms.amountsHidden
+  // Depend on the boolean, not on `perms`. The hook memoises its return now,
+  // but a dependency on a plain boolean cannot be broken by a later field
+  // being added to it.
+  const canSeeProfiles = perms.can('fees.profile.view')
 
   const load = useCallback(async () => {
-    if (!year || !staff || !perms.can('fees.profile.view')) { setLoading(false); return }
+    if (!year || !staff || !canSeeProfiles) { setLoading(false); return }
     setLoading(true)
     try {
       const [invoices, payments] = await Promise.all([
@@ -135,24 +140,22 @@ function FeesHub() {
     } finally {
       setLoading(false)
     }
-  }, [year, staff, perms])
+  }, [year, staff, canSeeProfiles])
 
   useEffect(() => { void load() }, [load])
 
-  if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-  }
+  if (perms.loading) return <Loading />
 
   // A student sees their own fees, not the module.
   if (!staff) return <StudentFeeCard />
 
   if (!perms.can('fees.view')) {
     return (
-      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center px-6">
+      <div className="min-h-screen bg-[#FDFCF9] flex items-center justify-center px-6">
         <div className="max-w-md text-center">
-          <Lock size={26} className="mx-auto text-[#D4D4D8] mb-3" />
-          <h2 className="text-base font-bold text-[#27272A]">Fees are not part of your role</h2>
-          <p className="text-sm text-[#71717A] mt-1">
+          <Lock size={26} className="mx-auto text-[#C9C4B4] mb-3" />
+          <h2 className="font-display text-base font-bold text-[#18181B]">Fees are not part of your role</h2>
+          <p className="text-[12.5px] text-[#8C8878] mt-1">
             An administrator can grant access in Admin Space → Fee Settings → Permissions.
           </p>
         </div>
@@ -163,82 +166,57 @@ function FeesHub() {
   const visible = TOOLS.filter(t => t.needs.some(k => perms.can(k)))
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-              <CreditCard size={16} className="text-[#B8983C]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight">Fees</h1>
-              <p className="text-xs text-zinc-500">Session {year?.code ?? '—'}</p>
-            </div>
-          </div>
-          <YearScope tone="dark" />
-        </div>
+    <FeeScreen
+      title="Fees"
+      subtitle={`Session ${year?.code ?? '—'}`}
+      icon={<CreditCard size={17} style={{ color: '#B8983C' }} />}
+      actions={<YearScope />}
+    >
+      {canSeeProfiles && (
+        <StatStrip
+          loading={loading}
+          stats={[
+            { label: 'Collected', value: inr(totals?.collected, showAmounts) },
+            { label: 'Outstanding', value: inr(totals?.outstanding, showAmounts),
+              tone: (totals?.outstanding ?? 0) > 0 ? '#7A6220' : undefined },
+            { label: 'Today', value: inr(totals?.today, showAmounts), strong: true },
+          ]}
+        />
+      )}
+
+      {perms.amountsHidden && (
+        <Notice>
+          Amounts are hidden for your account. The figures are not sent to this device at all,
+          so the counts and lists below are still complete.
+        </Notice>
+      )}
+
+      {/* Two up on a laptop, three on a wide monitor — the cards are short and
+          a single column of them on a 2,560px screen is mostly empty paper. */}
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-px bg-[#F0ECE2] border border-[#E3DFD3]">
+        {visible.map((tool, i) => {
+          const Icon = tool.icon
+          return (
+            <motion.div key={tool.href}
+                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}>
+              <Link href={tool.href}
+                    className="h-full bg-white hover:bg-[#FAF8F2] p-3.5 flex items-start gap-3
+ transition-colors group">
+                <div className="w-8 h-8 bg-[#F4F1E7] flex items-center justify-center flex-shrink-0">
+                  <Icon size={15} className="text-[#6B675A]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-bold text-[#18181B]">{tool.title}</div>
+                  <p className="text-[11px] text-[#8C8878] mt-0.5 leading-relaxed">{tool.description}</p>
+                </div>
+                <ChevronRight size={14} className="text-[#C9C4B4] group-hover:text-[#6B675A] mt-1 flex-shrink-0" />
+              </Link>
+            </motion.div>
+          )
+        })}
       </div>
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {perms.can('fees.profile.view') && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {loading ? (
-              [0, 1, 2].map(i => (
-                <div key={i} className={`${ADMIN.card} p-4 h-[74px] animate-pulse bg-[#FAFAFA]`} />
-              ))
-            ) : (
-              <>
-                <Headline label="Collected" value={inr(totals?.collected, showAmounts)} />
-                <Headline label="Outstanding" value={inr(totals?.outstanding, showAmounts)} tone="amber" />
-                <Headline label="Today" value={inr(totals?.today, showAmounts)} />
-              </>
-            )}
-          </div>
-        )}
-
-        {perms.amountsHidden && (
-          <p className="text-xs text-[#A1A1AA] -mt-2">
-            Amounts are hidden for your account. The figures are not sent to this device at all,
-            so the counts and lists below are still complete.
-          </p>
-        )}
-
-        <div className="grid sm:grid-cols-2 gap-3">
-          {visible.map((tool, i) => {
-            const Icon = tool.icon
-            return (
-              <motion.div key={tool.href}
-                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.04 }}>
-                <Link href={tool.href}
-                      className={`${ADMIN.card} p-4 flex items-start gap-3 hover:border-[#A1A1AA] transition-colors group`}>
-                  <div className="w-9 h-9 rounded-lg bg-[#F4F4F5] flex items-center justify-center flex-shrink-0">
-                    <Icon size={16} className="text-[#52525B]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-[#27272A]">{tool.title}</div>
-                    <p className="text-xs text-[#A1A1AA] mt-0.5 leading-relaxed">{tool.description}</p>
-                  </div>
-                  <ChevronRight size={15} className="text-[#D4D4D8] group-hover:text-[#71717A] mt-1 flex-shrink-0" />
-                </Link>
-              </motion.div>
-            )
-          })}
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
-function Headline({ label, value, tone }: { label: string; value: string; tone?: 'amber' }) {
-  return (
-    <div className={`${ADMIN.card} p-4`}>
-      <div className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{label}</div>
-      <div className={`text-xl font-bold mt-1 ${tone === 'amber' ? 'text-amber-700' : 'text-[#27272A]'}`}>
-        {value}
-      </div>
-    </div>
+    </FeeScreen>
   )
 }
 

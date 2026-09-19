@@ -1,21 +1,40 @@
 // Shared visual tokens for the Fee module.
 //
-// Deliberately the same zinc + honey-gold palette as the Salary Manager and the
-// Payroll module — see src/components/salary/adminUi.ts, whose own comment
-// already names the Fee Manager as part of the same system. Importing rather
-// than redefining is what keeps that true.
+// The Salary Manager's vocabulary, not a second one: warm paper surfaces,
+// hairline rules instead of shadow, and square corners so dense rows sit flush
+// against each other. See `src/components/salary/ui.tsx`, which this follows.
+//
+// `ADMIN` keeps the key names the fee screens already call — `card`, `label`,
+// `darkBtn` — and changes only what they resolve to. That is deliberate: it
+// re-skins nine screens and a dozen sheets from one place, and it leaves the
+// Salary Manager's own `ADMIN` (in adminUi.ts) untouched, so neither module
+// can restyle the other by accident.
 
-export { ADMIN, ADMIN_GOLD, SHARP } from '@/components/salary/adminUi'
+export { ADMIN_GOLD, SHARP } from '@/components/salary/adminUi'
+export { TONE, LABEL, BLEED } from '@/components/salary/ui'
+
+export const ADMIN = {
+  /** A raised surface. Square, hairlined, no shadow. */
+  card: 'bg-white border border-[#E3DFD3]',
+  /** Search input, with room for a leading icon and a trailing clear. */
+  input: 'w-full bg-white border border-[#E3DFD3] pl-8 pr-8 py-[7px] text-[12.5px] text-[#18181B] placeholder:text-[#A8A395] focus:outline-none focus:border-[#27272A] transition-colors',
+  /** Plain form field. */
+  inputPlain: 'w-full bg-white border border-[#E3DFD3] px-2.5 py-[7px] text-[12.5px] text-[#18181B] placeholder:text-[#A8A395] focus:outline-none focus:border-[#27272A] transition-colors',
+  /** The uppercase micro-label used for every field name and tile caption. */
+  label: 'text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]',
+  darkBtn: 'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+  ghostBtn: 'inline-flex items-center justify-center gap-1.5 bg-white text-[#52525B] hover:text-[#18181B] border border-[#E3DFD3] hover:border-[#C9C4B4] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+} as const
 
 export const GOLD = '#B8983C'
 
 /** Where an invoice sits in its life. */
 export const INVOICE_CHIP: Record<string, string> = {
-  draft:       'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
-  pending:     'bg-sky-50 text-sky-700 border border-sky-200',
-  partly_paid: 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]',
-  paid:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  overdue:     'bg-rose-50 text-rose-700 border border-rose-200',
+  draft:       'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
+  pending:     'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]',
+  partly_paid: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',
+  paid:        'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
+  overdue:     'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]',
   cancelled:   'bg-[#27272A] text-white border border-[#27272A]',
 }
 
@@ -25,9 +44,9 @@ export const INVOICE_LABEL: Record<string, string> = {
 }
 
 export const STRUCTURE_CHIP: Record<string, string> = {
-  draft:     'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
-  published: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  archived:  'bg-[#E4E4E7] text-[#52525B] border border-[#D4D4D8]',
+  draft:     'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
+  published: 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
+  archived:  'bg-[#E3DFD3] text-[#6B675A] border border-[#C9C4B4]',
 }
 
 /**

@@ -29,6 +29,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { daysBetween, todayIn } from '@/lib/fees/engine/dates'
@@ -172,164 +173,158 @@ function CollectionsInner() {
   }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see who owes fees" />
 
   const allShownSelected = shown.length > 0 && shown.every(f => selected.has(f.student.student_id))
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees" className="text-zinc-500 hover:text-white"><ArrowLeft size={16} /></Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-white tracking-tight">Collections</h1>
-            <p className="text-xs text-zinc-500">
-              {totals.families} famil{totals.families === 1 ? 'y' : 'ies'} owing · {totals.late} past due
-            </p>
-          </div>
-          <YearScope tone="dark" />
-        </div>
-      </div>
+    <FeeScreen
+      title="Collections"
+      subtitle={<>{totals.families} famil{totals.families === 1 ? 'y' : 'ies'} owing · {totals.late} past due</>}
+      icon={<MessageSquare size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<YearScope />}
+    >
+      <StatStrip
+        loading={loading}
+        stats={[
+          { label: 'Families owing', value: String(totals.families) },
+          { label: 'Outstanding', value: inr(totals.owed, showAmounts),
+            tone: totals.owed > 0 ? '#7A6220' : undefined, strong: true },
+          { label: 'Past due', value: String(totals.late) },
+          { label: 'No number', value: String(totals.unreachable) },
+        ]}
+      />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Families owing" value={String(totals.families)} />
-          <Stat label="Outstanding" value={inr(totals.owed, showAmounts)} tone="amber" />
-          <Stat label="Past due" value={String(totals.late)} />
-          <Stat label="No number" value={String(totals.unreachable)} />
-        </div>
+      <TabBar<Tab>
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'chase', label: 'Who to chase', icon: Users },
+          { key: 'log', label: 'Reminder log', icon: History },
+          { key: 'schedule', label: 'Automatic', icon: CalendarClock },
+        ]}
+      />
 
-        <div className="flex flex-wrap items-center gap-2">
-          {([
-            ['chase', 'Who to chase', Users],
-            ['log', 'Reminder log', History],
-            ['schedule', 'Automatic reminders', CalendarClock],
-          ] as [Tab, string, React.ElementType][]).map(([key, label, Icon]) => (
-            <button key={key} onClick={() => setTab(key)} className={tab === key ? tabOn : tabOff}>
-              <Icon size={13} /> {label}
+      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+
+      {loading ? (
+        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : tab === 'chase' ? (
+        <div className={ADMIN.card}>
+          <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
+            <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
+                    className="bg-white border border-[#E3DFD3] px-2 py-1.5 text-xs text-[#18181B]
+                               focus:outline-none focus:border-[#27272A]">
+              <option value="">Every class</option>
+              {classes.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button
+              onClick={() => setSelected(allShownSelected
+                ? new Set()
+                : new Set(shown.filter(f => f.contactable).map(f => f.student.student_id)))}
+              className={ADMIN.ghostBtn}>
+              {allShownSelected ? 'Clear' : `Select these ${shown.length}`}
             </button>
-          ))}
-        </div>
+            <div className="flex-1" />
+            {canRemind && (
+              <>
+                <button onClick={() => setScheduleFor(Array.from(selected))}
+                        disabled={selected.size === 0} className={ADMIN.ghostBtn}>
+                  <CalendarClock size={13} /> Send later
+                </button>
+                <button onClick={() => void remind(Array.from(selected))}
+                        disabled={sending || selected.size === 0} className={ADMIN.darkBtn}>
+                  {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  Remind {selected.size || ''}
+                </button>
+              </>
+            )}
+          </div>
 
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
-
-        {loading ? (
-          <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : tab === 'chase' ? (
-          <div className={ADMIN.card}>
-            <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex flex-wrap items-center gap-2">
-              <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
-                      className="bg-white border border-[#E4E4E7] px-2 py-1.5 text-xs text-[#27272A]
-                                 focus:outline-none focus:border-[#27272A]">
-                <option value="">Every class</option>
-                {classes.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button
-                onClick={() => setSelected(allShownSelected
-                  ? new Set()
-                  : new Set(shown.filter(f => f.contactable).map(f => f.student.student_id)))}
-                className={ADMIN.ghostBtn}>
-                {allShownSelected ? 'Clear' : `Select these ${shown.length}`}
-              </button>
-              <div className="flex-1" />
+          {shown.length === 0 ? (
+            <p className="px-4 py-10 text-sm text-[#8C8878]">
+              Nobody owes anything{klass ? ` in ${klass}` : ''}. That is worth saying out loud.
+            </p>
+          ) : shown.map(f => (
+            <div key={f.student.student_id}
+                 className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
+              <input type="checkbox" checked={selected.has(f.student.student_id)}
+                     disabled={!f.contactable}
+                     onChange={e => setSelected(s => {
+                       const next = new Set(s)
+                       if (e.target.checked) next.add(f.student.student_id)
+                       else next.delete(f.student.student_id)
+                       return next
+                     })} />
+              <div className="flex-1 min-w-[190px]">
+                <Link href={`/more/fees/students/${f.student.student_id}`}
+                      className="text-sm text-[#18181B] hover:underline">
+                  {f.student.full_name}
+                </Link>
+                <div className="text-[11px] text-[#8C8878]">
+                  {gradeLabel(f.student.grade)}{f.student.section ?? ''}
+                  {' · '}{f.bills.length} bill{f.bills.length === 1 ? '' : 's'}
+                  {f.lastReminded
+                    ? ` · last reminded ${fmtDate(f.lastReminded.slice(0, 10))}`
+                    : ' · never reminded'}
+                </div>
+              </div>
+              {!f.contactable && (
+                <span title="No number on file, or opted out"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase
+                                 tracking-wider px-2 py-0.5 bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                  <PhoneOff size={10} /> No number
+                </span>
+              )}
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${lateChip(f.daysLate)}`}>
+                {f.daysLate > 0 ? `${f.daysLate}d late` : f.daysLate === 0 ? 'Due today' : `In ${-f.daysLate}d`}
+              </span>
+              <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+                {inr(f.owed, showAmounts)}
+              </span>
               {canRemind && (
-                <>
-                  <button onClick={() => setScheduleFor(Array.from(selected))}
-                          disabled={selected.size === 0} className={ADMIN.ghostBtn}>
-                    <CalendarClock size={13} /> Send later
-                  </button>
-                  <button onClick={() => void remind(Array.from(selected))}
-                          disabled={sending || selected.size === 0} className={ADMIN.darkBtn}>
-                    {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    Remind {selected.size || ''}
-                  </button>
-                </>
+                <button onClick={() => void remind([f.student.student_id])}
+                        disabled={sending || !f.contactable}
+                        title={f.contactable ? 'Remind this family now' : 'No number on file'}
+                        className={ADMIN.ghostBtn}>
+                  <Bell size={13} /> Remind
+                </button>
               )}
             </div>
+          ))}
+        </div>
+      ) : tab === 'log' ? (
+        <ReminderLog rows={log} people={people} showAmounts={showAmounts} />
+      ) : (
+        <Schedules
+          rows={schedules}
+          yearId={year?.id ?? ''}
+          canEdit={perms.can('fees.settings.manage')}
+          onChanged={load}
+        />
+      )}
 
-            {shown.length === 0 ? (
-              <p className="px-4 py-10 text-sm text-[#A1A1AA]">
-                Nobody owes anything{klass ? ` in ${klass}` : ''}. That is worth saying out loud.
-              </p>
-            ) : shown.map(f => (
-              <div key={f.student.student_id}
-                   className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
-                <input type="checkbox" checked={selected.has(f.student.student_id)}
-                       disabled={!f.contactable}
-                       onChange={e => setSelected(s => {
-                         const next = new Set(s)
-                         if (e.target.checked) next.add(f.student.student_id)
-                         else next.delete(f.student.student_id)
-                         return next
-                       })} />
-                <div className="flex-1 min-w-[190px]">
-                  <Link href={`/more/fees/students/${f.student.student_id}`}
-                        className="text-sm text-[#27272A] hover:underline">
-                    {f.student.full_name}
-                  </Link>
-                  <div className="text-[11px] text-[#A1A1AA]">
-                    {gradeLabel(f.student.grade)}{f.student.section ?? ''}
-                    {' · '}{f.bills.length} bill{f.bills.length === 1 ? '' : 's'}
-                    {f.lastReminded
-                      ? ` · last reminded ${fmtDate(f.lastReminded.slice(0, 10))}`
-                      : ' · never reminded'}
-                  </div>
-                </div>
-                {!f.contactable && (
-                  <span title="No number on file, or opted out"
-                        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase
-                                   tracking-wider px-2 py-0.5 bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]">
-                    <PhoneOff size={10} /> No number
-                  </span>
-                )}
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${lateChip(f.daysLate)}`}>
-                  {f.daysLate > 0 ? `${f.daysLate}d late` : f.daysLate === 0 ? 'Due today' : `In ${-f.daysLate}d`}
-                </span>
-                <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
-                  {inr(f.owed, showAmounts)}
-                </span>
-                {canRemind && (
-                  <button onClick={() => void remind([f.student.student_id])}
-                          disabled={sending || !f.contactable}
-                          title={f.contactable ? 'Remind this family now' : 'No number on file'}
-                          className={ADMIN.ghostBtn}>
-                    <Bell size={13} /> Remind
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : tab === 'log' ? (
-          <ReminderLog rows={log} people={people} showAmounts={showAmounts} />
-        ) : (
-          <Schedules
-            rows={schedules}
-            yearId={year?.id ?? ''}
-            canEdit={perms.can('fees.settings.manage')}
-            onChanged={load}
-          />
-        )}
-      </div>
 
       {sent && (
         <ModalShell onClose={() => setSent(null)} sharp size="sm" title="Reminders queued"
-                    icon={<MessageSquare size={15} />} iconClassName="bg-emerald-50 text-emerald-700">
-          <p className="text-sm text-[#27272A]">
+                    icon={<MessageSquare size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
+          <p className="text-sm text-[#18181B]">
             <strong>{sent.queued}</strong> message{sent.queued === 1 ? '' : 's'} queued
             out of {sent.considered} bill{sent.considered === 1 ? '' : 's'}.
           </p>
           {Object.keys(sent.skipped ?? {}).length > 0 && (
             <ul className="mt-3 space-y-1">
               {Object.entries(sent.skipped).map(([reason, count]) => (
-                <li key={reason} className="text-xs text-[#71717A]">
+                <li key={reason} className="text-xs text-[#6B675A]">
                   {count} skipped — {SKIP_REASONS[reason] ?? SKIP_REASONS.unknown}
                 </li>
               ))}
             </ul>
           )}
-          <p className="mt-3 text-[11px] text-[#A1A1AA] leading-relaxed">
+          <p className="mt-3 text-[11px] text-[#8C8878] leading-relaxed">
             Queued, not yet delivered. The sender picks them up within the minute; the log shows
             delivery and read receipts as WhatsApp reports them.
           </p>
@@ -353,17 +348,15 @@ function CollectionsInner() {
           }}
         />
       )}
-    </div>
+    </FeeScreen>
   )
 }
 
-const tabOn = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[#27272A] text-white'
-const tabOff = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A]'
 
 function lateChip(days: number): string {
-  if (days > 30) return 'bg-rose-50 text-rose-700 border border-rose-200'
-  if (days > 0) return 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]'
-  return 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'
+  if (days > 30) return 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
+  if (days > 0) return 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
+  return 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'
 }
 
 /**
@@ -380,35 +373,23 @@ function templateFor(families: Family[], studentIds: string[], today: string): s
   return anyOverdue ? 'fee_reminder_overdue' : 'fee_reminder_due'
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'amber' }) {
-  return (
-    <div className={`${ADMIN.card} p-4`}>
-      <div className={ADMIN.label}>{label}</div>
-      <div className={`text-lg font-bold mt-0.5 ${tone === 'amber' ? 'text-amber-700' : 'text-[#27272A]'}`}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
-// ── The log ───────────────────────────────────────────────────────────────
 function ReminderLog({
   rows, people, showAmounts,
 }: { rows: ReminderLogRow[]; people: ProfileListRow[]; showAmounts: boolean }) {
   const name = (id: string) => people.find(p => p.student_id === id)?.full_name ?? 'Student'
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5]">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2]">
         <h3 className={ADMIN.label}>Every reminder sent</h3>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">No reminders have gone out yet.</p>
+        <p className="px-4 py-8 text-sm text-[#8C8878]">No reminders have gone out yet.</p>
       ) : rows.map(r => (
         <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
+             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
           <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#27272A]">{name(r.student_id)}</div>
-            <div className="text-[11px] text-[#A1A1AA]">
+            <div className="text-sm text-[#18181B]">{name(r.student_id)}</div>
+            <div className="text-[11px] text-[#8C8878]">
               {fmtDate((r.sent_at ?? r.created_at).slice(0, 10))}
               {r.msisdn ? ` · ${maskNumber(r.msisdn)}` : ''}
               {r.balance_then !== null ? ` · owed ${inr(r.balance_then, showAmounts)} then` : ''}
@@ -416,7 +397,7 @@ function ReminderLog({
           </div>
           {r.paid_at && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                             bg-emerald-50 text-emerald-700 border border-emerald-200">
+                             bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
               Paid after
             </span>
           )}
@@ -430,30 +411,30 @@ function ReminderLog({
 /** WhatsApp reports sent, then delivered, then read. Show the furthest reached. */
 function DeliveryState({ row }: { row: ReminderLogRow }) {
   if (row.failed_at) {
-    return <span className="inline-flex items-center gap-1 text-[11px] text-rose-700">Failed</span>
+    return <span className="inline-flex items-center gap-1 text-[11px] text-[#A93232]">Failed</span>
   }
   if (row.read_at) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-sky-700">
+      <span className="inline-flex items-center gap-1 text-[11px] text-[#3A5490]">
         <CheckCheck size={12} /> Read
       </span>
     )
   }
   if (row.delivered_at) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-[#71717A]">
+      <span className="inline-flex items-center gap-1 text-[11px] text-[#6B675A]">
         <CheckCheck size={12} /> Delivered
       </span>
     )
   }
   if (row.sent_at) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-[#A1A1AA]">
+      <span className="inline-flex items-center gap-1 text-[11px] text-[#8C8878]">
         <Check size={12} /> Sent
       </span>
     )
   }
-  return <span className="text-[11px] text-[#A1A1AA]">Queued</span>
+  return <span className="text-[11px] text-[#8C8878]">Queued</span>
 }
 
 /** Last four digits only — the log is read by more people than the profile is. */
@@ -501,7 +482,7 @@ function Schedules({
 
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Automatic reminders</h3>
         {canEdit && rows.length === 0 && (
           <button onClick={() => void create()} disabled={busy === 'new'} className={ADMIN.ghostBtn}>
@@ -510,15 +491,15 @@ function Schedules({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">
+        <p className="px-4 py-8 text-sm text-[#8C8878]">
           No schedule. Reminders only go out when somebody presses Remind.
         </p>
       ) : rows.map(r => (
-        <div key={r.id} className="px-4 py-3 border-b border-[#F4F4F5] last:border-0">
+        <div key={r.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[220px]">
-              <div className="text-sm font-semibold text-[#27272A]">{r.name}</div>
-              <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+              <div className="text-sm font-semibold text-[#18181B]">{r.name}</div>
+              <p className="text-[11px] text-[#8C8878] mt-0.5">
                 {describeOffsets(r.offsets)} · at {r.send_at.slice(0, 5)}
                 {r.quiet_days.length > 0
                   ? ` · never on ${r.quiet_days.map(d => DAY_NAMES[d] ?? d).join(', ')}`
@@ -528,8 +509,8 @@ function Schedules({
             </div>
             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
               r.enabled
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
+                ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
               {r.enabled ? 'On' : 'Off'}
             </span>
             {canEdit && (
@@ -542,7 +523,7 @@ function Schedules({
           </div>
         </div>
       ))}
-      <p className="px-4 py-2.5 text-[11px] text-[#A1A1AA] border-t border-[#F4F4F5] leading-relaxed">
+      <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2] leading-relaxed">
         One respectful message, sent on each of these days. It does not get sterner the longer a
         bill is unpaid — a family in difficulty is not helped by a harsher wording, and the school
         asked for it that way.
@@ -579,14 +560,14 @@ function SendLaterDialog({
 
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Send these later"
-                icon={<CalendarClock size={15} />} iconClassName="bg-[#FBF6E9] text-[#8A6D1F]">
-      <p className="text-sm text-[#71717A] leading-relaxed">
+                icon={<CalendarClock size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]">
+      <p className="text-sm text-[#6B675A] leading-relaxed">
         {count} famil{count === 1 ? 'y' : 'ies'}. The messages are queued now and held until this
         time; anyone who pays in between is skipped when the queue runs.
       </p>
       <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
              className={`${ADMIN.inputPlain} mt-3`} />
-      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
       <div className="flex items-center justify-end gap-2 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button

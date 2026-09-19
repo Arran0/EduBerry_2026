@@ -35,13 +35,13 @@ export function EfficiencyBar({
     <div className={`${ADMIN.card} p-4`}>
       <div className="flex items-baseline justify-between gap-3">
         <span className={ADMIN.label}>Collection efficiency</span>
-        <span className="text-xl font-bold text-[#27272A]">
+        <span className="text-xl font-bold text-[#18181B]">
           {efficiency === null ? '—' : `${efficiency}%`}
         </span>
       </div>
 
-      <div className="relative mt-3 h-3 bg-[#F4F4F5]">
-        <div className={`h-full ${ahead ? 'bg-emerald-500' : 'bg-[#B8983C]'}`}
+      <div className="relative mt-3 h-3 bg-[#F4F1E7]">
+        <div className={`h-full ${ahead ? 'bg-[#EAF5EE]0' : 'bg-[#B8983C]'}`}
              style={{ width: `${pct}%` }} />
         {marker !== null && (
           <div className="absolute top-[-4px] bottom-[-4px] w-px bg-[#27272A]"
@@ -50,7 +50,7 @@ export function EfficiencyBar({
         )}
       </div>
 
-      <p className="mt-2 text-[11px] text-[#71717A] leading-relaxed">
+      <p className="mt-2 text-[11px] text-[#6B675A] leading-relaxed">
         {marker === null
           ? 'Set the session start and end dates to see how this compares with the calendar.'
           : efficiency === null
@@ -77,7 +77,7 @@ export function AgingCliff({ rows, showAmounts }: { rows: AgingRow[]; showAmount
     <div className={`${ADMIN.card} p-4`}>
       <div className="flex items-center justify-between">
         <span className={ADMIN.label}>How late the dues are</span>
-        <span className="text-[11px] text-[#A1A1AA]">Bar height is the number of bills</span>
+        <span className="text-[11px] text-[#8C8878]">Bar height is the number of bills</span>
       </div>
 
       <div className="mt-4 flex items-end gap-2 h-40">
@@ -88,12 +88,12 @@ export function AgingCliff({ rows, showAmounts }: { rows: AgingRow[]; showAmount
           const late = bucket !== 'not_yet_due'
           return (
             <div key={bucket} className="flex-1 flex flex-col items-center justify-end h-full">
-              <span className="text-[11px] font-semibold text-[#27272A] mb-1">
+              <span className="text-[11px] font-semibold text-[#18181B] mb-1">
                 {bills || ''}
               </span>
               <div className={
-                    bills === 0 ? 'w-full bg-[#F4F4F5]'
-                      : bucket === 'd90_plus' ? 'w-full bg-rose-500'
+                    bills === 0 ? 'w-full bg-[#F4F1E7]'
+                      : bucket === 'd90_plus' ? 'w-full bg-[#FCECEC]0'
                       : late ? 'w-full bg-[#B8983C]'
                       : 'w-full bg-[#D4D4D8]'}
                    title={`${AGING_LABEL[bucket]} · ${bills} bills`}
@@ -108,8 +108,8 @@ export function AgingCliff({ rows, showAmounts }: { rows: AgingRow[]; showAmount
           const row = byBucket.get(bucket)
           return (
             <div key={bucket} className="flex-1 text-center">
-              <div className="text-[10px] text-[#71717A] leading-tight">{AGING_LABEL[bucket]}</div>
-              <div className="text-[11px] font-semibold text-[#27272A]">
+              <div className="text-[10px] text-[#6B675A] leading-tight">{AGING_LABEL[bucket]}</div>
+              <div className="text-[11px] font-semibold text-[#18181B]">
                 {row ? inr(row.outstanding, showAmounts) : '—'}
               </div>
             </div>
@@ -141,7 +141,7 @@ export function DefaulterHeatmap({
   if (sorted.length === 0) {
     return (
       <div className={`${ADMIN.card} p-8 text-center`}>
-        <p className="text-sm text-[#A1A1AA]">Nothing outstanding in any class.</p>
+        <p className="text-sm text-[#8C8878]">Nothing outstanding in any class.</p>
       </div>
     )
   }
@@ -150,7 +150,7 @@ export function DefaulterHeatmap({
     <div className={`${ADMIN.card} p-4`}>
       <div className="flex items-center justify-between">
         <span className={ADMIN.label}>Where the dues are</span>
-        <span className="text-[11px] text-[#A1A1AA]">Darker is more students owing</span>
+        <span className="text-[11px] text-[#8C8878]">Darker is more students owing</span>
       </div>
 
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
@@ -160,15 +160,15 @@ export function DefaulterHeatmap({
             <button key={`${r.grade}-${r.section}`}
                     onClick={onPick ? () => onPick(r) : undefined}
                     title={`${r.students_owing} students, ${r.bills} bills`}
-                    className="p-2 text-left border border-[#E4E4E7] hover:border-[#27272A] transition-colors"
+                    className="p-2 text-left border border-[#E3DFD3] hover:border-[#27272A] transition-colors"
                     style={{ backgroundColor: heat(intensity) }}>
-              <div className={`text-xs font-bold ${intensity > 0.55 ? 'text-white' : 'text-[#27272A]'}`}>
+              <div className={`text-xs font-bold ${intensity > 0.55 ? 'text-white' : 'text-[#18181B]'}`}>
                 {gradeLabel(r.grade)}{r.section ?? ''}
               </div>
-              <div className={`text-[10px] ${intensity > 0.55 ? 'text-white/80' : 'text-[#71717A]'}`}>
+              <div className={`text-[10px] ${intensity > 0.55 ? 'text-white/80' : 'text-[#6B675A]'}`}>
                 {r.students_owing} owing
               </div>
-              <div className={`text-[11px] font-semibold ${intensity > 0.55 ? 'text-white' : 'text-[#27272A]'}`}>
+              <div className={`text-[11px] font-semibold ${intensity > 0.55 ? 'text-white' : 'text-[#18181B]'}`}>
                 {inr(r.outstanding, showAmounts)}
               </div>
             </button>
@@ -229,7 +229,7 @@ export function CollectionCalendar({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={ADMIN.label}>Every day of the session</span>
         {best && (
-          <span className="text-[11px] text-[#71717A]">
+          <span className="text-[11px] text-[#6B675A]">
             Busiest day {best[0]} · {best[1].receipts} receipts
             {best[1].collected !== null && ` · ${inr(best[1].collected, showAmounts)}`}
           </span>
@@ -253,7 +253,7 @@ export function CollectionCalendar({
           })}
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-[#A1A1AA]">
+      <p className="mt-2 text-[11px] text-[#8C8878]">
         One square per day, top to bottom by week. Darker squares are busier counters.
       </p>
     </div>

@@ -26,6 +26,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
 import { gradeLabel } from '@/lib/grades'
@@ -95,67 +96,56 @@ function ConcessionsInner() {
   const granted = concessions.filter(c => c.status === 'applied' || c.status === 'approved')
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!canApply && !canApprove && !canScholarship) {
     return <NoAccess what="work with concessions" />
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees" className="text-zinc-500 hover:text-white"><ArrowLeft size={16} /></Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-white tracking-tight">Concessions</h1>
-            <p className="text-xs text-zinc-500">
-              {pending.length > 0 ? `${pending.length} waiting for a decision` : 'Nothing waiting'}
-            </p>
-          </div>
-          {canApply && (
+    <FeeScreen
+      title="Concessions"
+      subtitle={<>{pending.length > 0 ? `${pending.length} waiting for a decision` : 'Nothing waiting'}</>}
+      icon={<BadgePercent size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<>{canApply && (
             <button onClick={() => setApplying(true)}
-                    className="flex items-center gap-1.5 bg-[#3F3F46] hover:bg-[#52525B] text-white
-                               text-xs font-semibold px-3 py-2 rounded-lg">
+                    className="inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A]
+                               text-[10.5px] font-bold uppercase tracking-[0.08em] px-2.5 py-[7px]">
               <Plus size={13} /> Apply one
             </button>
-          )}
-          <YearScope tone="dark" />
-        </div>
-      </div>
+          )}<YearScope /></>}
+    >
+      <TabBar<Tab>
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'queue', label: 'Waiting', icon: Inbox, badge: pending.length },
+          { key: 'granted', label: 'Granted', icon: Check },
+          { key: 'types', label: 'Discount types', icon: BadgePercent },
+          { key: 'scholarships', label: 'Scholarships', icon: Award },
+        ]}
+      />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {([
-            ['queue', pending.length ? `Waiting (${pending.length})` : 'Waiting', Inbox],
-            ['granted', 'Granted', Check],
-            ['types', 'Discount types', BadgePercent],
-            ['scholarships', 'Scholarships', Award],
-          ] as [Tab, string, React.ElementType][]).map(([key, label, Icon]) => (
-            <button key={key} onClick={() => setTab(key)} className={tab === key ? tabOn : tabOff}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
+      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
 
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
+      {loading ? (
+        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : tab === 'queue' ? (
+        <Queue rows={pending} names={names} types={types} scholarships={scholarships}
+               showAmounts={showAmounts} canApprove={canApprove} onDecided={load} />
+      ) : tab === 'granted' ? (
+        <Granted rows={granted} names={names} types={types} scholarships={scholarships}
+                 showAmounts={showAmounts} canRemove={canApprove}
+                 onRemove={setRemoving} />
+      ) : tab === 'types' ? (
+        <Types rows={types} showAmounts={showAmounts} canEdit={canScholarship || canApprove}
+               onEdit={setEditingType} />
+      ) : (
+        <Scholarships rows={scholarships} showAmounts={showAmounts} canEdit={canScholarship}
+                      onEdit={setEditingScholarship} />
+      )}
 
-        {loading ? (
-          <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : tab === 'queue' ? (
-          <Queue rows={pending} names={names} types={types} scholarships={scholarships}
-                 showAmounts={showAmounts} canApprove={canApprove} onDecided={load} />
-        ) : tab === 'granted' ? (
-          <Granted rows={granted} names={names} types={types} scholarships={scholarships}
-                   showAmounts={showAmounts} canRemove={canApprove}
-                   onRemove={setRemoving} />
-        ) : tab === 'types' ? (
-          <Types rows={types} showAmounts={showAmounts} canEdit={canScholarship || canApprove}
-                 onEdit={setEditingType} />
-        ) : (
-          <Scholarships rows={scholarships} showAmounts={showAmounts} canEdit={canScholarship}
-                        onEdit={setEditingScholarship} />
-        )}
-      </div>
 
       {applying && year && (
         <ApplyConcessionSheet
@@ -197,12 +187,10 @@ function ConcessionsInner() {
           onDone={() => { setRemoving(null); void load() }}
         />
       )}
-    </div>
+    </FeeScreen>
   )
 }
 
-const tabOn = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[#27272A] text-white'
-const tabOff = 'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A]'
 
 function label(
   row: ConcessionRow, types: DiscountTypeRow[], scholarships: ScholarshipRow[],
@@ -242,33 +230,33 @@ function Queue({
 
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5]">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2]">
         <h3 className={ADMIN.label}>Waiting for a decision</h3>
       </div>
-      {error && <p className="px-4 py-2 text-xs text-rose-700 bg-rose-50">{error}</p>}
+      {error && <p className="px-4 py-2 text-xs text-[#A93232] bg-[#FCECEC]">{error}</p>}
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">
+        <p className="px-4 py-8 text-sm text-[#8C8878]">
           Nothing waiting. Concessions under their type&rsquo;s threshold apply straight away and
           never reach this list.
         </p>
       ) : rows.map(r => (
         <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F4F4F5] last:border-0">
+             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
           <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold text-[#27272A]">
+            <div className="text-sm font-semibold text-[#18181B]">
               {names.get(r.student_id)?.full_name ?? 'Student'}
-              <span className="font-normal text-[#A1A1AA]">
+              <span className="font-normal text-[#8C8878]">
                 {' · '}{gradeLabel(names.get(r.student_id)?.grade ?? null)}
                 {names.get(r.student_id)?.section ?? ''}
               </span>
             </div>
-            <div className="text-[11px] text-[#A1A1AA] mt-0.5">
+            <div className="text-[11px] text-[#8C8878] mt-0.5">
               {label(r, types, scholarships)}
               {r.reason ? ` · ${r.reason}` : ''}
               {' · asked '}{fmtDate(r.created_at.slice(0, 10))}
             </div>
           </div>
-          <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
+          <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
             {inr(r.amount, showAmounts)}
           </span>
           {canApprove ? (
@@ -282,12 +270,12 @@ function Queue({
               </button>
             </div>
           ) : (
-            <span className="text-[11px] text-[#A1A1AA]">Waiting on an approver</span>
+            <span className="text-[11px] text-[#8C8878]">Waiting on an approver</span>
           )}
         </div>
       ))}
       {canApprove && rows.length > 0 && (
-        <p className="px-4 py-2.5 text-[11px] text-[#A1A1AA] border-t border-[#F4F4F5]">
+        <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
           You cannot approve a request you made yourself — the server refuses it, so a second
           person always signs off.
         </p>
@@ -311,25 +299,25 @@ function Granted({
   const total = rows.reduce((a, r) => a + Number(r.amount ?? 0), 0)
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Granted this session</h3>
-        <span className="text-xs text-[#71717A]">
+        <span className="text-xs text-[#6B675A]">
           {rows.length} · {inr(total, showAmounts)} given up
         </span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">No concessions granted yet.</p>
+        <p className="px-4 py-8 text-sm text-[#8C8878]">No concessions granted yet.</p>
       ) : rows.map(r => (
         <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F4F4F5] last:border-0">
+             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
           <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#27272A]">{names.get(r.student_id)?.full_name ?? 'Student'}</div>
-            <div className="text-[11px] text-[#A1A1AA]">
+            <div className="text-sm text-[#18181B]">{names.get(r.student_id)?.full_name ?? 'Student'}</div>
+            <div className="text-[11px] text-[#8C8878]">
               {label(r, types, scholarships)}
               {r.approved_at ? ` · approved ${fmtDate(r.approved_at.slice(0, 10))}` : ''}
             </div>
           </div>
-          <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
+          <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
             {inr(r.amount, showAmounts)}
           </span>
           {canRemove && (
@@ -352,22 +340,22 @@ function Types({
 }) {
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Discount types</h3>
         {canEdit && (
           <button onClick={() => onEdit('new')} className={ADMIN.ghostBtn}><Plus size={13} /> New type</button>
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">
+        <p className="px-4 py-8 text-sm text-[#8C8878]">
           No discount types. Staff can still grant a one-off waiver, which always needs approval.
         </p>
       ) : rows.map(t => (
         <div key={t.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F4F4F5] last:border-0">
+             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
           <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold text-[#27272A]">{t.name}</div>
-            <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+            <div className="text-sm font-semibold text-[#18181B]">{t.name}</div>
+            <p className="text-[11px] text-[#8C8878] mt-0.5">
               {t.mode === 'percent' ? `${t.value}% off` : `${inr(t.value, showAmounts)} off`}
               {t.scope === 'heads' ? ` · ${t.head_ids.length} head${t.head_ids.length === 1 ? '' : 's'} only` : ' · the whole bill'}
               {t.approval_threshold !== null
@@ -378,8 +366,8 @@ function Types({
           </div>
           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
             t.active
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-              : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
+              ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+              : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
             {t.active ? 'Active' : 'Off'}
           </span>
           {canEdit && <button onClick={() => onEdit(t)} className={ADMIN.ghostBtn}>Edit</button>}
@@ -400,45 +388,45 @@ function Scholarships({
 }) {
   return (
     <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F4F4F5] flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Scholarships</h3>
         {canEdit && (
           <button onClick={() => onEdit('new')} className={ADMIN.ghostBtn}><Plus size={13} /> New scholarship</button>
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#A1A1AA]">No scholarships this session.</p>
+        <p className="px-4 py-8 text-sm text-[#8C8878]">No scholarships this session.</p>
       ) : rows.map(s => {
         const used = Number(s.awarded ?? 0)
         const budget = s.annual_budget === null ? null : Number(s.annual_budget)
         const pct = budget && budget > 0 ? Math.min(100, Math.round((used / budget) * 100)) : null
         const over = budget !== null && used > budget
         return (
-          <div key={s.id} className="px-4 py-3 border-b border-[#F4F4F5] last:border-0">
+          <div key={s.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex-1 min-w-[200px]">
-                <div className="text-sm font-semibold text-[#27272A]">{s.name}</div>
-                <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+                <div className="text-sm font-semibold text-[#18181B]">{s.name}</div>
+                <p className="text-[11px] text-[#8C8878] mt-0.5">
                   {s.funder ?? 'Funded by the school'}
                   {s.seats !== null ? ` · ${s.recipients ?? 0} of ${s.seats} seats` : ''}
                 </p>
               </div>
-              <span className={`text-sm font-semibold w-40 text-right ${over ? 'text-rose-700' : 'text-[#27272A]'}`}>
+              <span className={`text-sm font-semibold w-40 text-right ${over ? 'text-[#A93232]' : 'text-[#18181B]'}`}>
                 {inr(used, showAmounts)}
                 {budget !== null && (
-                  <span className="text-[#A1A1AA] font-normal"> of {inr(budget, showAmounts)}</span>
+                  <span className="text-[#8C8878] font-normal"> of {inr(budget, showAmounts)}</span>
                 )}
               </span>
               {canEdit && <button onClick={() => onEdit(s)} className={ADMIN.ghostBtn}>Edit</button>}
             </div>
             {pct !== null && (
-              <div className="mt-2 h-1.5 bg-[#F4F4F5] overflow-hidden">
-                <div className={`h-full ${over ? 'bg-rose-500' : 'bg-[#B8983C]'}`}
+              <div className="mt-2 h-1.5 bg-[#F4F1E7] overflow-hidden">
+                <div className={`h-full ${over ? 'bg-[#FCECEC]0' : 'bg-[#B8983C]'}`}
                      style={{ width: `${pct}%` }} />
               </div>
             )}
             {over && (
-              <p className="mt-1.5 text-[11px] text-rose-700">
+              <p className="mt-1.5 text-[11px] text-[#A93232]">
                 Awarded past the budget. Nothing stops this, but somebody has to fund it.
               </p>
             )}
@@ -470,7 +458,7 @@ function TypeEditor({
 
   return (
     <ModalShell onClose={onClose} sharp size="md" title={row ? 'Edit discount type' : 'New discount type'}
-                icon={<BadgePercent size={15} />} iconClassName="bg-[#FBF6E9] text-[#8A6D1F]"
+                icon={<BadgePercent size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
                 footer={
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
@@ -535,24 +523,24 @@ function TypeEditor({
                  onChange={e => set('approval_threshold', e.target.value === '' ? null : Number(e.target.value))}
                  placeholder="Blank means every one needs approval"
                  className={`${ADMIN.inputPlain} mt-1`} />
-          <p className="mt-1 text-[11px] text-[#A1A1AA] leading-snug">
+          <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">
             Below this a clerk&rsquo;s concession applies straight away. Above it, it waits in the
             queue. Set it to 0 to send everything to the queue.
           </p>
         </label>
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-xs text-[#27272A]">
+          <label className="flex items-center gap-2 text-xs text-[#18181B]">
             <input type="checkbox" checked={form.stackable ?? false}
                    onChange={e => set('stackable', e.target.checked)} />
             Can stack with another discount
           </label>
-          <label className="flex items-center gap-2 text-xs text-[#27272A]">
+          <label className="flex items-center gap-2 text-xs text-[#18181B]">
             <input type="checkbox" checked={form.active ?? true}
                    onChange={e => set('active', e.target.checked)} />
             Active
           </label>
         </div>
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -577,7 +565,7 @@ function ScholarshipEditor({
 
   return (
     <ModalShell onClose={onClose} sharp size="sm" title={row ? 'Edit scholarship' : 'New scholarship'}
-                icon={<Award size={15} />} iconClassName="bg-[#FBF6E9] text-[#8A6D1F]"
+                icon={<Award size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
                 footer={
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
@@ -632,12 +620,12 @@ function ScholarshipEditor({
                    placeholder="No limit" className={`${ADMIN.inputPlain} mt-1`} />
           </label>
         </div>
-        <label className="flex items-center gap-2 text-xs text-[#27272A]">
+        <label className="flex items-center gap-2 text-xs text-[#18181B]">
           <input type="checkbox" checked={form.active ?? true}
                  onChange={e => set('active', e.target.checked)} />
           Active
         </label>
-        {error && <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-800">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -657,15 +645,15 @@ function RemoveDialog({
 
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Remove this concession"
-                icon={<X size={15} />} iconClassName="bg-rose-50 text-rose-600">
-      <p className="text-sm text-[#71717A] leading-relaxed">
+                icon={<X size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
+      <p className="text-sm text-[#6B675A] leading-relaxed">
         {inr(row.amount, showAmounts)} comes off the discount and back onto the bill. The family
         will owe that much more, so make sure somebody has told them.
       </p>
       <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder="Why — this goes on the audit trail."
                 className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
-      {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
       <div className="flex items-center justify-end gap-2 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button

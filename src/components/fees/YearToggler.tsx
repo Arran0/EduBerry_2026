@@ -26,13 +26,13 @@ export default function YearToggler({ years, value, onChange, tone = 'dark' }: P
   const onLight = tone === 'light'
   const shell = onLight
     ? 'bg-white/15 border-white/25 text-white backdrop-blur-sm'
-    : 'bg-white border-[#E4E4E7] text-[#27272A]'
+    : 'bg-white border-[#E3DFD3] text-[#18181B]'
   const btn = onLight
     ? 'text-white/80 hover:text-white hover:bg-white/15 disabled:opacity-30'
-    : 'text-[#A8896B] hover:text-[#27272A] hover:bg-[#F4F2EC] disabled:opacity-30'
+    : 'text-[#A8896B] hover:text-[#18181B] hover:bg-[#F4F2EC] disabled:opacity-30'
 
   return (
-    <div className={`inline-flex items-center rounded-lg border shadow-sm overflow-hidden ${shell}`}>
+    <div className={`inline-flex items-center border shadow-sm overflow-hidden ${shell}`}>
       <button
         type="button"
         aria-label="Previous year"
@@ -49,7 +49,7 @@ export default function YearToggler({ years, value, onChange, tone = 'dark' }: P
           className="bg-transparent focus:outline-none cursor-pointer text-xs font-bold tracking-wide appearance-none text-center px-1.5 py-2"
         >
           {options.map(y => (
-            <option key={y} value={y} className="text-[#27272A]">{y}</option>
+            <option key={y} value={y} className="text-[#18181B]">{y}</option>
           ))}
         </select>
       </div>

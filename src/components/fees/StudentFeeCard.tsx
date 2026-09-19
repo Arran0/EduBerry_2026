@@ -167,7 +167,7 @@ export default function StudentFeeCard() {
         )}
 
         {totals.savings > 0 && (
-          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
+          <p className="text-xs text-[#1F6B42] bg-[#EAF5EE] border border-emerald-100 px-4 py-3">
             {money(totals.savings)} of your fees has been covered by discounts, scholarships or
             waivers the school has given you.
           </p>
@@ -188,13 +188,13 @@ export default function StudentFeeCard() {
                       <div className="text-sm font-semibold text-slate-800">
                         {inv.number}
                         {inv.status === 'cancelled' && (
-                          <span className="ml-2 text-xs font-normal text-rose-600">cancelled</span>
+                          <span className="ml-2 text-xs font-normal text-[#A93232]">cancelled</span>
                         )}
                       </div>
                       <div className="text-xs text-slate-400">Due {fmtDate(inv.due_date)}</div>
                     </div>
                     <div className="text-right">
-                      <div className={`text-sm font-bold ${paid ? 'text-emerald-600' : 'text-slate-800'}`}>
+                      <div className={`text-sm font-bold ${paid ? 'text-[#1F6B42]' : 'text-slate-800'}`}>
                         {paid ? 'Paid' : money(inv.balance)}
                       </div>
                       {!paid && (inv.paid ?? 0) > 0 && (
@@ -210,10 +210,10 @@ export default function StudentFeeCard() {
                       <div className="space-y-1">
                         {lines.filter(l => l.invoice_id === inv.id).map(l => (
                           <div key={l.id} className="flex justify-between text-sm">
-                            <span className={l.amount < 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                            <span className={l.amount < 0 ? 'text-[#1F6B42]' : 'text-slate-500'}>
                               {l.label}
                             </span>
-                            <span className={l.amount < 0 ? 'text-emerald-600' : 'text-slate-700'}>
+                            <span className={l.amount < 0 ? 'text-[#1F6B42]' : 'text-slate-700'}>
                               {l.amount < 0 ? `− ${money(Math.abs(l.amount))}` : money(l.amount)}
                             </span>
                           </div>
@@ -244,7 +244,7 @@ export default function StudentFeeCard() {
                       )}
 
                       <button onClick={() => void downloadInvoice(inv)}
-                              className="w-full text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg py-2 inline-flex items-center justify-center gap-1.5">
+                              className="w-full text-xs text-slate-500 hover:text-slate-700 border border-slate-200 py-2 inline-flex items-center justify-center gap-1.5">
                         <Download size={12} /> Download this bill
                       </button>
                     </div>
@@ -277,7 +277,7 @@ function Row({
       <span className={`text-sm ${strong ? 'font-bold text-slate-800' : 'text-slate-500'}`}>{label}</span>
       <span className={`text-sm ${
         strong ? 'font-bold text-slate-900 text-base'
-        : tone === 'emerald' ? 'text-emerald-600 font-medium'
+        : tone === 'emerald' ? 'text-[#1F6B42] font-medium'
         : 'text-slate-700 font-medium'}`}>
         {value}
       </span>

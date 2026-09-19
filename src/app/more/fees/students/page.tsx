@@ -17,6 +17,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
@@ -73,124 +74,113 @@ function StudentsInner() {
   }), [filtered])
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see student fee profiles" />
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees" className="p-1.5 text-zinc-500 hover:text-zinc-300 flex-shrink-0">
-            <ArrowLeft size={16} />
-          </Link>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-              <GraduationCap size={16} className="text-[#B8983C]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight">Student Fees</h1>
-              <p className="text-xs text-zinc-500">
-                {rows.length} fee {rows.length === 1 ? 'profile' : 'profiles'} for {year?.code}
-              </p>
-            </div>
-          </div>
-          <YearScope tone="dark" />
+    <FeeScreen
+      title="Student Fees"
+      subtitle={<>{rows.length} fee {rows.length === 1 ? 'profile' : 'profiles'} for {year?.code}</>}
+      icon={<GraduationCap size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<YearScope />}
+    >
+      <StatStrip
+        loading={loading}
+        stats={[
+          { label: 'Billed', value: inr(totals.billed, showAmounts) },
+          { label: 'Collected', value: inr(totals.paid, showAmounts) },
+          { label: 'Outstanding', value: inr(totals.due, showAmounts),
+            tone: totals.due > 0 ? '#7A6220' : undefined, strong: true },
+          { label: 'Families with dues', value: String(totals.withDues) },
+        ]}
+      />
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
+          <input value={query} onChange={e => setQuery(e.target.value)}
+                 placeholder="Name or admission number" className={ADMIN.input} />
         </div>
+        <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}
+                className={`${ADMIN.inputPlain} w-40`}>
+          <option value="">Every class</option>
+          {grades.map(g => <option key={g} value={String(g)}>{gradeLabel(g as number)}</option>)}
+        </select>
+        {perms.can('fees.profile.create') && (
+          <button onClick={() => setCreating(true)} className={ADMIN.darkBtn}>
+            <UserPlus size={13} /> Create profiles
+          </button>
+        )}
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Stat label="Billed" value={inr(totals.billed, showAmounts)} />
-          <Stat label="Collected" value={inr(totals.paid, showAmounts)} />
-          <Stat label="Outstanding" value={inr(totals.due, showAmounts)} tone="amber" />
-          <Stat label="Families with dues" value={String(totals.withDues)} />
-        </div>
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
-            <input value={query} onChange={e => setQuery(e.target.value)}
-                   placeholder="Name or admission number" className={ADMIN.input} />
-          </div>
-          <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}
-                  className={`${ADMIN.inputPlain} w-40`}>
-            <option value="">Every class</option>
-            {grades.map(g => <option key={g} value={String(g)}>{gradeLabel(g as number)}</option>)}
-          </select>
+      {loading ? (
+        <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : rows.length === 0 ? (
+        <div className={`${ADMIN.card} py-16 text-center px-6`}>
+          <p className="text-sm text-[#6B675A] max-w-md mx-auto">
+            No fee profiles exist for {year?.code} yet. A profile is a student&rsquo;s account for
+            the session — nothing can be billed or collected until they have one.
+          </p>
           {perms.can('fees.profile.create') && (
-            <button onClick={() => setCreating(true)} className={ADMIN.darkBtn}>
-              <UserPlus size={13} /> Create profiles
+            <button onClick={() => setCreating(true)} className={`${ADMIN.darkBtn} mt-4 mx-auto`}>
+              <UserPlus size={13} /> Create them now
             </button>
           )}
         </div>
-
-        {loading ? (
-          <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : rows.length === 0 ? (
-          <div className={`${ADMIN.card} py-16 text-center px-6`}>
-            <p className="text-sm text-[#71717A] max-w-md mx-auto">
-              No fee profiles exist for {year?.code} yet. A profile is a student&rsquo;s account for
-              the session — nothing can be billed or collected until they have one.
-            </p>
-            {perms.can('fees.profile.create') && (
-              <button onClick={() => setCreating(true)} className={`${ADMIN.darkBtn} mt-4 mx-auto`}>
-                <UserPlus size={13} /> Create them now
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className={`${ADMIN.card} overflow-hidden`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7]">
-                    <Th>Student</Th><Th>Class</Th><Th>Group</Th>
-                    <Th right>Billed</Th><Th right>Paid</Th><Th right>Due</Th>
+      ) : (
+        <div className={`${ADMIN.card} overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
+                  <Th>Student</Th><Th>Class</Th><Th>Group</Th>
+                  <Th right>Billed</Th><Th right>Paid</Th><Th right>Due</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => (
+                  <tr key={r.id} className="border-b border-[#F0ECE2] last:border-0 hover:bg-[#FAF8F2]">
+                    <td className="px-4 py-2.5">
+                      <Link href={`/more/fees/students/${r.student_id}`}
+                            className="font-medium text-[#18181B] hover:underline">
+                        {r.full_name}
+                      </Link>
+                      {r.admission_no && (
+                        <span className="text-xs text-[#8C8878] ml-2">{r.admission_no}</span>
+                      )}
+                      {r.is_rte && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
+                          RTE
+                        </span>
+                      )}
+                      {!r.structure_id && !r.is_rte && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">
+                          No structure
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#6B675A]">
+                      {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#6B675A]">
+                      {groups.find(g => g.id === r.fee_group_id)?.name ?? '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(r.billed, showAmounts)}</td>
+                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(r.paid, showAmounts)}</td>
+                    <td className={`px-4 py-2.5 text-right font-semibold ${
+                      (r.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
+                      {inr(r.outstanding, showAmounts)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(r => (
-                    <tr key={r.id} className="border-b border-[#F4F4F5] last:border-0 hover:bg-[#FAFAFA]">
-                      <td className="px-4 py-2.5">
-                        <Link href={`/more/fees/students/${r.student_id}`}
-                              className="font-medium text-[#27272A] hover:underline">
-                          {r.full_name}
-                        </Link>
-                        {r.admission_no && (
-                          <span className="text-xs text-[#A1A1AA] ml-2">{r.admission_no}</span>
-                        )}
-                        {r.is_rte && (
-                          <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
-                            RTE
-                          </span>
-                        )}
-                        {!r.structure_id && !r.is_rte && (
-                          <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                            No structure
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-[#71717A]">
-                        {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
-                      </td>
-                      <td className="px-4 py-2.5 text-[#71717A]">
-                        {groups.find(g => g.id === r.fee_group_id)?.name ?? '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[#71717A]">{inr(r.billed, showAmounts)}</td>
-                      <td className="px-4 py-2.5 text-right text-[#71717A]">{inr(r.paid, showAmounts)}</td>
-                      <td className={`px-4 py-2.5 text-right font-semibold ${
-                        (r.outstanding ?? 0) > 0 ? 'text-amber-700' : 'text-[#A1A1AA]'}`}>
-                        {inr(r.outstanding, showAmounts)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
 
       {creating && year && (
         <CreateProfilesDialog
@@ -201,27 +191,16 @@ function StudentsInner() {
           onDone={() => { setCreating(false); void load() }}
         />
       )}
-    </div>
+    </FeeScreen>
   )
 }
 
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A] ${
+    <th className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A] ${
       right ? 'text-right' : 'text-left'}`}>
       {children}
     </th>
-  )
-}
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'amber' }) {
-  return (
-    <div className={`${ADMIN.card} p-4`}>
-      <div className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{label}</div>
-      <div className={`text-xl font-bold mt-1 ${tone === 'amber' ? 'text-amber-700' : 'text-[#27272A]'}`}>
-        {value}
-      </div>
-    </div>
   )
 }
 
@@ -304,7 +283,7 @@ function CreateProfilesDialog({
                 <option key={g.id} value={g.id}>{g.name}{g.is_default ? ' (default)' : ''}</option>
               ))}
             </select>
-            <p className="text-xs text-[#A1A1AA] mt-1.5">
+            <p className="text-xs text-[#8C8878] mt-1.5">
               A student already assigned to a group keeps it — a bulk run never sweeps someone out
               of RTE or Staff Ward.
             </p>
@@ -312,22 +291,22 @@ function CreateProfilesDialog({
         </div>
 
         {preview && (
-          <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg p-4 space-y-1.5">
-            <p className="text-sm font-semibold text-[#27272A]">
+          <div className="bg-[#FAF8F2] border border-[#E3DFD3] p-4 space-y-1.5">
+            <p className="text-sm font-semibold text-[#18181B]">
               Will create {preview.created} profile{preview.created === 1 ? '' : 's'}
             </p>
             {preview.skipped_existing > 0 && (
-              <p className="text-xs text-[#71717A]">
+              <p className="text-xs text-[#6B675A]">
                 Skipping {preview.skipped_existing} who already have one for this session.
               </p>
             )}
             {preview.rte > 0 && (
-              <p className="text-xs text-[#71717A]">
+              <p className="text-xs text-[#6B675A]">
                 {preview.rte} are RTE — they get a profile but will not be billed.
               </p>
             )}
             {preview.without_structure > 0 && (
-              <p className="text-xs text-amber-700 flex items-start gap-1.5">
+              <p className="text-xs text-[#7A6220] flex items-start gap-1.5">
                 <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
                 {preview.without_structure} have no published structure covering their class.
                 They can be created now, but nothing can be billed to them until one exists.
@@ -337,7 +316,7 @@ function CreateProfilesDialog({
         )}
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
         )}
 
         <div className="flex gap-2">

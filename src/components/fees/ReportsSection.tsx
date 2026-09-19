@@ -16,9 +16,9 @@ import {
 
 const StatementPreviewModal = dynamic(() => import('./statements/StatementPreviewModal'))
 
-const card = 'bg-white border border-[#E4E4E7] rounded-xl'
-const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50'
-const label = 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]'
+const card = 'bg-white border border-[#E3DFD3] '
+const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 transition-colors disabled:opacity-50'
+const label = 'text-[10px] font-bold uppercase tracking-widest text-[#6B675A]'
 
 interface Props {
   year: string
@@ -140,7 +140,7 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
   const hrSelect = (value: string, onChange: (v: string) => void) => (
     <div className="relative">
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="appearance-none bg-white border border-[#E4E4E7] rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+        className="appearance-none bg-white border border-[#E3DFD3] pl-3 pr-8 py-1.5 text-xs font-semibold text-[#18181B] focus:outline-none focus:border-[#27272A] transition-colors">
         <option value="all">All homerooms</option>
         {homerooms.map(h => (
           <option key={h.id} value={h.id}>{h.name}{homeroomGradeSectionBadge(h) ? ` · ${homeroomGradeSectionBadge(h)}` : ''}</option>
@@ -163,21 +163,21 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
           </button>
         </div>
         {breakdown.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-4">No fees recorded this year.</p>
+          <p className="text-sm text-[#8C8878] text-center py-4">No fees recorded this year.</p>
         ) : (
-          <div className="border border-[#E4E4E7] rounded-lg overflow-hidden">
+          <div className="border border-[#E3DFD3] overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#27272A] text-left">
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Fee head</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Billed</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Collected</th>
-                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right">Outstanding</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#8C8878]">Fee head</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#8C8878] text-right">Billed</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#8C8878] text-right">Collected</th>
+                  <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#8C8878] text-right">Outstanding</th>
                 </tr>
               </thead>
               <tbody>
                 {breakdown.map(b => (
-                  <tr key={b.head} className="border-b border-[#F4F4F5] last:border-0 hover:bg-[#FAFAFA]">
+                  <tr key={b.head} className="border-b border-[#F0ECE2] last:border-0 hover:bg-[#FAF8F2]">
                     <td className="px-3 py-2.5 text-[#18181B] font-medium truncate max-w-[180px]">{b.head}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-[#52525B]">{formatINR(b.billed)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-[#16A34A]">{formatINR(b.paid)}</td>
@@ -205,15 +205,15 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
           </div>
         </div>
         {defaulters.length === 0 ? (
-          <p className="text-sm text-[#A1A1AA] text-center py-4">No defaulters{defHr !== 'all' ? ' in this homeroom' : ''}.</p>
+          <p className="text-sm text-[#8C8878] text-center py-4">No defaulters{defHr !== 'all' ? ' in this homeroom' : ''}.</p>
         ) : (
-          <div className="border border-[#E4E4E7] rounded-lg overflow-hidden divide-y divide-[#F4F4F5] max-h-80 overflow-y-auto">
+          <div className="border border-[#E3DFD3] overflow-hidden divide-y divide-[#F0ECE2] max-h-80 overflow-y-auto">
             {defaulters.map(d => (
-              <div key={d.student?.id ?? Math.random()} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#FAFAFA]">
+              <div key={d.student?.id ?? Math.random()} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#FAF8F2]">
                 <Avatar avatarUrl={d.student?.avatar_url} name={d.student?.full_name ?? '?'} size={28} userId={d.student?.id} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#18181B] truncate">{d.student?.full_name ?? 'Unknown'}</p>
-                  <p className="text-[11px] text-[#A1A1AA]">
+                  <p className="text-[11px] text-[#8C8878]">
                     {d.student?.grade != null ? `Grade ${d.student.grade}${d.student.section ? ` ${d.student.section}` : ''} · ` : ''}{d.count} fee{d.count === 1 ? '' : 's'} due
                   </p>
                 </div>
@@ -236,20 +236,20 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
 
         {!picked ? (
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878] pointer-events-none" />
             <input value={query} onChange={e => setQuery(e.target.value)}
               placeholder={stmtHr === 'all' ? 'Search a student by name or email…' : 'Search within this homeroom…'}
-              className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A]" />
+              className="w-full bg-white border border-[#E3DFD3] pl-9 pr-3 py-2.5 text-sm text-[#18181B] placeholder:text-[#8C8878] focus:outline-none focus:border-[#27272A]" />
             {query && (
-              <div className="mt-1.5 border border-[#E4E4E7] rounded-lg overflow-hidden divide-y divide-[#F4F4F5]">
+              <div className="mt-1.5 border border-[#E3DFD3] overflow-hidden divide-y divide-[#F0ECE2]">
                 {results.length === 0 ? (
-                  <p className="text-sm text-[#A1A1AA] text-center py-3">No matching student.</p>
+                  <p className="text-sm text-[#8C8878] text-center py-3">No matching student.</p>
                 ) : results.map(s => (
                   <button key={s.id} onClick={() => { setPicked(s); setQuery('') }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 bg-white hover:bg-[#FAFAFA] text-left transition-colors">
+                    className="w-full flex items-center gap-2.5 px-3 py-2 bg-white hover:bg-[#FAF8F2] text-left transition-colors">
                     <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={28} userId={s.id} />
                     <span className="flex-1 min-w-0 text-sm font-medium text-[#18181B] truncate">{s.full_name}</span>
-                    {s.grade != null && <span className="text-[11px] text-[#A1A1AA] flex-shrink-0">Grade {s.grade}{s.section ? ` ${s.section}` : ''}</span>}
+                    {s.grade != null && <span className="text-[11px] text-[#8C8878] flex-shrink-0">Grade {s.grade}{s.section ? ` ${s.section}` : ''}</span>}
                   </button>
                 ))}
               </div>
@@ -257,13 +257,13 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2.5 mb-3 p-2 rounded-lg bg-[#FAFAFA] border border-[#E4E4E7]">
+            <div className="flex items-center gap-2.5 mb-3 p-2 bg-[#FAF8F2] border border-[#E3DFD3]">
               <Avatar avatarUrl={picked.avatar_url} name={picked.full_name} size={32} userId={picked.id} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-[#18181B] truncate">{picked.full_name}</p>
-                <p className="text-[11px] text-[#A1A1AA] truncate">{pickedFees.length} fee{pickedFees.length === 1 ? '' : 's'} · {year}</p>
+                <p className="text-[11px] text-[#8C8878] truncate">{pickedFees.length} fee{pickedFees.length === 1 ? '' : 's'} · {year}</p>
               </div>
-              <button onClick={() => setPicked(null)} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg">
+              <button onClick={() => setPicked(null)} className="p-1.5 text-[#8C8878] hover:text-[#18181B] hover:bg-[#F4F1E7] ">
                 <X size={15} />
               </button>
             </div>
@@ -275,7 +275,7 @@ export default function ReportsSection({ year, fees, homerooms, focusNonce }: Pr
               <DocButton busy={busy === 'n'} disabled={!noDue} onClick={() => openPreview('n', `No-Due Certificate · ${picked.full_name}`, () => buildNoDue(picked, year))} icon={<BadgeCheck size={16} />} label="No-Due" title={noDue ? 'Preview No-Due Certificate' : 'Blocked — outstanding dues exist'} />
             </div>
             {!noDue && (
-              <p className="text-[11px] text-[#A1A1AA] mt-2.5">No-Due Certificate unlocks once all dues for {year} are cleared.</p>
+              <p className="text-[11px] text-[#8C8878] mt-2.5">No-Due Certificate unlocks once all dues for {year} are cleared.</p>
             )}
           </>
         )}
@@ -297,10 +297,10 @@ function DocButton({ icon, label, onClick, busy, disabled, title }: {
   const off = disabled
   return (
     <button onClick={onClick} disabled={busy || disabled} title={title}
-      className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl border text-xs font-semibold transition-all ${
+      className={`flex flex-col items-center justify-center gap-1.5 py-3.5 border text-xs font-semibold transition-all ${
         off
-          ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
-          : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
+          ? 'bg-[#FAF8F2] border-[#E3DFD3] text-[#C4C4C8] cursor-not-allowed'
+          : 'bg-white border-[#E3DFD3] text-[#18181B] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
       }`}>
       <span className={off ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{icon}</span>
       {busy ? '…' : label}

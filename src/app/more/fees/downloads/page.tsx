@@ -130,7 +130,7 @@ export default function DownloadCenterPage() {
                 {paidFees.map(f => (
                   <div key={f.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl page-accent-bg flex items-center justify-center flex-shrink-0 page-accent-text">
+                      <div className="w-10 h-10 page-accent-bg flex items-center justify-center flex-shrink-0 page-accent-text">
                         <Receipt size={18} />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -142,7 +142,7 @@ export default function DownloadCenterPage() {
                       <button
                         disabled={busy === `r-${f.id}`}
                         onClick={() => openPreview(`r-${f.id}`, 'Fee Receipt', () => buildFeeReceipt(f, student))}
-                        className="flex-shrink-0 flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+                        className="flex-shrink-0 flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 transition-colors disabled:opacity-50"
                       >
                         <Receipt size={13} /> Receipt
                       </button>

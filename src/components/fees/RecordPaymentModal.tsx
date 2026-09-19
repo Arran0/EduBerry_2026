@@ -60,16 +60,16 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
         <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-slate-100 rounded-lg"><Wallet size={16} className="text-slate-700" /></div>
+            <div className="p-1.5 bg-slate-100 "><Wallet size={16} className="text-slate-700" /></div>
             <h2 className="font-bold text-slate-800">Record payment</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ">
             <X size={16} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+          <div className="bg-slate-50 border border-slate-100 p-3">
             <p className="text-sm font-semibold text-slate-800 truncate">{fee.description || fee.fee_head?.name || 'School fee'}</p>
             <p className="text-xs text-slate-400 truncate">
               Billed {formatINR(fee.amount)}
@@ -84,7 +84,7 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
                 const on = method === m
                 return (
                   <button key={m} type="button" onClick={() => setMethod(m)}
-                    className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                    className={`py-2 text-xs font-semibold border transition-colors ${
                       on ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}>
                     {METHOD_LABELS[m]}
@@ -106,8 +106,8 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
           </div>
 
           {valid && (
-            <div className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-medium ${
-              willBePartial ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+            <div className={`flex items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium ${
+              willBePartial ? 'bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220]' : 'bg-[#EAF5EE] border border-[#C6E3D2] text-[#1F6B42]'
             }`}>
               <span>{willBePartial ? `Short by ${formatINR(remaining - amt)} → stays Partial` : 'Clears the balance → marks as Paid'}</span>
               <span className="font-bold uppercase tracking-wide">{willBePartial ? 'Partial' : 'Paid'}</span>
@@ -115,7 +115,7 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
           )}
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
@@ -123,7 +123,7 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
             <button onClick={submit} disabled={saving}
-              className="flex-1 text-sm font-semibold py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
+              className="flex-1 text-sm font-semibold py-2 bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
               {saving ? 'Recording…' : 'Record payment'}
             </button>
           </div>
@@ -133,7 +133,7 @@ export default function RecordPaymentModal({ fee, paid = 0, onClose, onRecorded 
   )
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
+const inputCls = 'w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

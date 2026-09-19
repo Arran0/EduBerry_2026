@@ -21,6 +21,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, STRUCTURE_CHIP, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
   cloneFeeYear, createStructure, deleteHead, deleteInstallment, deleteStructure,
@@ -61,15 +62,15 @@ function FeeConfigInner() {
   useEffect(() => { void load() }, [load])
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
 
   if (!perms.can('fees.view')) {
     return (
       <div className="max-w-md mx-auto mt-20 text-center px-6">
-        <AlertTriangle size={26} className="mx-auto text-[#D4D4D8] mb-3" />
-        <h2 className="text-base font-bold text-[#27272A]">No access to fees</h2>
-        <p className="text-sm text-[#71717A] mt-1">
+        <AlertTriangle size={26} className="mx-auto text-[#C9C4B4] mb-3" />
+        <h2 className="text-base font-bold text-[#18181B]">No access to fees</h2>
+        <p className="text-sm text-[#6B675A] mt-1">
           Your account does not hold the &ldquo;Open the fee module&rdquo; permission. An
           administrator can grant it in Admin Space → Fee Settings → Permissions.
         </p>
@@ -78,91 +79,65 @@ function FeeConfigInner() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-          <div className="flex items-center gap-4">
-            <Link href="/more/fees" className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0">
-              <ArrowLeft size={16} />
-            </Link>
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-                <Layers size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base font-bold text-white tracking-tight">Fee Configuration</h1>
-                <p className="text-xs text-zinc-500">
-                  The price list for {year?.code ?? 'this session'} — set it up once, then clone it forward
-                </p>
-              </div>
-            </div>
-            <YearScope tone="dark" />
-          </div>
+    <FeeScreen
+      title="Fee Configuration"
+      subtitle={<>The price list for {year?.code ?? 'this session'} — set it up once, then clone it forward</>}
+      icon={<Layers size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees', label: 'Fees' }}
+      actions={<YearScope />}
+    >
+      {!canEdit && (
+        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-sm px-4 py-3 ">
+          You can see the price list but not change it — that needs the &ldquo;Edit the price
+          list&rdquo; permission.
         </div>
-      </div>
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {!canEdit && (
-          <div className="bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] text-sm px-4 py-3 rounded-lg">
-            You can see the price list but not change it — that needs the &ldquo;Edit the price
-            list&rdquo; permission.
-          </div>
-        )}
+      {error && (
+        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+      )}
 
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
-        )}
+      {perms.can('fees.config.clone_year') && years.length > 1 && year && (
+        <CloneCard currentYearId={year.id} onDone={() => void load()} />
+      )}
 
-        {perms.can('fees.config.clone_year') && years.length > 1 && year && (
-          <CloneCard currentYearId={year.id} onDone={() => void load()} />
-        )}
+      <TabBar
+        active={section}
+        onChange={setSection}
+        tabs={[
+          { key: 'structures', label: 'Structures', icon: Receipt },
+          { key: 'heads', label: 'Fee heads', icon: FolderTree },
+          { key: 'groups', label: 'Groups', icon: Users },
+        ]}
+      />
 
-        <div className="flex gap-1.5">
-          {([['structures', 'Structures', Receipt],
-             ['heads', 'Fee heads', FolderTree],
-             ['groups', 'Groups', Users]] as const).map(([key, label, Icon]) => (
-            <button
-              key={key}
-              onClick={() => setSection(key)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                section === key
-                  ? 'bg-[#27272A] text-white'
-                  : 'bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A]'
-              }`}
-            >
-              <Icon size={13} /> {label}
-            </button>
-          ))}
+      {loading ? (
+        <div className={`${ADMIN.card} p-10 flex items-center justify-center gap-2 text-sm text-[#6B675A]`}>
+          <Loader2 size={16} className="animate-spin" /> Loading the price list…
         </div>
-
-        {loading ? (
-          <div className={`${ADMIN.card} p-10 flex items-center justify-center gap-2 text-sm text-[#71717A]`}>
-            <Loader2 size={16} className="animate-spin" /> Loading the price list…
-          </div>
-        ) : !year ? (
-          <div className={`${ADMIN.card} p-6 text-sm text-[#71717A]`}>
-            No academic sessions exist yet. Add one in Admin Space → Fee Settings → Sessions.
-          </div>
-        ) : (
-          <>
-            {section === 'heads' && (
-              <HeadsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
-                            onChanged={() => void load()} onError={setError} />
-            )}
-            {section === 'groups' && (
-              <GroupsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
-                             onChanged={() => void load()} onError={setError} />
-            )}
-            {section === 'structures' && (
-              <StructuresSection bundle={bundle} yearId={year.id} canEdit={canEdit}
-                                 canAutogen={perms.can('fees.invoice.autogen')}
-                                 showAmounts={!perms.amountsHidden}
-                                 onChanged={() => void load()} onError={setError} />
-            )}
-          </>
-        )}
-      </div>
-    </div>
+      ) : !year ? (
+        <div className={`${ADMIN.card} p-6 text-sm text-[#6B675A]`}>
+          No academic sessions exist yet. Add one in Admin Space → Fee Settings → Sessions.
+        </div>
+      ) : (
+        <>
+          {section === 'heads' && (
+            <HeadsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
+                          onChanged={() => void load()} onError={setError} />
+          )}
+          {section === 'groups' && (
+            <GroupsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
+                           onChanged={() => void load()} onError={setError} />
+          )}
+          {section === 'structures' && (
+            <StructuresSection bundle={bundle} yearId={year.id} canEdit={canEdit}
+                               canAutogen={perms.can('fees.invoice.autogen')}
+                               showAmounts={!perms.amountsHidden}
+                               onChanged={() => void load()} onError={setError} />
+          )}
+        </>
+      )}
+    </FeeScreen>
   )
 }
 
@@ -204,7 +179,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
           Clone
         </button>
-        <p className="text-xs text-[#A1A1AA] flex-1 min-w-[260px]">
+        <p className="text-xs text-[#8C8878] flex-1 min-w-[260px]">
           Copies the heads, groups, structures and installments with every due date moved on a
           year. Structures arrive as drafts and auto-generation stays off, so nothing bills itself
           before someone has looked at the prices. Running it twice adds nothing twice.
@@ -212,7 +187,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
       </div>
 
       {result && (
-        <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg">
+        <div className="mt-3 bg-[#EAF5EE] border border-[#C6E3D2] text-[#1F6B42] text-sm px-4 py-3 ">
           Cloned {result.heads} head{result.heads === 1 ? '' : 's'}, {result.groups} group
           {result.groups === 1 ? '' : 's'}, {result.structures} structure
           {result.structures === 1 ? '' : 's'}, {result.structure_items} priced line
@@ -225,7 +200,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
       )}
 
       {error && (
-        <div className="mt-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
+        <div className="mt-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
       )}
     </div>
   )
@@ -277,34 +252,34 @@ function HeadsSection({
       <div className={`${ADMIN.card} overflow-hidden`}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7]">
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Head</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Code</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Category</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Tax</th>
+            <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
+              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Head</th>
+              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Code</th>
+              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Category</th>
+              <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Tax</th>
               <th className="w-10" />
             </tr>
           </thead>
           <tbody>
             {bundle.heads.map(h => (
-              <tr key={h.id} className="border-b border-[#F4F4F5] last:border-0">
-                <td className="px-4 py-2.5 font-medium text-[#27272A]">
+              <tr key={h.id} className="border-b border-[#F0ECE2] last:border-0">
+                <td className="px-4 py-2.5 font-medium text-[#18181B]">
                   {h.name}
                   {h.is_transport && (
-                    <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F4F4F5] text-[#71717A]">
+                    <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F4F1E7] text-[#6B675A]">
                       Transport
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-2.5 font-mono text-xs text-[#71717A]">{h.code}</td>
-                <td className="px-4 py-2.5 text-[#71717A]">{catName(h.category_id)}</td>
-                <td className="px-4 py-2.5 text-right text-[#71717A]">
+                <td className="px-4 py-2.5 font-mono text-xs text-[#6B675A]">{h.code}</td>
+                <td className="px-4 py-2.5 text-[#6B675A]">{catName(h.category_id)}</td>
+                <td className="px-4 py-2.5 text-right text-[#6B675A]">
                   {Number(h.tax_rate) ? `${h.tax_rate}%` : '—'}
                 </td>
                 <td className="px-2">
                   {canEdit && (
                     <button onClick={() => void remove(h.id)}
-                            className="p-1.5 text-[#D4D4D8] hover:text-rose-500 transition-colors">
+                            className="p-1.5 text-[#C9C4B4] hover:text-[#A93232] transition-colors">
                       <Trash2 size={13} />
                     </button>
                   )}
@@ -312,7 +287,7 @@ function HeadsSection({
               </tr>
             ))}
             {bundle.heads.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-[#A1A1AA]">
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-[#8C8878]">
                 No fee heads yet. Add Tuition first — everything else prices against it.
               </td></tr>
             )}
@@ -348,7 +323,7 @@ function HeadsSection({
                      className={ADMIN.inputPlain} />
             </div>
           </div>
-          <p className="text-xs text-[#A1A1AA]">
+          <p className="text-xs text-[#8C8878]">
             The code is what links this head to the same head in another year, so cross-year
             reporting and the clone both follow it. Leave it blank and one is made from the name.
           </p>
@@ -406,8 +381,8 @@ function GroupsSection({
           <div key={g.id} className={`${ADMIN.card} p-4`}>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-sm font-bold text-[#27272A]">{g.name}</div>
-                <div className="font-mono text-[11px] text-[#A1A1AA]">{g.code}</div>
+                <div className="text-sm font-bold text-[#18181B]">{g.name}</div>
+                <div className="font-mono text-[11px] text-[#8C8878]">{g.code}</div>
               </div>
               <div className="flex flex-col gap-1 items-end">
                 {g.is_default && (
@@ -416,14 +391,14 @@ function GroupsSection({
                   </span>
                 )}
                 {g.is_rte && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
                     RTE
                   </span>
                 )}
               </div>
             </div>
-            {g.description && <p className="text-xs text-[#71717A] mt-2">{g.description}</p>}
-            <p className="text-[11px] text-[#A1A1AA] mt-2">
+            {g.description && <p className="text-xs text-[#6B675A] mt-2">{g.description}</p>}
+            <p className="text-[11px] text-[#8C8878] mt-2">
               {bundle.structures.filter(s => s.fee_group_id === g.id).length} structure(s)
             </p>
           </div>
@@ -527,7 +502,7 @@ function StructuresSection({
       ))}
 
       {bundle.structures.length === 0 && (
-        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#A1A1AA]`}>
+        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#8C8878]`}>
           No structures yet. A structure is the plan for one group and one grade — what is charged,
           how much, and when it falls due.
         </div>
@@ -612,29 +587,29 @@ function StructureCard({
       <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-[#27272A]">{s.name}</span>
+            <span className="text-sm font-bold text-[#18181B]">{s.name}</span>
             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${STRUCTURE_CHIP[s.status]}`}>
               {s.status}
             </span>
             {group?.is_rte && (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
                 Bills nothing
               </span>
             )}
           </div>
-          <div className="text-xs text-[#A1A1AA] mt-0.5">
+          <div className="text-xs text-[#8C8878] mt-0.5">
             {group?.name} · {s.grade === null ? 'every grade' : gradeLabel(s.grade)} ·
             {' '}{items.length} head{items.length === 1 ? '' : 's'} ·
             {' '}{installments.length} installment{installments.length === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="text-sm font-bold text-[#27272A] flex-shrink-0">
+        <div className="text-sm font-bold text-[#18181B] flex-shrink-0">
           {inr(s.total_cached, showAmounts)}
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-[#F4F4F5] p-4 space-y-5">
+        <div className="border-t border-[#F0ECE2] p-4 space-y-5">
           <StructureItems
             structureId={s.id} items={items} bundle={bundle} canEdit={canEdit}
             showAmounts={showAmounts} onChanged={onChanged} onError={onError} />
@@ -645,18 +620,18 @@ function StructureCard({
             headName={headName} onChanged={onChanged} onError={onError} />
 
           {canEdit && (
-            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#F4F4F5]">
+            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#F0ECE2]">
               <button onClick={() => void publish()} className={ADMIN.darkBtn}>
                 {s.status === 'published' ? 'Move back to draft' : 'Publish'}
               </button>
-              <span className="text-xs text-[#A1A1AA]">
+              <span className="text-xs text-[#8C8878]">
                 {s.status === 'published'
                   ? 'Live. Bills can be generated from it.'
                   : 'A draft is never billed from — publish when the prices are right.'}
               </span>
               <button
                 onClick={() => void deleteStructure(s.id).then(onChanged)}
-                className="ml-auto p-1.5 text-[#D4D4D8] hover:text-rose-500 transition-colors"
+                className="ml-auto p-1.5 text-[#C9C4B4] hover:text-[#A93232] transition-colors"
                 title="Delete this structure"
               >
                 <Trash2 size={13} />
@@ -701,15 +676,15 @@ function StructureItems({
       <h4 className={`${ADMIN.label} mb-2`}>What is charged</h4>
       <div className="space-y-1">
         {items.map(i => (
-          <div key={i.id} className="flex items-center gap-3 py-1.5 px-3 bg-[#FAFAFA] rounded">
-            <span className="text-sm text-[#27272A] flex-1">
+          <div key={i.id} className="flex items-center gap-3 py-1.5 px-3 bg-[#FAF8F2] rounded">
+            <span className="text-sm text-[#18181B] flex-1">
               {bundle.heads.find(h => h.id === i.fee_head_id)?.name ?? 'Fee head'}
             </span>
-            <span className="text-sm font-medium text-[#27272A]">{inr(i.amount, showAmounts)}</span>
+            <span className="text-sm font-medium text-[#18181B]">{inr(i.amount, showAmounts)}</span>
             {canEdit && (
               <button
                 onClick={() => void removeStructureItem(structureId, i.fee_head_id).then(onChanged)}
-                className="p-1 text-[#D4D4D8] hover:text-rose-500 transition-colors"
+                className="p-1 text-[#C9C4B4] hover:text-[#A93232] transition-colors"
               >
                 <Trash2 size={12} />
               </button>
@@ -717,14 +692,14 @@ function StructureItems({
           </div>
         ))}
         {items.length === 0 && (
-          <p className="text-xs text-[#A1A1AA] py-2">Nothing priced yet.</p>
+          <p className="text-xs text-[#8C8878] py-2">Nothing priced yet.</p>
         )}
       </div>
 
       {items.length > 0 && (
-        <div className="flex justify-between items-center mt-2 pt-2 border-t border-[#F4F4F5]">
+        <div className="flex justify-between items-center mt-2 pt-2 border-t border-[#F0ECE2]">
           <span className={ADMIN.label}>Year total</span>
-          <span className="text-sm font-bold text-[#27272A]">{inr(total, showAmounts)}</span>
+          <span className="text-sm font-bold text-[#18181B]">{inr(total, showAmounts)}</span>
         </div>
       )}
 
@@ -788,11 +763,11 @@ function Installments({
         {installments.map(i => {
           const explicit = bundle.installmentItems.filter(ii => ii.installment_id === i.id)
           return (
-            <div key={i.id} className="flex flex-wrap items-center gap-3 py-2 px-3 bg-[#FAFAFA] rounded">
-              <span className="text-xs font-mono text-[#A1A1AA] w-6">{i.seq}</span>
-              <span className="text-sm text-[#27272A] flex-1 min-w-[100px]">{i.name}</span>
-              <span className="text-xs text-[#71717A]">{fmtDate(i.due_date)}</span>
-              <span className="text-sm font-medium text-[#27272A] w-20 text-right">
+            <div key={i.id} className="flex flex-wrap items-center gap-3 py-2 px-3 bg-[#FAF8F2] rounded">
+              <span className="text-xs font-mono text-[#8C8878] w-6">{i.seq}</span>
+              <span className="text-sm text-[#18181B] flex-1 min-w-[100px]">{i.name}</span>
+              <span className="text-xs text-[#6B675A]">{fmtDate(i.due_date)}</span>
+              <span className="text-sm font-medium text-[#18181B] w-20 text-right">
                 {explicit.length > 0
                   ? explicit.map(e => headName(e.fee_head_id)).join(', ')
                   : i.percent !== null ? `${Number(i.percent)}%`
@@ -807,8 +782,8 @@ function Installments({
                     : 'Bills are generated by hand'}
                   className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${
                     i.autogen_enabled
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-white text-[#A1A1AA] border border-[#E4E4E7] hover:border-[#A1A1AA]'
+                      ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                      : 'bg-white text-[#8C8878] border border-[#E3DFD3] hover:border-[#C9C4B4]'
                   }`}
                 >
                   <Settings2 size={10} />
@@ -817,7 +792,7 @@ function Installments({
               )}
               {canEdit && (
                 <button onClick={() => void deleteInstallment(i.id).then(onChanged)}
-                        className="p-1 text-[#D4D4D8] hover:text-rose-500 transition-colors">
+                        className="p-1 text-[#C9C4B4] hover:text-[#A93232] transition-colors">
                   <Trash2 size={12} />
                 </button>
               )}
@@ -825,14 +800,14 @@ function Installments({
           )
         })}
         {installments.length === 0 && (
-          <p className="text-xs text-[#A1A1AA] py-2">
+          <p className="text-xs text-[#8C8878] py-2">
             No installments. Without one there is nothing to bill.
           </p>
         )}
       </div>
 
       {installments.length > 0 && pctTotal > 0 && pctTotal !== 100 && (
-        <p className="text-xs text-amber-700 mt-2 flex items-start gap-1.5">
+        <p className="text-xs text-[#7A6220] mt-2 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
           The percentages come to {pctTotal}%. The bills will still add up to the year&rsquo;s fee —
           the last installment absorbs the difference — but that is probably not what was meant.

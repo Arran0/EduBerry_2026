@@ -10,8 +10,8 @@ import { exportRows } from '@/lib/feeExports'
 import { formatINR } from './FeeCollectionSummary'
 
 // Shared admin-aesthetic tokens (zinc + honey gold), mirroring page.tsx.
-const card = 'bg-white border border-[#E4E4E7] rounded-xl'
-const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50'
+const card = 'bg-white border border-[#E3DFD3] '
+const darkBtn = 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 transition-colors disabled:opacity-50'
 
 type RangeKey = 'today' | 'yesterday' | 'custom'
 
@@ -95,13 +95,13 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
   return (
     <div className="space-y-4">
       {/* Date range */}
-      <div className="flex border-b border-[#E4E4E7]">
+      <div className="flex border-b border-[#E3DFD3]">
         {RANGES.map(r => {
           const active = range === r.key
           return (
             <button key={r.key} onClick={() => setRange(r.key)}
               className={`flex-1 text-center pb-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
-                active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
+                active ? 'border-[#27272A] text-[#18181B]' : 'border-transparent text-[#8C8878] hover:text-[#6B675A]'
               }`}>
               {r.label}
             </button>
@@ -111,15 +111,15 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
 
       {range === 'custom' && (
         <div className="flex flex-col sm:flex-row gap-2">
-          <label className="flex-1 text-xs font-semibold text-[#71717A]">
+          <label className="flex-1 text-xs font-semibold text-[#6B675A]">
             From
             <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-              className="mt-1 w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A]" />
+              className="mt-1 w-full bg-white border border-[#E3DFD3] px-3 py-2 text-sm text-[#18181B] focus:outline-none focus:border-[#27272A]" />
           </label>
-          <label className="flex-1 text-xs font-semibold text-[#71717A]">
+          <label className="flex-1 text-xs font-semibold text-[#6B675A]">
             To
             <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-              className="mt-1 w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[#27272A]" />
+              className="mt-1 w-full bg-white border border-[#E3DFD3] px-3 py-2 text-sm text-[#18181B] focus:outline-none focus:border-[#27272A]" />
           </label>
         </div>
       )}
@@ -130,8 +130,8 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
           const on = methods.has(m)
           return (
             <button key={m} onClick={() => toggleMethod(m)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                on ? 'bg-[#27272A] border-[#27272A] text-white' : 'bg-white border-[#E4E4E7] text-[#71717A] hover:border-[#D4D4D8]'
+              className={`px-3 py-1.5 text-xs font-semibold border transition-colors ${
+                on ? 'bg-[#27272A] border-[#27272A] text-white' : 'bg-white border-[#E3DFD3] text-[#6B675A] hover:border-[#C9C4B4]'
               }`}>
               {METHOD_LABELS[m]}
             </button>
@@ -139,7 +139,7 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
         })}
         {methods.size > 0 && (
           <button onClick={() => setMethods(new Set())}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#A1A1AA] hover:text-[#27272A]">
+            className="px-3 py-1.5 text-xs font-semibold text-[#8C8878] hover:text-[#18181B]">
             Clear
           </button>
         )}
@@ -150,10 +150,10 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex items-baseline gap-1.5">
             <span className="text-xl font-bold text-[#18181B] tabular-nums">{formatINR(totals.grand)}</span>
-            <span className="text-xs text-[#A1A1AA]">· {rows.length} payment{rows.length === 1 ? '' : 's'}</span>
+            <span className="text-xs text-[#8C8878]">· {rows.length} payment{rows.length === 1 ? '' : 's'}</span>
           </div>
           {[...totals.byMethod.entries()].map(([m, amt]) => (
-            <span key={m} className="text-[11px] px-2.5 py-1 rounded-full bg-[#F4F2EC] border border-[#E7E2D8] text-[#71717A] font-semibold tabular-nums">
+            <span key={m} className="text-[11px] px-2.5 py-1 rounded-full bg-[#F4F2EC] border border-[#E7E2D8] text-[#6B675A] font-semibold tabular-nums">
               {METHOD_LABELS[m]} · {formatINR(amt)}
             </span>
           ))}
@@ -169,22 +169,22 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7] text-left">
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Date</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Student</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Fee</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Method</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Amount</th>
+                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3] text-left">
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Date</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Student</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Fee</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Method</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: 6 }, (_, i) => (
-                  <tr key={i} className="border-b border-[#F4F4F5] last:border-0 animate-pulse">
-                    <td className="px-3 py-2.5"><div className="h-3 w-20 rounded-full bg-[#E4E4E7]" /></td>
-                    <td className="px-3 py-2.5"><div className="h-3 w-28 rounded-full bg-[#E4E4E7]" /></td>
-                    <td className="px-3 py-2.5"><div className="h-3 w-24 rounded-full bg-[#E4E4E7]" /></td>
-                    <td className="px-3 py-2.5"><div className="h-4 w-16 rounded-full bg-[#E4E4E7]" /></td>
-                    <td className="px-3 py-2.5 text-right"><div className="h-3 w-16 rounded-full bg-[#E4E4E7] ml-auto" /></td>
+                  <tr key={i} className="border-b border-[#F0ECE2] last:border-0 animate-pulse">
+                    <td className="px-3 py-2.5"><div className="h-3 w-20 rounded-full bg-[#E3DFD3]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-3 w-28 rounded-full bg-[#E3DFD3]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-3 w-24 rounded-full bg-[#E3DFD3]" /></td>
+                    <td className="px-3 py-2.5"><div className="h-4 w-16 rounded-full bg-[#E3DFD3]" /></td>
+                    <td className="px-3 py-2.5 text-right"><div className="h-3 w-16 rounded-full bg-[#E3DFD3] ml-auto" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -193,28 +193,28 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
         </div>
       ) : rows.length === 0 ? (
         <div className={`${card} p-8 text-center`}>
-          <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center">
+          <div className="w-14 h-14 mx-auto mb-3 bg-[#F4F2EC] border border-[#E7E2D8] flex items-center justify-center">
             <Wallet size={24} className="text-[#A8896B]" strokeWidth={1.6} />
           </div>
-          <p className="text-sm text-[#71717A]">No collections in this range.</p>
+          <p className="text-sm text-[#6B675A]">No collections in this range.</p>
         </div>
       ) : (
         <div className={`${card} shadow-sm overflow-hidden`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7] text-left">
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Date</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Student</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Fee</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide">Method</th>
-                  <th className="px-3 py-2.5 font-semibold text-[#71717A] text-xs uppercase tracking-wide text-right">Amount</th>
+                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3] text-left">
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Date</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Student</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Fee</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide">Method</th>
+                  <th className="px-3 py-2.5 font-semibold text-[#6B675A] text-xs uppercase tracking-wide text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.id} className="border-b border-[#F4F4F5] last:border-0">
-                    <td className="px-3 py-2.5 text-[#71717A] whitespace-nowrap text-xs">
+                  <tr key={r.id} className="border-b border-[#F0ECE2] last:border-0">
+                    <td className="px-3 py-2.5 text-[#6B675A] whitespace-nowrap text-xs">
                       {r.verified_at ? new Date(r.verified_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                     <td className="px-3 py-2.5">
@@ -223,19 +223,19 @@ export default function CollectionReportSection({ year, onStudentClick }: { year
                           className="font-medium text-[#18181B] hover:underline underline-offset-2 text-left">
                           {r.fee.student.full_name}
                         </button>
-                      ) : <span className="text-[#71717A]">—</span>}
+                      ) : <span className="text-[#6B675A]">—</span>}
                     </td>
                     <td className="px-3 py-2.5 truncate max-w-[160px]">
-                      <p className="text-[#71717A] truncate">{r.fee?.description || r.fee?.fee_head?.name || 'School fee'}</p>
+                      <p className="text-[#6B675A] truncate">{r.fee?.description || r.fee?.fee_head?.name || 'School fee'}</p>
                       {r.fee?.status === 'partial' && (
                         <p className="text-[10px] tabular-nums mt-0.5">
-                          <span className="text-[#71717A]">Fee {formatINR(r.fee.amount)}</span>
+                          <span className="text-[#6B675A]">Fee {formatINR(r.fee.amount)}</span>
                           <span className="text-[#DC2626] font-semibold"> · Remaining {formatINR(Math.max(0, Number(r.fee.amount) - Number(r.amount)))}</span>
                         </p>
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#52525B] font-semibold">{METHOD_LABELS[r.method] ?? r.method}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#F4F1E7] text-[#52525B] font-semibold">{METHOD_LABELS[r.method] ?? r.method}</span>
                     </td>
                     <td className="px-3 py-2.5 text-right font-bold text-[#18181B] tabular-nums whitespace-nowrap">{formatINR(r.amount)}</td>
                   </tr>

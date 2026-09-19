@@ -7,7 +7,7 @@
 // cached in a module-level promise so several components mounting together do
 // not each fire it.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchMyFeePermissions, type FeePermissionKey } from '@/lib/fees/permissions'
 
@@ -69,7 +69,13 @@ export function useFeePermissions(): FeePermissionState {
     setNonce(n => n + 1)
   }, [])
 
-  return {
+  // Memoised, and this is not a micro-optimisation. Screens put `perms` in a
+  // useCallback dependency array to gate what they fetch. A fresh object each
+  // render makes that callback fresh too, which re-fires the effect that calls
+  // it, which sets state, which renders again — an endless refetch loop that
+  // shows up as summary tiles flickering between their skeleton and their
+  // figures. The identity of this object is load-bearing.
+  return useMemo(() => ({
     loading,
     keys,
     can,
@@ -77,5 +83,5 @@ export function useFeePermissions(): FeePermissionState {
     canAny,
     amountsHidden: !loading && !keys.has('fees.view_amounts'),
     reload,
-  }
+  }), [loading, keys, can, canAll, canAny, reload])
 }

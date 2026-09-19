@@ -25,6 +25,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
@@ -172,344 +173,329 @@ function ProfileInner() {
   }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see student fee profiles" />
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
-      <div className="bg-[#27272A] border-b border-[#3F3F46]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-          <Link href="/more/fees/students" className="p-1.5 text-zinc-500 hover:text-zinc-300 flex-shrink-0">
-            <ArrowLeft size={16} />
-          </Link>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-              <User size={16} className="text-[#B8983C]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-bold text-white tracking-tight truncate">
-                {student?.full_name ?? 'Student'}
-              </h1>
-              <p className="text-xs text-zinc-500">
-                {student?.grade === null || student?.grade === undefined ? '—' : gradeLabel(student.grade)}
-                {student?.section ? ` ${student.section}` : ''}
-                {student?.admission_no ? ` · ${student.admission_no}` : ''}
+    <FeeScreen
+      title={student?.full_name ?? 'Student'}
+      subtitle={<>
+        {student?.grade === null || student?.grade === undefined ? '—' : gradeLabel(student.grade)}
+        {student?.section ? ` ${student.section}` : ''}
+        {student?.admission_no ? ` · ${student.admission_no}` : ''}
+      </>}
+      icon={<User size={17} style={{ color: '#B8983C' }} />}
+      back={{ href: '/more/fees/students', label: 'Student fees' }}
+      actions={<>
+        {perms.can('fees.collect') && profile && (
+          <Btn tone="dark" onClick={() => setRefunding(true)}>
+            <Undo2 size={12} /> Refund
+          </Btn>
+        )}
+        <YearScope />
+      </>}
+    >
+      {loading ? (
+        <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
+      ) : !profile ? (
+        <div className={`${ADMIN.card} py-14 px-6 text-center`}>
+          <p className="text-sm text-[#6B675A] max-w-md mx-auto">
+            This student has no fee profile for {year?.code}. Nothing can be billed or collected
+            until they do — create one from the{' '}
+            <Link href="/more/fees/students" className="underline">Students screen</Link>.
+          </p>
+        </div>
+      ) : (
+        <>
+          <StatStrip stats={[
+            { label: 'Billed', value: inr(totals.billed, showAmounts) },
+            { label: 'Concessions', value: inr(totals.concessions, showAmounts) },
+            { label: 'Paid', value: inr(totals.paid, showAmounts) },
+            { label: 'Still due', value: inr(totals.due, showAmounts),
+              tone: totals.due > 0 ? '#7A6220' : undefined, strong: true },
+          ]} />
+
+          {profile.structure_source && (
+            <div className={`${ADMIN.card} px-4 py-3 flex items-start gap-2`}>
+              <Scale size={14} className="mt-0.5 text-[#8C8878] flex-shrink-0" />
+              <p className="text-xs text-[#6B675A]">
+                <span className="font-semibold text-[#52525B]">Why this price: </span>
+                {profile.structure_source.why}
+                {profile.prorate_from
+                  ? ` Charged only from ${fmtDate(profile.prorate_from)}, as a mid-year joiner.`
+                  : ''}
               </p>
             </div>
-          </div>
-          {perms.can('fees.collect') && profile && (
-            <button onClick={() => setRefunding(true)}
-                    className="flex items-center gap-1.5 bg-[#3F3F46] hover:bg-[#52525B] text-white
-                               text-xs font-semibold px-3 py-2 rounded-lg">
-              <Undo2 size={13} /> Refund
-            </button>
           )}
-          <YearScope tone="dark" />
-        </div>
-      </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        {loading ? (
-          <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#A1A1AA]" /></div>
-        ) : !profile ? (
-          <div className={`${ADMIN.card} py-14 px-6 text-center`}>
-            <p className="text-sm text-[#71717A] max-w-md mx-auto">
-              This student has no fee profile for {year?.code}. Nothing can be billed or collected
-              until they do — create one from the{' '}
-              <Link href="/more/fees/students" className="underline">Students screen</Link>.
-            </p>
+          <div className="flex gap-1 border-b border-[#E3DFD3] overflow-x-auto">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                      className={`px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                        tab === t.key
+                          ? 'border-[#27272A] text-[#18181B]'
+                          : 'border-transparent text-[#8C8878] hover:text-[#6B675A]'}`}>
+                {t.label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <Stat label="Billed" value={inr(totals.billed, showAmounts)} />
-              <Stat label="Concessions" value={inr(totals.concessions, showAmounts)} />
-              <Stat label="Paid" value={inr(totals.paid, showAmounts)} />
-              <Stat label="Still due" value={inr(totals.due, showAmounts)}
-                    tone={totals.due > 0 ? 'amber' : undefined} />
-            </div>
 
-            {profile.structure_source && (
-              <div className={`${ADMIN.card} px-4 py-3 flex items-start gap-2`}>
-                <Scale size={14} className="mt-0.5 text-[#A1A1AA] flex-shrink-0" />
-                <p className="text-xs text-[#71717A]">
-                  <span className="font-semibold text-[#52525B]">Why this price: </span>
-                  {profile.structure_source.why}
-                  {profile.prorate_from
-                    ? ` Charged only from ${fmtDate(profile.prorate_from)}, as a mid-year joiner.`
-                    : ''}
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-1 border-b border-[#E4E4E7] overflow-x-auto">
-              {TABS.map(t => (
-                <button key={t.key} onClick={() => setTab(t.key)}
-                        className={`px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                          tab === t.key
-                            ? 'border-[#27272A] text-[#27272A]'
-                            : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'}`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'invoices' && (
-              <Panel empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
-                {invoices.map(i => (
-                  <div key={i.id} className="px-4 py-3 border-b border-[#F4F4F5] last:border-0">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-mono text-xs text-[#71717A] flex-1 min-w-[150px]">{i.number}</span>
-                      <span className="text-xs text-[#A1A1AA]">due {fmtDate(i.due_date)}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
-                        {INVOICE_LABEL[i.status]}
-                      </span>
-                      <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
-                        {inr(i.net, showAmounts)}
-                      </span>
-                      <button onClick={() => void printInvoice(i)} title="Download the bill"
-                              className="p-1.5 text-[#A1A1AA] hover:text-[#27272A]">
-                        <Download size={14} />
-                      </button>
-                    </div>
-                    <div className="mt-1.5 pl-1 space-y-0.5">
-                      {lines.filter(l => l.invoice_id === i.id).map(l => (
-                        <div key={l.id} className="flex justify-between text-xs">
-                          <span className={l.amount < 0 ? 'text-emerald-700' : 'text-[#A1A1AA]'}>
-                            {l.label}
-                          </span>
-                          <span className={l.amount < 0 ? 'text-emerald-700' : 'text-[#71717A]'}>
-                            {inr(l.amount, showAmounts)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {i.cancelled_reason && (
-                      <p className="text-xs text-rose-600 mt-1.5">Cancelled: {i.cancelled_reason}</p>
-                    )}
-                  </div>
-                ))}
-              </Panel>
-            )}
-
-            {tab === 'payments' && (
-              <Panel empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
-                {payments.map(p => (
-                  <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F4F4F5] last:border-0">
-                    <span className="font-mono text-xs text-[#71717A] flex-1 min-w-[150px]">
-                      {p.receipt_no ?? '—'}
+          {tab === 'invoices' && (
+            <Panel empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
+              {invoices.map(i => (
+                <div key={i.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-mono text-xs text-[#6B675A] flex-1 min-w-[150px]">{i.number}</span>
+                    <span className="text-xs text-[#8C8878]">due {fmtDate(i.due_date)}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                      {INVOICE_LABEL[i.status]}
                     </span>
-                    <span className="text-xs text-[#A1A1AA]">{fmtDate(p.paid_on)} · {p.method}</span>
-                    {p.status !== 'verified' && (
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                        p.status === 'reversed'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
-                        {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
-                      </span>
-                    )}
-                    <span className={`text-sm font-semibold w-24 text-right ${
-                      p.status === 'reversed' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
-                      {inr(p.amount, showAmounts)}
+                    <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+                      {inr(i.net, showAmounts)}
                     </span>
-                    {perms.can('fees.receipt.print') && (
-                      <>
-                        <button onClick={() => void printReceipt(p, true)} title="Thermal print"
-                                className="p-1.5 text-[#A1A1AA] hover:text-[#27272A]"><Printer size={14} /></button>
-                        <button onClick={() => void printReceipt(p, false)} title="Download A4"
-                                className="p-1.5 text-[#A1A1AA] hover:text-[#27272A]"><FileText size={14} /></button>
-                      </>
-                    )}
-                    {p.reversal_reason && (
-                      <p className="w-full text-xs text-rose-600">Reversed: {p.reversal_reason}</p>
-                    )}
-                  </div>
-                ))}
-              </Panel>
-            )}
-
-            {tab === 'cheques' && (
-              <Panel empty={instruments.length === 0 ? 'No cheques or drafts from this student.' : null}>
-                {instruments.map(r => (
-                  <div key={r.id} className="px-4 py-3 border-b border-[#F4F4F5] last:border-0">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-sm text-[#27272A] flex-1 min-w-[150px]">
-                        {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
-                        {r.bank ? <span className="text-[#A1A1AA]"> · {r.bank}</span> : null}
-                      </span>
-                      {r.is_postdated && r.present_on && (
-                        <span className="text-xs text-[#A1A1AA] inline-flex items-center gap-1">
-                          <Clock size={11} /> present {fmtDate(r.present_on)}
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                        r.status === 'cleared' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : r.status === 'bounced' ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                        : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
-                        {r.status}
-                      </span>
-                      <span className="text-sm font-semibold text-[#27272A] w-24 text-right">
-                        {inr(r.amount, showAmounts)}
-                      </span>
-                    </div>
-                    {r.bounce_reason && (
-                      <p className="text-xs text-rose-600 mt-1">
-                        Bounced: {r.bounce_reason}
-                        {r.bounce_charge ? ` · ${inr(r.bounce_charge, showAmounts)} charge passed on` : ''}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </Panel>
-            )}
-
-            {tab === 'ledger' && (
-              <Panel empty={ledger.length === 0 ? 'Nothing on the ledger yet.' : null}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7]">
-                        <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Date</th>
-                        <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Entry</th>
-                        <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Charged</th>
-                        <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Paid</th>
-                        <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ledger.map(l => (
-                        <tr key={l.id} className="border-b border-[#F4F4F5] last:border-0">
-                          <td className="px-4 py-2 text-xs text-[#A1A1AA] whitespace-nowrap">{fmtDate(l.entry_date)}</td>
-                          <td className="px-4 py-2 text-[#52525B]">{l.note ?? l.kind}</td>
-                          <td className="px-4 py-2 text-right text-[#71717A]">
-                            {(l.debit ?? 0) > 0 ? inr(l.debit, showAmounts) : ''}
-                          </td>
-                          <td className="px-4 py-2 text-right text-emerald-700">
-                            {(l.credit ?? 0) > 0 ? inr(l.credit, showAmounts) : ''}
-                          </td>
-                          <td className="px-4 py-2 text-right font-semibold text-[#27272A]">
-                            {inr(l.balance_after, showAmounts)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-            )}
-
-            {tab === 'concessions' && (
-              <>
-                {perms.can('fees.discount.apply') && (
-                  <div className="flex justify-end mb-3">
-                    <button onClick={() => setApplying(true)} className={ADMIN.ghostBtn}>
-                      <BadgePercent size={13} /> Apply a concession
+                    <button onClick={() => void printInvoice(i)} title="Download the bill"
+                            className="p-1.5 text-[#8C8878] hover:text-[#18181B]">
+                      <Download size={14} />
                     </button>
                   </div>
-                )}
-                <Panel empty={concessions.length === 0
-                  ? 'No concessions for this student. Each one, when granted, is a named line on the bill it comes off.'
-                  : null}>
-                  <table className="w-full text-sm">
-                    <thead className="bg-[#FAFAFA] text-[10px] uppercase tracking-widest text-[#A1A1AA]">
-                      <tr>
-                        <th className="text-left px-4 py-2 font-bold">What</th>
-                        <th className="text-left px-4 py-2 font-bold">Asked</th>
-                        <th className="text-left px-4 py-2 font-bold">State</th>
-                        <th className="text-right px-4 py-2 font-bold">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {concessions.map(c => (
-                        <tr key={c.id} className="border-t border-[#F4F4F5]">
-                          <td className="px-4 py-2 text-[#27272A]">
-                            {discountTypes.find(t => t.id === c.type_id)?.name
-                              ?? scholarships.find(s => s.id === c.scholarship_id)?.name
-                              ?? (c.kind === 'waiver' ? 'Waiver' : 'Concession')}
-                            {c.reason && (
-                              <span className="block text-[11px] text-[#A1A1AA]">{c.reason}</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-[#71717A]">{fmtDate(c.created_at.slice(0, 10))}</td>
-                          <td className="px-4 py-2">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-                              c.status === 'applied'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : c.status === 'pending'
-                                  ? 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]'
-                                  : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'}`}>
-                              {c.status === 'applied' ? 'On the bill'
-                                : c.status === 'pending' ? 'Waiting'
-                                : c.status === 'declined' ? 'Declined' : 'Removed'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-right font-semibold text-emerald-700">
-                            −{inr(c.amount, showAmounts)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Panel>
-              </>
-            )}
+                  <div className="mt-1.5 pl-1 space-y-0.5">
+                    {lines.filter(l => l.invoice_id === i.id).map(l => (
+                      <div key={l.id} className="flex justify-between text-xs">
+                        <span className={l.amount < 0 ? 'text-[#1F6B42]' : 'text-[#8C8878]'}>
+                          {l.label}
+                        </span>
+                        <span className={l.amount < 0 ? 'text-[#1F6B42]' : 'text-[#6B675A]'}>
+                          {inr(l.amount, showAmounts)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {i.cancelled_reason && (
+                    <p className="text-xs text-[#A93232] mt-1.5">Cancelled: {i.cancelled_reason}</p>
+                  )}
+                </div>
+              ))}
+            </Panel>
+          )}
 
-            {tab === 'charges' && (
-              <Panel empty={fines.length === 0 && lateFees.length === 0
-                ? 'Nothing has been added to this student’s bills since they were issued.'
+          {tab === 'payments' && (
+            <Panel empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
+              {payments.map(p => (
+                <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
+                  <span className="font-mono text-xs text-[#6B675A] flex-1 min-w-[150px]">
+                    {p.receipt_no ?? '—'}
+                  </span>
+                  <span className="text-xs text-[#8C8878]">{fmtDate(p.paid_on)} · {p.method}</span>
+                  {p.status !== 'verified' && (
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      p.status === 'reversed'
+                        ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
+                        : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'}`}>
+                      {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
+                    </span>
+                  )}
+                  <span className={`text-sm font-semibold w-24 text-right ${
+                    p.status === 'reversed' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
+                    {inr(p.amount, showAmounts)}
+                  </span>
+                  {perms.can('fees.receipt.print') && (
+                    <>
+                      <button onClick={() => void printReceipt(p, true)} title="Thermal print"
+                              className="p-1.5 text-[#8C8878] hover:text-[#18181B]"><Printer size={14} /></button>
+                      <button onClick={() => void printReceipt(p, false)} title="Download A4"
+                              className="p-1.5 text-[#8C8878] hover:text-[#18181B]"><FileText size={14} /></button>
+                    </>
+                  )}
+                  {p.reversal_reason && (
+                    <p className="w-full text-xs text-[#A93232]">Reversed: {p.reversal_reason}</p>
+                  )}
+                </div>
+              ))}
+            </Panel>
+          )}
+
+          {tab === 'cheques' && (
+            <Panel empty={instruments.length === 0 ? 'No cheques or drafts from this student.' : null}>
+              {instruments.map(r => (
+                <div key={r.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm text-[#18181B] flex-1 min-w-[150px]">
+                      {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
+                      {r.bank ? <span className="text-[#8C8878]"> · {r.bank}</span> : null}
+                    </span>
+                    {r.is_postdated && r.present_on && (
+                      <span className="text-xs text-[#8C8878] inline-flex items-center gap-1">
+                        <Clock size={11} /> present {fmtDate(r.present_on)}
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                      : r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
+                      : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                      {r.status}
+                    </span>
+                    <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+                      {inr(r.amount, showAmounts)}
+                    </span>
+                  </div>
+                  {r.bounce_reason && (
+                    <p className="text-xs text-[#A93232] mt-1">
+                      Bounced: {r.bounce_reason}
+                      {r.bounce_charge ? ` · ${inr(r.bounce_charge, showAmounts)} charge passed on` : ''}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </Panel>
+          )}
+
+          {tab === 'ledger' && (
+            <Panel empty={ledger.length === 0 ? 'Nothing on the ledger yet.' : null}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
+                      <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Date</th>
+                      <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Entry</th>
+                      <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Charged</th>
+                      <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Paid</th>
+                      <th className="text-right px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledger.map(l => (
+                      <tr key={l.id} className="border-b border-[#F0ECE2] last:border-0">
+                        <td className="px-4 py-2 text-xs text-[#8C8878] whitespace-nowrap">{fmtDate(l.entry_date)}</td>
+                        <td className="px-4 py-2 text-[#52525B]">{l.note ?? l.kind}</td>
+                        <td className="px-4 py-2 text-right text-[#6B675A]">
+                          {(l.debit ?? 0) > 0 ? inr(l.debit, showAmounts) : ''}
+                        </td>
+                        <td className="px-4 py-2 text-right text-[#1F6B42]">
+                          {(l.credit ?? 0) > 0 ? inr(l.credit, showAmounts) : ''}
+                        </td>
+                        <td className="px-4 py-2 text-right font-semibold text-[#18181B]">
+                          {inr(l.balance_after, showAmounts)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          )}
+
+          {tab === 'concessions' && (
+            <>
+              {perms.can('fees.discount.apply') && (
+                <div className="flex justify-end mb-3">
+                  <button onClick={() => setApplying(true)} className={ADMIN.ghostBtn}>
+                    <BadgePercent size={13} /> Apply a concession
+                  </button>
+                </div>
+              )}
+              <Panel empty={concessions.length === 0
+                ? 'No concessions for this student. Each one, when granted, is a named line on the bill it comes off.'
                 : null}>
                 <table className="w-full text-sm">
-                  <thead className="bg-[#FAFAFA] text-[10px] uppercase tracking-widest text-[#A1A1AA]">
+                  <thead className="bg-[#FAF8F2] text-[10px] uppercase tracking-widest text-[#8C8878]">
                     <tr>
                       <th className="text-left px-4 py-2 font-bold">What</th>
-                      <th className="text-left px-4 py-2 font-bold">When</th>
-                      <th className="text-left px-4 py-2 font-bold">Bill</th>
+                      <th className="text-left px-4 py-2 font-bold">Asked</th>
+                      <th className="text-left px-4 py-2 font-bold">State</th>
                       <th className="text-right px-4 py-2 font-bold">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {fines.map(f => (
-                      <tr key={f.id} className="border-t border-[#F4F4F5]">
-                        <td className="px-4 py-2 text-[#27272A]">
-                          {fineCategories.find(c => c.id === f.category_id)?.name ?? 'Fine'}
-                          {f.reason && <span className="block text-[11px] text-[#A1A1AA]">{f.reason}</span>}
+                    {concessions.map(c => (
+                      <tr key={c.id} className="border-t border-[#F0ECE2]">
+                        <td className="px-4 py-2 text-[#18181B]">
+                          {discountTypes.find(t => t.id === c.type_id)?.name
+                            ?? scholarships.find(s => s.id === c.scholarship_id)?.name
+                            ?? (c.kind === 'waiver' ? 'Waiver' : 'Concession')}
+                          {c.reason && (
+                            <span className="block text-[11px] text-[#8C8878]">{c.reason}</span>
+                          )}
                         </td>
-                        <td className="px-4 py-2 text-[#71717A]">{fmtDate(f.created_at.slice(0, 10))}</td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-[#71717A]">
-                          {invoices.find(i => i.id === f.invoice_id)?.number ?? '—'}
-                        </td>
-                        <td className={`px-4 py-2 text-right font-semibold ${
-                          f.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
-                          {inr(f.amount, showAmounts)}
-                        </td>
-                      </tr>
-                    ))}
-                    {lateFees.map(c => (
-                      <tr key={c.id} className="border-t border-[#F4F4F5]">
-                        <td className="px-4 py-2 text-[#27272A]">
-                          Late fee
-                          <span className="block text-[11px] text-[#A1A1AA]">
-                            {c.days_late} days past due
+                        <td className="px-4 py-2 text-[#6B675A]">{fmtDate(c.created_at.slice(0, 10))}</td>
+                        <td className="px-4 py-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
+                            c.status === 'applied'
+                              ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                              : c.status === 'pending'
+                                ? 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
+                                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                            {c.status === 'applied' ? 'On the bill'
+                              : c.status === 'pending' ? 'Waiting'
+                              : c.status === 'declined' ? 'Declined' : 'Removed'}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-[#71717A]">{fmtDate(c.as_of)}</td>
-                        <td className="px-4 py-2 font-mono text-[11px] text-[#71717A]">
-                          {invoices.find(i => i.id === c.invoice_id)?.number ?? '—'}
-                        </td>
-                        <td className={`px-4 py-2 text-right font-semibold ${
-                          c.status === 'waived' ? 'text-[#A1A1AA] line-through' : 'text-[#27272A]'}`}>
-                          {inr(c.amount, showAmounts)}
+                        <td className="px-4 py-2 text-right font-semibold text-[#1F6B42]">
+                          −{inr(c.amount, showAmounts)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </Panel>
-            )}
-          </>
-        )}
-      </div>
+            </>
+          )}
+
+          {tab === 'charges' && (
+            <Panel empty={fines.length === 0 && lateFees.length === 0
+              ? 'Nothing has been added to this student’s bills since they were issued.'
+              : null}>
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAF8F2] text-[10px] uppercase tracking-widest text-[#8C8878]">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-bold">What</th>
+                    <th className="text-left px-4 py-2 font-bold">When</th>
+                    <th className="text-left px-4 py-2 font-bold">Bill</th>
+                    <th className="text-right px-4 py-2 font-bold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fines.map(f => (
+                    <tr key={f.id} className="border-t border-[#F0ECE2]">
+                      <td className="px-4 py-2 text-[#18181B]">
+                        {fineCategories.find(c => c.id === f.category_id)?.name ?? 'Fine'}
+                        {f.reason && <span className="block text-[11px] text-[#8C8878]">{f.reason}</span>}
+                      </td>
+                      <td className="px-4 py-2 text-[#6B675A]">{fmtDate(f.created_at.slice(0, 10))}</td>
+                      <td className="px-4 py-2 font-mono text-[11px] text-[#6B675A]">
+                        {invoices.find(i => i.id === f.invoice_id)?.number ?? '—'}
+                      </td>
+                      <td className={`px-4 py-2 text-right font-semibold ${
+                        f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
+                        {inr(f.amount, showAmounts)}
+                      </td>
+                    </tr>
+                  ))}
+                  {lateFees.map(c => (
+                    <tr key={c.id} className="border-t border-[#F0ECE2]">
+                      <td className="px-4 py-2 text-[#18181B]">
+                        Late fee
+                        <span className="block text-[11px] text-[#8C8878]">
+                          {c.days_late} days past due
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-[#6B675A]">{fmtDate(c.as_of)}</td>
+                      <td className="px-4 py-2 font-mono text-[11px] text-[#6B675A]">
+                        {invoices.find(i => i.id === c.invoice_id)?.number ?? '—'}
+                      </td>
+                      <td className={`px-4 py-2 text-right font-semibold ${
+                        c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
+                        {inr(c.amount, showAmounts)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
+          )}
+        </>
+      )}
+
 
       {applying && year && student && (
         <ApplyConcessionSheet
@@ -546,25 +532,14 @@ function ProfileInner() {
           onDone={() => { setRefunding(false); void load() }}
         />
       )}
-    </div>
-  )
-}
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'amber' }) {
-  return (
-    <div className={`${ADMIN.card} p-4`}>
-      <div className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{label}</div>
-      <div className={`text-xl font-bold mt-1 ${tone === 'amber' ? 'text-amber-700' : 'text-[#27272A]'}`}>
-        {value}
-      </div>
-    </div>
+    </FeeScreen>
   )
 }
 
 function Panel({ empty, children }: { empty: string | null; children: React.ReactNode }) {
   return (
     <div className={`${ADMIN.card} overflow-hidden`}>
-      {empty ? <p className="px-4 py-10 text-sm text-[#A1A1AA] text-center">{empty}</p> : children}
+      {empty ? <p className="px-4 py-10 text-sm text-[#8C8878] text-center">{empty}</p> : children}
     </div>
   )
 }

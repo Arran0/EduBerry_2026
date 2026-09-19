@@ -129,10 +129,10 @@ export default function LateFeeRuleBuilder({
       title={rule ? 'Edit late-fee rule' : 'New late-fee rule'}
       subtitle="Nothing is charged until you switch the rule on, and never for days before that."
       icon={<AlertTriangle size={15} />}
-      iconClassName="bg-[#FBF6E9] text-[#8A6D1F]"
+      iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-[#A1A1AA]">
+          <span className="text-[11px] text-[#8C8878]">
             {blocking.length > 0
               ? 'Fix the errors above to save.'
               : rule?.enabled
@@ -175,7 +175,7 @@ export default function LateFeeRuleBuilder({
               <select value={form.scope_id ?? ''}
                       disabled={form.scope === 'all'}
                       onChange={e => set('scope_id', e.target.value || null)}
-                      className={`${ADMIN.inputPlain} disabled:bg-[#FAFAFA] disabled:text-[#A1A1AA]`}>
+                      className={`${ADMIN.inputPlain} disabled:bg-[#FAF8F2] disabled:text-[#8C8878]`}>
                 <option value="">{form.scope === 'all' ? '—' : 'Choose…'}</option>
                 {scopes.filter(s => s.kind === form.scope).map(s => (
                   <option key={s.id} value={s.id}>{s.label}</option>
@@ -247,68 +247,68 @@ export default function LateFeeRuleBuilder({
 
         {/* ── The live sample ──────────────────────────────────────── */}
         <div className="space-y-3">
-          <div className="bg-[#FAFAFA] border border-[#E4E4E7] p-3">
+          <div className="bg-[#FAF8F2] border border-[#E3DFD3] p-3">
             <div className="flex items-center justify-between gap-2">
               <span className={ADMIN.label}>On a sample bill of</span>
               <div className="flex items-center gap-1">
-                <span className="text-sm text-[#71717A]">₹</span>
+                <span className="text-sm text-[#6B675A]">₹</span>
                 <input type="number" min={0} value={sample}
                        onChange={e => setSample(Number(e.target.value))}
-                       className="w-28 bg-white border border-[#E4E4E7] px-2 py-1 text-sm text-right
-                                  text-[#27272A] focus:outline-none focus:border-[#27272A]" />
+                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-sm text-right
+                                  text-[#18181B] focus:outline-none focus:border-[#27272A]" />
               </div>
             </div>
             <table className="w-full mt-3 text-sm">
               <tbody>
                 {horizons.map(h => (
-                  <tr key={h.days} className="border-t border-[#E4E4E7] first:border-0">
-                    <td className="py-1.5 text-[#71717A]">
+                  <tr key={h.days} className="border-t border-[#E3DFD3] first:border-0">
+                    <td className="py-1.5 text-[#6B675A]">
                       {h.days === 365 ? 'A year late' : `${h.days} days late`}
                     </td>
-                    <td className="py-1.5 text-right font-semibold text-[#27272A]">
+                    <td className="py-1.5 text-right font-semibold text-[#18181B]">
                       {formatPaise(h.result.amount)}
                       {h.result.cappedBy && (
                         <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider
-                                         text-[#8A6D1F]">capped</span>
+                                         text-[#7A6220]">capped</span>
                       )}
                     </td>
-                    <td className="py-1.5 pl-3 text-right text-[11px] text-[#A1A1AA] w-24">
+                    <td className="py-1.5 pl-3 text-right text-[11px] text-[#8C8878] w-24">
                       {sample > 0 ? `${Math.round((h.result.amount / toPaise(sample)) * 100)}% of bill` : ''}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[11px] text-[#A1A1AA] leading-relaxed">
+            <p className="mt-2 text-[11px] text-[#8C8878] leading-relaxed">
               {horizons[1]?.result.why}
             </p>
           </div>
 
           {warnings.length === 0 ? (
-            <div className="flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200">
-              <Info size={13} className="text-emerald-700 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-emerald-800 leading-relaxed">
+            <div className="flex items-start gap-2 p-3 bg-[#EAF5EE] border border-[#C6E3D2]">
+              <Info size={13} className="text-[#1F6B42] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[#1F6B42] leading-relaxed">
                 Nothing to flag. The sample above is what a family would actually be charged.
               </p>
             </div>
           ) : warnings.map((w, i) => (
             <div key={i} className={`flex items-start gap-2 p-3 border ${
               w.level === 'error'
-                ? 'bg-rose-50 border-rose-200'
-                : 'bg-[#FBF6E9] border-[#EFE3C4]'}`}>
+                ? 'bg-[#FCECEC] border-[#EFCCCC]'
+                : 'bg-[#FAF3DF] border-[#E7D9AE]'}`}>
               <AlertTriangle size={13} className={`mt-0.5 flex-shrink-0 ${
-                w.level === 'error' ? 'text-rose-600' : 'text-[#8A6D1F]'}`} />
+                w.level === 'error' ? 'text-[#A93232]' : 'text-[#7A6220]'}`} />
               <p className={`text-xs leading-relaxed ${
-                w.level === 'error' ? 'text-rose-800' : 'text-[#7A5F16]'}`}>
+                w.level === 'error' ? 'text-[#A93232]' : 'text-[#7A6220]'}`}>
                 {w.message}
               </p>
             </div>
           ))}
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200">
-              <X size={13} className="text-rose-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-rose-800">{error}</p>
+            <div className="flex items-start gap-2 p-3 bg-[#FCECEC] border border-[#EFCCCC]">
+              <X size={13} className="text-[#A93232] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[#A93232]">{error}</p>
             </div>
           )}
         </div>
@@ -324,7 +324,7 @@ function Field({
     <label className="block">
       <span className={ADMIN.label}>{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-1 text-[11px] text-[#A1A1AA] leading-snug">{hint}</p>}
+      {hint && <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">{hint}</p>}
     </label>
   )
 }

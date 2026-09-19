@@ -11,45 +11,46 @@ import React from 'react'
 import { CalendarRange, ChevronDown, RotateCcw } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 
-export default function YearScope({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
+export default function YearScope() {
   const { years, year, isViewingPastYear, setYearId, resetToActive } = useAcademicYear()
   if (years.length === 0 || !year) return null
 
-  const dark = tone === 'dark'
-
   return (
-    <div className="flex items-center gap-2">
-      <div className={`relative inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1.5 rounded-lg border ${
+    <div className="flex items-center gap-1.5">
+      <div className={`relative inline-flex items-center gap-1.5 pl-2 pr-1 py-[5px] border ${
         isViewingPastYear
-          ? 'bg-[#FBF6E9] border-[#EFE3C4]'
-          : dark ? 'bg-[#3F3F46] border-[#52525B]' : 'bg-white border-[#E4E4E7]'
+          ? 'bg-[#FAF3DF] border-[#E7D9AE]'
+          : 'bg-white border-[#E3DFD3]'
       }`}>
-        <CalendarRange size={13} className={
-          isViewingPastYear ? 'text-[#8A6D1F]' : dark ? 'text-zinc-400' : 'text-[#A1A1AA]'} />
+        <CalendarRange size={12} className={isViewingPastYear ? 'text-[#7A6220]' : 'text-[#A8A395]'} />
         <select
           value={year.id}
           onChange={e => setYearId(e.target.value)}
           aria-label="Academic session"
-          className={`appearance-none bg-transparent pr-5 text-xs font-semibold focus:outline-none cursor-pointer ${
-            isViewingPastYear ? 'text-[#8A6D1F]' : dark ? 'text-white' : 'text-[#27272A]'
+          className={`appearance-none bg-transparent pr-4 text-[11px] font-bold uppercase tracking-[0.06em]
+                      leading-none focus:outline-none cursor-pointer ${
+            isViewingPastYear ? 'text-[#7A6220]' : 'text-[#18181B]'
           }`}
         >
           {years.map(y => (
-            <option key={y.id} value={y.id} className="text-[#27272A]">
+            <option key={y.id} value={y.id} className="text-[#18181B] normal-case tracking-normal">
               {y.code}{y.is_active ? ' · active' : ''}
             </option>
           ))}
         </select>
-        <ChevronDown size={12} className={`absolute right-2 pointer-events-none ${
-          isViewingPastYear ? 'text-[#8A6D1F]' : dark ? 'text-zinc-400' : 'text-[#A1A1AA]'}`} />
+        <ChevronDown size={11} className={`absolute right-1.5 pointer-events-none ${
+          isViewingPastYear ? 'text-[#7A6220]' : 'text-[#A8A395]'}`} />
       </div>
 
       {isViewingPastYear && (
         <button
           onClick={resetToActive}
-          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8A6D1F] hover:underline"
+          title="Back to the current session"
+          className="inline-flex items-center gap-1 px-1.5 py-[5px] text-[9px] font-bold uppercase
+                     tracking-[0.08em] leading-none text-[#7A6220] border border-[#E7D9AE]
+                     bg-[#FAF3DF] hover:bg-[#F5EBCE] transition-colors"
         >
-          <RotateCcw size={11} /> Back to the current session
+          <RotateCcw size={10} /> <span className="hidden sm:inline">Current</span>
         </button>
       )}
     </div>

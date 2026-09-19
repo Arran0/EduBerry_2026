@@ -164,7 +164,7 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
             <h2 className="font-bold text-slate-800">Pay fee</h2>
             <p className="text-xs text-slate-400">{formatINR(dueNow)} · {fee.description || 'School fee'}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ">
             <X size={16} />
           </button>
         </div>
@@ -178,14 +178,14 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
           ) : loading ? (
             <div className="text-center py-8"><div className="spinner mx-auto" /></div>
           ) : !razorpayConfigured && !upiConfigured ? (
-            <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+            <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 text-xs text-slate-600">
               <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
               No payment method is set up yet. Please contact the school office.
             </div>
           ) : (
             <>
               {razorpayConfigured && upiConfigured && (
-                <div className="flex gap-1.5 mb-4 p-1 bg-slate-100 rounded-xl">
+                <div className="flex gap-1.5 mb-4 p-1 bg-slate-100 ">
                   <TabBtn active={tab === 'upi'} onClick={() => setTab('upi')} icon={<QrCode size={14} />} label="UPI QR" />
                   <TabBtn active={tab === 'razorpay'} onClick={() => setTab('razorpay')} icon={<CreditCard size={14} />} label="Card / Netbanking" />
                 </div>
@@ -195,14 +195,14 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
                 <div>
                   <p className="text-sm text-slate-500 mb-4 leading-relaxed">Pay securely via Razorpay — UPI, cards, netbanking, and wallets.</p>
                   <button onClick={payRazorpay} disabled={busy}
-                    className="w-full text-sm font-semibold py-2.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                    className="w-full text-sm font-semibold py-2.5 bg-slate-800 text-white hover:bg-slate-900 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                     {busy ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
                     Pay {formatINR(dueNow)}
                   </button>
                 </div>
               ) : upiConfigured ? (
                 <div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center">
+                  <div className="bg-slate-50 border border-slate-200 p-4 flex flex-col items-center">
                     {collecting || !qrDataUrl ? (
                       <div className="w-44 h-44 flex items-center justify-center"><div className="spinner" /></div>
                     ) : (
@@ -221,7 +221,7 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
                       Waiting for your payment… this confirms automatically.
                     </div>
                   ) : (
-                    <div className="mt-4 flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                    <div className="mt-4 flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 text-xs text-slate-600">
                       <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                       After you pay, the school office confirms receipt against this reference — no need to do anything else here.
                     </div>
@@ -230,7 +230,7 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
               ) : null}
 
               {error && (
-                <div className="flex items-center gap-2 p-3 mt-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                <div className="flex items-center gap-2 p-3 mt-4 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-xs">
                   <AlertCircle size={14} className="flex-shrink-0" /> {error}
                 </div>
               )}
@@ -245,7 +245,7 @@ export default function PaySchoolFeeModal({ fee, payable, onClose, onPaid }: Pay
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick}
-      className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg transition-colors ${
+      className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 transition-colors ${
         active ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
       }`}>
       {icon} {label}

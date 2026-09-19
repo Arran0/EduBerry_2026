@@ -138,10 +138,10 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
         <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-slate-100 rounded-lg"><IndianRupee size={16} className="text-slate-700" /></div>
+            <div className="p-1.5 bg-slate-100 "><IndianRupee size={16} className="text-slate-700" /></div>
             <h2 className="font-bold text-slate-800">Issue Fee</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ">
             <X size={16} />
           </button>
         </div>
@@ -191,11 +191,11 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
             </div>
 
             {showHrPicker && (
-              <div className="mb-2 border border-slate-200 rounded-xl p-2">
+              <div className="mb-2 border border-slate-200 p-2">
                 <div className="relative mb-2">
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input value={hrQuery} onChange={e => setHrQuery(e.target.value)} placeholder="Search homerooms…"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
                 </div>
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {hrPickerResults.length === 0 ? (
@@ -206,7 +206,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
                     const badge = homeroomGradeSectionBadge(h)
                     return (
                       <button key={h.id} type="button" onClick={() => { toggleHomeroom(h.id); setShowHrPicker(false); setHrQuery('') }}
-                        className="w-full flex items-center gap-2.5 rounded-lg p-2 border border-slate-200 bg-white hover:border-slate-300 text-left transition-colors">
+                        className="w-full flex items-center gap-2.5 p-2 border border-slate-200 bg-white hover:border-slate-300 text-left transition-colors">
                         <Users size={14} className="text-slate-400 flex-shrink-0" />
                         <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">
                           {h.name}{badge ? <span className="text-slate-400"> · {badge}</span> : null}
@@ -240,18 +240,18 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
 
 
             {showPicker && (
-              <div className="mb-2 border border-slate-200 rounded-xl p-2">
+              <div className="mb-2 border border-slate-200 p-2">
                 <div className="relative mb-2">
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search students…"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white" />
                 </div>
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {pickerResults.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-3">No matching students.</p>
                   ) : pickerResults.map(p => (
                     <button key={p.id} type="button" onClick={() => addIndividual(p)}
-                      className="w-full flex items-center gap-2.5 rounded-lg p-2 border border-slate-200 bg-white hover:border-slate-300 text-left transition-colors">
+                      className="w-full flex items-center gap-2.5 p-2 border border-slate-200 bg-white hover:border-slate-300 text-left transition-colors">
                       <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
                       <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{p.full_name}</span>
                       <UserPlus size={14} className="text-slate-400 flex-shrink-0" />
@@ -261,15 +261,15 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
               </div>
             )}
 
-            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 rounded-xl p-2">
+            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5 border border-slate-100 p-2">
               {recipients.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-4">Pick homerooms or add students.</p>
               ) : recipients.map(p => (
-                <div key={p.id} className="w-full flex items-center gap-2.5 rounded-lg p-2 border border-slate-200 bg-white">
+                <div key={p.id} className="w-full flex items-center gap-2.5 p-2 border border-slate-200 bg-white">
                   <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28} userId={p.id} />
                   <span className="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate">{p.full_name}</span>
                   <button onClick={() => removeRecipient(p.id)}
-                    className="p-1 text-slate-300 hover:text-rose-500 flex-shrink-0" title="Remove">
+                    className="p-1 text-slate-300 hover:text-[#A93232] flex-shrink-0" title="Remove">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -278,7 +278,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+            <div className="flex items-center gap-2 p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-xs">
               <AlertCircle size={14} className="flex-shrink-0" /> {error}
             </div>
           )}
@@ -286,7 +286,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
             <button onClick={submit} disabled={saving || recipients.length === 0 || !dueDate}
-              className="flex-1 text-sm font-semibold py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
+              className="flex-1 text-sm font-semibold py-2 bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
               {saving ? 'Issuing…' : `Issue ${recipients.length || ''} fee${recipients.length === 1 ? '' : 's'}`}
             </button>
           </div>
@@ -296,7 +296,7 @@ export default function IssueFeeModal({ feeHeads, homerooms, onClose, onIssued }
   )
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
+const inputCls = 'w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
