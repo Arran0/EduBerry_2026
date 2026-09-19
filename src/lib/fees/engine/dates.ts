@@ -48,17 +48,11 @@ export function maxDate(a: IsoDate, b: IsoDate): IsoDate {
   return toEpochDay(a) >= toEpochDay(b) ? a : b
 }
 
-export function minDate(a: IsoDate, b: IsoDate): IsoDate {
-  return toEpochDay(a) <= toEpochDay(b) ? a : b
-}
 
 export function isBefore(a: IsoDate, b: IsoDate): boolean {
   return toEpochDay(a) < toEpochDay(b)
 }
 
-export function isOnOrBefore(a: IsoDate, b: IsoDate): boolean {
-  return toEpochDay(a) <= toEpochDay(b)
-}
 
 /** Today in a named IANA zone, as a date string. Defaults to the school's zone. */
 export function todayIn(timeZone = 'Asia/Kolkata', now: Date = new Date()): IsoDate {

@@ -16,7 +16,7 @@
 // raises its own slip or joins a bill the guardian is already about to pay.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle, ArrowLeft, Ban, CheckCircle2, Gavel, Loader2, Play, Plus,
@@ -70,21 +70,41 @@ function ChargesInner() {
   const canManage = perms.can('fees.latefee.manage')
   const canFine = perms.can('fees.fine.apply')
 
-  const load = useCallback(async () => {
+  // Per tab. The rules tab needs the price list (for a rule's scope) and the
+  // bills (for a realistic sample); the fines tab needs the roster, which is
+  // every student in the school. Fetching all of it on mount meant opening
+  // this screen to switch one rule off pulled ~930 profile rows down first.
+  const fetched = useRef<Set<Tab>>(new Set())
+
+  const load = useCallback(async (which: Tab, force = false) => {
     if (!year) return
+    if (!force && fetched.current.has(which)) return
     setLoading(true)
     try {
-      const [cfg, rs, inv, list, fs, cats] = await Promise.all([
-        fetchFeeConfig(year.id),
-        fetchLateFeeRules(year.id),
-        fetchUnpaidInvoices(year.id),
-        fetchProfileList(year.id),
-        fetchFines(year.id),
-        fetchFineCategories(),
-      ])
-      setConfig(cfg); setRules(rs); setInvoices(inv); setPeople(list)
-      setFines(fs); setCategories(cats)
-      setCharges(await fetchLateFeeCharges(inv.map(i => i.id)))
+      if (which === 'rules' || which === 'charged') {
+        const [cfg, rs, inv] = await Promise.all([
+          fetchFeeConfig(year.id),
+          fetchLateFeeRules(year.id),
+          fetchUnpaidInvoices(year.id),
+        ])
+        setConfig(cfg); setRules(rs); setInvoices(inv)
+        if (which === 'charged') {
+          const [chg, list] = await Promise.all([
+            fetchLateFeeCharges(inv.map(i => i.id)),
+            fetchProfileList(year.id),
+          ])
+          setCharges(chg); setPeople(list)
+        }
+      } else {
+        const [fs, cats, list, inv] = await Promise.all([
+          fetchFines(year.id),
+          fetchFineCategories(),
+          fetchProfileList(year.id),
+          fetchUnpaidInvoices(year.id),
+        ])
+        setFines(fs); setCategories(cats); setPeople(list); setInvoices(inv)
+      }
+      fetched.current.add(which)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load charges.')
     } finally {
@@ -92,7 +112,11 @@ function ChargesInner() {
     }
   }, [year])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { fetched.current = new Set() }, [year])
+  useEffect(() => { void load(tab) }, [load, tab])
+
+  /** After a write, refresh the tab that is open. */
+  const reload = useCallback(() => load(tab, true), [load, tab])
 
   const names = useMemo(() => {
     const m = new Map<string, ProfileListRow>()
@@ -136,7 +160,7 @@ function ChargesInner() {
     try {
       const result = await runLateFeeSweep(year.id, commit)
       setSweep(result)
-      if (commit) await load()
+      if (commit) await reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The sweep could not run.')
     } finally {
@@ -147,7 +171,7 @@ function ChargesInner() {
   const toggleRule = async (rule: LateFeeRuleRow) => {
     try {
       await setLateFeeRuleEnabled(rule.id, !rule.enabled)
-      await load()
+      await reload()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change the rule.')
     }
@@ -300,13 +324,13 @@ function ChargesInner() {
         <ChargedList
           charges={charges} invoices={byInvoice} names={names}
           showAmounts={showAmounts} canManage={canManage}
-          onChanged={load}
+          onChanged={reload}
         />
       ) : (
         <FinesList
           fines={fines} categories={categories} names={names}
           showAmounts={showAmounts} canFine={canFine}
-          onAdd={() => setFining(true)} onChanged={load}
+          onAdd={() => setFining(true)} onChanged={reload}
         />
       )}
 
@@ -318,7 +342,7 @@ function ChargesInner() {
           scopes={scopes}
           sampleBillRupees={sampleBill}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load() }}
+          onSaved={() => { setEditing(null); void reload() }}
         />
       )}
 
@@ -330,7 +354,7 @@ function ChargesInner() {
           invoices={invoices}
           showAmounts={showAmounts}
           onClose={() => setFining(false)}
-          onDone={() => { setFining(false); void load() }}
+          onDone={() => { setFining(false); void reload() }}
         />
       )}
     </FeeScreen>

@@ -56,7 +56,7 @@ export default function RteRegister({
             {pending > 0 && ` · ${inr(pending, showAmounts)} still with the state`}
           </span>
         )}
-        <button onClick={() => exportRows(
+        <button onClick={() => void exportRows(
                   rows.map(r => ({
                     Student: names.get(r.student_id) ?? r.student_id,
                     Category: r.category,

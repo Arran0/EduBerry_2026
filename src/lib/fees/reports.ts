@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase, isMissingRelation, authHeader } from '@/lib/supabase'
+import { inChunks } from './chunk'
 
 function empty<T>(error: { code?: string; message?: string } | null, fallback: T): T {
   if (isMissingRelation(error)) return fallback
@@ -488,19 +489,15 @@ export async function runQuestion(
 }
 
 /** Student id → name, chunked so a long list stays inside one URL. */
-async function namesFor(ids: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
-  const unique = Array.from(new Set(ids))
-  for (let i = 0; i < unique.length; i += 300) {
+export async function namesFor(ids: string[]): Promise<Map<string, string>> {
+  type Row = { id: string; full_name: string }
+  const rows = await inChunks(Array.from(new Set(ids)), async batch => {
     const { data, error } = await supabase.from('profiles')
-      .select('id, full_name').in('id', unique.slice(i, i + 300))
-    if (error) return empty(error, out)
-    ;(data ?? []).forEach(r => {
-      const row = r as { id: string; full_name: string }
-      out.set(row.id, row.full_name)
-    })
-  }
-  return out
+      .select('id, full_name').in('id', batch)
+    if (error) return empty(error, [] as Row[])
+    return (data ?? []) as Row[]
+  })
+  return new Map(rows.map(r => [r.id, r.full_name]))
 }
 
 async function studentsInClass(grade: number, section?: string): Promise<Map<string, string>> {

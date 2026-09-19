@@ -14,7 +14,7 @@
 // database withheld the numbers rather than the interface hiding them.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, BarChart3, CalendarDays, Download, FileClock, Loader2,
@@ -40,7 +40,7 @@ import { fetchUnpaidInvoices, type InvoiceRow } from '@/lib/fees/invoices'
 import {
   fetchAging, fetchAudit, fetchCollectionDaily, fetchConcessionSummary,
   fetchDefaultersByClass, fetchInstrumentPipeline, fetchRefunds, fetchRteRegister,
-  fetchStaffCollection, fetchYearSummary,
+  fetchStaffCollection, fetchYearSummary, namesFor,
   type AgingRow, type AuditRow, type CollectionDayRow, type ConcessionSummaryRow,
   type DefaulterClassRow, type InstrumentPipelineRow, type RefundRow, type RteRow,
   type StaffCollectionRow, type YearSummaryRow,
@@ -84,25 +84,60 @@ function ReportsInner() {
   // A boolean rather than `perms` itself — see the note on the hub's loader.
   const canSeeAudit = perms.can('fees.audit.view')
 
-  const load = useCallback(async () => {
+  // What each tab needs, so opening the Collection Center does not pull the
+  // whole module down. This page used to fetch eleven datasets on mount —
+  // every tab's, including up to five thousand invoice rows — for a reader who
+  // in practice looks at Overview and leaves.
+  //
+  // Overview's four headline figures are one view, so they stay eager; the
+  // rest arrive when their tab is first opened and are then kept.
+  // A ref, not state. `load` reads it to decide whether a tab is already in
+  // hand, and writes it when a fetch lands — as state that would put `load` in
+  // its own dependency chain, which is exactly the loop this module had to fix
+  // on the hub. A ref keeps `load` stable and the bookkeeping invisible to
+  // rendering, which is what it is: nothing on screen depends on it.
+  const fetched = useRef<Set<Tab | 'headline'>>(new Set())
+
+  const load = useCallback(async (what: Tab | 'headline' | 'all', force = false) => {
     if (!year) return
+    if (!force && what !== 'all' && fetched.current.has(what)) return
     setLoading(true)
     try {
+      const want = (t: Tab | 'headline') => what === 'all' || what === t
+
       const [s, d, a, c, cs, p, st, rf, rt, au, un] = await Promise.all([
-        fetchYearSummary(year.id),
-        fetchCollectionDaily(year.id),
-        fetchAging(year.id),
-        fetchDefaultersByClass(year.id),
-        fetchConcessionSummary(year.id),
-        fetchInstrumentPipeline(year.id),
-        fetchStaffCollection(year.id),
-        fetchRefunds(year.id),
-        fetchRteRegister(year.id),
-        canSeeAudit ? fetchAudit({ yearId: year.id, limit: 200 }) : Promise.resolve([]),
-        fetchUnpaidInvoices(year.id),
+        want('headline') || want('overview') ? fetchYearSummary(year.id) : null,
+        want('overview') || want('collections') ? fetchCollectionDaily(year.id) : null,
+        want('outstanding') ? fetchAging(year.id) : null,
+        want('outstanding') ? fetchDefaultersByClass(year.id) : null,
+        want('concessions') ? fetchConcessionSummary(year.id) : null,
+        want('instruments') ? fetchInstrumentPipeline(year.id) : null,
+        want('instruments') ? fetchStaffCollection(year.id) : null,
+        want('instruments') ? fetchRefunds(year.id) : null,
+        want('operations') ? fetchRteRegister(year.id) : null,
+        want('operations') && canSeeAudit ? fetchAudit({ yearId: year.id, limit: 200 }) : null,
+        // Only the two tabs with a Remind button need the bills behind it.
+        want('outstanding') || want('operations') ? fetchUnpaidInvoices(year.id) : null,
       ])
-      setSummary(s); setDaily(d); setAging(a); setClasses(c); setConcessions(cs)
-      setPipeline(p); setStaff(st); setRefunds(rf); setRte(rt); setAudit(au); setUnpaid(un)
+
+      if (s) setSummary(s)
+      if (d) setDaily(d)
+      if (a) setAging(a)
+      if (c) setClasses(c)
+      if (cs) setConcessions(cs)
+      if (p) setPipeline(p)
+      if (st) setStaff(st)
+      if (rf) setRefunds(rf)
+      if (rt) setRte(rt)
+      if (au) setAudit(au)
+      if (un) setUnpaid(un)
+
+      if (what === 'all') {
+        fetched.current.add('headline')
+        TABS.forEach(t => fetched.current.add(t.key))
+      } else {
+        fetched.current.add(what)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the reports.')
     } finally {
@@ -110,31 +145,36 @@ function ReportsInner() {
     }
   }, [year, canSeeAudit])
 
-  useEffect(() => { void load() }, [load])
+  // The headline strip and whichever tab is open. Changing the session throws
+  // the cache away, because every figure on the page is scoped to one.
+  useEffect(() => { fetched.current = new Set() }, [year])
+  useEffect(() => { void load('headline') }, [load])
+  useEffect(() => { void load(tab) }, [load, tab])
+
+  /** After a write, re-fetch what is on screen rather than everything. */
+  const reload = useCallback(async () => {
+    await load('headline', true)
+    await load(tab, true)
+  }, [load, tab])
 
   // Names for the refund queue, the RTE register and the audit trail, fetched
   // once for all three rather than per row.
+  //
+  // `namesFor` batches. This used to slice to the first 300 ids, so an audit
+  // trail longer than that showed "Student" for every row past it — silently,
+  // because a truncated list still renders.
+  const nameIds = useMemo(() => Array.from(new Set([
+    ...refunds.map(r => r.student_id),
+    ...rte.map(r => r.student_id),
+    ...audit.map(a => a.student_id).filter((x): x is string => Boolean(x)),
+  ])).sort().join(','), [refunds, rte, audit])
+
   useEffect(() => {
-    const ids = Array.from(new Set([
-      ...refunds.map(r => r.student_id),
-      ...rte.map(r => r.student_id),
-      ...audit.map(a => a.student_id).filter((x): x is string => Boolean(x)),
-    ]))
-    if (ids.length === 0) return
+    if (!nameIds) return
     let cancelled = false
-    void (async () => {
-      const { supabase } = await import('@/lib/supabase')
-      const { data } = await supabase.from('profiles').select('id, full_name').in('id', ids.slice(0, 300))
-      if (cancelled) return
-      const m = new Map<string, string>()
-      ;(data ?? []).forEach(r => {
-        const row = r as { id: string; full_name: string }
-        m.set(row.id, row.full_name)
-      })
-      setNames(m)
-    })()
+    void namesFor(nameIds.split(',')).then(m => { if (!cancelled) setNames(m) })
     return () => { cancelled = true }
-  }, [refunds, rte, audit])
+  }, [nameIds])
 
   const todayCollected = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -239,7 +279,7 @@ function ReportsInner() {
           <Pipeline rows={pipeline} showAmounts={showAmounts} />
           <StaffTable rows={staff} showAmounts={showAmounts} />
           <RefundQueue rows={refunds} names={names} showAmounts={showAmounts}
-                       canDecide={perms.can('fees.refund.approve')} onChanged={load} />
+                       canDecide={perms.can('fees.refund.approve')} onChanged={reload} />
         </div>
       ) : tab === 'concessions' ? (
         <ConcessionTable rows={concessions} showAmounts={showAmounts} />
@@ -247,11 +287,11 @@ function ReportsInner() {
         <div className="space-y-4">
           {year && (
             <RteRegister rows={rte} names={names} yearId={year.id} showAmounts={showAmounts}
-                         canManage={perms.can('fees.rte.manage')} onChanged={load} />
+                         canManage={perms.can('fees.rte.manage')} onChanged={reload} />
           )}
           {years.length > 1 && perms.can('fees.config.clone_year') && year && (
             <CarryForward years={years.map(y => ({ id: y.id, code: y.code }))}
-                          currentId={year.id} showAmounts={showAmounts} onDone={load} />
+                          currentId={year.id} showAmounts={showAmounts} onDone={reload} />
           )}
           <AuditTrail rows={audit} names={names} showAmounts={showAmounts}
                       canSee={perms.can('fees.audit.view')} />
@@ -414,7 +454,7 @@ function ByMethod({ rows, showAmounts }: { rows: CollectionDayRow[]; showAmounts
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>How families paid</h3>
-        <button onClick={() => exportRows(
+        <button onClick={() => void exportRows(
                   list.map(([method, v]) => ({
                     Method: method, Receipts: v.receipts,
                     Collected: showAmounts && v.collected !== null ? v.collected : '••••',
@@ -460,7 +500,7 @@ function ClassTable({
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Class by class</h3>
-        <button onClick={() => exportRows(
+        <button onClick={() => void exportRows(
                   sorted.map(r => ({
                     Class: `${gradeLabel(r.grade)}${r.section ?? ''}`,
                     'Students owing': r.students_owing,

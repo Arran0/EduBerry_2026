@@ -164,7 +164,7 @@ export default function FeeSearch({
                   Remind these {answer.studentIds.length}
                 </button>
               )}
-              <button onClick={() => exportRows(answer.rows, 'Answer',
+              <button onClick={() => void exportRows(answer.rows, 'Answer',
                                                 `fee-${answer.label.toLowerCase().replace(/\W+/g, '-')}`)}
                       disabled={answer.rows.length === 0} className={ADMIN.ghostBtn}>
                 <Download size={13} /> Export

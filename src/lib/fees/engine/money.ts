@@ -32,13 +32,6 @@ export function toRupees(paise: Paise): number {
   return Math.round(paise) / RUPEE
 }
 
-/** Guards against a NaN or a fraction sneaking in from a caller. */
-export function assertPaise(value: number, what = 'amount'): Paise {
-  if (!Number.isFinite(value) || !Number.isInteger(value)) {
-    throw new Error(`${what} must be a whole number of paise, got ${value}`)
-  }
-  return value
-}
 
 export function sum(values: Paise[]): Paise {
   return values.reduce((a, b) => a + b, 0)

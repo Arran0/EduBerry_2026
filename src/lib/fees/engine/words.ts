@@ -89,9 +89,5 @@ export function amountInWords(paise: Paise): string {
   return negative ? `Minus ${out}` : out
 }
 
-/** Convenience for callers holding rupees rather than paise. */
-export function rupeesInWords(rupees: number): string {
-  return amountInWords(Math.round(rupees * 100))
-}
 
 export { toRupees }

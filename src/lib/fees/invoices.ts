@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase, isMissingRelation, authHeader } from '@/lib/supabase'
+import { inChunks } from './chunk'
 
 export type InvoiceStatus =
   | 'draft' | 'pending' | 'partly_paid' | 'paid' | 'overdue' | 'cancelled'
@@ -209,13 +210,14 @@ export async function fetchOutstandingInvoices(
 }
 
 export async function fetchInvoiceLines(invoiceIds: string[]): Promise<InvoiceLineRow[]> {
-  if (invoiceIds.length === 0) return []
-  const { data, error } = await supabase.from('fee_invoice_lines')
-    .select('id, invoice_id, kind, fee_head_id, label, amount, tax_rate, tax_amount, note, sort')
-    .in('invoice_id', invoiceIds)
-    .order('sort')
-  if (error) return emptyOnMissing(error, [])
-  return (data ?? []) as InvoiceLineRow[]
+  return inChunks(invoiceIds, async batch => {
+    const { data, error } = await supabase.from('fee_invoice_lines')
+      .select('id, invoice_id, kind, fee_head_id, label, amount, tax_rate, tax_amount, note, sort')
+      .in('invoice_id', batch)
+      .order('sort')
+    if (error) return emptyOnMissing(error, [] as InvoiceLineRow[])
+    return (data ?? []) as InvoiceLineRow[]
+  })
 }
 
 export async function fetchPayments(filter: {
@@ -243,12 +245,14 @@ export async function fetchPayments(filter: {
 export async function fetchAllocations(
   paymentIds: string[],
 ): Promise<{ payment_id: string; invoice_id: string; amount: number }[]> {
-  if (paymentIds.length === 0) return []
-  const { data, error } = await supabase.from('fee_payment_allocations')
-    .select('payment_id, invoice_id, amount')
-    .in('payment_id', paymentIds)
-  if (error) return emptyOnMissing(error, [])
-  return (data ?? []) as { payment_id: string; invoice_id: string; amount: number }[]
+  type Row = { payment_id: string; invoice_id: string; amount: number }
+  return inChunks(paymentIds, async batch => {
+    const { data, error } = await supabase.from('fee_payment_allocations')
+      .select('payment_id, invoice_id, amount')
+      .in('payment_id', batch)
+    if (error) return emptyOnMissing(error, [] as Row[])
+    return (data ?? []) as Row[]
+  })
 }
 
 export async function fetchInstruments(filter: {

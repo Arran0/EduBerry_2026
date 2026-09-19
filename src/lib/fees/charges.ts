@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase, isMissingRelation, authHeader } from '@/lib/supabase'
+import { inChunks } from './chunk'
 import type { LateFeeRule } from './engine/latefee'
 import { toPaise } from './engine/money'
 
@@ -199,11 +200,15 @@ export async function fetchLateFeeRules(yearId: string): Promise<LateFeeRuleRow[
 }
 
 export async function fetchLateFeeCharges(invoiceIds: string[]): Promise<LateFeeChargeRow[]> {
-  if (invoiceIds.length === 0) return []
-  const { data, error } = await supabase.from('fee_late_fee_charges')
-    .select('*').in('invoice_id', invoiceIds).order('as_of', { ascending: false })
-  if (error) return empty(error, [])
-  return (data ?? []) as LateFeeChargeRow[]
+  const rows = await inChunks(invoiceIds, async batch => {
+    const { data, error } = await supabase.from('fee_late_fee_charges')
+      .select('*').in('invoice_id', batch)
+    if (error) return empty(error, [] as LateFeeChargeRow[])
+    return (data ?? []) as LateFeeChargeRow[]
+  })
+  // Sorted here rather than per batch — ordering inside each chunk would
+  // interleave into something that is not sorted at all.
+  return rows.sort((a, b) => b.as_of.localeCompare(a.as_of))
 }
 
 export async function fetchReminderLog(filter: {
