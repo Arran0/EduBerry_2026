@@ -32,6 +32,10 @@ const MAX_ACCURACY_M = 2000
 const MAX_IMPLIED_KMH = 150
 /** Replay window on the signature. */
 const MAX_SIGNATURE_AGE_S = 300
+/** One POST is one batch, not a backfill. A forwarder with more splits it. */
+const MAX_BATCH = 500
+/** A signature is hex of a fixed width; anything longer is not worth hashing. */
+const MAX_BODY_BYTES = 512 * 1024
 
 export async function POST(request: NextRequest) {
   const client = adminClient()
@@ -40,17 +44,23 @@ export async function POST(request: NextRequest) {
   }
 
   const rawBody = await request.text()
-  const keyId = request.headers.get('x-transport-key-id') ?? request.nextUrl.searchParams.get('k')
-  if (!keyId) {
+  if (Buffer.byteLength(rawBody) > MAX_BODY_BYTES) {
+    return NextResponse.json({ success: false, error: 'Payload too large' }, { status: 413 })
+  }
+
+  const keyId = request.headers.get('x-transport-key-id')
+    ?? request.nextUrl.searchParams.get('key')
+  // A key id identifies the source and is public; the secret never travels
+  // except inside the signature. The two are unrelated values, so seeing one
+  // request tells an observer nothing about how to forge the next.
+  if (!keyId || !/^[0-9a-f]{16}$/.test(keyId)) {
     return NextResponse.json({ success: false, error: 'Missing key' }, { status: 401 })
   }
 
-  // A key prefix identifies the source; the secret itself never travels except
-  // inside the signature.
   const { data: source } = await client
     .from('transport_telemetry_sources')
     .select('id, vendor, vehicle_id, active, ingest_key_prefix')
-    .eq('ingest_key_prefix', keyId.slice(0, 8))
+    .eq('ingest_key_prefix', keyId)
     .maybeSingle()
 
   if (!source || !source.active) {
@@ -63,7 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Source has no ingest secret configured' }, { status: 401 })
   }
 
-  if (!verify(request, rawBody, secret, keyId)) {
+  if (!verify(request, rawBody, secret)) {
     return NextResponse.json({ success: false, error: 'Bad signature' }, { status: 401 })
   }
 
@@ -76,6 +86,10 @@ export async function POST(request: NextRequest) {
 
   const now = Date.now()
   let rejected = 0
+  if (parsed.length > MAX_BATCH) {
+    rejected += parsed.length - MAX_BATCH
+    parsed = parsed.slice(0, MAX_BATCH)
+  }
   const usable = parsed.filter(f => {
     const t = new Date(f.recordedAt).getTime()
     if (!Number.isFinite(t) || now - t > MAX_AGE_MS || t - now > MAX_SKEW_MS) { rejected++; return false }
@@ -166,27 +180,30 @@ export async function POST(request: NextRequest) {
 /**
  * HMAC over `${timestamp}.${body}`, the same shape the existing Razorpay and
  * bank webhooks verify. A query-string secret is accepted as a documented
- * second-best for forwarders that cannot sign — it is compared in constant time
- * and rate-limited by the key lookup, but it does end up in access logs.
+ * second-best for forwarders that cannot sign — it is compared in constant time,
+ * but it does end up in access logs, which is why it is a separate parameter
+ * from the key id rather than the key id itself.
  */
-function verify(request: NextRequest, rawBody: string, secret: string, keyId: string): boolean {
+function verify(request: NextRequest, rawBody: string, secret: string): boolean {
   const signature = request.headers.get('x-transport-signature')
   const timestamp = request.headers.get('x-transport-timestamp')
 
   if (!signature || !timestamp) {
-    const provided = request.nextUrl.searchParams.get('k')
+    const provided = request.nextUrl.searchParams.get('secret')
     return !!provided && timingSafeEqual(provided, secret)
   }
 
-  const age = Math.abs(Date.now() / 1000 - Number(timestamp))
-  if (!Number.isFinite(age) || age > MAX_SIGNATURE_AGE_S) return false
+  const ts = Number(timestamp)
+  if (!Number.isFinite(ts)) return false
+  const age = Math.abs(Date.now() / 1000 - ts)
+  if (age > MAX_SIGNATURE_AGE_S) return false
 
   const expected = 'sha256=' + crypto
     .createHmac('sha256', secret)
     .update(`${timestamp}.${rawBody}`)
     .digest('hex')
 
-  return timingSafeEqual(signature, expected) && keyId.length > 0
+  return timingSafeEqual(signature, expected)
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

@@ -126,6 +126,29 @@ export async function fetchRunPassengers(runId: string): Promise<TransportRunPas
   )
 }
 
+/**
+ * One passenger row: the signed-in family's own child on a run.
+ *
+ * RLS already refuses another family's row, but a parent screen has no business
+ * asking for the whole roster and discarding it — the filter belongs in the
+ * query, so the onboard list never crosses the wire to a phone that must not
+ * see it. `fetchRunPassengers` stays for crew and admin, who legitimately need
+ * the roster.
+ */
+export async function fetchMyRunPassenger(
+  runId: string,
+  studentId: string,
+): Promise<TransportRunPassenger | null> {
+  const { data, error } = await supabase
+    .from('transport_run_passengers')
+    .select(`*, student:profiles!student_id(${STUDENT_COLS})`)
+    .eq('run_id', runId)
+    .eq('student_id', studentId)
+    .maybeSingle()
+  if (error) { console.error('fetchMyRunPassenger failed:', error); return null }
+  return (data as unknown as TransportRunPassenger) ?? null
+}
+
 export async function fetchOpenAlerts(): Promise<TransportAlert[]> {
   const { data, error } = await supabase
     .from('transport_alerts')

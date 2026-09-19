@@ -143,7 +143,7 @@ function DevicesPanel() {
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [newSecret, setNewSecret] = useState<{ label: string; secret: string } | null>(null)
+  const [newSecret, setNewSecret] = useState<{ label: string; keyId: string; secret: string } | null>(null)
   const [form, setForm] = useState<{ label: string; vendor: string; external_id: string; vehicle_id: string; kind: SourceKind }>({
     label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device',
   })
@@ -171,7 +171,7 @@ function DevicesPanel() {
       vehicle_id: form.vehicle_id || null,
     })
     if (!res.success) { setError(res.error ?? 'Could not register the device'); return }
-    setNewSecret({ label: form.label.trim(), secret: res.secret ?? '' })
+    setNewSecret({ label: form.label.trim(), keyId: res.keyId ?? '', secret: res.secret ?? '' })
     setForm({ label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device' })
     setAdding(false)
     load()
@@ -193,11 +193,13 @@ function DevicesPanel() {
           POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/transport/ingest
         </code>
         <p className="text-[11px] text-[#A1A1AA] mt-1.5">
-          Sign each request with the device key: header <code>x-transport-key-id</code>,
-          plus <code>x-transport-timestamp</code> and an <code>x-transport-signature</code> of
-          <code> sha256(timestamp + &quot;.&quot; + body)</code>. Forwarders that cannot sign may
-          append <code>?k=&lt;secret&gt;</code> instead — simpler, but the secret then
-          appears in server logs, so rotate it periodically.
+          Each device gets a <strong>key id</strong> and a <strong>secret</strong>. Send the key id
+          in <code>x-transport-key-id</code>, a unix time in <code>x-transport-timestamp</code>, and
+          in <code>x-transport-signature</code> the value
+          <code> sha256=HMAC-SHA256(secret, timestamp + &quot;.&quot; + body)</code>. The secret
+          itself is never sent. Forwarders that cannot sign may append
+          <code> ?key=&lt;key id&gt;&amp;secret=&lt;secret&gt;</code> instead — simpler, but the
+          secret then appears in server logs, so rotate it periodically.
         </p>
       </div>
 
@@ -207,9 +209,13 @@ function DevicesPanel() {
             <KeyRound size={14} /> Ingest key for {newSecret.label}
           </p>
           <p className="text-[11px] text-amber-800 mt-0.5 mb-2">
-            Copy this now — it is shown once and never again. If you lose it, rotate
-            the key rather than trying to recover it.
+            Copy the secret now — it is shown once and never again. If you lose it,
+            rotate the key rather than trying to recover it. The key id is not
+            secret and stays visible in the list below.
           </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mb-1">Key id</p>
+          <SecretRow secret={newSecret.keyId} />
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mt-2 mb-1">Secret</p>
           <SecretRow secret={newSecret.secret} />
           <button
             className="text-[11px] font-semibold text-amber-800 hover:text-amber-950 mt-2"
@@ -289,7 +295,7 @@ function DevicesPanel() {
                     <p className="text-sm font-semibold text-[#27272A] truncate">{s.label}</p>
                     <p className="text-[11px] text-[#71717A] truncate">
                       {s.vendor} · {s.external_id}
-                      {s.ingest_key_prefix && ` · key ${s.ingest_key_prefix}…`}
+                      {s.ingest_key_prefix && ` · key ${s.ingest_key_prefix}`}
                     </p>
                     {s.last_error && (
                       <p className="text-[11px] text-rose-600 truncate">{s.last_error}</p>
@@ -308,7 +314,9 @@ function DevicesPanel() {
                       onClick={async () => {
                         if (!confirm(`Rotate the key for “${s.label}”? The gateway will stop reporting until you paste the new one.`)) return
                         const res = await rotateSourceSecret(s.id)
-                        if (res.success && res.secret) setNewSecret({ label: s.label, secret: res.secret })
+                        if (res.success && res.secret) {
+                          setNewSecret({ label: s.label, keyId: res.keyId ?? '', secret: res.secret })
+                        }
                         load()
                       }}
                       className="p-1.5 rounded-md text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] transition-colors"

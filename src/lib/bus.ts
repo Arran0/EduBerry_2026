@@ -1,4 +1,15 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+
+/**
+ * The profile columns a bus screen actually renders.
+ *
+ * `profiles` is embedded from ~50 places and a `(*)` wildcard here is the
+ * single biggest egress multiplier in the app (README conventions). Every
+ * field below is read by a bus screen: `is_non_teaching` and `role` by the
+ * statement modals, `email`/`role` by the payslip builder, the rest by the
+ * avatar and name rows.
+ */
+const PROFILE_COLS = 'id, email, full_name, role, avatar_url, grade, section, is_non_teaching'
 import { academicYearOf, currentAcademicYear } from './fees'
 
 export { academicYearOf, currentAcademicYear }
@@ -125,73 +136,25 @@ export interface FeeCollectionSummary {
 export async function fetchTrips(): Promise<BusTrip[]> {
   const { data, error } = await supabase
     .from('transport_routes')
-    .select('*, default_driver:profiles!default_driver_id(*)')
+    .select(`*, default_driver:profiles!default_driver_id(${PROFILE_COLS})`)
     .order('name', { ascending: true })
   if (error) { console.error('fetchTrips failed:', error); return [] }
   return (data as BusTrip[]) || []
 }
 
-export async function fetchTrip(tripId: string): Promise<BusTrip | null> {
-  const { data, error } = await supabase
-    .from('transport_routes')
-    .select('*, default_driver:profiles!default_driver_id(*)')
-    .eq('id', tripId)
-    .single()
-  if (error) { console.error('fetchTrip failed:', error); return null }
-  return data as BusTrip
-}
-
-export interface TripInput {
-  name: string
-  description?: string | null
-  pickup_time?: string | null
-  drop_time?: string | null
-  default_driver_id?: string | null
-  active?: boolean
-}
-
-export async function createTrip(input: TripInput): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('transport_routes')
-    .insert({ ...input, created_by: user?.id })
-    .select('id')
-    .single()
-  if (error) { console.error('createTrip failed:', error); return { success: false, error: error.message } }
-  return { success: true, id: data.id }
-}
-
-export async function updateTrip(tripId: string, input: Partial<TripInput>): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('transport_routes').update(input).eq('id', tripId)
-  if (error) { console.error('updateTrip failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function setTripActive(tripId: string, active: boolean): Promise<{ success: boolean; error?: string }> {
-  return updateTrip(tripId, { active })
-}
+// Route CRUD used to live here. It now belongs to src/lib/transport/routes.ts,
+// which writes the full route model (path, colour, deviation threshold) rather
+// than the four columns the old trip template had. `fetchTrips` survives only
+// because the fee screens still want a flat list of routes to pick from.
 
 // ============================================
 // Passengers
 //
 // Assignment management now lives in src/lib/transport/assignments.ts against
 // the renamed transport_student_assignments table. What remains here is only
-// what the legacy driver roster and the bus-fee draft importer still read.
+// what the bus-fee draft importer still reads, and it is no longer exported:
+// a second way to read the roster is how two screens come to disagree.
 // ============================================
-
-export async function fetchTripPassengers(tripId: string): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('transport_student_assignments')
-    .select('passenger:profiles!student_id(*)')
-    .eq('route_id', tripId)
-    .is('ended_on', null)
-  if (error) { console.error('fetchTripPassengers failed:', error); return [] }
-  const rows = (data as unknown as { passenger: UserProfile | null }[]) || []
-  return rows
-    .map(r => r.passenger)
-    .filter((p): p is UserProfile => !!p)
-    .sort((a, b) => a.full_name.localeCompare(b.full_name))
-}
 
 /**
  * Anyone a bus fee can be issued to: any profile that is not an admin or a
@@ -212,7 +175,7 @@ export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
 }
 
 /** A route rider with the per-route fee + pickup label the admin set. */
-export interface TripPassengerDetail {
+interface TripPassengerDetail {
   passenger_id: string
   fee_amount: number | null
   location: string | null
@@ -221,10 +184,10 @@ export interface TripPassengerDetail {
 
 /** Riders with their fee amount + pickup label, used by "Import trip" in a Bulk
  *  Issue. Aliased back to the old field names so the fee screens are untouched. */
-export async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
+async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
   const { data, error } = await supabase
     .from('transport_student_assignments')
-    .select('passenger_id:student_id, fee_amount, location:location_label, passenger:profiles!student_id(*)')
+    .select(`passenger_id:student_id, fee_amount, location:location_label, passenger:profiles!student_id(${PROFILE_COLS})`)
     .eq('route_id', tripId)
     .is('ended_on', null)
   if (error) { console.error('fetchTripPassengersDetailed failed:', error); return [] }
@@ -324,7 +287,7 @@ export async function fetchFeesForPassenger(passengerId: string): Promise<BusFee
 export async function fetchAllFees(): Promise<BusFee[]> {
   const { data, error } = await supabase
     .from('bus_fees')
-    .select('*, passenger:profiles!passenger_id(*), route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .select(`*, passenger:profiles!passenger_id(${PROFILE_COLS}), route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)`)
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchAllFees failed:', error); return [] }
   return (data as BusFee[]) || []
@@ -459,7 +422,7 @@ export interface PendingPayment extends BusPayment {
 export async function fetchPendingPayments(): Promise<PendingPayment[]> {
   const { data, error } = await supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*))')
+    .select(`*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(${PROFILE_COLS}))`)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchPendingPayments failed:', error); return [] }
@@ -488,7 +451,7 @@ export async function rejectPayment(paymentId: string): Promise<{ success: boole
 export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
   let q = supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .select(`*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(${PROFILE_COLS}), fee_head:bus_fee_heads!fee_head_id(id, name))`)
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)
@@ -822,7 +785,7 @@ export async function deleteBusFeeDraft(draftId: string): Promise<{ success: boo
 export async function fetchDraftPassengersWithAmounts(draftId: string): Promise<BusFeeDraftPassenger[]> {
   const { data, error } = await supabase
     .from('bus_fee_draft_passengers')
-    .select('*, passenger:profiles!passenger_id(*)')
+    .select(`*, passenger:profiles!passenger_id(${PROFILE_COLS})`)
     .eq('draft_id', draftId)
     .order('created_at', { ascending: true })
   if (error) { console.error('fetchDraftPassengersWithAmounts failed:', error); return [] }

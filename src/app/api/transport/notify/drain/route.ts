@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/serverAuth'
 import { sendPushToUsers } from '@/lib/notifications/push'
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     .in('key', ['cron_secret'])
   const expected = (cfg ?? []).find(r => r.key === 'cron_secret')?.value
 
-  if (!expected || request.headers.get('x-cron-secret') !== expected) {
+  if (!expected || !timingSafeEqual(request.headers.get('x-cron-secret'), String(expected))) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -85,6 +86,15 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ success: true, sent, failed, claimed: rows.length })
+}
+
+/** Length is not secret here, but the byte comparison must not short-circuit. */
+function timingSafeEqual(a: string | null, b: string): boolean {
+  if (!a) return false
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ab.length !== bb.length) return false
+  return crypto.timingSafeEqual(ab, bb)
 }
 
 interface OutboxRow {

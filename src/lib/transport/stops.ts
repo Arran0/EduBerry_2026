@@ -9,7 +9,10 @@
  */
 
 import { supabase } from '../supabase'
-import { haversineDistance, type Fence } from '../geofence'
+import { type Fence } from '../geofence'
+// One implementation of the arc-length rule, and it lives beside the projection
+// that reads the cached array back — the two have to agree to the metre.
+import { cumulativeDistances } from './path'
 import type { LatLng, StopInput, TransportDirection, TransportRoutePath, TransportStop } from './types'
 
 export async function fetchStops(routeId: string): Promise<TransportStop[]> {
@@ -99,23 +102,6 @@ export async function fetchRoutePaths(routeId: string): Promise<TransportRoutePa
     .eq('route_id', routeId)
   if (error) { console.error('fetchRoutePaths failed:', error); return [] }
   return (data as TransportRoutePath[]) || []
-}
-
-/**
- * Cumulative distance along a polyline, in metres.
- *
- * Cached on the row so Round 2's progress-along-route is a single scan of a
- * stored array rather than re-deriving every segment length on every GPS fix.
- * Returns `[0, d1, d1+d2, ...]`, one entry per vertex.
- */
-export function cumulativeDistances(polyline: LatLng[]): number[] {
-  const out: number[] = [0]
-  for (let i = 1; i < polyline.length; i++) {
-    const a = polyline[i - 1]
-    const b = polyline[i]
-    out.push(out[i - 1] + haversineDistance(a.lat, a.lng, b.lat, b.lng))
-  }
-  return out
 }
 
 export async function saveRoutePath(

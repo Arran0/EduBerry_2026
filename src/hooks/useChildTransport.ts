@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
-  fetchAlertsForRuns, fetchRunPassengers, fetchRunStops, fetchRunsForStudent, todayISO,
+  fetchAlertsForRuns, fetchMyRunPassenger, fetchRunStops, fetchRunsForStudent, todayISO,
 } from '@/lib/transport/runs'
 import { fetchAssignmentForStudent } from '@/lib/transport/assignments'
 import { fetchStops } from '@/lib/transport/stops'
@@ -81,15 +81,16 @@ export function useChildTransport(studentId: string | null): ChildTransportState
       return
     }
 
-    const [runStops, passengers, runAlerts, allStops] = await Promise.all([
+    const [runStops, mine, runAlerts, allStops] = await Promise.all([
       fetchRunStops(active.id),
-      // RLS narrows this to the caller's own child, so it is one row.
-      fetchRunPassengers(active.id),
+      // Filtered in the query, not in the browser: the rest of the roster is
+      // other people's children and must never be fetched here at all.
+      fetchMyRunPassenger(active.id, studentId),
       fetchAlertsForRuns(todaysRuns.map(r => r.id)),
       fetchStops(active.route_id),
     ])
     setStops(runStops)
-    setMe(passengers.find(p => p.student_id === studentId) ?? null)
+    setMe(mine)
     setAlerts(runAlerts)
     setRouteStops(allStops)
     setLoading(false)
@@ -124,8 +125,8 @@ export function useChildTransport(studentId: string | null): ChildTransportState
         { event: '*', schema: 'public', table: 'transport_run_passengers', filter: `run_id=eq.${activeRun.id}` },
         () => {
           if (!alive || !studentId) return
-          fetchRunPassengers(activeRun.id).then(ps => {
-            if (alive) setMe(ps.find(p => p.student_id === studentId) ?? null)
+          fetchMyRunPassenger(activeRun.id, studentId).then(row => {
+            if (alive) setMe(row)
           })
         },
       )

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
@@ -36,6 +36,12 @@ export default function LiveSection() {
   const [busy, setBusy] = useState(false)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
+  // Which runs are on the board right now, readable from a subscription
+  // callback without making `runs` a dependency of the channel effect (which
+  // would tear the channel down and rebuild it on every position update).
+  const runIds = useRef<Set<string>>(new Set())
+  useEffect(() => { runIds.current = new Set(runs.map(r => r.id)) }, [runs])
+
   const load = useCallback(async () => {
     const [r, a] = await Promise.all([fetchActiveRuns(), fetchOpenAlerts()])
     setRuns(r); setAlerts(a); setLoading(false)
@@ -43,17 +49,55 @@ export default function LiveSection() {
 
   useEffect(() => { load() }, [load])
 
-  // The tick writes to these tables once a minute; subscribing means the wall
-  // display stays honest without anyone refreshing it.
+  /**
+   * Live updates, without the refetch storm.
+   *
+   * Every GPS fix updates its run row, so on a thirty-bus fleet this channel
+   * fires several times a second. Re-running the whole fleet query on each one
+   * would re-read every run, route, vehicle and crew profile for a position
+   * that moved twelve metres. So an UPDATE is merged into the row we already
+   * hold — the changed columns are exactly what the payload carries, and the
+   * embedded route/vehicle/driver objects survive untouched. Only an INSERT or
+   * DELETE changes which runs exist, and only that is worth a refetch, coalesced
+   * so a burst of them costs one query.
+   */
   useEffect(() => {
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const refetchRuns = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { if (alive) fetchActiveRuns().then(r => { if (alive) setRuns(r) }) }, 400)
+    }
+    let alertTimer: ReturnType<typeof setTimeout> | null = null
+    const refetchAlerts = () => {
+      if (alertTimer) clearTimeout(alertTimer)
+      alertTimer = setTimeout(() => { if (alive) fetchOpenAlerts().then(a => { if (alive) setAlerts(a) }) }, 400)
+    }
+
     const channel = supabase
       .channel('transport_fleet_live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transport_trip_runs' },
-        () => fetchActiveRuns().then(setRuns))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transport_alerts' },
-        () => fetchOpenAlerts().then(setAlerts))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transport_trip_runs' },
+        payload => {
+          if (!alive) return
+          const next = payload.new as Partial<TransportRun> & { id?: string }
+          if (!next?.id) return
+          // A run that was not on the board — a late-created one, or one that
+          // just became today's — still needs its joins, so fetch it properly.
+          if (!runIds.current.has(next.id)) { refetchRuns(); return }
+          setRuns(prev => prev.map(r => (r.id === next.id ? { ...r, ...next } : r)))
+        })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transport_trip_runs' }, refetchRuns)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transport_trip_runs' }, refetchRuns)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transport_alerts' }, refetchAlerts)
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+
+    return () => {
+      alive = false
+      if (timer) clearTimeout(timer)
+      if (alertTimer) clearTimeout(alertTimer)
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const sortedAlerts = useMemo(

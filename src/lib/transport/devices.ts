@@ -20,6 +20,7 @@ export interface TelemetrySource {
   external_id: string | null
   /** Lower wins. A mains-powered device should outrank a driver's phone. */
   priority: number
+  /** The public key id the device sends. Not derived from the secret. */
   ingest_key_prefix: string | null
   active: boolean
   last_seen_at: string | null
@@ -49,26 +50,31 @@ export async function fetchSources(): Promise<TelemetrySource[]> {
 }
 
 /**
- * Register a device and mint its ingest secret.
+ * Register a device and mint its ingest credentials.
  *
- * The secret is returned exactly once, here — only its 8-character prefix is
- * stored on the source row, and the secret itself goes into
- * integration_secrets, which admins alone can read. An admin who loses it
- * rotates rather than recovers.
+ * Two independent values are minted: a public **key id**, stored on the source
+ * row so an incoming request can be resolved to a device, and a **secret**,
+ * stored only in integration_secrets. They are deliberately unrelated — a key
+ * id derived from the secret would mean the device had to transmit part of the
+ * secret in cleartext on every request, which is the one thing an HMAC scheme
+ * exists to avoid.
+ *
+ * The secret is returned exactly once, here. An admin who loses it rotates
+ * rather than recovers.
  */
 export async function createSource(
   input: SourceInput,
-): Promise<{ success: boolean; id?: string; secret?: string; error?: string }> {
+): Promise<{ success: boolean; id?: string; keyId?: string; secret?: string; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
-  const secret = generateSecret()
-  const prefix = secret.slice(0, 8)
+  const keyId = generateToken(8)
+  const secret = generateToken(32)
 
   const { data, error } = await supabase
     .from('transport_telemetry_sources')
     .insert({
       ...input,
       priority: input.priority ?? (input.kind === 'gps_device' ? 10 : 50),
-      ingest_key_prefix: prefix,
+      ingest_key_prefix: keyId,
       created_by: user?.id,
     })
     .select('id')
@@ -93,7 +99,7 @@ export async function createSource(
     return { success: false, error: 'Could not store the ingest secret' }
   }
 
-  return { success: true, id: data.id, secret }
+  return { success: true, id: data.id, keyId, secret }
 }
 
 export async function updateSource(
@@ -112,19 +118,22 @@ export async function deleteSource(sourceId: string): Promise<{ success: boolean
   return { success: true }
 }
 
+/** Rotate both halves. The old pair stops working the moment this returns. */
 export async function rotateSourceSecret(
   sourceId: string,
-): Promise<{ success: boolean; secret?: string; error?: string }> {
-  const secret = generateSecret()
+): Promise<{ success: boolean; keyId?: string; secret?: string; error?: string }> {
+  const keyId = generateToken(8)
+  const secret = generateToken(32)
   const { error } = await supabase
     .from('integration_secrets')
     .upsert({ key: `telemetry:${sourceId}`, value: { ingest_secret: secret } }, { onConflict: 'key' })
   if (error) { console.error('rotateSourceSecret failed:', error); return { success: false, error: error.message } }
-  await supabase
+  const { error: keyErr } = await supabase
     .from('transport_telemetry_sources')
-    .update({ ingest_key_prefix: secret.slice(0, 8) })
+    .update({ ingest_key_prefix: keyId })
     .eq('id', sourceId)
-  return { success: true, secret }
+  if (keyErr) { console.error('rotateSourceSecret key failed:', keyErr); return { success: false, error: keyErr.message } }
+  return { success: true, keyId, secret }
 }
 
 /** How healthy a device looks, in words rather than a timestamp. */
@@ -138,8 +147,8 @@ export function sourceHealth(s: TelemetrySource): { label: string; tone: 'ok' | 
   return { label: `${Math.round(mins / 1440)} d ago`, tone: 'bad' }
 }
 
-function generateSecret(): string {
-  const bytes = new Uint8Array(24)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+function generateToken(bytes: number): string {
+  const buf = new Uint8Array(bytes)
+  crypto.getRandomValues(buf)
+  return Array.from(buf, b => b.toString(16).padStart(2, '0')).join('')
 }
