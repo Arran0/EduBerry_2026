@@ -16,6 +16,7 @@ import { endRun, formatClock, markBoarding, relativeMinutes, startRun } from '@/
 import type { TransportRunPassenger, TransportRunStop } from '@/lib/transport/types'
 import { DIRECTION_LABELS } from '@/lib/transport/types'
 import SosButton from '@/components/transport/SosButton'
+import ScanField from '@/components/transport/ScanField'
 
 export default function DriverRunPage() {
   const params = useParams<{ runId: string }>()
@@ -119,6 +120,13 @@ export default function DriverRunPage() {
           <ArrowLeft size={15} /> Today
         </Link>
 
+        {/* On a phone this is one column, in order. On a tablet or a desktop the
+            controls a driver touches — state, SOS, start/end, the scanner —
+            stay fixed on the left while the roster scrolls beside them, so
+            ending a trip never means scrolling past forty children first. */}
+        <div className="lg:grid lg:grid-cols-[22rem_1fr] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+        <div className="space-y-4 lg:sticky lg:top-5">
+
         {/* Hero: one glance answers "where am I and how many are with me". */}
         <div
           className="rounded-2xl px-4 py-4 text-white"
@@ -203,6 +211,17 @@ export default function DriverRunPage() {
           </p>
         )}
 
+        {/* A card or a QR is a faster tap, never an unsupervised one: the name
+            comes back and the attendant checks it against the child. */}
+        {isLive && (
+          <ScanField
+            runId={runId}
+            stopId={currentStop?.stop_id ?? null}
+            onScanned={reload}
+          />
+        )}
+        </div>
+
         {/* Stop-by-stop, not one flat roster: the driver only ever needs the
             handful of children standing in front of them. */}
         <div className="space-y-3">
@@ -237,6 +256,7 @@ export default function DriverRunPage() {
               </div>
             </div>
           ) : null}
+        </div>
         </div>
 
         {profile && (

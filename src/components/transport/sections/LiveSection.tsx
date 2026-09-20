@@ -160,7 +160,7 @@ export default function LiveSection() {
             selectedStopId={selectedRunId}
             onStopClick={id => setSelectedRunId(id === selectedRunId ? null : id)}
             showFences={false}
-            height={420}
+            heightClass="h-[420px] xl:h-[min(62vh,44rem)]"
             className="rounded-xl overflow-hidden border border-[#E4E4E7]"
           />
 

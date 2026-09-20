@@ -117,7 +117,12 @@ export default function ChildTransportView({
       )}
 
       {activeRun && (
-        <>
+        /* On a phone this is one column in order of urgency. On a desktop the
+           map takes the space it deserves on the left and sticks while the
+           answers beside it scroll — a parent watching a bus approach should
+           not have to choose between seeing it and reading the ETA. */
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+        <div className="space-y-4 lg:sticky lg:top-4">
           <TransportMap
             stops={mapStops}
             selectedStopId={myStop?.stop_id ?? null}
@@ -127,7 +132,7 @@ export default function ChildTransportView({
                 : null
             }
             showFences={false}
-            height={300}
+            heightClass="h-[300px] lg:h-[32rem]"
             className="rounded-2xl overflow-hidden border border-slate-200"
           />
 
@@ -139,7 +144,9 @@ export default function ChildTransportView({
                 : `Last seen ${Math.round(ageSec / 60)} min ago — showing scheduled times until it reports again.`}
             </p>
           )}
+        </div>
 
+        <div className="space-y-4">
           {/* My stop — the ETA that actually matters. */}
           {myStop && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -246,7 +253,8 @@ export default function ChildTransportView({
               )}
             </div>
           )}
-        </>
+        </div>
+        </div>
       )}
     </div>
   )

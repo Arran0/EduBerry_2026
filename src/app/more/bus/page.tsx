@@ -6,18 +6,20 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
-  ShieldAlert, Plug,
+  ShieldAlert, Plug, History, BarChart3,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { HubTabs } from '@/components/bus/adminUI'
+import { ADMIN, HubTabs } from '@/components/bus/adminUI'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const LiveSection          = dynamic(() => import('@/components/transport/sections/LiveSection'))
 const SafetySection        = dynamic(() => import('@/components/transport/sections/SafetySection'))
 const IntegrationsSection  = dynamic(() => import('@/components/transport/sections/IntegrationsSection'))
 const RoutesSection        = dynamic(() => import('@/components/transport/sections/RoutesSection'))
+const HistorySection       = dynamic(() => import('@/components/transport/sections/HistorySection'))
+const ReportsSection       = dynamic(() => import('@/components/transport/sections/ReportsSection'))
 const FleetSection         = dynamic(() => import('@/components/transport/sections/FleetSection'))
 const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
 const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
@@ -63,17 +65,22 @@ function BusPageContent() {
 // Admin hub — three sections: Trips / Bus Fees / Driver Payroll
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'live' | 'routes' | 'fleet' | 'safety' | 'setup' | 'fees' | 'payroll'
+type SectionKey =
+  | 'live' | 'routes' | 'fleet' | 'history' | 'reports' | 'safety' | 'setup' | 'fees' | 'payroll'
 
 const SECTIONS = [
   { key: 'live' as const, label: 'Live', icon: <Radio size={15} /> },
   { key: 'routes' as const, label: 'Routes', icon: <Route size={15} /> },
   { key: 'fleet' as const, label: 'Fleet & Crew', icon: <Bus size={15} /> },
+  { key: 'history' as const, label: 'History', icon: <History size={15} /> },
+  { key: 'reports' as const, label: 'Reports', icon: <BarChart3 size={15} /> },
   { key: 'safety' as const, label: 'Safety', icon: <ShieldAlert size={15} /> },
   { key: 'setup' as const, label: 'Setup', icon: <Plug size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
+
+const SECTION_KEYS = SECTIONS.map(s => s.key)
 
 function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
@@ -82,10 +89,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
   const initial: SectionKey =
-    tabParam === 'fees' || tabParam === 'payroll' || tabParam === 'fleet'
-    || tabParam === 'routes' || tabParam === 'safety' || tabParam === 'setup'
-      ? tabParam
-      : 'live'
+    SECTION_KEYS.includes(tabParam as SectionKey) ? (tabParam as SectionKey) : 'live'
   const [section, setSection] = useState<SectionKey>(initial)
   const [bannerEditing, setBannerEditing] = useState(false)
 
@@ -106,11 +110,11 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
-        maxWidth="max-w-6xl"
+        maxWidth={ADMIN.shellWidth}
         backgroundIcon={<Bus size={150} className="text-white" />}
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+      <div className={`${ADMIN.shell} px-4 sm:px-6 lg:px-8 pb-10`}>
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
@@ -122,6 +126,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
           {section === 'live' && <LiveSection />}
           {section === 'routes' && <RoutesSection />}
           {section === 'fleet' && <FleetSection />}
+          {section === 'history' && <HistorySection />}
+          {section === 'reports' && <ReportsSection />}
           {section === 'safety' && <SafetySection />}
           {section === 'setup' && <IntegrationsSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
@@ -194,13 +200,16 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         title="My Bus"
         subtitle="Live tracking and fees"
         onBack={onBack}
-        maxWidth="max-w-2xl"
+        maxWidth="max-w-2xl lg:max-w-5xl 2xl:max-w-6xl"
         backgroundIcon={<Bus size={150} className="text-white" />}
       />
 
-      <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+      {/* Wider than a reading column on a desktop, because the tracking tab is
+          a live map. The fee list keeps its own measure below rather than
+          stretching bank references across 1200px. */}
+      <div className="relative z-0 max-w-2xl lg:max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
         {/* Inline tabs — overlap the banner */}
-        <div className="relative z-10 flex items-stretch bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden mb-5">
+        <div className="relative z-10 flex items-stretch bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden mb-5 lg:max-w-2xl">
           {TABS.map((t, i) => {
             const active = tab === t.key
             const badge = t.key === 'fees' && outstandingFees.length > 0 ? outstandingFees.length : null
@@ -238,7 +247,7 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         ) : fees.length === 0 ? (
           <EmptyState icon={<Wallet size={26} className="text-white" />} text="No fees issued to you." />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-5 lg:max-w-2xl">
             {/* Outstanding / Paid summary tiles */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">

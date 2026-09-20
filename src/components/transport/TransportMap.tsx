@@ -80,6 +80,13 @@ export interface TransportMapProps {
   /** Draw each stop's geofence. Off in read-only contexts where it is clutter. */
   showFences?: boolean
   height?: number
+  /**
+   * Tailwind height classes, for a map that should be one size on a phone and
+   * another on a desktop. Supersedes `height` entirely when given — an inline
+   * height and a responsive class fight, and the inline one wins at every
+   * breakpoint, which is the wrong answer above `lg`.
+   */
+  heightClass?: string
   className?: string
 }
 
@@ -135,6 +142,7 @@ export default function TransportMap({
   me = null,
   showFences = true,
   height = 380,
+  heightClass,
   className = '',
 }: TransportMapProps) {
   const selected = useMemo(
@@ -156,7 +164,10 @@ export default function TransportMap({
           : [20.5937, 78.9629]
 
   return (
-    <div className={className} style={{ height }}>
+    <div
+      className={`${className} ${heightClass ?? ''}`}
+      style={heightClass ? undefined : { height }}
+    >
       <MapContainer
         center={center}
         zoom={14}
