@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
 
-// The fee payment settings moved into Admin Space as one tab of Fee Settings.
-// Kept as a redirect so an old bookmark still lands somewhere useful, matching
-// what src/app/more/salary/manage/settings/page.tsx already does.
+// This screen is now a tab of /more/fees rather than a page of its own.
+// The route is kept so existing links and bookmarks still work.
 
 export default function FeeSettingsRedirect() {
-  redirect('/admin/fee-settings')
+  redirect('/more/fees?tab=settings')
 }

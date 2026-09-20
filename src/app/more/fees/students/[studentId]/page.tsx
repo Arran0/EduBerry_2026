@@ -185,7 +185,7 @@ function ProfileInner() {
         {student?.admission_no ? ` · ${student.admission_no}` : ''}
       </>}
       icon={<User size={17} style={{ color: '#B8983C' }} />}
-      back={{ href: '/more/fees/students', label: 'Student fees' }}
+      back={{ href: '/more/fees?tab=collection&sub=students', label: 'Student fees' }}
       actions={<>
         {perms.can('fees.collect') && profile && (
           <Btn tone="dark" onClick={() => setRefunding(true)}>
@@ -202,7 +202,7 @@ function ProfileInner() {
           <p className="text-sm text-[#6B675A] max-w-md mx-auto">
             This student has no fee profile for {year?.code}. Nothing can be billed or collected
             until they do — create one from the{' '}
-            <Link href="/more/fees/students" className="underline">Students screen</Link>.
+            <Link href="/more/fees?tab=collection&sub=students" className="underline">Students screen</Link>.
           </p>
         </div>
       ) : (

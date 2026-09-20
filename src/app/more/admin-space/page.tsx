@@ -52,7 +52,7 @@ const adminTools = [
   {
     title: 'Fee Configuration',
     description: 'The price list — fee heads, cohort groups, per-grade structures and installments, with a one-click clone into next year',
-    href: '/more/fees/config',
+    href: '/more/fees?tab=config&sub=pricing',
     icon: Layers,
   },
   {
