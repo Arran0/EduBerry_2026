@@ -3,50 +3,37 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import {
-  Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet,
+  Bus, IndianRupee, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
+  ShieldAlert, Plug, History, BarChart3,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { HubTabs } from '@/components/bus/adminUI'
+import { ADMIN, HubTabs } from '@/components/bus/adminUI'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
-const TripsSection         = dynamic(() => import('@/components/bus/sections/TripsSection'))
+const LiveSection          = dynamic(() => import('@/components/transport/sections/LiveSection'))
+const SafetySection        = dynamic(() => import('@/components/transport/sections/SafetySection'))
+const IntegrationsSection  = dynamic(() => import('@/components/transport/sections/IntegrationsSection'))
+const RoutesSection        = dynamic(() => import('@/components/transport/sections/RoutesSection'))
+const HistorySection       = dynamic(() => import('@/components/transport/sections/HistorySection'))
+const ReportsSection       = dynamic(() => import('@/components/transport/sections/ReportsSection'))
+const FleetSection         = dynamic(() => import('@/components/transport/sections/FleetSection'))
 const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
 const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { BUS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment } from '@/lib/bus'
+import { BusFee, fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment } from '@/lib/bus'
 
-// Leaflet touches `window`, so load the map only on the client.
-const PassengerTripMap = dynamic(() => import('@/components/bus/PassengerTripMap'), {
+const ChildTransportView = dynamic(() => import('@/components/transport/ChildTransportView'), {
   ssr: false,
-  loading: () => <div className="h-[372px] rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center"><div className="spinner" /></div>,
+  loading: () => <div className="h-64 rounded-2xl border border-slate-200 bg-slate-50 animate-pulse" />,
 })
 
 export default function BusPage() {
-  return (
-    <ProtectedLayout>
-      <UnderConstruction
-        title="Bus Management"
-        description="Bus trips, fees, and payroll tools are being rebuilt. Check back soon!"
-        icon={<Bus className="w-14 h-14 text-mps-blue-500" strokeWidth={1.5} />}
-      />
-    </ProtectedLayout>
-  )
-}
-
-// The pre-rebuild bus page, kept deliberately: the default export above
-// renders UnderConstruction while these tools are rebuilt, and this is the
-// reference implementation that rebuild works against. It is the only thing
-// holding the rest of this file reachable — deleting it strips the whole
-// parked UI with it.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function BusPageOriginal() {
   return (
     <Suspense fallback={
       <ProtectedLayout>
@@ -78,13 +65,22 @@ function BusPageContent() {
 // Admin hub — three sections: Trips / Bus Fees / Driver Payroll
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'trips' | 'fees' | 'payroll'
+type SectionKey =
+  | 'live' | 'routes' | 'fleet' | 'history' | 'reports' | 'safety' | 'setup' | 'fees' | 'payroll'
 
 const SECTIONS = [
-  { key: 'trips' as const, label: 'Trips', icon: <Bus size={15} /> },
+  { key: 'live' as const, label: 'Live', icon: <Radio size={15} /> },
+  { key: 'routes' as const, label: 'Routes', icon: <Route size={15} /> },
+  { key: 'fleet' as const, label: 'Fleet & Crew', icon: <Bus size={15} /> },
+  { key: 'history' as const, label: 'History', icon: <History size={15} /> },
+  { key: 'reports' as const, label: 'Reports', icon: <BarChart3 size={15} /> },
+  { key: 'safety' as const, label: 'Safety', icon: <ShieldAlert size={15} /> },
+  { key: 'setup' as const, label: 'Setup', icon: <Plug size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
+
+const SECTION_KEYS = SECTIONS.map(s => s.key)
 
 function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
@@ -92,14 +88,15 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const tabParam = searchParams.get('tab')
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
-  const initial: SectionKey = tabParam === 'fees' || tabParam === 'payroll' ? tabParam : 'trips'
+  const initial: SectionKey =
+    SECTION_KEYS.includes(tabParam as SectionKey) ? (tabParam as SectionKey) : 'live'
   const [section, setSection] = useState<SectionKey>(initial)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const selectSection = (key: SectionKey) => {
     setSection(key)
     // Keep the URL shareable / consistent with the active section.
-    router.replace(key === 'trips' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
+    router.replace(key === 'live' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
   }
 
   return (
@@ -108,16 +105,16 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         settingKey="bus_banner"
         defaultBanner={BUS_BANNER_DEFAULT}
         icon={<Bus size={26} className="text-white" />}
-        title="Bus Manager"
-        subtitle="Trips, fees & driver payroll"
+        title="Transport"
+        subtitle="Routes, fleet, fees & driver payroll"
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
-        maxWidth="max-w-6xl"
+        maxWidth={ADMIN.shellWidth}
         backgroundIcon={<Bus size={150} className="text-white" />}
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+      <div className={`${ADMIN.shell} px-4 sm:px-6 lg:px-8 pb-10`}>
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
@@ -126,7 +123,13 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
             <HubTabs tabs={SECTIONS} value={section} onChange={selectSection} />
           </div>
 
-          {section === 'trips' && <TripsSection />}
+          {section === 'live' && <LiveSection />}
+          {section === 'routes' && <RoutesSection />}
+          {section === 'fleet' && <FleetSection />}
+          {section === 'history' && <HistorySection />}
+          {section === 'reports' && <ReportsSection />}
+          {section === 'safety' && <SafetySection />}
+          {section === 'setup' && <IntegrationsSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
           {section === 'payroll' && <DriverPayrollSection />}
         </div>
@@ -142,22 +145,20 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 type PassengerTab = 'trips' | 'fees'
 
 function PassengerBusView({ onBack }: { onBack: () => void }) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [trips, setTrips] = useState<BusTrip[]>([])
   const [fees, setFees] = useState<BusFee[]>([])
   const [payments, setPayments] = useState<PassengerPayment[]>([])
   const [payingFee, setPayingFee] = useState<BusFee | null>(null)
-  const [trackingTripId, setTrackingTripId] = useState<string | null>(null)
   const [tab, setTab] = useState<PassengerTab>('trips')
 
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const [t, f, p] = await Promise.all([
-      fetchTrips(), fetchFeesForPassenger(user.id), fetchVerifiedPaymentsForPassenger(user.id),
+    const [f, p] = await Promise.all([
+      fetchFeesForPassenger(user.id), fetchVerifiedPaymentsForPassenger(user.id),
     ])
-    setTrips(t); setFees(f); setPayments(p)
+    setFees(f); setPayments(p)
     setLoading(false)
   }, [user])
 
@@ -186,7 +187,7 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
   const paidTotal = paidFees.reduce((s, f) => s + (Number(f.amount) || 0), 0)
 
   const TABS: { key: PassengerTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'trips', label: 'My Trips', icon: <Route size={15} /> },
+    { key: 'trips', label: 'Where is my child', icon: <Route size={15} /> },
     { key: 'fees', label: 'My Bus Fees', icon: <Wallet size={15} /> },
   ]
 
@@ -197,15 +198,18 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         defaultBanner={BUS_BANNER_DEFAULT}
         icon={<Bus size={26} className="text-white" />}
         title="My Bus"
-        subtitle="Your trips and fees"
+        subtitle="Live tracking and fees"
         onBack={onBack}
-        maxWidth="max-w-2xl"
+        maxWidth="max-w-2xl lg:max-w-5xl 2xl:max-w-6xl"
         backgroundIcon={<Bus size={150} className="text-white" />}
       />
 
-      <div className="relative z-0 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
+      {/* Wider than a reading column on a desktop, because the tracking tab is
+          a live map. The fee list keeps its own measure below rather than
+          stretching bank references across 1200px. */}
+      <div className="relative z-0 max-w-2xl lg:max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10">
         {/* Inline tabs — overlap the banner */}
-        <div className="relative z-10 flex items-stretch bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden mb-5">
+        <div className="relative z-10 flex items-stretch bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden mb-5 lg:max-w-2xl">
           {TABS.map((t, i) => {
             const active = tab === t.key
             const badge = t.key === 'fees' && outstandingFees.length > 0 ? outstandingFees.length : null
@@ -229,56 +233,21 @@ function PassengerBusView({ onBack }: { onBack: () => void }) {
         {loading ? (
           <div className="text-center py-16"><div className="spinner mx-auto mb-3" /><p className="text-sm text-slate-500">Loading…</p></div>
 
-        /* ══ MY TRIPS ══════════════════════════════════════════════ */
+        /* ══ WHERE IS MY CHILD ═════════════════════════════════════ */
         ) : tab === 'trips' ? (
-          trips.length === 0 ? (
-            <EmptyState icon={<Route size={26} className="text-white" />} text="You are not assigned to any bus trip yet." />
-          ) : (
-            <div className="space-y-3">
-              {trips.map(t => {
-                const tracking = trackingTripId === t.id
-                return (
-                  <div key={t.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${tracking ? 'border-slate-300 shadow-md' : 'border-slate-200 hover:shadow-md'}`}>
-                    <div className="flex items-center gap-3 p-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}>
-                        <Bus size={22} className="text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-800 truncate">{t.name}</p>
-                        {t.route_description
-                          ? <p className="text-xs text-slate-400 truncate flex items-center gap-1"><MapPin size={11} /> {t.route_description}</p>
-                          : <p className="text-xs text-slate-300">Bus route</p>}
-                      </div>
-                      <button
-                        onClick={() => setTrackingTripId(tracking ? null : t.id)}
-                        className={`flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg transition-colors flex-shrink-0 ${
-                          tracking ? 'bg-slate-100 text-slate-600' : 'page-btn-primary'
-                        }`}>
-                        <MapPin size={13} /> {tracking ? 'Hide' : 'Track'}
-                      </button>
-                    </div>
-                    <AnimatePresence initial={false}>
-                      {tracking && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden">
-                          <div className="px-3 pb-3">
-                            <PassengerTripMap tripId={t.id} tripName={t.name} />
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )
-              })}
-            </div>
-          )
+          profile ? (
+            <ChildTransportView
+              studentId={profile.id}
+              studentName={profile.full_name}
+              avatarUrl={profile.avatar_url}
+            />
+          ) : null
 
         /* ══ MY BUS FEES ═══════════════════════════════════════════ */
         ) : fees.length === 0 ? (
           <EmptyState icon={<Wallet size={26} className="text-white" />} text="No fees issued to you." />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-5 lg:max-w-2xl">
             {/* Outstanding / Paid summary tiles */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
@@ -369,7 +338,7 @@ function FeeRow({ fee: f, remaining, onPay }: { fee: BusFee; remaining?: number;
             {formatINR(f.status === 'partial' ? due : amt)}
           </p>
           <p className="text-xs text-slate-400 truncate">
-            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}
+            {f.description || f.fee_head?.name || 'Bus fee'}{f.route?.name ? ` · ${f.route.name}` : ''}
             {f.due_date ? ` · due ${f.due_date}` : ''}
           </p>
           {f.status === 'partial' && (

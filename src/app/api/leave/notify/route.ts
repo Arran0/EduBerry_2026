@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import webpush from 'web-push'
 import { adminClient, callerUserId } from '@/lib/serverAuth'
+import { pushConfigured, sendPushToUsers } from '@/lib/notifications/push'
 
 /**
  * Send the Web Push notification for an OD / Leave event — the push half of
@@ -72,9 +72,6 @@ async function resolveApprovers(
 }
 
 export async function POST(request: NextRequest) {
-  const publicKey  = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-  const privateKey = process.env.VAPID_PRIVATE_KEY
-  const subject    = process.env.VAPID_SUBJECT || 'mailto:admin@eduberry.app'
 
   const client = adminClient()
   if (!client) {
@@ -126,10 +123,9 @@ export async function POST(request: NextRequest) {
 
   // Push is optional infrastructure — without keys the application itself is
   // still fine, so report the skip rather than failing the caller.
-  if (!publicKey || !privateKey) {
+  if (!pushConfigured()) {
     return NextResponse.json({ success: true, sent: 0, skipped: 'VAPID keys not configured' })
   }
-  webpush.setVapidDetails(subject, publicKey, privateKey)
 
   const { data: applicant } = await client
     .from('profiles')
@@ -175,16 +171,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, sent: 0 })
   }
 
-  const { data: subscriptions } = await client
-    .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
-    .in('user_id', [...recipients])
-
-  if (!subscriptions || subscriptions.length === 0) {
-    return NextResponse.json({ success: true, sent: 0 })
-  }
-
-  const payload = JSON.stringify({
+  const { sent, pruned } = await sendPushToUsers(client, [...recipients], {
     title,
     body: bodyText,
     url,
@@ -193,28 +180,5 @@ export async function POST(request: NextRequest) {
     tag: `leave-${event}-${application.id}`,
   })
 
-  const staleIds: string[] = []
-  let sent = 0
-
-  await Promise.all(subscriptions.map(async sub => {
-    try {
-      await webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload,
-      )
-      sent++
-    } catch (err) {
-      // 404/410 mean the browser threw the subscription away — prune it so the
-      // table doesn't fill with devices that can never be reached again.
-      const status = (err as { statusCode?: number }).statusCode
-      if (status === 404 || status === 410) staleIds.push(sub.id)
-      else console.warn('Leave push send failed:', status, (err as Error).message)
-    }
-  }))
-
-  if (staleIds.length > 0) {
-    await client.from('push_subscriptions').delete().in('id', staleIds)
-  }
-
-  return NextResponse.json({ success: true, sent, pruned: staleIds.length })
+  return NextResponse.json({ success: true, sent, pruned })
 }

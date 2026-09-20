@@ -67,7 +67,7 @@ export default function FeeIssueModal({ assignable, feeHeads = [], onClose, onIs
     setSaving(true); setError(null)
     const inputs: FeeInput[] = selected.map(p => ({
       passenger_id: p.id,
-      trip_id: null,
+      route_id: null,
       fee_head_id: feeHeadId || null,
       amount: amt,
       description: description.trim() || null,

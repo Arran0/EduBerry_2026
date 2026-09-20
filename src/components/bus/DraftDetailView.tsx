@@ -107,11 +107,11 @@ export default function DraftDetailView({
   }
 
   const handleImportTrip = async () => {
-    if (!draft.trip_id) return
+    if (!draft.route_id) return
     setImporting(true)
     // Pulls the trip roster and auto-fills each passenger's fee + pickup
     // location from the trip into the sheet.
-    await importTripPassengersIntoDraft(draft.id, draft.trip_id)
+    await importTripPassengersIntoDraft(draft.id, draft.route_id)
     setImporting(false)
     loadPassengers()
   }
@@ -212,7 +212,7 @@ export default function DraftDetailView({
             </div>
             <p className="text-xs text-[#71717A] mt-0.5">
               <span className="inline-flex items-center gap-1"><Calendar size={11} /> {formatDraftMonth(draft.month)}</span>
-              {draft.trip?.name && <span> · {draft.trip.name}</span>}
+              {draft.route?.name && <span> · {draft.route.name}</span>}
               {draft.due_date && <span> · Due {draft.due_date}</span>}
             </p>
           </div>
@@ -297,7 +297,7 @@ export default function DraftDetailView({
               </div>
             )}
           </div>
-          {draft.trip_id && (
+          {draft.route_id && (
             <button onClick={handleImportTrip} disabled={importing} className={ADMIN.ghostBtn}
               title="Import passengers from the linked trip, with their fee + pickup location">
               <Download size={13} />
@@ -318,7 +318,7 @@ export default function DraftDetailView({
           <p className="text-sm text-[#71717A] mb-1">No students in this draft yet.</p>
           {!isIssued && (
             <p className="text-xs text-[#A1A1AA]">
-              Search above to add students{draft.trip_id ? ', or click "Import trip"' : ''}.
+              Search above to add students{draft.route_id ? ', or click "Import trip"' : ''}.
             </p>
           )}
         </div>

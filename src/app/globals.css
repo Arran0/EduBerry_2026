@@ -995,3 +995,13 @@ body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
 .login-cta:disabled .login-cta-shimmer {
   display: none;
 }
+
+/* Tab strips that scroll on a phone and fit on a desktop should not also
+   carry a scrollbar — the tabs themselves are the affordance. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

@@ -11,6 +11,21 @@ import React from 'react'
 
 export const ADMIN = {
   pageBg: '#FDFCF9',
+  /**
+   * The admin shell's width.
+   *
+   * max-w-6xl (1152px) is a reading measure, and these screens are not reading
+   * — they are a fleet map, a sheet of forty routes, and a rail of exceptions
+   * that all want to be visible at once. On a 1440 or 1920 display the old cap
+   * left a third of the glass empty while the sheet scrolled.
+   *
+   * The two steps are the house dashboard widths from the desktop-ui-standardizer
+   * skill, not numbers invented here — every wide admin surface in this app
+   * should line up at the same edge.
+   */
+  shell: 'w-full mx-auto max-w-7xl 2xl:max-w-[1600px]',
+  /** Same steps, for a PageBanner's maxWidth so the header aligns with it. */
+  shellWidth: 'max-w-7xl 2xl:max-w-[1600px]',
   card: 'bg-white border border-[#E4E4E7] rounded-xl',
   cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md transition-shadow',
   input:
@@ -100,14 +115,16 @@ export function HubTabs<T extends string>({
   className?: string
 }) {
   return (
-    <div className={`flex items-stretch bg-white rounded-xl border border-[#E4E4E7] shadow-sm overflow-hidden ${className}`}>
+    // Scrolls on a phone rather than crushing nine tabs into 360px, and stops
+    // scrolling the moment they fit.
+    <div className={`flex items-stretch bg-white rounded-xl border border-[#E4E4E7] shadow-sm overflow-x-auto sm:overflow-hidden scrollbar-none ${className}`}>
       {tabs.map((t, i) => {
         const active = value === t.key
         return (
           <button
             key={t.key}
             onClick={() => onChange(t.key)}
-            className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 sm:px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+            className={`relative flex flex-shrink-0 sm:flex-shrink sm:flex-1 items-center justify-center gap-1.5 px-3.5 sm:px-4 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
               i > 0 ? 'border-l border-[#F0F0F0]' : ''
             } ${active ? 'text-[#27272A]' : 'text-[#A1A1AA] hover:text-[#52525B] hover:bg-[#FAFAFA]'}`}
           >

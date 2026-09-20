@@ -243,7 +243,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
       (f.passenger?.full_name ?? '').toLowerCase().includes(q) ||
       (f.description ?? '').toLowerCase().includes(q) ||
       (f.fee_head?.name ?? '').toLowerCase().includes(q) ||
-      (f.trip?.name ?? '').toLowerCase().includes(q) ||
+      (f.route?.name ?? '').toLowerCase().includes(q) ||
       (f.upi_reference ?? '').toLowerCase().includes(q))
   ), [fees, statusFilter, headFilter, q])
 
@@ -261,7 +261,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
   const filteredDrafts = useMemo(() => dq === '' ? drafts : drafts.filter(d =>
     d.title.toLowerCase().includes(dq) ||
     formatDraftMonth(d.month).toLowerCase().includes(dq) ||
-    (d.trip?.name ?? '').toLowerCase().includes(dq)
+    (d.route?.name ?? '').toLowerCase().includes(dq)
   ), [drafts, dq])
 
   // One Excel-style fee-head line — mirrors the Fee Manager's FeeHeadRow:
@@ -534,7 +534,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
                             <p className="font-semibold text-[#18181B] text-sm truncate">Unknown</p>
                           )}
                           <p className="text-[11px] text-[#71717A] truncate">
-                            {f.description || f.fee_head?.name || 'Bus fee'}{f.trip?.name ? ` · ${f.trip.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
+                            {f.description || f.fee_head?.name || 'Bus fee'}{f.route?.name ? ` · ${f.route.name}` : ''}{f.due_date ? ` · due ${f.due_date}` : ''}
                             {f.upi_reference ? ` · ref ${f.upi_reference}` : ''}
                           </p>
                         </div>
@@ -657,7 +657,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
                           <p className="font-semibold text-[#18181B] text-sm truncate">{d.title}</p>
                           <p className="text-[11px] text-[#71717A] truncate">
                             <span className="inline-flex items-center gap-1"><Calendar size={10} /> {formatDraftMonth(d.month)}</span>
-                            {d.trip?.name ? ` · ${d.trip.name}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}
+                            {d.route?.name ? ` · ${d.route.name}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}
                           </p>
                         </div>
                         <span className="w-16 sm:w-24 flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0">

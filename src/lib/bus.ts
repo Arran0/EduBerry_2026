@@ -1,4 +1,15 @@
 import { supabase, UserProfile, UserRole, isMissingRelation } from './supabase'
+
+/**
+ * The profile columns a bus screen actually renders.
+ *
+ * `profiles` is embedded from ~50 places and a `(*)` wildcard here is the
+ * single biggest egress multiplier in the app (README conventions). Every
+ * field below is read by a bus screen: `is_non_teaching` and `role` by the
+ * statement modals, `email`/`role` by the payslip builder, the rest by the
+ * avatar and name rows.
+ */
+const PROFILE_COLS = 'id, email, full_name, role, avatar_url, grade, section, is_non_teaching'
 import { academicYearOf, currentAcademicYear } from './fees'
 
 export { academicYearOf, currentAcademicYear }
@@ -18,7 +29,6 @@ export async function listBusAcademicYears(): Promise<string[]> {
 // Types
 // ============================================
 
-export type TripAttendanceStatus = 'picked_up' | 'dropped' | 'absent'
 export type BusFeeStatus = 'unpaid' | 'partial' | 'paid' | 'cancelled'
 export type BusPaymentMethod = 'razorpay' | 'upi_qr' | 'cash' | 'card' | 'bank' | 'cheque'
 export type BusPaymentStatus = 'pending' | 'verified' | 'failed'
@@ -31,7 +41,7 @@ export const BUS_METHOD_LABELS: Record<BusPaymentMethod, string> = {
 export interface BusTrip {
   id: string
   name: string
-  route_description: string | null
+  description: string | null
   pickup_time: string | null
   drop_time: string | null
   default_driver_id: string | null
@@ -40,37 +50,6 @@ export interface BusTrip {
   created_at: string
   updated_at: string
   default_driver?: UserProfile | null
-}
-
-export interface TripDriverOverride {
-  id: string
-  trip_id: string
-  date: string
-  driver_id: string
-  note: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  driver?: UserProfile | null
-}
-
-export interface TripAttendance {
-  id: string
-  trip_id: string
-  passenger_id: string
-  date: string
-  status: TripAttendanceStatus
-  marked_by: string | null
-  picked_up_at: string | null
-  dropped_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-/** A passenger row for a trip roster, with the latest attendance for a given date. */
-export interface TripRosterRow {
-  passenger: UserProfile
-  record: TripAttendance | null
 }
 
 export interface BusFeeHead {
@@ -86,7 +65,7 @@ export interface BusFeeHead {
 
 export interface BusFee {
   id: string
-  trip_id: string | null
+  route_id: string | null
   fee_head_id: string | null
   passenger_id: string
   amount: number
@@ -98,7 +77,7 @@ export interface BusFee {
   created_at: string
   updated_at: string
   passenger?: UserProfile | null
-  trip?: Pick<BusTrip, 'id' | 'name'> | null
+  route?: Pick<BusTrip, 'id' | 'name'> | null
   fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
 }
 
@@ -139,18 +118,6 @@ export interface DriverBankAccount {
   updated_at: string
 }
 
-export interface BusLocation {
-  id: string
-  trip_id: string
-  driver_id: string | null
-  lat: number
-  lng: number
-  heading: number | null
-  speed: number | null
-  accuracy: number | null
-  recorded_at: string
-}
-
 export interface FeeCollectionSummary {
   total_amount: number
   collected_amount: number
@@ -168,177 +135,64 @@ export interface FeeCollectionSummary {
 
 export async function fetchTrips(): Promise<BusTrip[]> {
   const { data, error } = await supabase
-    .from('bus_trips')
-    .select('*, default_driver:profiles!default_driver_id(*)')
+    .from('transport_routes')
+    .select(`*, default_driver:profiles!default_driver_id(${PROFILE_COLS})`)
     .order('name', { ascending: true })
   if (error) { console.error('fetchTrips failed:', error); return [] }
   return (data as BusTrip[]) || []
 }
 
-export async function fetchTrip(tripId: string): Promise<BusTrip | null> {
-  const { data, error } = await supabase
-    .from('bus_trips')
-    .select('*, default_driver:profiles!default_driver_id(*)')
-    .eq('id', tripId)
-    .single()
-  if (error) { console.error('fetchTrip failed:', error); return null }
-  return data as BusTrip
-}
-
-export interface TripInput {
-  name: string
-  route_description?: string | null
-  pickup_time?: string | null
-  drop_time?: string | null
-  default_driver_id?: string | null
-  active?: boolean
-}
-
-export async function createTrip(input: TripInput): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('bus_trips')
-    .insert({ ...input, created_by: user?.id })
-    .select('id')
-    .single()
-  if (error) { console.error('createTrip failed:', error); return { success: false, error: error.message } }
-  return { success: true, id: data.id }
-}
-
-export async function updateTrip(tripId: string, input: Partial<TripInput>): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('bus_trips').update(input).eq('id', tripId)
-  if (error) { console.error('updateTrip failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function setTripActive(tripId: string, active: boolean): Promise<{ success: boolean; error?: string }> {
-  return updateTrip(tripId, { active })
-}
+// Route CRUD used to live here. It now belongs to src/lib/transport/routes.ts,
+// which writes the full route model (path, colour, deviation threshold) rather
+// than the four columns the old trip template had. `fetchTrips` survives only
+// because the fee screens still want a flat list of routes to pick from.
 
 // ============================================
 // Passengers
+//
+// Assignment management now lives in src/lib/transport/assignments.ts against
+// the renamed transport_student_assignments table. What remains here is only
+// what the bus-fee draft importer still reads, and it is no longer exported:
+// a second way to read the roster is how two screens come to disagree.
 // ============================================
 
-export async function fetchTripPassengers(tripId: string): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('trip_passengers')
-    .select('passenger:profiles!passenger_id(*)')
-    .eq('trip_id', tripId)
-  if (error) { console.error('fetchTripPassengers failed:', error); return [] }
-  const rows = (data as unknown as { passenger: UserProfile | null }[]) || []
-  return rows
-    .map(r => r.passenger)
-    .filter((p): p is UserProfile => !!p)
-    .sort((a, b) => a.full_name.localeCompare(b.full_name))
-}
-
-/** Passenger count per trip, keyed by trip_id (admin overview). */
-export async function fetchTripPassengerCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('trip_passengers').select('trip_id')
-  if (error) { console.error('fetchTripPassengerCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { trip_id: string }[]) {
-    counts[r.trip_id] = (counts[r.trip_id] ?? 0) + 1
-  }
-  return counts
-}
-
-/** Anyone who can be a passenger: any profile that is not an admin or a driver. */
+/**
+ * Anyone a bus fee can be issued to: any profile that is not an admin or a
+ * driver. Bus fees are overwhelmingly a student thing, but staff riders do
+ * exist, so the set is deliberately wider than `role = 'student'`.
+ */
 export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
   const excluded: UserRole[] = ['admin', 'driver']
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    // Not select('*'): profiles is joined from ~50 places and a wildcard here
+    // is the single biggest egress multiplier in the app (README conventions).
+    .select('id, email, full_name, role, avatar_url, grade, section, created_at, updated_at')
     .not('role', 'in', `(${excluded.join(',')})`)
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchAssignablePassengers failed:', error); return [] }
   return (data as UserProfile[]) || []
 }
 
-/** Reconcile a trip's passenger set to exactly `passengerIds` (diff insert/delete). */
-export async function setTripPassengers(tripId: string, passengerIds: string[]): Promise<{ success: boolean; error?: string }> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('trip_passengers')
-    .select('passenger_id')
-    .eq('trip_id', tripId)
-  if (fetchErr) { console.error('setTripPassengers fetch failed:', fetchErr); return { success: false, error: fetchErr.message } }
-
-  const current = new Set((existing || []).map((r: { passenger_id: string }) => r.passenger_id))
-  const target = new Set(passengerIds)
-  const toAdd = passengerIds.filter(id => !current.has(id))
-  const toRemove = [...current].filter(id => !target.has(id))
-
-  if (toAdd.length > 0) {
-    const { error } = await supabase
-      .from('trip_passengers')
-      .insert(toAdd.map(passenger_id => ({ trip_id: tripId, passenger_id })))
-    if (error) { console.error('setTripPassengers insert failed:', error); return { success: false, error: error.message } }
-  }
-  if (toRemove.length > 0) {
-    const { error } = await supabase
-      .from('trip_passengers')
-      .delete()
-      .eq('trip_id', tripId)
-      .in('passenger_id', toRemove)
-    if (error) { console.error('setTripPassengers delete failed:', error); return { success: false, error: error.message } }
-  }
-  return { success: true }
-}
-
-/** A trip passenger with the per-trip fee + pickup location the admin set. */
-export interface TripPassengerDetail {
+/** A route rider with the per-route fee + pickup label the admin set. */
+interface TripPassengerDetail {
   passenger_id: string
   fee_amount: number | null
   location: string | null
   passenger?: UserProfile | null
 }
 
-/** Trip passengers with their per-trip fee amount + pickup location, used both
- *  by the trip editor and by "Import trip" in a Bulk Issue. */
-export async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
+/** Riders with their fee amount + pickup label, used by "Import trip" in a Bulk
+ *  Issue. Aliased back to the old field names so the fee screens are untouched. */
+async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
   const { data, error } = await supabase
-    .from('trip_passengers')
-    .select('passenger_id, fee_amount, location, passenger:profiles!passenger_id(*)')
-    .eq('trip_id', tripId)
+    .from('transport_student_assignments')
+    .select(`passenger_id:student_id, fee_amount, location:location_label, passenger:profiles!student_id(${PROFILE_COLS})`)
+    .eq('route_id', tripId)
+    .is('ended_on', null)
   if (error) { console.error('fetchTripPassengersDetailed failed:', error); return [] }
   const rows = (data as unknown as TripPassengerDetail[]) || []
   return rows.sort((a, b) => (a.passenger?.full_name ?? '').localeCompare(b.passenger?.full_name ?? ''))
-}
-
-/** Reconcile a trip's passenger set AND persist each passenger's fee + location.
- *  Inserts new members, updates fee/location on existing ones, removes the rest. */
-export async function setTripPassengersDetailed(
-  tripId: string,
-  rows: { passenger_id: string; fee_amount: number | null; location: string | null }[],
-): Promise<{ success: boolean; error?: string }> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('trip_passengers')
-    .select('passenger_id')
-    .eq('trip_id', tripId)
-  if (fetchErr) { console.error('setTripPassengersDetailed fetch failed:', fetchErr); return { success: false, error: fetchErr.message } }
-
-  const current = new Set((existing || []).map((r: { passenger_id: string }) => r.passenger_id))
-  const target = new Set(rows.map(r => r.passenger_id))
-  const toRemove = [...current].filter(id => !target.has(id))
-
-  if (rows.length > 0) {
-    const { error } = await supabase
-      .from('trip_passengers')
-      .upsert(
-        rows.map(r => ({ trip_id: tripId, passenger_id: r.passenger_id, fee_amount: r.fee_amount, location: r.location })),
-        { onConflict: 'trip_id,passenger_id' },
-      )
-    if (error) { console.error('setTripPassengersDetailed upsert failed:', error); return { success: false, error: error.message } }
-  }
-  if (toRemove.length > 0) {
-    const { error } = await supabase
-      .from('trip_passengers')
-      .delete()
-      .eq('trip_id', tripId)
-      .in('passenger_id', toRemove)
-    if (error) { console.error('setTripPassengersDetailed delete failed:', error); return { success: false, error: error.message } }
-  }
-  return { success: true }
 }
 
 // ============================================
@@ -353,119 +207,6 @@ export async function fetchDrivers(): Promise<UserProfile[]> {
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchDrivers failed:', error); return [] }
   return (data as UserProfile[]) || []
-}
-
-export async function fetchDriverOverrides(tripId: string): Promise<TripDriverOverride[]> {
-  const { data, error } = await supabase
-    .from('trip_driver_overrides')
-    .select('*, driver:profiles!driver_id(*)')
-    .eq('trip_id', tripId)
-    .order('date', { ascending: true })
-  if (error) { console.error('fetchDriverOverrides failed:', error); return [] }
-  return (data as TripDriverOverride[]) || []
-}
-
-export async function setDriverOverride(
-  tripId: string,
-  date: string,
-  driverId: string,
-  note?: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase
-    .from('trip_driver_overrides')
-    .upsert(
-      { trip_id: tripId, date, driver_id: driverId, note: note ?? null, created_by: user?.id },
-      { onConflict: 'trip_id,date' },
-    )
-  if (error) { console.error('setDriverOverride failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function clearDriverOverride(tripId: string, date: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('trip_driver_overrides')
-    .delete()
-    .eq('trip_id', tripId)
-    .eq('date', date)
-  if (error) { console.error('clearDriverOverride failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** Trips a given driver actually drives on `date` (default driver, minus days
- *  overridden to someone else, plus days overridden to them). */
-export async function fetchDriverTripsForDate(driverId: string, date: string): Promise<BusTrip[]> {
-  const { data: overrides } = await supabase
-    .from('trip_driver_overrides')
-    .select('trip_id, driver_id')
-    .eq('date', date)
-  const overrideByTrip = new Map<string, string>()
-  for (const o of overrides || []) overrideByTrip.set(o.trip_id, o.driver_id)
-
-  const { data: trips, error } = await supabase
-    .from('bus_trips')
-    .select('*, default_driver:profiles!default_driver_id(*)')
-    .eq('active', true)
-  if (error) { console.error('fetchDriverTripsForDate failed:', error); return [] }
-
-  const result = (trips as BusTrip[] || []).filter(t => {
-    const overrideDriver = overrideByTrip.get(t.id)
-    if (overrideDriver) return overrideDriver === driverId
-    return t.default_driver_id === driverId
-  })
-  // Trips overridden TO this driver but where they aren't the default may not be
-  // in `trips` if RLS excluded them — but is_trip_driver covers override holders,
-  // so they are readable; the filter above keeps them. Sort by pickup time.
-  return result.sort((a, b) => (a.pickup_time ?? '').localeCompare(b.pickup_time ?? ''))
-}
-
-// ============================================
-// Attendance
-// ============================================
-
-export async function fetchTripAttendance(tripId: string, date: string): Promise<TripAttendance[]> {
-  const { data, error } = await supabase
-    .from('trip_attendance')
-    .select('*')
-    .eq('trip_id', tripId)
-    .eq('date', date)
-  if (error) { console.error('fetchTripAttendance failed:', error); return [] }
-  return (data as TripAttendance[]) || []
-}
-
-/** A trip roster for `date`: every assigned passenger paired with their record (if any). */
-export async function fetchTripRoster(tripId: string, date: string): Promise<TripRosterRow[]> {
-  const [passengers, records] = await Promise.all([
-    fetchTripPassengers(tripId),
-    fetchTripAttendance(tripId, date),
-  ])
-  const byPassenger = new Map(records.map(r => [r.passenger_id, r]))
-  return passengers.map(passenger => ({ passenger, record: byPassenger.get(passenger.id) ?? null }))
-}
-
-export async function markPassenger(
-  tripId: string,
-  passengerId: string,
-  date: string,
-  status: TripAttendanceStatus,
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const now = new Date().toISOString()
-  const row: Record<string, unknown> = {
-    trip_id: tripId,
-    passenger_id: passengerId,
-    date,
-    status,
-    marked_by: user?.id,
-  }
-  if (status === 'picked_up') row.picked_up_at = now
-  if (status === 'dropped') row.dropped_at = now
-
-  const { error } = await supabase
-    .from('trip_attendance')
-    .upsert(row, { onConflict: 'trip_id,passenger_id,date' })
-  if (error) { console.error('markPassenger failed:', error); return { success: false, error: error.message } }
-  return { success: true }
 }
 
 // ============================================
@@ -536,7 +277,7 @@ export async function deleteBusFeeHead(headId: string): Promise<{ success: boole
 export async function fetchFeesForPassenger(passengerId: string): Promise<BusFee[]> {
   const { data, error } = await supabase
     .from('bus_fees')
-    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .select('*, route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
     .eq('passenger_id', passengerId)
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchFeesForPassenger failed:', error); return [] }
@@ -546,7 +287,7 @@ export async function fetchFeesForPassenger(passengerId: string): Promise<BusFee
 export async function fetchAllFees(): Promise<BusFee[]> {
   const { data, error } = await supabase
     .from('bus_fees')
-    .select('*, passenger:profiles!passenger_id(*), trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .select(`*, passenger:profiles!passenger_id(${PROFILE_COLS}), route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)`)
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchAllFees failed:', error); return [] }
   return (data as BusFee[]) || []
@@ -581,7 +322,7 @@ export function summarizeFees(fees: BusFee[], paidByFee?: Map<string, number>): 
 
 export interface FeeInput {
   passenger_id: string
-  trip_id?: string | null
+  route_id?: string | null
   fee_head_id?: string | null
   amount: number
   description?: string | null
@@ -681,7 +422,7 @@ export interface PendingPayment extends BusPayment {
 export async function fetchPendingPayments(): Promise<PendingPayment[]> {
   const { data, error } = await supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(*))')
+    .select(`*, fee:bus_fees!fee_id(id, amount, description, upi_reference, passenger:profiles!passenger_id(${PROFILE_COLS}))`)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchPendingPayments failed:', error); return [] }
@@ -710,7 +451,7 @@ export async function rejectPayment(paymentId: string): Promise<{ success: boole
 export async function fetchBusCollectionReport(filter: { from?: string; to?: string; methods?: BusPaymentMethod[] } = {}): Promise<BusCollectionRow[]> {
   let q = supabase
     .from('bus_payments')
-    .select('*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(*), fee_head:bus_fee_heads!fee_head_id(id, name))')
+    .select(`*, fee:bus_fees!fee_id(id, amount, status, description, upi_reference, passenger:profiles!passenger_id(${PROFILE_COLS}), fee_head:bus_fee_heads!fee_head_id(id, name))`)
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)
@@ -964,62 +705,6 @@ export type { PayoutConfig } from './salary'
 export { fetchPayoutConfig, savePayoutConfig } from './salary'
 
 // ============================================
-// Live location & ETA
-// ============================================
-
-export async function pushLocation(
-  tripId: string,
-  pos: { lat: number; lng: number; heading?: number | null; speed?: number | null; accuracy?: number | null },
-): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase.from('bus_locations').insert({
-    trip_id: tripId,
-    driver_id: user?.id,
-    lat: pos.lat,
-    lng: pos.lng,
-    heading: pos.heading ?? null,
-    speed: pos.speed ?? null,
-    accuracy: pos.accuracy ?? null,
-  })
-  if (error) { console.error('pushLocation failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function fetchLatestLocation(tripId: string): Promise<BusLocation | null> {
-  const { data, error } = await supabase
-    .from('bus_locations')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('recorded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) { console.error('fetchLatestLocation failed:', error); return null }
-  return (data as BusLocation) ?? null
-}
-
-/** Great-circle distance in kilometres between two lat/lng points. */
-export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const lat1 = toRad(a.lat)
-  const lat2 = toRad(b.lat)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(h))
-}
-
-/** Rough ETA in minutes from bus to passenger, straight-line at an assumed speed. */
-export function estimateEtaMinutes(
-  bus: { lat: number; lng: number },
-  passenger: { lat: number; lng: number },
-  avgSpeedKmh = 25,
-): number {
-  const km = haversineKm(bus, passenger)
-  return Math.max(1, Math.round((km / avgSpeedKmh) * 60))
-}
-
-// ============================================
 // Monthly Fee Drafts
 // ============================================
 
@@ -1029,7 +714,7 @@ export interface BusFeeDraft {
   id: string
   title: string
   month: string
-  trip_id: string | null
+  route_id: string | null
   fee_head_id: string | null
   description: string | null
   due_date: string | null
@@ -1038,7 +723,7 @@ export interface BusFeeDraft {
   created_by: string | null
   created_at: string
   updated_at: string
-  trip?: Pick<BusTrip, 'id' | 'name'> | null
+  route?: Pick<BusTrip, 'id' | 'name'> | null
   fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
   passenger_count?: number
 }
@@ -1046,7 +731,7 @@ export interface BusFeeDraft {
 export interface BusFeeDraftInput {
   title: string
   month: string
-  trip_id?: string | null
+  route_id?: string | null
   fee_head_id?: string | null
   description?: string | null
   due_date?: string | null
@@ -1065,7 +750,7 @@ export interface BusFeeDraftPassenger {
 export async function fetchBusFeeDrafts(): Promise<BusFeeDraft[]> {
   const { data, error } = await supabase
     .from('bus_fee_drafts')
-    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .select('*, route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
     .order('month', { ascending: false })
   if (error) { console.error('fetchBusFeeDrafts failed:', error); return [] }
 
@@ -1089,7 +774,7 @@ export async function fetchBusFeeDrafts(): Promise<BusFeeDraft[]> {
 export async function fetchBusFeeDraft(draftId: string): Promise<BusFeeDraft | null> {
   const { data, error } = await supabase
     .from('bus_fee_drafts')
-    .select('*, trip:bus_trips!trip_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
+    .select('*, route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
     .eq('id', draftId)
     .single()
   if (error) { console.error('fetchBusFeeDraft failed:', error); return null }
@@ -1129,7 +814,7 @@ export async function deleteBusFeeDraft(draftId: string): Promise<{ success: boo
 export async function fetchDraftPassengersWithAmounts(draftId: string): Promise<BusFeeDraftPassenger[]> {
   const { data, error } = await supabase
     .from('bus_fee_draft_passengers')
-    .select('*, passenger:profiles!passenger_id(*)')
+    .select(`*, passenger:profiles!passenger_id(${PROFILE_COLS})`)
     .eq('draft_id', draftId)
     .order('created_at', { ascending: true })
   if (error) { console.error('fetchDraftPassengersWithAmounts failed:', error); return [] }
@@ -1236,7 +921,7 @@ export async function issueDraft(draftId: string): Promise<{ success: boolean; c
 
   const fees = passengers.map(p => ({
     passenger_id: p.passenger_id,
-    trip_id: (draft.trip_id as string | null) ?? null,
+    route_id: (draft.route_id as string | null) ?? null,
     fee_head_id: (draft.fee_head_id as string | null) ?? null,
     amount: p.amount!,
     description: p.description || (draft.description as string | null) || (draft.title as string),
