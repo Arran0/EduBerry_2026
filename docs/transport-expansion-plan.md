@@ -423,19 +423,26 @@ phone can both feed one run and the device wins; a run from 60 days ago replays.
 
 ---
 
-## Round 4 — History & openness  ✅ BUILT · ⚠️ MIGRATIONS NOT YET APPLIED
+## Round 4 — History & openness  ✅ BUILT · ✅ APPLIED
 
-Shipped in code: migrations `transport_r4_a…d`; the downsampled telemetry
+Shipped in code: migrations `transport_r4_a…e`; the downsampled telemetry
 archive with `transport_replay_run` and the admin History tab's replay
 scrubber; the nightly metrics rollup with five reports and CSV export;
 RFID/NFC/QR credentials with a driver-side scan field; and the GTFS static
 (`.zip`) and GTFS-Realtime exports.
 
-> **The four Round 4 migrations have not been run against the live project.**
-> The Supabase connector was not authorised in the session that wrote them, and
-> no database password is on disk, so they could not be applied the way Rounds
-> 1–3 were. Everything above is inert until they are — see
-> `docs/transport-round-4-checklist.md`.
+> **Applied to the live project (`tgxxqzeaqxiwoqzopcku`) on 2026-09-20**, in
+> the order a → b → c → d, then `e`. Verified afterwards: all four tables and
+> all fifteen functions exist; `transport-archive-telemetry` (02:30) sits
+> before `cleanup-transport-telemetry` (03:00) with `cleanup-transport-archive`
+> (03:15) and `transport-rollup-metrics` (03:45) after it; `get_advisors`
+> returns no ERROR-level lint and no new `auth_rls_initplan` or duplicate-policy
+> finding from the new tables.
+>
+> The audit that followed found one real hole, which `transport_r4_e` closes:
+> `transport_tick()` had never been revoked from `PUBLIC`, so any signed-in
+> account could drive the school's alerting pass through
+> `/rest/v1/rpc/transport_tick`. See that migration's header.
 
 **Goal.** Make the history answerable, the operation measurable, boarding
 faster without making it less supervised, and the school's own timetable

@@ -1,88 +1,85 @@
 # Transport — what's left for you
 
-Everything in the transport module is built and pushed. This is the list of
-things that need a human, either because they need a credential this session
-didn't have or because they involve a third party.
+Everything in the transport module is built, pushed, and — as of 2026-09-20 —
+applied to the live database. **Steps 1–3 are done**; they are kept below,
+struck through, because what they found and what they set is worth a record.
 
-Ordered so that each step makes the next one possible. **Steps 1–3 are
-load-bearing: until they're done, Round 4 is inert code.** Everything from
-step 5 down is improvement, not repair.
+What is left genuinely needs a human: a third party (Meta), a decision only the
+school can make, or physical hardware. Nothing below blocks the module from
+working — a school could run it tomorrow on push notifications alone.
 
 ---
 
-## 1. Re-authorise the Supabase connector — *blocks everything below*
+## 1. ~~Re-authorise the Supabase connector~~ — ✅ done
 
-The Supabase connector was disconnected for this work, and there's no database
-password or connection string on disk, so the four Round 4 migrations could not
-be applied the way Rounds 1–3 were. Nothing else here can happen first.
+Connected on 2026-09-20. Everything in steps 2 and 3 was run and verified
+against the live project rather than handed to you as SQL.
 
-- claude.ai → **Settings → Connectors → Supabase → Connect**, or run `/mcp` in
-  an interactive Claude Code session.
+## 2. ~~Run the Round 4 migrations~~ — ✅ applied
 
-Once it's connected, I can run step 2 for you and verify it against the live
-schema — that's the better path, because I can check the result rather than
-hand you SQL and hope.
-
-## 2. Run the four Round 4 migrations — *in this order*
-
-In the Supabase SQL Editor (the house method — every migration header says so,
-and they're written idempotent, so re-running one is safe):
+Applied to `tgxxqzeaqxiwoqzopcku` in order:
 
 1. `supabase-migrations/transport_r4_a_archive_and_replay.sql`
 2. `supabase-migrations/transport_r4_b_metrics_and_reports.sql`
 3. `supabase-migrations/transport_r4_c_scan_boarding.sql`
 4. `supabase-migrations/transport_r4_d_gtfs.sql`
+5. `supabase-migrations/transport_r4_e_revoke_tick_execute.sql` — written
+   *after* the other four, because the audit below found a hole.
 
-Order matters: `b` reads tables `a` creates, and both schedule pg_cron jobs that
-have to interleave correctly with the existing telemetry purge.
+The History, Reports, Cards & QR and Open data tabs, and the driver's scan
+field, are live now.
 
-**Until these run**, the History tab, the Reports tab, the Cards & QR tab, the
-Open data tab and the driver's scan field will all load and then fail with a
-missing-function error. That's expected, not a bug.
+### What the post-migration checks found
 
-### Then check three things
+- **Shape.** All four tables and all fifteen functions exist.
+- **Cron.** `transport-archive-telemetry` 02:30 → `cleanup-transport-telemetry`
+  03:00 → `cleanup-transport-archive` 03:15 → `transport-rollup-metrics` 03:45.
+  The 02:30 → 03:00 gap is the one that matters: **the archiver has to run
+  before the purge deletes the fixes it archives.** If you ever move either
+  job, keep that ordering.
+- **Advisors.** No ERROR-level lint. No new `auth_rls_initplan` and no
+  duplicate-permissive-policy finding from the new tables. The only
+  performance notes against them are "unused index" on indexes of tables that
+  are still empty, which is expected.
+- **Grants — one real hole, now closed.** `anon` has EXECUTE on nothing from
+  Round 4. But `transport_tick()` had never been revoked from `PUBLIC`, which
+  includes `authenticated`, so **any signed-in account could have driven the
+  school's alerting pass** through `/rest/v1/rpc/transport_tick`. The tick is
+  advisory-locked and idempotent, so nothing was corrupted, but an
+  unprivileged caller controlling alert and notification timing is bad enough.
+  `transport_r4_e` revokes it. The other four cron-only functions each carried
+  their own REVOKE and were already correct.
 
-- **`get_advisors` for `security` and `performance`.** The project already
-  tracks the `auth_rls_initplan` and unindexed-FK lints; the new tables must not
-  regress them.
-- **Function grants.** Re-run `optimize_rls_scope_to_authenticated.sql` and
-  `optimize_rls_wrap_auth_calls.sql` — both are written to be re-runnable and
-  will catch any policy authored without `TO authenticated` or with a bare
-  `auth.uid()`. Then confirm `anon` has **no** EXECUTE on anything named
-  `cleanup_*`, `transport_tick`, `transport_archive_telemetry`,
-  `transport_rollup_metrics` — an earlier round found a blanket
-  `GRANT ALL ON ALL ROUTINES` had quietly re-granted those.
-- **The cron jobs exist.** `SELECT jobname, schedule FROM cron.job ORDER BY jobname;`
-  should include `transport-archive-telemetry` (02:30 UTC),
-  `cleanup-transport-archive` (03:15) and `transport-rollup-metrics` (03:45),
-  alongside the existing `transport-tick`, `transport-materialise-runs` and
-  `cleanup-transport-telemetry` (03:00).
+## 3. ~~Fill in `transport_runtime_config`~~ — ✅ done and verified
 
-  The 02:30 → 03:00 ordering is the important one: **the archiver has to run
-  before the purge deletes the fixes it archives.** If you move either job,
-  keep that gap.
+Both rows existed but were `NULL`, so notifications were silent. Now set:
 
-## 3. Fill in `transport_runtime_config` — *notifications are silent without it*
+- `drain_url` → `https://mps-web-by-arran.vercel.app/api/transport/notify/drain`,
+  taken from `NEXT_PUBLIC_SITE_URL` in `.env.local`. **If that is not the
+  domain you actually serve from, change it** — pg_net calls it from
+  Supabase's network, so it must be the deployed URL, and a wrong one fails
+  silently.
+- `cron_secret` → a freshly generated 64-hex-character value, minted
+  server-side. It is only ever compared inside the database and the drain
+  endpoint, both of which read this same row, so there is nothing to copy
+  anywhere and nothing to keep in an env var.
 
-Two rows, and nothing sends until both exist:
+**Verified end to end, not assumed.** A `net.http_post` to the drain with that
+secret returned `200 {"success":true,"sent":0,"failed":0}` — pg_net reached the
+deployed endpoint, the secret was accepted, and the outbox claim ran. `sent:0`
+is correct: there are no runs yet, so nothing was queued, and no real parent
+was messaged by the test.
+
+To change the secret later:
 
 ```sql
-INSERT INTO public.transport_runtime_config (key, value) VALUES
-  ('drain_url',   'https://YOUR-DOMAIN/api/transport/notify/drain'),
-  ('cron_secret', 'a long random string you generate')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+UPDATE public.transport_runtime_config
+   SET value = encode(gen_random_bytes(32), 'hex') WHERE key = 'cron_secret';
 ```
 
-- `drain_url` must be the **deployed** URL. pg_net calls it from Supabase's
-  network, so `localhost` will fail silently.
-- `cron_secret` is compared in constant time by the drain endpoint. Generate it
-  with `openssl rand -hex 32` — don't pick something memorable.
-
-**Verify it works** rather than assuming: enqueue a test row and watch it leave.
+If messages ever stop, that is what to look at:
 
 ```sql
-SELECT public.transport_kick_drain();
--- then, a few seconds later:
 SELECT status, attempts, last_error, sent_at
 FROM public.notification_outbox ORDER BY created_at DESC LIMIT 5;
 ```
@@ -169,12 +166,17 @@ replacement.
 
 ## What I'd do first
 
-If you only do one thing: **step 1, then let me run step 2.** Everything else
-can wait, and verifying a migration against the live schema is worth more than
-verifying it by reading.
+**Step 4.** It is the only remaining item with a lead time you cannot compress:
+Meta takes days to approve templates, and until they do, the six messages that
+matter most — didn't board, delayed, replacement bus, SOS — reach a parent only
+as a push notification they may have muted. Submitting the templates is twenty
+minutes of form-filling that has to start before it is needed, not when.
 
-Steps 3 and 4 are what turn a tracking screen into a product a parent notices —
-a school running without them has GPS, but no one is being told anything.
+Then **step 6 or 7**, depending on whether the school has GPS hardware or wants
+cards. Step 5 is worth ten minutes of thought and no urgency.
+
+One thing to confirm rather than assume: the drain URL in step 3 was taken from
+`.env.local`. If the school serves from a different domain, change that row.
 
 *(An earlier draft of this list had a step about `npm run lint` being broken by
 an ESLint 8/9 config mismatch. That was fixed on `main` while this work was in
