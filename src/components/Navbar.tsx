@@ -66,10 +66,24 @@ export default function Navbar() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
-  // Once the user starts scrolling, fade the bar toward translucent so it
-  // gives up some of its opacity for a more immersive, content-forward feel
-  // — still blurred so text scrolling underneath stays legible.
+  // Once the user starts scrolling, the full-width bar dissolves and its three
+  // groups (brand / links / profile) float apart into separate stadium-shaped
+  // pills — two of them on phones, where the links group is hidden. Mirrors the
+  // way BottomNav shrinks into a pill, and keeps the page feeling content-first
+  // while every control stays exactly where it was.
   const scrolled = useScrolled()
+
+  // Applied to each group so it morphs between "flat section of one bar" and
+  // "free-floating stadium chunk". Transparent border/ring in both states so
+  // nothing jumps by a pixel when the styles swap.
+  // `pointer-events-auto` re-arms the chunks themselves: once scrolled the bar
+  // is transparent, so it is turned into a click-through strip (below) and the
+  // gaps between chunks hand taps to the content underneath.
+  const chunk = `pointer-events-auto transition-all duration-300 ease-out border ${
+    scrolled
+      ? 'rounded-full border-slate-200/70 bg-white/85 backdrop-blur-xl shadow-[0_6px_24px_rgba(15,23,42,0.12)]'
+      : 'rounded-full border-transparent bg-transparent shadow-none'
+  }`
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
   const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(user?.id ?? null)
@@ -99,9 +113,7 @@ export default function Navbar() {
 
   if (loading) {
     return (
-      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
-        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
-      }`}>
+      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-sm pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -122,23 +134,38 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
-        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
+      <nav className={`sticky top-0 z-50 pt-[env(safe-area-inset-top)] transition-[background-color,border-color,box-shadow] duration-300 border-b ${
+        scrolled
+          ? 'bg-transparent border-transparent shadow-none pointer-events-none'
+          : 'bg-white/95 backdrop-blur-xl border-slate-200/80 shadow-sm'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className={`flex items-center justify-between transition-all duration-300 ease-out ${
+            scrolled ? 'h-[3.75rem] gap-2' : 'h-16 gap-0'
+          }`}>
 
-            {/* Logo + branding */}
-            <Link href="/home" className="flex items-center gap-3 group flex-shrink-0">
+            {/* Chunk 1 — logo + branding */}
+            <Link
+              href="/home"
+              className={`flex items-center group flex-shrink-0 ${chunk} ${
+                scrolled ? 'gap-2 px-1.5 md:pr-3 py-1' : 'gap-3 px-0 py-0'
+              }`}
+            >
               <MPSLogo size="sm" src={branding.logoUrl || undefined} className="transition-transform duration-200 group-hover:scale-105" />
-              <div>
+              {/* On phones the scrolled brand chunk drops its wordmark so it
+                  shrinks to a compact logo pill; desktop keeps the title. */}
+              <div className={scrolled ? 'hidden md:block' : 'block'}>
                 <h1 className="font-display text-base font-bold gradient-text leading-tight">{branding.appTitle}</h1>
-                <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">{branding.appSubtitle}</p>
+                <p className={`text-[11px] text-slate-400 leading-tight transition-all duration-300 ${
+                  scrolled ? 'hidden' : 'hidden sm:block'
+                }`}>{branding.appSubtitle}</p>
               </div>
             </Link>
 
-            {/* Desktop nav */}
-            <div className="hidden md:flex items-center gap-0.5" ref={dropdownRef}>
+            {/* Chunk 2 (desktop only) — nav links */}
+            <div className={`hidden md:flex items-center ${chunk} ${
+              scrolled ? 'gap-0.5 px-1.5 py-1' : 'gap-0.5 px-0 py-0'
+            }`} ref={dropdownRef}>
               {filteredNavItems.map((item) => {
                 const active = isActive(item.href)
                 return (
@@ -146,7 +173,9 @@ export default function Navbar() {
                     {item.children ? (
                       <button
                         onClick={() => setActiveDropdown(activeDropdown === item.label ? null : item.label)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        className={`flex items-center gap-1.5 px-3 text-sm font-medium transition-all duration-300 ${
+                          scrolled ? 'py-1.5 rounded-full' : 'py-2 rounded-xl'
+                        } ${
                           active
                             ? 'text-mps-blue-600 bg-mps-blue-50'
                             : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
@@ -162,7 +191,9 @@ export default function Navbar() {
                     ) : (
                       <Link
                         href={item.href}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                        className={`flex items-center gap-1.5 px-3 text-sm font-medium transition-all duration-300 ${
+                          scrolled ? 'py-1.5 rounded-full' : 'py-2 rounded-xl'
+                        } ${
                           active
                             ? 'text-mps-blue-600 bg-mps-blue-50'
                             : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
@@ -203,23 +234,27 @@ export default function Navbar() {
               })}
             </div>
 
-            {/* Right side: profile + mobile toggle */}
-            <div className="flex items-center gap-2">
+            {/* Chunk 3 (2 on phones) — profile + mobile toggle */}
+            <div className={`flex items-center ${chunk} ${
+              scrolled ? 'gap-1 px-1 py-1' : 'gap-2 px-0 py-0'
+            }`}>
 
               {/* Profile button */}
               <div className="relative" ref={profileDropdownRef}>
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center gap-2.5 pl-1 pr-2.5 py-1 rounded-xl hover:bg-slate-100 transition-all duration-200"
+                  className={`flex items-center gap-2.5 pl-1 pr-2.5 py-1 hover:bg-slate-100 transition-all duration-300 ${
+                    scrolled ? 'rounded-full' : 'rounded-xl'
+                  }`}
                 >
                   <Avatar
                     avatarUrl={profile?.avatar_url}
                     name={profile?.full_name}
                     email={user.email}
-                    size={34}
-                    className="ring-2 ring-white shadow-sm"
+                    size={scrolled ? 30 : 34}
+                    className="ring-2 ring-white shadow-sm transition-all duration-300"
                   />
-                  <div className="hidden sm:block text-left">
+                  <div className={`text-left transition-all duration-300 ${scrolled ? 'hidden lg:block' : 'hidden sm:block'}`}>
                     <p className="text-sm font-semibold text-slate-700 leading-tight truncate max-w-[110px]">
                       {profile?.full_name?.split(' ')[0] || 'User'}
                     </p>
@@ -231,7 +266,9 @@ export default function Navbar() {
                   </div>
                   <ChevronDown
                     size={14}
-                    className={`text-slate-400 transition-transform duration-200 hidden sm:block ${profileDropdownOpen ? 'rotate-180' : ''}`}
+                    className={`text-slate-400 transition-transform duration-200 ${
+                      scrolled ? 'hidden lg:block' : 'hidden sm:block'
+                    } ${profileDropdownOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
 
@@ -266,7 +303,9 @@ export default function Navbar() {
               {/* Mobile hamburger */}
               <button
                 onClick={() => { setMobileMenuOpen(prev => !prev); setActiveDropdown(null) }}
-                className="md:hidden p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-600"
+                className={`md:hidden p-2 hover:bg-slate-100 transition-all duration-300 text-slate-600 ${
+                  scrolled ? 'rounded-full' : 'rounded-xl'
+                }`}
               >
                 {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
@@ -285,7 +324,11 @@ export default function Navbar() {
           />
           {/* Panel \u2014 sibling to backdrop so touch events never reach it */}
           <div
-            className="fixed right-0 top-16 z-50 w-72 max-h-[calc(100vh-4rem)] bg-white shadow-2xl rounded-bl-3xl overflow-y-auto md:hidden"
+            className={`fixed z-50 w-72 max-h-[calc(100vh-5rem)] bg-white shadow-2xl overflow-y-auto md:hidden transition-all duration-300 ${
+              scrolled
+                ? 'right-3 top-[3.75rem] rounded-3xl border border-slate-200/70'
+                : 'right-0 top-16 rounded-bl-3xl'
+            }`}
           >
             {/* Profile summary */}
             <div className="px-4 py-4 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200 flex items-center gap-3">
