@@ -29,7 +29,6 @@ import { inr } from '@/components/fees/ui'
 import { FeeScreen, StatStrip, Notice, Loading } from '@/components/fees/shell'
 import YearScope from '@/components/fees/config/YearScope'
 import StudentFeeCard from '@/components/fees/StudentFeeCard'
-import { isStaffRole } from '@/lib/supabase'
 import { fetchInvoices, fetchPayments } from '@/lib/fees/invoices'
 import type { FeePermissionKey } from '@/lib/fees/permissions'
 
@@ -114,7 +113,9 @@ function FeesHub() {
   const [totals, setTotals] = useState<{ collected: number; outstanding: number; today: number } | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const staff = profile ? isStaffRole(profile.role) : false
+  // Fees are an admin-only module on the staff side. Other staff roles fall
+  // through to the student card, which shows only the viewer's own bills.
+  const isAdmin = profile?.role === 'admin'
   const showAmounts = !perms.amountsHidden
   // Depend on the boolean, not on `perms`. The hook memoises its return now,
   // but a dependency on a plain boolean cannot be broken by a later field
@@ -122,7 +123,7 @@ function FeesHub() {
   const canSeeProfiles = perms.can('fees.profile.view')
 
   const load = useCallback(async () => {
-    if (!year || !staff || !canSeeProfiles) { setLoading(false); return }
+    if (!year || !isAdmin || !canSeeProfiles) { setLoading(false); return }
     setLoading(true)
     try {
       const [invoices, payments] = await Promise.all([
@@ -140,14 +141,14 @@ function FeesHub() {
     } finally {
       setLoading(false)
     }
-  }, [year, staff, canSeeProfiles])
+  }, [year, isAdmin, canSeeProfiles])
 
   useEffect(() => { void load() }, [load])
 
   if (perms.loading) return <Loading />
 
   // A student sees their own fees, not the module.
-  if (!staff) return <StudentFeeCard />
+  if (!isAdmin) return <StudentFeeCard />
 
   if (!perms.can('fees.view')) {
     return (

@@ -8,6 +8,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase, isMissingRelation } from '@/lib/supabase'
+import { inChunks } from './chunk'
+import { tryResolveStructure } from './engine/structure'
 import { toPaise } from './engine/money'
 import type {
   FeeGroup as EngineGroup, FeeHead as EngineHead, FeeStructure as EngineStructure,
@@ -419,4 +421,201 @@ export async function assignGroupBulk(
       { onConflict: 'student_id,academic_year_id', count: 'exact' })
   if (error) throw error
   return count ?? studentIds.length
+}
+
+// ── The roster: who is in which group ───────────────────────────────────
+export interface RosterStudent {
+  student_id: string
+  full_name: string
+  grade: number | null
+  section: string | null
+  admission_no: string | null
+  /** From fee_group_assignments. Null means nobody has said, so the default applies. */
+  assigned_group_id: string | null
+  assigned_is_rte: boolean
+  prorate_from: string | null
+  note: string | null
+  /**
+   * The group the student's fee profile was actually built with, if they have
+   * one. This can differ from the assignment: `fee_create_profiles` reads the
+   * assignment once, at creation, and bakes the result into the profile.
+   * Showing both is what stops "I changed her group and nothing happened".
+   */
+  profile_id: string | null
+  profile_group_id: string | null
+}
+
+/**
+ * Every student in the school with their group assignment and their profile's
+ * group, in three queries rather than one per student.
+ */
+export async function fetchRoster(academicYearId: string): Promise<RosterStudent[]> {
+  const [{ data: students, error: sErr }, assignments, { data: profiles }] = await Promise.all([
+    supabase.from('profiles')
+      .select('id, full_name, grade, section')
+      .eq('role', 'student')
+      .eq('is_banned', false)
+      .order('grade').order('section').order('full_name'),
+    fetchGroupAssignments(academicYearId),
+    supabase.from('fee_profiles')
+      .select('id, student_id, fee_group_id')
+      .eq('academic_year_id', academicYearId),
+  ])
+  if (sErr) {
+    if (isMissingRelation(sErr)) return []
+    throw sErr
+  }
+
+  const byStudent = new Map(assignments.map(a => [a.student_id, a]))
+  const profByStudent = new Map(
+    (profiles ?? []).map(p => [
+      (p as { student_id: string }).student_id,
+      p as { id: string; student_id: string; fee_group_id: string | null },
+    ]))
+
+  const admission = await fetchAdmissionNumbers((students ?? []).map(s => (s as { id: string }).id))
+
+  return (students ?? []).map(row => {
+    const s = row as { id: string; full_name: string; grade: number | null; section: string | null }
+    const a = byStudent.get(s.id)
+    const p = profByStudent.get(s.id)
+    return {
+      student_id: s.id,
+      full_name: s.full_name,
+      grade: s.grade,
+      section: s.section,
+      admission_no: admission.get(s.id) ?? null,
+      assigned_group_id: a?.fee_group_id ?? null,
+      assigned_is_rte: a?.is_rte ?? false,
+      prorate_from: a?.prorate_from ?? null,
+      note: a?.note ?? null,
+      profile_id: p?.id ?? null,
+      profile_group_id: p?.fee_group_id ?? null,
+    }
+  })
+}
+
+/** Admission numbers live on student_details, batched like every other id list. */
+async function fetchAdmissionNumbers(ids: string[]): Promise<Map<string, string | null>> {
+  type Row = { student_id: string; admission_no: string | null }
+  const rows = await inChunks(ids, async batch => {
+    const { data, error } = await supabase.from('student_details')
+      .select('student_id, admission_no').in('student_id', batch)
+    if (error) {
+      if (isMissingRelation(error)) return [] as Row[]
+      throw error
+    }
+    return (data ?? []) as Row[]
+  })
+  return new Map(rows.map(r => [r.student_id, r.admission_no]))
+}
+
+export interface ReassignResult {
+  assigned: number
+  /** Profiles re-priced because they already existed when the group changed. */
+  repriced: number
+  /** Students whose new group has no published structure that fits them. */
+  unpriced: { studentId: string; name: string; reason: string }[]
+}
+
+/**
+ * Put students in a group — and re-price the ones who already have a profile.
+ *
+ * The assignment table alone is not enough. `fee_create_profiles` reads it
+ * once, when the profile is made, and writes the resolved structure onto the
+ * profile; every bill after that comes from the profile. So moving a student
+ * who is already billed would change nothing anybody could see, which is the
+ * worst kind of control — one that looks like it worked.
+ *
+ * Re-resolution uses `resolveStructure`, the same four-rank ladder
+ * `fee_generate_invoices` walks in SQL, so a profile repriced here and one
+ * created by the server land on the same structure with the same stated
+ * reason. The `why` is carried onto the profile, because a parent asking why
+ * their bill changed deserves the answer the engine already has.
+ *
+ * Bills that have already been issued are deliberately untouched. Re-pricing
+ * decides what the *next* bill costs; rewriting a bill the family has been
+ * sent is a different act, with its own permission and its own paper trail.
+ */
+export async function reassignGroup(input: {
+  academicYearId: string
+  studentIds: string[]
+  feeGroupId: string
+  isRte?: boolean
+  prorateFrom?: string | null
+  note?: string | null
+  /** The price list, so the re-resolution does not refetch it per student. */
+  bundle: FeeConfigBundle
+  roster: RosterStudent[]
+}): Promise<ReassignResult> {
+  const { academicYearId, studentIds, feeGroupId, bundle, roster } = input
+  if (studentIds.length === 0) return { assigned: 0, repriced: 0, unpriced: [] }
+
+  const group = bundle.groups.find(g => g.id === feeGroupId)
+  const isRte = input.isRte ?? group?.is_rte ?? false
+
+  const { error } = await supabase.from('fee_group_assignments').upsert(
+    studentIds.map(student_id => ({
+      academic_year_id: academicYearId,
+      student_id,
+      fee_group_id: feeGroupId,
+      is_rte: isRte,
+      prorate_from: input.prorateFrom ?? null,
+      note: input.note ?? null,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: 'student_id,academic_year_id' })
+  if (error) throw error
+
+  // Re-price the ones already carrying a profile.
+  const engineGroups = bundle.groups.map(toEngineGroup)
+  const engineStructures = toEngineStructures(bundle)
+  const byId = new Map(roster.map(r => [r.student_id, r]))
+  const unpriced: ReassignResult['unpriced'] = []
+  let repriced = 0
+
+  for (const studentId of studentIds) {
+    const person = byId.get(studentId)
+    if (!person?.profile_id) continue
+
+    const resolved = tryResolveStructure(
+      {
+        studentId,
+        grade: person.grade,
+        feeGroupId,
+        prorateFrom: input.prorateFrom ?? null,
+        isRte,
+      },
+      engineGroups,
+      engineStructures)
+
+    if (!resolved.ok) {
+      unpriced.push({ studentId, name: person.full_name, reason: resolved.reason })
+      continue
+    }
+
+    const { error: uErr } = await supabase.from('fee_profiles').update({
+      fee_group_id: feeGroupId,
+      structure_id: resolved.resolved.structure.id,
+      structure_source: resolved.resolved.source,
+      is_rte: isRte,
+      prorate_from: input.prorateFrom ?? null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', person.profile_id)
+    if (uErr) throw uErr
+    repriced += 1
+  }
+
+  return { assigned: studentIds.length, repriced, unpriced }
+}
+
+/** Take students out of every group, so the default applies again. */
+export async function clearAssignments(
+  academicYearId: string, studentIds: string[],
+): Promise<number> {
+  if (studentIds.length === 0) return 0
+  const { error } = await supabase.from('fee_group_assignments')
+    .delete().eq('academic_year_id', academicYearId).in('student_id', studentIds)
+  if (error) throw error
+  return studentIds.length
 }

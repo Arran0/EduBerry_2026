@@ -20,6 +20,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, STRUCTURE_CHIP, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
+import GroupRoster from '@/components/fees/config/GroupRoster'
 import { FeeScreen, TabBar } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
@@ -125,8 +126,12 @@ function FeeConfigInner() {
                           onChanged={() => void load()} onError={setError} />
           )}
           {section === 'groups' && (
-            <GroupsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
-                           onChanged={() => void load()} onError={setError} />
+            <div className="space-y-4">
+              <GroupsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
+                             onChanged={() => void load()} onError={setError} />
+              <GroupRoster bundle={bundle} yearId={year.id} canEdit={canEdit}
+                           onError={setError} />
+            </div>
           )}
           {section === 'structures' && (
             <StructuresSection bundle={bundle} yearId={year.id} canEdit={canEdit}

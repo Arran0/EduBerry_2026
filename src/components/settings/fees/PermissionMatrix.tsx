@@ -27,7 +27,11 @@ import {
 } from '@/lib/fees/permissions'
 
 /** Roles that can plausibly touch fees. Students and drivers are not offered. */
-const ROLES = ['admin', 'principal', 'coordinator', 'teacher'] as const
+// Fees are an administrator's job and a family's own business — no other
+// staff role has a part in the module. The resolver enforces this
+// (fee_restrict_to_admin_and_students.sql); listing one role here is the
+// interface agreeing with it, rather than offering boxes that tick to nothing.
+const ROLES = ['admin'] as const
 
 interface StaffRow { id: string; full_name: string; role: string }
 

@@ -122,12 +122,26 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.fee_is_service_context()
 RETURNS BOOLEAN LANGUAGE sql STABLE SET search_path = public AS $$
-  -- session_user, not current_user. This is called from inside SECURITY
-  -- DEFINER functions, where current_user is the function's owner (postgres)
-  -- and the answer would be "yes, service role" for every caller — which is
-  -- exactly the escalation fee_fix_service_context_escalation.sql closes.
-  -- SECURITY DEFINER never changes session_user.
-  SELECT session_user IN ('service_role', 'postgres', 'supabase_admin');
+  -- The JWT role claim. Not current_user, and not session_user either:
+  --   current_user — inside SECURITY DEFINER this is the function's owner
+  --     (postgres), so the answer is "yes, service role" for every caller.
+  --     That was the privilege escalation.
+  --   session_user — PostgREST connects as `authenticator` and SET ROLEs per
+  --     request, so this is `authenticator` for ALL API traffic, service-role
+  --     calls included. It locks the API routes out instead.
+  -- PostgREST sets request.jwt.claims from the verified JWT, and SECURITY
+  -- DEFINER does not touch it, so the claim is both accurate and unforgeable.
+  SELECT CASE
+    WHEN nullif(current_setting('request.jwt.claims', true), '') IS NOT NULL
+      THEN COALESCE(
+             nullif(current_setting('request.jwt.claims', true), '')::json ->> 'role',
+             '') = 'service_role'
+    -- No claims at all means this is not a PostgREST request: pg_cron, a
+    -- migration, psql. Those hold a database connection already. The
+    -- session_user guard stops an unauthenticated PostgREST request, which
+    -- still arrives as `authenticator`, from taking this branch.
+    ELSE session_user NOT IN ('authenticator', 'anon', 'authenticated', 'service_role')
+  END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.normalize_academic_year_code(p_code TEXT)

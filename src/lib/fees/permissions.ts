@@ -174,7 +174,11 @@ export async function fetchPermissionHolders(
 ): Promise<PermissionHolder[]> {
   const [{ data: profiles, error: pErr }, roleGrants, { data: overrides, error: oErr }] =
     await Promise.all([
-      supabase.from('profiles').select('id, full_name, role').eq('is_banned', false),
+      // Only administrators can hold a fee permission — the resolver gates on
+      // it, so anyone else listed here would be a name beside a key they do
+      // not actually have.
+      supabase.from('profiles').select('id, full_name, role')
+        .eq('is_banned', false).eq('role', 'admin'),
       fetchRoleGrants(),
       supabase.from('fee_user_grants').select('user_id, granted').eq('permission_key', key),
     ])

@@ -1,3 +1,7 @@
+-- SUPERSEDED by fee_fix_service_context_jwt_claim.sql. The session_user test
+-- below is wrong: PostgREST connects as `authenticator` for every request,
+-- service-role included, so this denies the fee API routes. Do not apply.
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- SECURITY FIX — privilege escalation through fee_requires().
 --
