@@ -98,35 +98,26 @@ export async function restoreRoute(routeId: string): Promise<{ success: boolean;
 }
 
 /**
- * Assigned-student count per route.
+ * Stops and assigned students, per route, in one call.
  *
- * One grouped query rather than a count per route — see the "Batch, don't loop"
- * convention in README.md. (`fetchTripPassengerCounts` in src/lib/bus.ts pulled
- * every membership row and counted them in JS; this does not.)
+ * Previously two queries that each selected every row of a table so the browser
+ * could call `.length` on the result — every stop in the school and every
+ * active assignment, pulled across the wire to render two numbers in a list.
+ * `transport_route_counts()` counts them where the rows already are.
  */
-export async function fetchRouteStudentCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase
-    .from('transport_student_assignments')
-    .select('route_id')
-    .is('ended_on', null)
-  if (error) { console.error('fetchRouteStudentCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { route_id: string }[]) {
-    counts[r.route_id] = (counts[r.route_id] ?? 0) + 1
-  }
-  return counts
+export interface RouteCounts {
+  stops: Record<string, number>
+  students: Record<string, number>
 }
 
-/** Stop count per route, for the route list. */
-export async function fetchRouteStopCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase
-    .from('transport_route_stops')
-    .select('route_id')
-    .eq('active', true)
-  if (error) { console.error('fetchRouteStopCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { route_id: string }[]) {
-    counts[r.route_id] = (counts[r.route_id] ?? 0) + 1
+export async function fetchRouteCounts(): Promise<RouteCounts> {
+  const { data, error } = await supabase.rpc('transport_route_counts')
+  if (error) { console.error('fetchRouteCounts failed:', error); return { stops: {}, students: {} } }
+  const stops: Record<string, number> = {}
+  const students: Record<string, number> = {}
+  for (const r of (data || []) as { route_id: string; stops: number; students: number }[]) {
+    stops[r.route_id] = r.stops
+    students[r.route_id] = r.students
   }
-  return counts
+  return { stops, students }
 }

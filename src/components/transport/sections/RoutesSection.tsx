@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Route as RouteIcon, Plus, ChevronRight, MapPin, Users, Power, Archive } from 'lucide-react'
 import { ADMIN, SHEET, Sheet, SheetRowSkeleton } from '@/components/bus/adminUI'
 import {
-  fetchRoutes, fetchRouteStopCounts, fetchRouteStudentCounts, setRouteActive, archiveRoute,
+  fetchRoutes, fetchRouteCounts, setRouteActive, archiveRoute,
 } from '@/lib/transport/routes'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { fetchTransportStaff } from '@/lib/transport/staff'
@@ -26,10 +26,10 @@ export default function RoutesSection() {
   const load = useCallback(async () => {
     setLoading(true)
     // Four independent reads — fired together rather than awaited in sequence.
-    const [r, stops, students, v, c] = await Promise.all([
-      fetchRoutes(), fetchRouteStopCounts(), fetchRouteStudentCounts(), fetchVehicles(), fetchTransportStaff(),
+    const [r, counts, v, c] = await Promise.all([
+      fetchRoutes(), fetchRouteCounts(), fetchVehicles(), fetchTransportStaff(),
     ])
-    setRoutes(r); setStopCounts(stops); setStudentCounts(students)
+    setRoutes(r); setStopCounts(counts.stops); setStudentCounts(counts.students)
     setVehicles(v); setCrew(c); setLoading(false)
   }, [])
 
