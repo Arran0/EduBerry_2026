@@ -1,11 +1,12 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Collections.
+// Reminders.
 //
 // Every family that owes something, most overdue first. The one question the
-// office asks each morning is "who do I chase today", and this answers it
-// without a report being run.
+// office asks each morning is "who do I remind today", and this answers it
+// without a report being run. It was called Chase, which is the wrong word for
+// what the school actually does here.
 //
 // Per the school's instruction there is no escalating tone: one respectful
 // message, sent more or less often. What changes with lateness is which
@@ -15,6 +16,9 @@
 // Reminders skip anyone who has already paid, anyone with no number on file,
 // and anyone already reminded today. The result of a send says how many were
 // skipped and why, in words, rather than reporting a silent success.
+//
+// This is a popup now, opened from the Collection Center's toolbar, so the
+// three folders below are the whole of it rather than three tabs inside a tab.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -41,7 +45,7 @@ import {
   type ReminderLogRow, type ReminderScheduleRow, type SendRemindersResult,
 } from '@/lib/fees/charges'
 
-type Tab = 'chase' | 'log' | 'schedule'
+type Tab = 'who' | 'log' | 'schedule'
 
 interface Family {
   student: ProfileListRow
@@ -53,10 +57,10 @@ interface Family {
   contactable: boolean
 }
 
-export default function ChaseSection() {
+export default function RemindersSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
-  const [tab, setTab] = useState<Tab>('chase')
+  const [tab, setTab] = useState<Tab>('who')
 
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [people, setPeople] = useState<ProfileListRow[]>([])
@@ -89,7 +93,7 @@ export default function ChaseSection() {
       setContactable(await fetchContactableStudents(
         Array.from(new Set(inv.map(i => i.student_id)))))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load collections.')
+      setError(e instanceof Error ? e.message : 'Could not load the reminder list.')
     } finally {
       setLoading(false)
     }
@@ -163,6 +167,7 @@ export default function ChaseSection() {
       setSent(result)
       setSelected(new Set())
       await load()
+      onChanged?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Those reminders were not queued.')
     } finally {
@@ -194,7 +199,7 @@ export default function ChaseSection() {
         active={tab}
         onChange={setTab}
         tabs={[
-          { key: 'chase', label: 'Who to chase', icon: Users },
+          { key: 'who', label: 'Who to remind', icon: Users },
           { key: 'log', label: 'Reminder log', icon: History },
           { key: 'schedule', label: 'Automatic', icon: CalendarClock },
         ]}
@@ -204,7 +209,7 @@ export default function ChaseSection() {
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-      ) : tab === 'chase' ? (
+      ) : tab === 'who' ? (
         <div className={ADMIN.card}>
           <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
             <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
