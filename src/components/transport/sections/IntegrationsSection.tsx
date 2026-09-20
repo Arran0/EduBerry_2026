@@ -477,7 +477,7 @@ function CardsPanel() {
       </div>
 
       <div className={`${ADMIN.card} p-4 space-y-3`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <Field label="Student" hint="Type to narrow the list.">
             <div className="space-y-1.5">
               <TextInput
@@ -680,7 +680,7 @@ function GtfsPanel() {
         </div>
       ) : feed ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
             {gtfsSummary(feed).map(s => (
               <div key={s.label} className={`${ADMIN.card} px-3 py-2.5`}>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{s.label}</p>

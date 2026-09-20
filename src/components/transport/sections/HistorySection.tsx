@@ -90,8 +90,8 @@ export default function HistorySection() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[19rem_1fr] gap-4 items-start">
-        <div className={`${ADMIN.card} overflow-hidden xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] overflow-y-auto`}>
+      <div className="grid grid-cols-1 lg:grid-cols-[17rem_1fr] xl:grid-cols-[19rem_1fr] gap-4 lg:gap-5 items-start">
+        <div className={`${ADMIN.card} overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] overflow-y-auto`}>
           {loading ? (
             <div className="px-4 py-10 text-center text-xs text-[#A1A1AA]">
               <Loader2 size={16} className="animate-spin mx-auto mb-2" /> Loading trips…

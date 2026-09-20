@@ -33,6 +33,10 @@ export interface UtilisationRow {
   avg_boarded: number | null
   utilisation_pct: number | null
   no_show_pct: number | null
+  /** Absolute rider counts across the window, not per-run averages. */
+  total_boarded: number
+  total_excused: number
+  total_no_show: number
 }
 
 export interface StopDelayRow {

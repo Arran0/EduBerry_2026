@@ -151,14 +151,14 @@ export default function LiveSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_20rem] xl:grid-cols-[1fr_22rem] gap-4 lg:gap-5">
         <div className="space-y-3">
           <TransportMap
             stops={mapStops}
             selectedStopId={selectedRunId}
             onStopClick={id => setSelectedRunId(id === selectedRunId ? null : id)}
             showFences={false}
-            heightClass="h-[420px] xl:h-[min(62vh,44rem)]"
+            heightClass="h-[340px] md:h-[420px] lg:h-[min(62vh,44rem)]"
             className="rounded-xl overflow-hidden border border-[#E4E4E7]"
           />
 

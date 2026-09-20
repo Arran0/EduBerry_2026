@@ -15,9 +15,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  AlertTriangle, Clock, Download, Gauge, Radio, TrendingUp, Users,
+  AlertTriangle, ChevronRight, Clock, Download, Gauge, Radio, TrendingUp, Users,
 } from 'lucide-react'
 import { ADMIN, SHEET, Sheet, SheetRowSkeleton } from '@/components/bus/adminUI'
+import DonutChart from '@/components/charts/DonutChart'
+import MetricBars from '@/components/charts/MetricBars'
 import {
   fetchAttendanceMismatch, fetchGpsHealthReport, fetchOnTimeReport,
   fetchStopDelayReport, fetchUtilisationReport, formatDelay, pct, windowOf,
@@ -77,6 +79,15 @@ export default function ReportsSection() {
     ? Math.round(util.reduce((n, r) => n + (r.utilisation_pct ?? 0), 0) / util.length)
     : null
 
+  // Boarding outcomes across the window. Leave is its own segment rather than
+  // being folded into "did not ride": a child the school already knew was away
+  // is not a seat that went to waste, and colouring it as one would make every
+  // Monday look like a failure.
+  const riderBoarded = util.reduce((n, r) => n + (r.total_boarded ?? 0), 0)
+  const riderExcused = util.reduce((n, r) => n + (r.total_excused ?? 0), 0)
+  const riderNoShow = util.reduce((n, r) => n + (r.total_no_show ?? 0), 0)
+  const riderTotal = riderBoarded + riderExcused + riderNoShow
+
   const exportCsv = () => {
     const { from, to } = windowOf(days)
     const spec: Record<Tab, { header: string[]; rows: Record<string, unknown>[]; name: string }> = {
@@ -88,7 +99,8 @@ export default function ReportsSection() {
       },
       utilisation: {
         name: 'seats-used',
-        header: ['route_name', 'capacity', 'avg_expected', 'avg_boarded', 'utilisation_pct', 'no_show_pct'],
+        header: ['route_name', 'capacity', 'avg_expected', 'avg_boarded', 'utilisation_pct',
+          'no_show_pct', 'total_boarded', 'total_excused', 'total_no_show'],
         rows: util as unknown as Record<string, unknown>[],
       },
       stops: {
@@ -137,7 +149,12 @@ export default function ReportsSection() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Below lg: four tiles, because a donut at phone width is a decoration.
+          At lg and up: three infographic panels, all visible at once — the
+          house pattern for a rate statistic is a chart carrying the shape with
+          the numbers read off beside it, not a row of single numbers. Both
+          branches read the same state; nothing is fetched twice. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:hidden">
         <Stat
           icon={<Clock size={14} />}
           label="Stops on time"
@@ -170,6 +187,105 @@ export default function ReportsSection() {
           detail="Boarded, then marked absent"
           tone={mismatch.length === 0 ? 'good' : 'warn'}
         />
+      </div>
+
+      <div className="hidden lg:grid lg:grid-cols-3 gap-5 items-stretch">
+        <Panel
+          icon={<Clock size={14} />}
+          title="Punctuality"
+          onOpen={() => setTab('ontime')}
+          caption={`${totalArrived.toLocaleString()} arrivals in this window`}
+          empty={totalArrived === 0}
+          emptyNote="No arrivals rolled up yet."
+        >
+          <DonutChart
+            segments={[
+              { label: 'On time', value: totalOnTime, color: '#10b981' },
+              { label: 'Late', value: totalArrived - totalOnTime, color: '#f59e0b' },
+            ]}
+            size={128}
+            thickness={14}
+            centerValue={fleetOnTime == null ? '—' : `${fleetOnTime}%`}
+            centerLabel="on time"
+            ariaLabel={`${totalOnTime} of ${totalArrived} stop arrivals were on time`}
+          />
+          <div className="flex-1 min-w-0">
+            <MetricBars
+              dense
+              rows={[
+                { label: 'On time', value: totalOnTime, color: '#10b981' },
+                { label: 'Late', value: totalArrived - totalOnTime, color: '#f59e0b' },
+              ]}
+              showPercent
+            />
+          </div>
+        </Panel>
+
+        <Panel
+          icon={<Users size={14} />}
+          title="Who actually rode"
+          onOpen={() => setTab('utilisation')}
+          caption={`Across ${util.length} route${util.length === 1 ? '' : 's'}`}
+          empty={riderTotal === 0}
+          emptyNote="No riders rolled up yet."
+        >
+          <DonutChart
+            segments={[
+              { label: 'Rode', value: riderBoarded, color: '#10b981' },
+              { label: 'On leave', value: riderExcused, color: '#0ea5e9' },
+              { label: 'No-show', value: riderNoShow, color: '#f43f5e' },
+            ]}
+            size={128}
+            thickness={14}
+            centerValue={avgUtil == null ? '—' : `${avgUtil}%`}
+            centerLabel="seats used"
+            ariaLabel={`${riderBoarded} rode, ${riderExcused} were on leave, ${riderNoShow} did not show`}
+          />
+          <div className="flex-1 min-w-0">
+            <MetricBars
+              dense
+              showPercent
+              rows={[
+                { label: 'Rode', value: riderBoarded, color: '#10b981' },
+                { label: 'On leave', value: riderExcused, color: '#0ea5e9' },
+                { label: 'No-show', value: riderNoShow, color: '#f43f5e' },
+              ]}
+            />
+          </div>
+        </Panel>
+
+        {/* GPS gets a panel of its own rather than a tile, because it is the
+            number that decides whether the other two can be believed. */}
+        <Panel
+          icon={<Radio size={14} />}
+          title="Can we believe it?"
+          onOpen={() => setTab('gps')}
+          caption={mismatch.length === 0
+            ? 'Every rider who boarded was present in class'
+            : `${mismatch.length} boarded, then marked absent in class`}
+          empty={gps.length === 0}
+          emptyNote="No vehicles rolled up yet."
+        >
+          <div className="flex-1 min-w-0">
+            <MetricBars
+              dense
+              max={100}
+              rows={gps.slice(0, 5).map(g => ({
+                label: g.display_name ?? g.registration_no,
+                value: g.avg_coverage_pct ?? 0,
+                display: pct(g.avg_coverage_pct),
+                title: `${g.runs} trip${g.runs === 1 ? '' : 's'}, ${g.total_fixes.toLocaleString()} positions`,
+                color: (g.avg_coverage_pct ?? 0) >= 85 ? '#10b981'
+                  : (g.avg_coverage_pct ?? 0) >= 60 ? '#f59e0b' : '#f43f5e',
+              }))}
+            />
+            {gps.length > 5 && (
+              <p className="text-[11px] text-[#A1A1AA] mt-2">
+                Weakest five of {gps.length} vehicles. Full list under GPS health.
+              </p>
+            )}
+          </div>
+        </Panel>
       </div>
 
       <div className="flex items-center gap-1 overflow-x-auto scrollbar-none border-b border-[#E4E4E7]">
@@ -339,6 +455,55 @@ const TONE_BAR: Record<string, string> = {
 }
 const TONE_TEXT: Record<string, string> = {
   good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-rose-600', flat: 'text-[#52525B]',
+}
+
+/**
+ * One infographic panel: a chart carrying the shape of the data with the
+ * numbers read off beside it.
+ *
+ * Panels in a row share a height (`h-full` on a stretched grid) so the row has
+ * no ragged bottom, and an empty one shows a real empty state rather than
+ * collapsing — a panel that vanishes when its data is missing makes the row
+ * reflow every time a filter changes.
+ */
+function Panel({ icon, title, caption, empty, emptyNote, onOpen, children }: {
+  icon: React.ReactNode
+  title: string
+  caption: string
+  empty?: boolean
+  emptyNote?: string
+  /** Opens the tab this panel summarises — the panel's own "show me the rows". */
+  onOpen?: () => void
+  children: React.ReactNode
+}) {
+  const heading = (
+    <span className="text-[11px] font-bold uppercase tracking-widest text-[#A1A1AA] flex items-center gap-1.5">
+      {icon} {title}
+      {onOpen && <ChevronRight size={12} className="text-[#D4D4D8] group-hover:text-[#71717A] transition-colors" />}
+    </span>
+  )
+  return (
+    <section className={`${ADMIN.card} h-full p-5 flex flex-col`}>
+      <h3>
+        {onOpen ? (
+          <button
+            onClick={onOpen}
+            className="group text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]"
+          >
+            {heading}
+          </button>
+        ) : heading}
+      </h3>
+      <p className="text-xs text-[#71717A] mt-1 mb-4">{caption}</p>
+      {empty ? (
+        <p className="flex-1 flex items-center justify-center text-xs text-[#A1A1AA] text-center">
+          {emptyNote ?? 'Nothing rolled up yet.'}
+        </p>
+      ) : (
+        <div className="flex-1 flex items-center gap-5">{children}</div>
+      )}
+    </section>
+  )
 }
 
 function Stat({ icon, label, value, detail, tone }: {

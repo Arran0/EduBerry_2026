@@ -132,14 +132,14 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
   const coarse = replay.track.some(p => p.res === 'archive')
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr_20rem] gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_18rem] xl:grid-cols-[1fr_20rem] gap-4 lg:gap-5">
       <div className="space-y-3">
         <TransportMap
           stops={mapStops}
           path={travelled.length > 1 ? travelled : null}
           bus={bus ? { lat: bus.lat, lng: bus.lng, label: clock(atMs) } : null}
           showFences
-          heightClass="h-[460px] xl:h-[min(60vh,42rem)]"
+          heightClass="h-[380px] md:h-[460px] lg:h-[min(60vh,42rem)]"
           className="rounded-xl overflow-hidden border border-[#E4E4E7]"
         />
 

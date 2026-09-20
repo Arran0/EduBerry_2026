@@ -270,7 +270,11 @@ CREATE OR REPLACE FUNCTION public.transport_report_utilisation(p_from DATE, p_to
 RETURNS TABLE (
   route_id UUID, route_name TEXT, capacity INTEGER,
   avg_expected NUMERIC, avg_boarded NUMERIC,
-  utilisation_pct NUMERIC, no_show_pct NUMERIC
+  utilisation_pct NUMERIC, no_show_pct NUMERIC,
+  -- Absolute totals as well as averages: the averages answer "is this route
+  -- the right size", the totals answer "what happened to the children", and
+  -- the summary panel is asking the second question.
+  total_boarded BIGINT, total_excused BIGINT, total_no_show BIGINT
 ) LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
 BEGIN
   IF public.get_user_role() <> 'admin' THEN RETURN; END IF;
@@ -283,7 +287,10 @@ BEGIN
     -- Excused absences are not no-shows: a child on approved leave was never
     -- expected, and counting them as waste would make every Monday look broken.
     ROUND(100.0 * SUM(m.no_show_riders)
-          / NULLIF(SUM(m.expected_riders) - SUM(m.excused_riders), 0), 1)
+          / NULLIF(SUM(m.expected_riders) - SUM(m.excused_riders), 0), 1),
+    SUM(m.boarded_riders)::BIGINT,
+    SUM(m.excused_riders)::BIGINT,
+    SUM(m.no_show_riders)::BIGINT
   FROM public.transport_run_metrics m
   JOIN public.transport_routes r ON r.id = m.route_id
   WHERE m.service_date BETWEEN p_from AND p_to

@@ -17,13 +17,15 @@ export const ADMIN = {
    * max-w-6xl (1152px) is a reading measure, and these screens are not reading
    * — they are a fleet map, a sheet of forty routes, and a rail of exceptions
    * that all want to be visible at once. On a 1440 or 1920 display the old cap
-   * left a third of the glass empty while the sheet scrolled. It steps up
-   * rather than going unbounded, because a row that spans 2500px is a row your
-   * eye loses on the way across.
+   * left a third of the glass empty while the sheet scrolled.
+   *
+   * The two steps are the house dashboard widths from the desktop-ui-standardizer
+   * skill, not numbers invented here — every wide admin surface in this app
+   * should line up at the same edge.
    */
-  shell: 'w-full mx-auto max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1720px]',
+  shell: 'w-full mx-auto max-w-7xl 2xl:max-w-[1600px]',
   /** Same steps, for a PageBanner's maxWidth so the header aligns with it. */
-  shellWidth: 'max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1720px]',
+  shellWidth: 'max-w-7xl 2xl:max-w-[1600px]',
   card: 'bg-white border border-[#E4E4E7] rounded-xl',
   cardHover: 'bg-white border border-[#E4E4E7] rounded-xl shadow-sm hover:shadow-md transition-shadow',
   input:

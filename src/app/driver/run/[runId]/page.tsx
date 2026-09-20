@@ -224,7 +224,7 @@ export default function DriverRunPage() {
 
         {/* Stop-by-stop, not one flat roster: the driver only ever needs the
             handful of children standing in front of them. */}
-        <div className="space-y-3">
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 lg:block lg:space-y-3 xl:grid xl:grid-cols-2 xl:gap-3 xl:space-y-0">
           {stops.map(s => (
             <StopBlock
               key={s.id}
@@ -238,7 +238,7 @@ export default function DriverRunPage() {
             />
           ))}
           {byStop.get('none')?.length ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 md:col-span-2 lg:col-span-1 xl:col-span-2">
               <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
                 <AlertTriangle size={15} /> No stop set
               </p>
