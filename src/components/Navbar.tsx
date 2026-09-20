@@ -11,7 +11,6 @@ import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import { useAnnouncementNotifications } from '@/hooks/useAnnouncementNotifications'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
-import { useScrolled } from '@/hooks/useScrolled'
 import {
   Home,
   ClipboardList,
@@ -66,10 +65,8 @@ export default function Navbar() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
-  // Once the user starts scrolling, fade the bar toward translucent so it
-  // gives up some of its opacity for a more immersive, content-forward feel
-  // — still blurred so text scrolling underneath stays legible.
-  const scrolled = useScrolled()
+  // The bar stays full width and fully opaque at every scroll position — no
+  // translucency, no shrinking. Content scrolls cleanly underneath it.
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
   const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(user?.id ?? null)
@@ -99,9 +96,7 @@ export default function Navbar() {
 
   if (loading) {
     return (
-      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
-        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
-      }`}>
+      <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -122,9 +117,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
-        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
-      }`}>
+      <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
 
