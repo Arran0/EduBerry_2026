@@ -3,6 +3,18 @@ import type { NextRequest } from 'next/server'
 import { adminClient } from '@/lib/serverAuth'
 import { metaCloudProvider } from '@/lib/whatsapp/metaCloud'
 import { orderedParams } from '@/lib/whatsapp/provider'
+import crypto from 'node:crypto'
+
+/** Constant-time compare that does not reveal length through an early exit. */
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  // Hash both to a fixed width first: timingSafeEqual throws on a length
+  // mismatch, and that throw is itself an oracle for the secret's length.
+  const ah = crypto.createHash('sha256').update(ab).digest()
+  const bh = crypto.createHash('sha256').update(bb).digest()
+  return crypto.timingSafeEqual(ah, bh)
+}
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -32,7 +44,11 @@ export async function POST(request: NextRequest) {
 
   // No secret configured means the drain has not been set up. Refuse rather
   // than running unauthenticated.
-  if (!expected || secretHeader !== expected) {
+  //
+  // Compared with timingSafeEqual, like the WhatsApp and Razorpay signatures:
+  // `!==` returns as soon as two bytes differ, which leaks the secret one
+  // character at a time to anyone willing to time the responses.
+  if (!expected || !secretHeader || !timingSafeStringEqual(secretHeader, expected)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 

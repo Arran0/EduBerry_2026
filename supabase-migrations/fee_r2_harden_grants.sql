@@ -122,7 +122,12 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.fee_is_service_context()
 RETURNS BOOLEAN LANGUAGE sql STABLE SET search_path = public AS $$
-  SELECT current_user IN ('service_role', 'postgres', 'supabase_admin');
+  -- session_user, not current_user. This is called from inside SECURITY
+  -- DEFINER functions, where current_user is the function's owner (postgres)
+  -- and the answer would be "yes, service role" for every caller — which is
+  -- exactly the escalation fee_fix_service_context_escalation.sql closes.
+  -- SECURITY DEFINER never changes session_user.
+  SELECT session_user IN ('service_role', 'postgres', 'supabase_admin');
 $$;
 
 CREATE OR REPLACE FUNCTION public.normalize_academic_year_code(p_code TEXT)
