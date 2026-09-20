@@ -110,5 +110,3 @@ const ADAPTERS: Record<string, TelemetryAdapter> = {
 export function resolveAdapter(slug?: string | null): TelemetryAdapter {
   return ADAPTERS[slug ?? ''] ?? generic
 }
-
-export const ADAPTER_SLUGS = Object.keys(ADAPTERS)

@@ -1,29 +1,24 @@
 /**
- * Distance to a route path, and progress along it.
+ * Arc length along a route polyline.
  *
- * The TypeScript half of a paired implementation: the SQL half is
- * `transport_point_to_path_m` in
- * supabase-migrations/transport_r2_b_derivation.sql. Both use the same local
- * equirectangular projection, and this one imports `projectOnSegment` and
- * `toLocalMetres` from src/lib/geofence.ts rather than copying them, so there
- * is one fewer place for the rules to drift.
+ * `transport_route_paths.cumulative` caches the prefix sums of a path's segment
+ * lengths so the SQL derivation (`transport_point_to_path_m` in
+ * supabase-migrations/transport_r2_b_derivation.sql) scans a stored array on
+ * every fix instead of re-deriving every segment. This computes that array when
+ * a path is saved, using the same `haversineDistance` the SQL half uses, so the
+ * cached numbers and the numbers the database checks them against agree.
  *
- * Used client-side only for display — the authoritative numbers on a run row
- * are always the ones the database computed.
+ * This file used to carry a TypeScript `projectOntoPath` as well — the client
+ * half of the projection. Nothing ever called it: the derivation trigger writes
+ * `progress_m` and `off_route_m` onto the run row on every fix, so every screen
+ * reads the authoritative number rather than recomputing an approximation of
+ * it. A second implementation of geometry that nothing runs is not a spare, it
+ * is a copy waiting to disagree.
  */
 
-import { haversineDistance, projectOnSegment, toLocalMetres, type LatLng } from '../geofence'
+import { haversineDistance, type LatLng } from '../geofence'
 
-export interface PathProjection {
-  /** Metres from the point to the nearest part of the path. */
-  distanceM: number
-  /** Index of the nearest segment (0-based, so `polyline[i] -> polyline[i+1]`). */
-  segmentIndex: number
-  /** Metres travelled along the path to the projected point. */
-  progressM: number
-}
-
-/** Cumulative distance to each vertex: `[0, d1, d1+d2, ...]`. */
+/** Cumulative distance to each vertex: `[0, d1, d1+d2, ...]`, in metres. */
 export function cumulativeDistances(polyline: LatLng[]): number[] {
   const out: number[] = [0]
   for (let i = 1; i < polyline.length; i++) {
@@ -32,48 +27,4 @@ export function cumulativeDistances(polyline: LatLng[]): number[] {
     ))
   }
   return out
-}
-
-export function projectOntoPath(
-  point: LatLng,
-  polyline: LatLng[],
-  cumulative?: number[] | null,
-): PathProjection | null {
-  if (polyline.length < 2) return null
-
-  const cum = cumulative && cumulative.length === polyline.length
-    ? cumulative
-    : cumulativeDistances(polyline)
-
-  // One reference point for the whole path: a school route spans a few km, over
-  // which the longitude scale factor is effectively constant.
-  const ref = polyline[0]
-  const p = toLocalMetres(point, ref)
-  const projected = polyline.map(v => toLocalMetres(v, ref))
-
-  let bestD = Infinity
-  let bestI = 0
-  let bestT = 0
-
-  for (let i = 0; i < projected.length - 1; i++) {
-    const { distance, t } = projectOnSegment(p, projected[i], projected[i + 1])
-    if (distance < bestD) { bestD = distance; bestI = i; bestT = t }
-  }
-
-  const base = cum[bestI] ?? 0
-  const segLen = (cum[bestI + 1] ?? base) - base
-
-  return { distanceM: bestD, segmentIndex: bestI, progressM: base + bestT * segLen }
-}
-
-/** Metres still to travel along the path from `progressM` to a target point. */
-export function remainingAlongPath(
-  progressM: number,
-  target: LatLng,
-  polyline: LatLng[],
-  cumulative?: number[] | null,
-): number | null {
-  const proj = projectOntoPath(target, polyline, cumulative)
-  if (!proj) return null
-  return Math.max(0, proj.progressM - progressM)
 }

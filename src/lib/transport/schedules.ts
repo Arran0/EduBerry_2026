@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '../supabase'
+import { fetchStops } from './stops'
 import type {
   ScheduleInput,
   TransportDirection,
@@ -131,7 +132,7 @@ export function stopTimings(schedule: TransportSchedule, stops: TransportStop[])
  * A starting point an admin then corrects, not a claim about traffic — the
  * first stop sits at the anchor and the last at `totalMinutes`.
  */
-export function evenOffsets(stopCount: number, totalMinutes: number): number[] {
+function evenOffsets(stopCount: number, totalMinutes: number): number[] {
   if (stopCount <= 1) return [0]
   const step = totalMinutes / (stopCount - 1)
   return Array.from({ length: stopCount }, (_, i) => Math.round(i * step))
@@ -142,26 +143,26 @@ export async function applyEvenOffsets(
   direction: TransportDirection,
   totalMinutes: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const { data, error: readErr } = await supabase
-    .from('transport_route_stops')
-    .select('id, seq, active')
-    .eq('route_id', routeId)
-    .eq('active', true)
-    .order('seq', { ascending: true })
-  if (readErr) { console.error('applyEvenOffsets read failed:', readErr); return { success: false, error: readErr.message } }
-  const stops = (data || []) as { id: string; seq: number }[]
+  const all = await fetchStops(routeId)
+  const stops = all.filter(s => s.active)
   if (stops.length < 2) return { success: false, error: 'Add at least two stops first.' }
 
   const ordered = direction === 'inbound' ? stops : [...stops].reverse()
   const offsets = evenOffsets(ordered.length, totalMinutes)
   const column = direction === 'inbound' ? 'inbound_offset_min' : 'outbound_offset_min'
 
-  const results = await Promise.all(
-    ordered.map((s, i) =>
-      supabase.from('transport_route_stops').update({ [column]: offsets[i] }).eq('id', s.id),
-    ),
-  )
-  const failed = results.find(r => r.error)
-  if (failed?.error) { console.error('applyEvenOffsets failed:', failed.error); return { success: false, error: failed.error.message } }
+  // One statement, not one per stop. A thirty-stop route was thirty round
+  // trips that could half-apply if the connection dropped in the middle,
+  // leaving two different timetables on the same route. Whole rows are sent
+  // rather than just the offset, because an upsert is an INSERT first and the
+  // stop's NOT NULL columns have to be on the proposed tuple — the same reason
+  // reorderStops reads the rows before writing them back.
+  const { error } = await supabase
+    .from('transport_route_stops')
+    .upsert(
+      ordered.map((s, i) => ({ ...s, [column]: offsets[i] })),
+      { onConflict: 'id' },
+    )
+  if (error) { console.error('applyEvenOffsets failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }

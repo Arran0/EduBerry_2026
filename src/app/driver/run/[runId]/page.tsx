@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, MapPin, Play, Square, Wifi, WifiOff, Loader2, CheckCircle2,
+  ArrowLeft, Play, Square, Wifi, WifiOff, Loader2, CheckCircle2,
   CircleSlash, Users, AlertTriangle, CloudOff,
 } from 'lucide-react'
 import DriverLayout from '@/components/DriverLayout'

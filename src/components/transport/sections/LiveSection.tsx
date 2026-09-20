@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
 import {
   AlertTriangle, Bus, Check, CheckCheck, Loader2, MapPin, RefreshCw, Wifi, WifiOff, Calendar,
 } from 'lucide-react'
@@ -29,7 +28,6 @@ const TransportMap = dynamic(() => import('../TransportMap'), {
 const SEVERITY_RANK: Record<TransportAlert['severity'], number> = { critical: 0, warning: 1, info: 2 }
 
 export default function LiveSection() {
-  const router = useRouter()
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [alerts, setAlerts] = useState<TransportAlert[]>([])
   const [loading, setLoading] = useState(true)

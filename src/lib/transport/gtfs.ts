@@ -67,7 +67,7 @@ const COLUMNS: Record<string, string[]> = {
  * its sequence, which is a flattening that belongs where the CSV is written
  * rather than in a JSON payload.
  */
-export function gtfsFiles(feed: GtfsStatic): ZipEntry[] {
+function gtfsFiles(feed: GtfsStatic): ZipEntry[] {
   const stops = feed.stops.map(s => ({ ...s, stop_lon: s.stop_lng }))
 
   const shapePoints: Record<string, unknown>[] = []

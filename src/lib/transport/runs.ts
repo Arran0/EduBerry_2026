@@ -30,16 +30,6 @@ export function todayISO(): string {
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
-export async function fetchRunsForDate(date = todayISO()): Promise<TransportRun[]> {
-  const { data, error } = await supabase
-    .from('transport_trip_runs')
-    .select(RUN_SELECT)
-    .eq('service_date', date)
-    .order('scheduled_start_at', { ascending: true })
-  if (error) { console.error('fetchRunsForDate failed:', error); return [] }
-  return (data as unknown as TransportRun[]) || []
-}
-
 /** Runs the signed-in crew member is driving or attending today. */
 export async function fetchMyRuns(date = todayISO()): Promise<TransportRun[]> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -82,27 +72,31 @@ export async function fetchRun(runId: string): Promise<TransportRun | null> {
   return (data as unknown as TransportRun) ?? null
 }
 
-/** The run carrying this student today, if any. */
+/**
+ * The runs carrying this student on a date.
+ *
+ * One query, filtered on the run's own date through an inner join. The obvious
+ * two-step — read the student's run ids, then fetch those runs for today —
+ * reads *every* run the child has ever ridden in order to throw almost all of
+ * them away: two a day, so a few hundred rows by the end of a year and a few
+ * thousand by the time they leave, on the parent screen's first paint.
+ */
 export async function fetchRunsForStudent(
   studentId: string,
   date = todayISO(),
 ): Promise<TransportRun[]> {
-  const { data: rows, error } = await supabase
+  const { data, error } = await supabase
     .from('transport_run_passengers')
-    .select('run_id')
+    .select(`run:transport_trip_runs!run_id!inner(${RUN_SELECT})`)
     .eq('student_id', studentId)
+    .eq('run.service_date', date)
   if (error) { console.error('fetchRunsForStudent failed:', error); return [] }
-  const ids = (rows || []).map((r: { run_id: string }) => r.run_id)
-  if (ids.length === 0) return []
 
-  const { data, error: runErr } = await supabase
-    .from('transport_trip_runs')
-    .select(RUN_SELECT)
-    .in('id', ids)
-    .eq('service_date', date)
-    .order('scheduled_start_at', { ascending: true })
-  if (runErr) { console.error('fetchRunsForStudent runs failed:', runErr); return [] }
-  return (data as unknown as TransportRun[]) || []
+  return ((data ?? []) as unknown as { run: TransportRun | null }[])
+    .map(r => r.run)
+    .filter((r): r is TransportRun => !!r)
+    .sort((a, b) =>
+      new Date(a.scheduled_start_at).getTime() - new Date(b.scheduled_start_at).getTime())
 }
 
 export async function fetchRunStops(runId: string): Promise<TransportRunStop[]> {

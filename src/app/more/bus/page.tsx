@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import {
-  Bus, IndianRupee, MapPin, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
+  Bus, IndianRupee, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
   ShieldAlert, Plug, History, BarChart3,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -26,7 +26,7 @@ const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/Dri
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { BUS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { BusTrip, BusFee, fetchTrips, fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment } from '@/lib/bus'
+import { BusFee, fetchFeesForPassenger, fetchVerifiedPaymentsForPassenger, PassengerPayment } from '@/lib/bus'
 
 const ChildTransportView = dynamic(() => import('@/components/transport/ChildTransportView'), {
   ssr: false,

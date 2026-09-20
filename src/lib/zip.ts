@@ -103,7 +103,7 @@ export function makeZip(entries: ZipEntry[], modified = new Date()): Blob {
  * Gate 2` is a real kind of name — and a feed that breaks on one is a feed that
  * breaks silently, halfway down the file, for the consumer rather than for us.
  */
-export function csvRow(values: (string | number | null | undefined)[]): string {
+function csvRow(values: (string | number | null | undefined)[]): string {
   return values.map(v => {
     if (v == null) return ''
     const s = String(v)

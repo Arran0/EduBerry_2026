@@ -2,10 +2,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Route as RouteIcon, Plus, ChevronRight, MapPin, Users, Power, Archive } from 'lucide-react'
+import { Route as RouteIcon, Plus, ChevronRight, MapPin, Users, Power } from 'lucide-react'
 import { ADMIN, SHEET, Sheet, SheetRowSkeleton } from '@/components/bus/adminUI'
 import {
-  fetchRoutes, fetchRouteCounts, setRouteActive, archiveRoute,
+  fetchRoutes, fetchRouteCounts, setRouteActive,
 } from '@/lib/transport/routes'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { fetchTransportStaff } from '@/lib/transport/staff'

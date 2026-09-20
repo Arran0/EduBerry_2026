@@ -165,18 +165,6 @@ everywhere else.
 Boarding by tap keeps working regardless; cards are a speed-up, not a
 replacement.
 
-## 8. Fix the ESLint version mismatch — *pre-existing, not from this work*
-
-`npm run lint` is broken on `main` and has been independently of the transport
-work: `eslint.config.mjs` is flat config, which needs ESLint 9, while
-`package.json` pins `eslint ^8.57.0`. Everything here was gated on
-`npx tsc --noEmit` and `npx next build` instead, both of which are clean.
-
-Either upgrade to ESLint 9 or convert the config back to `.eslintrc` — but
-either way, do it as its own change, because the first clean lint run will
-surface a backlog across the whole repository and you don't want that mixed
-into a transport diff.
-
 ---
 
 ## What I'd do first
@@ -187,3 +175,8 @@ verifying it by reading.
 
 Steps 3 and 4 are what turn a tracking screen into a product a parent notices —
 a school running without them has GPS, but no one is being told anything.
+
+*(An earlier draft of this list had a step about `npm run lint` being broken by
+an ESLint 8/9 config mismatch. That was fixed on `main` while this work was in
+progress — lint, typecheck, build and all 284 tests are green, with no warnings
+left in any transport file.)*

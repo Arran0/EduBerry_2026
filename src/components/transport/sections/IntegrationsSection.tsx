@@ -19,8 +19,7 @@ import {
 import {
   downloadBlob, fetchGtfsRealtime, fetchGtfsStatic, gtfsSummary, gtfsZip, type GtfsStatic,
 } from '@/lib/transport/gtfs'
-import { fetchAssignablePassengers } from '@/lib/bus'
-import type { UserProfile } from '@/lib/supabase'
+import { fetchAssignableStudents } from '@/lib/transport/assignments'
 import QRCode from 'qrcode'
 import type { TransportVehicle } from '@/lib/transport/types'
 import { Field, FormError, Select, TextInput } from '../formUI'
@@ -399,11 +398,14 @@ function SecretRow({ secret }: { secret: string }) {
  * its hash. An admin who navigates away has lost it, which is stated plainly
  * rather than discovered later.
  */
+type PickableStudent = Awaited<ReturnType<typeof fetchAssignableStudents>>[number]
+
 function CardsPanel() {
-  const [students, setStudents] = useState<UserProfile[]>([])
+  const [students, setStudents] = useState<PickableStudent[]>([])
   const [creds, setCreds] = useState<StudentCredential[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
   const [studentId, setStudentId] = useState('')
   const [method, setMethod] = useState<CredentialMethod>('qr')
   const [uid, setUid] = useState('')
@@ -414,11 +416,22 @@ function CardsPanel() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, c] = await Promise.all([fetchAssignablePassengers(), fetchCredentials()])
-    setStudents(s); setCreds(c); setLoading(false)
+    setCreds(await fetchCredentials())
+    setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // The picker is search-driven and capped at 50 by the query, not a dropdown
+  // of every student in the school. Debounced so typing a name is one request
+  // rather than one per keystroke.
+  useEffect(() => {
+    let alive = true
+    const t = setTimeout(() => {
+      fetchAssignableStudents(studentSearch).then(rows => { if (alive) setStudents(rows) })
+    }, 250)
+    return () => { alive = false; clearTimeout(t) }
+  }, [studentSearch])
 
   const create = async () => {
     if (!studentId) { setError('Pick a student first'); return }
@@ -465,15 +478,22 @@ function CardsPanel() {
 
       <div className={`${ADMIN.card} p-4 space-y-3`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <Field label="Student">
-            <Select value={studentId} onChange={e => setStudentId(e.target.value)}>
-              <option value="">Pick a student…</option>
-              {students.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}{s.grade ? ` · ${s.grade}${s.section ?? ''}` : ''}
-                </option>
-              ))}
-            </Select>
+          <Field label="Student" hint="Type to narrow the list.">
+            <div className="space-y-1.5">
+              <TextInput
+                value={studentSearch}
+                onChange={e => setStudentSearch(e.target.value)}
+                placeholder="Search by name"
+              />
+              <Select value={studentId} onChange={e => setStudentId(e.target.value)}>
+                <option value="">Pick a student…</option>
+                {students.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name}{s.grade ? ` · ${s.grade}${s.section ?? ''}` : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </Field>
           <Field label="Kind">
             <Select value={method} onChange={e => setMethod(e.target.value as CredentialMethod)}>

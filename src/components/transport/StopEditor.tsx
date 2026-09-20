@@ -48,7 +48,6 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
 
   useEffect(() => { load() }, [load])
 
-  const selected = useMemo(() => stops.find(s => s.id === selectedId) ?? null, [stops, selectedId])
   const inboundPath = useMemo(() => paths.find(p => p.direction === 'inbound') ?? null, [paths])
 
   const mapStops = useMemo(

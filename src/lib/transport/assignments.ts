@@ -46,24 +46,6 @@ export async function fetchAssignmentForStudent(studentId: string): Promise<Tran
   return (data as unknown as TransportAssignment) ?? null
 }
 
-export async function createAssignment(
-  input: AssignmentInput,
-): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data, error } = await supabase
-    .from('transport_student_assignments')
-    .insert(input)
-    .select('id')
-    .single()
-  if (error) {
-    console.error('createAssignment failed:', error)
-    if (error.code === '23505') {
-      return { success: false, error: 'That student is already assigned to this route.' }
-    }
-    return { success: false, error: error.message }
-  }
-  return { success: true, id: data.id }
-}
-
 export async function updateAssignment(
   assignmentId: string,
   input: Partial<AssignmentInput>,

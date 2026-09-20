@@ -9,7 +9,6 @@
  */
 
 import { supabase } from '../supabase'
-import { type Fence } from '../geofence'
 // One implementation of the arc-length rule, and it lives beside the projection
 // that reads the cached array back — the two have to agree to the metre.
 import { cumulativeDistances } from './path'
@@ -85,14 +84,6 @@ export function nextSeq(stops: TransportStop[]): number {
   return stops.reduce((max, s) => Math.max(max, s.seq), 0) + 1
 }
 
-/** A stop as a `Fence`, so the shared geofence evaluator can be used unchanged. */
-export function fenceFromStop(stop: TransportStop): Fence {
-  if (stop.shape === 'polygon' && stop.polygon?.length) {
-    return { kind: 'polygon', vertices: stop.polygon, bufferM: stop.radius_m }
-  }
-  return { kind: 'circle', centre: { lat: stop.lat, lng: stop.lng }, radiusM: stop.radius_m }
-}
-
 // ── Path ────────────────────────────────────────────────────────────────────
 
 export async function fetchRoutePaths(routeId: string): Promise<TransportRoutePath[]> {
@@ -104,7 +95,7 @@ export async function fetchRoutePaths(routeId: string): Promise<TransportRoutePa
   return (data as TransportRoutePath[]) || []
 }
 
-export async function saveRoutePath(
+async function saveRoutePath(
   routeId: string,
   direction: TransportDirection,
   polyline: LatLng[],
