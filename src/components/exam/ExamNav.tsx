@@ -12,6 +12,9 @@ export const EXAM_MAX_W = 'max-w-7xl'
 export interface MiniNavItem {
   id: string
   label: string
+  /** Shorter form of `label` shown on narrow phones so the full word never
+   *  clips — falls back to `label` when omitted. */
+  shortLabel?: string
   icon?: React.ReactNode
   onClick?: () => void
   active?: boolean
@@ -43,7 +46,7 @@ export default function MiniNav({
           onClick={it.onClick}
           disabled={it.disabled}
           title={it.title}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 h-10 px-3 text-xs font-semibold uppercase tracking-[0.08em] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5 h-10 px-1 sm:px-3 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.02em] sm:tracking-[0.08em] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
             i > 0 ? 'border-l border-[#E4E1D8]' : ''
           } ${
             it.active
@@ -52,7 +55,8 @@ export default function MiniNav({
           }`}
         >
           {it.icon}
-          <span className="truncate">{it.label}</span>
+          <span className="hidden sm:inline truncate">{it.label}</span>
+          <span className="sm:hidden truncate">{it.shortLabel ?? it.label}</span>
           {it.badge !== undefined && it.badge !== '' && (
             <span
               className={`ml-0.5 px-1.5 py-px text-[10px] font-bold tabular-nums leading-[1.4] ${

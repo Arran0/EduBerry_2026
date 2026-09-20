@@ -154,7 +154,7 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
     return (
       <div className="text-center py-16">
         <BarChart3 size={32} className="text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500">Analysis is available to staff only.</p>
+        <p className="text-sm text-slate-600">Analysis is available to staff only.</p>
       </div>
     )
   }
@@ -163,7 +163,7 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
     return (
       <div className="text-center py-16">
         <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-500">Crunching the numbers…</p>
+        <p className="text-sm text-slate-600">Crunching the numbers…</p>
       </div>
     )
   }
@@ -173,14 +173,14 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
   return (
     <div className="space-y-5">
       {/* Student focus selector (shared by both charts) */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Focus student</label>
+      <div className="flex items-center gap-3 flex-wrap px-3 sm:px-0">
+        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Focus student</label>
         <select
           value={selectedStudent}
           onChange={e => setSelectedStudent(e.target.value)}
-          className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 text-slate-700"
+          className="flex-1 min-w-[12rem] border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white shadow-sm focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 text-slate-800 transition-all"
         >
-          <option value="">Class only (no student)</option>
+          <option value="">Entire class overview</option>
           {studentOptions.map(s => (
             <option key={s.id} value={s.id}>{s.full_name}</option>
           ))}
@@ -188,10 +188,10 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
       </div>
 
       {/* ── Monthly EduPoints trend ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden sm:shadow-sm">
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
           <Star size={15} className="text-amber-500" />
-          <h3 className="text-sm font-semibold text-slate-700">Edu Points — monthly trend</h3>
+          <h3 className="text-sm font-bold text-slate-800">Edu Points — monthly trend</h3>
           {mostImproved && (
             <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium flex items-center gap-1">
               <TrendingUp size={11} /> Most improved: {mostImproved.name} (+{mostImproved.delta})
@@ -200,11 +200,11 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
         </div>
 
         {months.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-10">
+          <p className="text-sm text-slate-600 text-center py-10 px-4">
             No Edu Points earned yet. Points appear here once students complete files worth Edu Points.
           </p>
         ) : (
-          <div className="p-4 space-y-4">
+          <div className="p-3 sm:p-4 space-y-4">
             <LineChart labels={months.map(monthLabel)} series={monthlySeries} unit=" EP" />
 
             {/* Per-student current month + delta */}
@@ -212,9 +212,9 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left">
-                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Student</th>
-                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 text-right">This month</th>
-                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 text-right">Change</th>
+                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-600">Student</th>
+                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-600 text-right">This month</th>
+                    <th className="py-2 px-2 text-[11px] font-bold uppercase tracking-wide text-slate-600 text-right">Change</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -230,7 +230,7 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
                       <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">{r.current}</td>
                       <td className="py-2 px-2 text-right">
                         <span className={`inline-flex items-center gap-1 font-semibold tabular-nums ${
-                          r.delta > 0 ? 'text-emerald-600' : r.delta < 0 ? 'text-rose-500' : 'text-slate-400'
+                          r.delta > 0 ? 'text-emerald-700' : r.delta < 0 ? 'text-rose-600' : 'text-slate-600'
                         }`}>
                           {r.delta > 0 ? <TrendingUp size={13} /> : r.delta < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
                           {r.delta > 0 ? `+${r.delta}` : r.delta}
@@ -246,26 +246,26 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
       </div>
 
       {/* ── Exam progress ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden sm:shadow-sm">
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
           <ClipboardList size={15} className="text-amber-600" />
-          <h3 className="text-sm font-semibold text-slate-700">Exam progress (%)</h3>
+          <h3 className="text-sm font-bold text-slate-800">Exam progress (%)</h3>
           {!selectedStudent && (
-            <span className="ml-auto text-[11px] text-slate-400">Select a student above to overlay their scores</span>
+            <span className="ml-auto text-[11px] text-slate-600 text-right">Select a student above to overlay their scores</span>
           )}
         </div>
 
         {assessments.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-10">No assessments in this classroom yet.</p>
+          <p className="text-sm text-slate-600 text-center py-10">No assessments in this classroom yet.</p>
         ) : (
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             <LineChart labels={examLabels} series={examSeries} yMax={100} unit="%" />
           </div>
         )}
       </div>
 
       {/* Hint */}
-      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+      <p className="text-xs text-slate-600 flex items-center gap-1.5 px-3 sm:px-0 pb-2">
         <Award size={12} /> Tip: click a student row to focus their trend, then compare against the class average.
       </p>
     </div>

@@ -734,7 +734,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
               <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
                 <Tag size={28} className="text-[#B8983C]" strokeWidth={1.6} />
               </div>
-              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. "Monthly Bus Fee") to issue from.</p>
+              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">No fee heads yet. Create a reusable bus fee type (e.g. &ldquo;Monthly Bus Fee&rdquo;) to issue from.</p>
               <button onClick={() => setShowNewHead(true)} className={`${ADMIN.darkBtn} mx-auto`}>
                 <Plus size={14} /> New Fee Head
               </button>
@@ -798,6 +798,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
       <AnimatePresence>
         {recordingFee && (
           <BusRecordPaymentModal
+            key="record-payment"
             fee={recordingFee}
             paid={paidByFee.get(recordingFee.id) ?? 0}
             onClose={() => setRecordingFee(null)}
@@ -806,6 +807,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {showIssue && (
           <FeeIssueModal
+            key="fee-issue"
             assignable={assignable}
             feeHeads={heads}
             onClose={() => setShowIssue(false)}
@@ -814,6 +816,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {(showNewHead || editHead) && (
           <BusFeeHeadFormModal
+            key="fee-head-form"
             head={editHead}
             onClose={() => { setShowNewHead(false); setEditHead(null) }}
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
@@ -821,6 +824,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {showNewDraft && (
           <MonthlyDraftModal
+            key="monthly-draft"
             trips={trips}
             feeHeads={heads}
             onClose={() => setShowNewDraft(false)}
@@ -834,6 +838,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
         )}
         {statementPassenger && (
           <BusStudentStatementsModal
+            key="student-statements"
             passenger={statementPassenger}
             onClose={() => setStatementPassenger(null)}
           />

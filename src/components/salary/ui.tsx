@@ -19,21 +19,6 @@ import { Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
 // floating on grey. Depth comes from the ramp and hairlines, not shadow.
 // ──────────────────────────────────────────────────────────────
 
-export const TONE = {
-  paper: '#FDFCF9',   // the page itself
-  surface: '#FFFFFF', // raised: sheets, panels
-  raised: '#FAF8F2',  // a shade in: stat tiles, sub-heads
-  sunken: '#F4F1E7',  // two shades in: totals, emphasis tiles
-  deep: '#EDE9DC',    // deepest paper: the "headline" tile
-  line: '#E3DFD3',    // structural hairline
-  lineSoft: '#F0ECE2', // hairline between rows
-  ink: '#18181B',
-  inkSoft: '#52525B',
-  muted: '#8C8878',   // warm grey for labels and units
-  gold: '#B8983C',
-  goldInk: '#7A6220',
-} as const
-
 /** Uppercase micro-label used for every field name, column and tile caption. */
 export const LABEL = 'text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]'
 

@@ -6,6 +6,7 @@ import { LogIn, Clock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Navbar from '@/components/Navbar'
+import Footer from '@/components/Footer'
 import LeaveNotificationsListener from '@/components/notifications/LeaveNotificationsListener'
 import AttendancePunchPrompt from '@/components/attendance/AttendancePunchPrompt'
 
@@ -142,7 +143,15 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   }
 
   return (
-    <>
+    /* Column shell at least a viewport tall, with <main> taking the slack, so
+       the footer sits at the bottom of the screen on short pages instead of
+       floating directly under the content. The bottom padding (room for the
+       fixed BottomNav) lives here rather than on <main> so it stays *below*
+       the footer; Footer's own white fill covers that strip. */
+    <div
+      className="flex min-h-[100dvh] flex-col md:pb-0"
+      style={{ paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom)))' }}
+    >
       <Navbar />
       {/* Live OD / Leave notifications — toast, browser notification and the
           badge refresh broadcast. Outside the keyed <main> below so a tab
@@ -160,9 +169,10 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         pulling fresh data from Supabase without a hard refresh.
         The Navbar is intentionally outside the key so it is not disrupted.
       */}
-      <main key={dataRefreshKey} className="md:pb-0" style={{ paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom)))' }}>
+      <main key={dataRefreshKey} className="flex-1">
         {children}
       </main>
-    </>
+      <Footer />
+    </div>
   )
 }

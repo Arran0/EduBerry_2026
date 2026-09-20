@@ -313,7 +313,7 @@ function PersonOverrides({
     }
   }
 
-  const usePreset = async (preset: FeePresetKey) => {
+  const choosePreset = async (preset: FeePresetKey) => {
     if (!selected) return
     setBusy(true)
     onError(null)
@@ -384,7 +384,7 @@ function PersonOverrides({
                 <button
                   key={preset.key}
                   disabled={busy}
-                  onClick={() => void usePreset(preset.key)}
+                  onClick={() => void choosePreset(preset.key)}
                   title={preset.help}
                   className={ADMIN.ghostBtn}
                 >

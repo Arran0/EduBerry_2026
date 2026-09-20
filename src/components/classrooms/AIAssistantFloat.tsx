@@ -49,6 +49,7 @@ export default function AIAssistantFloat({
   const [prompt, setPrompt] = useState('')
   const [mounted, setMounted] = useState(false)
   const [openWidth, setOpenWidth] = useState(360)
+  const [isMobile, setIsMobile] = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -62,7 +63,11 @@ export default function AIAssistantFloat({
 
   // Compute expanded width: near-full-width on mobile, fixed on desktop
   useEffect(() => {
-    const calc = () => setOpenWidth(window.innerWidth < 640 ? window.innerWidth - 24 : 360)
+    const calc = () => {
+      const mobile = window.innerWidth < 640
+      setIsMobile(mobile)
+      setOpenWidth(mobile ? window.innerWidth - 24 : 360)
+    }
     calc()
     window.addEventListener('resize', calc)
     return () => window.removeEventListener('resize', calc)
@@ -104,10 +109,12 @@ export default function AIAssistantFloat({
       // Above the BottomNav (z-40) but below popups/sheets (z-50+), so open
       // modals aren't overlapped by the floating button.
       className="fixed right-3 sm:right-6 z-[45]"
+      // On desktop there's no BottomNav to clear, so the button sits in the
+      // corner instead of floating a nav-height up over the page's cards.
       style={{
         bottom: keyboardOpen
           ? 'calc(var(--keyboard-inset) + 8px)'
-          : `${mobileBase}px`,
+          : isMobile ? `${mobileBase}px` : '24px',
       }}
     >
       {/*

@@ -17,15 +17,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, BadgePercent, Clock, Download, FileText, Loader2, Printer, Receipt,
-  Scale, Undo2, User,
+  BadgePercent, Clock, Download, FileText, Loader2, Printer, Scale, Undo2, User,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, StatStrip, Btn } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'

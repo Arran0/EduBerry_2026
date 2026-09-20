@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
+import { fetchRawSetting } from '@/lib/pageConfig'
 import {
   Mail,
   Shield,
@@ -45,12 +46,8 @@ export default function ProfilePage() {
     new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   const loadBanner = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'profile_banner')
-      .single()
-    if (data?.value) setBannerUrl(data.value)
+    const url = await fetchRawSetting<string>('profile_banner')
+    if (url) setBannerUrl(url)
   }, [])
 
   useEffect(() => {

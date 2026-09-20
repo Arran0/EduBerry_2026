@@ -1,7 +1,9 @@
-// Admin/principal accounts have the "Classrooms" section hidden on the home
-// page by default (it duplicates the Academics page for roles that rarely
-// need the shortcut). This lets them opt back in from the Academics page —
-// stored per-account so multiple accounts on one browser don't clash.
+// The home page's classroom-button grid is hidden by default — home leads with
+// the day's work, and the same buttons are one tap away on Academics. The
+// Academics classrooms heading carries a home toggle that opts back in.
+// Stored per-account so multiple accounts on one browser don't clash, and
+// mirrors homeTaskCalendarVisibility (same storage shape, same default-off
+// reading of a missing key).
 const STORAGE_PREFIX = 'home_classrooms_visible_'
 
 export function getShowClassroomsOnHome(userId: string): boolean {

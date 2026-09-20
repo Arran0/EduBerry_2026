@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { X, Loader2, Save, Users, CheckSquare, ChevronDown, ChevronUp, Lock, Unlock, Calendar, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react'
+import { X, Loader2, Save, Users, CheckSquare, ChevronUp, Lock, Unlock, Calendar, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react'
 import {
   AttendanceStatus,
   AttendanceSheetRow,
@@ -9,7 +9,7 @@ import {
   fetchAttendanceSheet,
   bulkMarkAttendance,
   fetchMyAttendanceByMonth,
-  AttendanceRecord,
+  AttendanceDayRecord,
 } from '@/lib/attendance'
 import {
   LeaveApplicationWithDetails,
@@ -123,7 +123,7 @@ interface StudentCalendarModalProps {
 function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, onClose }: StudentCalendarModalProps) {
   const [year, setYear] = useState(initialYear)
   const [month, setMonth] = useState(initialMonth)
-  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [records, setRecords] = useState<AttendanceDayRecord[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
@@ -151,7 +151,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
   for (let d = 1; d <= totalDays; d++) cells.push(d)
   while (cells.length % 7 !== 0) cells.push(null)
 
-  const byDay: Record<number, AttendanceRecord> = {}
+  const byDay: Record<number, AttendanceDayRecord> = {}
   for (const r of records) byDay[parseInt(r.date.split('-')[2], 10)] = r
 
   const leaveByDay: Record<number, LeaveApplicationWithDetails[]> = {}
@@ -276,7 +276,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
                       <span className="font-medium">{a.approver?.full_name ?? a.approver_role}</span>
                       <span className={`font-medium ${a.status === 'approved' ? 'text-green-700' : a.status === 'rejected' ? 'text-red-700' : 'text-amber-700'}`}>{LEAVE_STATUS_LABELS[a.status]}</span>
                     </div>
-                    {a.comments && <p className="mt-1 italic text-slate-600">"{a.comments}"</p>}
+                    {a.comments && <p className="mt-1 italic text-slate-600">&ldquo;{a.comments}&rdquo;</p>}
                   </div>
                 ))}
               </div>

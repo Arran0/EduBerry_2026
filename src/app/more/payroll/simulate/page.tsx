@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FlaskConical, TrendingUp } from 'lucide-react'
+import { ArrowLeft, FlaskConical } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { PUI, inr, inrDelta, deltaColor } from '@/components/payroll/ui'
 import { simulate, type SimulationResult } from '@/lib/payroll/runs'

@@ -164,7 +164,7 @@ function statutoryReadiness(loc: WorkLocation, ruleSets: RuleSetRow[]) {
   }
 }
 
-function LocationsTab({ locations, staff, ruleSets, defaultState, onDefaultState, onEdit, onAssign, onReload }: {
+function LocationsTab({ locations, staff: _staff, ruleSets, defaultState, onDefaultState, onEdit, onAssign, onReload }: {
   locations: WorkLocation[]; staff: StaffLite[]; ruleSets: RuleSetRow[]
   defaultState: string; onDefaultState: (s: string) => Promise<void>
   onEdit: (l: WorkLocation | 'new') => void; onAssign: (l: WorkLocation) => void

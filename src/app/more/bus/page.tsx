@@ -40,6 +40,12 @@ export default function BusPage() {
   )
 }
 
+// The pre-rebuild bus page, kept deliberately: the default export above
+// renders UnderConstruction while these tools are rebuilt, and this is the
+// reference implementation that rebuild works against. It is the only thing
+// holding the rest of this file reachable — deleting it strips the whole
+// parked UI with it.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function BusPageOriginal() {
   return (
     <Suspense fallback={

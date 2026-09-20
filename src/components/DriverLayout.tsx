@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { LogIn, Clock, LogOut, Bus } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
+import Footer from '@/components/Footer'
+import { useScrolled } from '@/hooks/useScrolled'
 
 interface DriverLayoutProps {
   children: React.ReactNode
@@ -25,6 +27,7 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
   const { user, profile, loading, sessionExpired, dataRefreshKey, signOut } = useAuth()
   const { branding, brandingLoaded, loginConfig } = usePageConfig()
   const router = useRouter()
+  const scrolled = useScrolled()
 
   useEffect(() => {
     if (!loading && !user && !sessionExpired) {
@@ -88,9 +91,9 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
       {/* Slim driver header (no app Navbar) */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+      <header className={`sticky top-0 z-30 backdrop-blur-xl border-b border-slate-200 shadow-sm transition-colors duration-300 ${scrolled ? 'bg-white/60' : 'bg-white'}`}>
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-gradient-to-br from-orange-500 to-amber-600 flex-shrink-0">
@@ -115,9 +118,10 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
       </header>
 
       {/* key remounts page content after a long background period (matches ProtectedLayout) */}
-      <main key={dataRefreshKey} className="max-w-3xl mx-auto px-4 py-5">
+      <main key={dataRefreshKey} className="w-full max-w-3xl mx-auto px-4 py-5 flex-1">
         {children}
       </main>
+      <Footer />
     </div>
   )
 }

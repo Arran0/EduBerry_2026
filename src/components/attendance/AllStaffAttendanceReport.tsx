@@ -171,7 +171,7 @@ function shortName(name: string, max = 11) {
 
 // ── Single staff row ──────────────────────────────────────────────────────────
 
-function StaffRow({
+const StaffRow = React.memo(function StaffRow({
   staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole, onViewLeave,
 }: {
   staff: UserProfile
@@ -199,22 +199,34 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  // Stays true through the closing animation, then clears — so the rows nobody
+  // opened never put a portal in the document. With a whole school listed that
+  // was one idle portal per row, re-rendered on every keystroke in the search box.
+  const [portalMounted, setPortalMounted] = useState(false)
   // A punch this staff member was allowed through with the location off
   // campus, unmeasured, or unavailable. Flagged here because "present" on
   // this row would otherwise be indistinguishable from a check-in that was
   // actually verified against the campus.
   const [showWarning, setShowWarning] = useState(false)
-  const warning = describeLocationWarning(record)
+  const warning = useMemo(() => describeLocationWarning(record), [record])
+  const openModal = useCallback(() => { setPortalMounted(true); setShowModal(true) }, [])
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <motion.div
+        layout="position"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
+        transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+      >
         <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={openModal}
               title={staff.full_name}
               className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
             >
@@ -308,7 +320,7 @@ function StaffRow({
             })}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {warning && showWarning && record && (
         <LocationWarningModal
@@ -319,8 +331,8 @@ function StaffRow({
         />
       )}
 
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
+      {portalMounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
           {showModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -368,10 +380,14 @@ function StaffRow({
       )}
     </>
   )
-}
+})
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+  return (
+    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </div>
+  )
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
@@ -456,8 +472,11 @@ export default function AllStaffAttendanceReport({
   }, [hasFixedRoster])
 
   // Load the day's records, holiday status, and any custom timing together.
-  const loadRecords = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading spinner — used after a quick mark/clear so the
+  // list stays on screen and animates the row out instead of the whole tab
+  // flashing to a spinner and back.
+  const loadRecords = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     setStreakMap(new Map())
     // Apply any cutoff / holiday / non-working-day rule that changed since the
     // last look before reading the day, so the report never shows a status
@@ -486,7 +505,18 @@ export default function AllStaffAttendanceReport({
     }
   }, [date, viewerRole])
 
-  useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
+  // Full spinner only when the day (or, for admin, the timing-relevant
+  // viewer role) actually changes. A `refreshKey` bump alone — e.g. from
+  // marking someone here or in the Support Staff tab, both of which bump the
+  // same page-level refreshKey — reloads the same day's data silently
+  // instead of flashing the whole tab back to "Loading…".
+  const lastLoadedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const loadKey = `${date}|${viewerRole}`
+    const silent = lastLoadedKeyRef.current === loadKey
+    lastLoadedKeyRef.current = loadKey
+    loadRecords({ silent })
+  }, [loadRecords, refreshKey, date, viewerRole])
 
   // Resolve the active roster (team for admins, fixed list for coordinators/teachers).
   useEffect(() => {
@@ -782,16 +812,40 @@ export default function AllStaffAttendanceReport({
     return [...rows].sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
   }, [notMarked, query])
 
-  const handleSet = async (staffId: string, status: StaffAttendanceStatus) => {
+  /**
+   * Quick-set a status.
+   *
+   * The chosen status is known before the write resolves, so a row that
+   * already has a record is repainted immediately and the round trip runs
+   * behind it — marking someone used to block on the write *and* a full reload
+   * of the day (records, holidays, non-working days, timings, streaks) before
+   * anything moved. A row with no record yet still waits, because its id and
+   * marked_by only exist once the server has written it.
+   *
+   * The silent reload afterwards is the reconciliation: it also restores the
+   * true status if the write turns out to have failed.
+   */
+  const handleSet = useCallback(async (staffId: string, status: StaffAttendanceStatus) => {
     setSavingId(staffId)
+    let optimistic = false
+    setRecords(prev => {
+      const i = prev.findIndex(r => r.staff_id === staffId)
+      if (i === -1) return prev
+      optimistic = true
+      const next = [...prev]
+      next[i] = { ...next[i], status }
+      return next
+    })
+    if (optimistic) setSavingId(null)
+
     const ok = await adminMarkStaffAttendance(staffId, date, status, viewerId)
+    await loadRecords({ silent: true })
     if (ok) {
-      await loadRecords()
       if (!hasFixedRoster) fetchTrackedStaffCount().then(setTrackedTotal)
       onChanged?.()
     }
     setSavingId(null)
-  }
+  }, [date, viewerId, loadRecords, hasFixedRoster, onChanged])
 
   const teamOptions: SmartOption[] = useMemo(
     () => teams.map(t => ({ value: t.id, label: t.name })),
@@ -1173,9 +1227,11 @@ export default function AllStaffAttendanceReport({
                           <span className="text-xs text-red-500">({filteredUnverified.length})</span>
                         </div>
                         <div className="divide-y divide-red-100">
-                          {filteredUnverified.map(r => (
-                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
-                          ))}
+                          <AnimatePresence initial={false}>
+                            {filteredUnverified.map(r => (
+                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
+                            ))}
+                          </AnimatePresence>
                         </div>
                       </div>
                     )}

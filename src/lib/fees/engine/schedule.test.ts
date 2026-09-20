@@ -5,7 +5,7 @@ import { installmentPeriods, prorationFraction } from './proration'
 import { sum } from './money'
 import {
   YEAR_2026, GROUP_REGULAR, GROUP_RTE, GROUP_STAFF, HEADS,
-  HEAD_TUITION, HEAD_LAB, structure, student, inst, threeTermInstallments,
+  HEAD_LAB, structure, student, inst, threeTermInstallments,
 } from './__fixtures__'
 
 const GROUPS = [GROUP_REGULAR, GROUP_RTE, GROUP_STAFF]

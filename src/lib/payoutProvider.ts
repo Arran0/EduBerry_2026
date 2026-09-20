@@ -20,10 +20,7 @@
 
 import 'server-only'
 import { callBank, applyFieldMap, flatten, pickString, type BankCredentials } from './bankClient'
-import {
-  normalizePayoutConfig, PAYOUT_FILE_TOKENS, PAYOUT_FILE_HEADERS,
-  type PayoutConfig, type TransferMode,
-} from './bankConfig'
+import { normalizePayoutConfig, PAYOUT_FILE_HEADERS, type PayoutConfig, type TransferMode } from './bankConfig'
 
 export interface PayoutBankDetails {
   account_holder_name: string
@@ -379,8 +376,3 @@ export function getPayoutProvider(
   }
 }
 
-/** Validate a file format's columns; surfaced in Settings before saving. */
-export function unknownFileTokens(columns: string[]): string[] {
-  const known = new Set<string>(PAYOUT_FILE_TOKENS)
-  return columns.filter(c => !known.has(c))
-}

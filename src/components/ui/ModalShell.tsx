@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useDragControls, PanInfo } from 'framer-motion'
+import { motion, useDragControls, useIsPresent, PanInfo } from 'framer-motion'
 import { X } from 'lucide-react'
 import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
@@ -89,9 +89,32 @@ export default function ModalShell({
   // panel reads as a sheet rising over the page rather than a stuck banner.
   const radius = sharp ? 'rounded-t-lg sm:rounded-none' : 'rounded-t-[1.75rem] sm:rounded-[1.75rem]'
 
+  /**
+   * Whether AnimatePresence still considers this shell part of the tree, or
+   * has begun animating it away. True when rendered outside an
+   * AnimatePresence at all.
+   *
+   * Everything below that keys off this is a safety net rather than a
+   * behaviour: a shell on its way out stops holding the page hostage the
+   * instant it is told to leave, rather than at the end of its exit
+   * animation. In the normal case those two moments are ~200ms apart and
+   * nobody notices.
+   *
+   * The case worth guarding is an exit that never completes at all. This
+   * shell's portal root covers the whole viewport, so one left mounted at
+   * opacity 0 is invisible and still takes every click — a page that looks
+   * completely normal and responds to nothing, with no error to explain it.
+   * That is a bad enough failure, and a hard enough one to diagnose from a
+   * bug report, to be worth making structurally impossible rather than
+   * merely unlikely.
+   */
+  const isPresent = useIsPresent()
+
   // Escape to close. Body scroll is frozen by the shared refcounted lock, so
   // two shells open at once still leave the page scrollable once both close.
-  useBodyScrollLock()
+  // Released as soon as the shell starts leaving — a stuck exit must not be
+  // able to strand the page permanently unscrollable.
+  useBodyScrollLock(isPresent)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -104,8 +127,26 @@ export default function ModalShell({
 
   if (typeof document === 'undefined') return null
 
+  // The page's palette lives on its [data-page-theme] element (globals.css for
+  // the defaults, PageConfigContext for whatever an admin picked in app
+  // settings). A portal lands on <body>, outside that element, so carry the
+  // attribute across — otherwise every --page-* variable inside a modal falls
+  // back to its default and the sheet ignores the school's colours.
+  const pageTheme = document.querySelector('[data-page-theme]')
+    ?.getAttribute('data-page-theme') ?? undefined
+
   return createPortal(
-    <div className={`fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}>
+    // modal-portal marks this subtree as page chrome that was raised out of the
+    // page: a pro-chrome (staff) page squares its modals through that hook,
+    // since the portal lands on <body>, outside the page's own scope.
+    <div
+      data-page-theme={pageTheme}
+      className={`modal-portal fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}
+      // A leaving shell is inert: its backdrop and panel inherit this, so the
+      // page underneath is clickable again from the moment the exit starts —
+      // and stays clickable even if the exit never finishes.
+      style={isPresent ? undefined : { pointerEvents: 'none' }}
+    >
       {/* Backdrop */}
       <motion.div
         className="absolute inset-0 bg-slate-950/45 backdrop-blur-md"
@@ -142,14 +183,14 @@ export default function ModalShell({
           className={`sm:hidden flex-shrink-0 flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none ${bare ? 'absolute top-0 left-0 right-0 z-20' : ''}`}
           onPointerDown={e => dragControls.start(e)}
         >
-          <div className={`w-10 h-1.5 rounded-full ${bare ? 'bg-slate-900/15 backdrop-blur-sm' : 'bg-slate-300/80'}`} />
+          <div className={`w-10 h-1.5 !rounded-full ${bare ? 'bg-slate-900/15 backdrop-blur-sm' : 'bg-slate-300/80'}`} />
         </div>
 
         {/* Header */}
         {title != null && !bare && (
           <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
             {icon && (
-              <div className={`w-9 h-9 ${sharp ? '' : 'rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
+              <div className={`w-9 h-9 ${sharp ? '' : '!rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
                 {icon}
               </div>
             )}
@@ -163,7 +204,7 @@ export default function ModalShell({
             <button
               onClick={onClose}
               aria-label="Close"
-              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : 'rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
+              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${sharp ? '' : '!rounded-full'} bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all`}
             >
               <X size={15} strokeWidth={2.5} />
             </button>

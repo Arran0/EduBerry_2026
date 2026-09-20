@@ -403,20 +403,20 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-2.5 mb-4">
+      <div className="flex items-center gap-2.5 mb-4 px-3 sm:px-0">
         <div className="p-2 bg-teal-100 rounded-xl">
           <MessageSquare size={16} className="text-teal-600" />
         </div>
         <div>
           <h2 className="font-semibold text-slate-800 text-sm leading-tight">Discussion</h2>
-          <p className="text-xs text-slate-400 leading-tight">
+          <p className="text-xs text-slate-500 leading-tight">
             {messages.length} {messages.length === 1 ? 'message' : 'messages'}
           </p>
         </div>
       </div>
 
       {/* ── Chat stream ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl sm:shadow-sm">
         <div className="px-2.5 sm:px-3 py-3">
 
           {/* Empty state */}
@@ -425,8 +425,8 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center mb-4">
                 <MessageSquare size={28} className="text-teal-300" />
               </div>
-              <p className="text-slate-600 font-medium mb-1">No messages yet</p>
-              <p className="text-slate-400 text-sm">Start the conversation — share a note, file or link.</p>
+              <p className="text-slate-700 font-semibold mb-1">No messages yet</p>
+              <p className="text-slate-600 text-sm">Start the conversation — share a note, file or link.</p>
             </div>
           )}
 
@@ -442,7 +442,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 {showDayDivider && (
                   <div className="flex items-center gap-3 px-2 my-3 select-none">
                     <div className="flex-1 h-px bg-slate-100" />
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
                       {dayLabel(first.created_at)}
                     </span>
                     <div className="flex-1 h-px bg-slate-100" />
@@ -462,9 +462,9 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-slate-800 leading-tight">
                         {group.user?.full_name || 'Unknown'}
-                        {isMine && <span className="ml-1.5 text-[10px] font-medium text-teal-500">you</span>}
+                        {isMine && <span className="ml-1.5 text-[10px] font-semibold text-teal-600">you</span>}
                       </span>
-                      <span className="text-[11px] text-slate-400">{fullStamp(first.created_at)}</span>
+                      <span className="text-[11px] text-slate-500">{fullStamp(first.created_at)}</span>
                     </div>
 
                     {/* Stacked messages in this group */}
@@ -580,7 +580,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 {showAttachMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                    <div className="absolute bottom-11 left-0 z-20 w-44 bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden py-1">
+                    <div className="absolute bottom-11 left-0 z-20 w-44 bg-white !rounded-2xl border border-slate-100 shadow-lg overflow-hidden py-1">
                       <button type="button" onClick={() => pickFile('image')} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                         <ImageIcon size={15} className="text-teal-500" /> Photo
                       </button>
@@ -596,7 +596,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                 <button
                   type="button"
                   onClick={() => setShowAttachMenu(s => !s)}
-                  className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+                  className={`w-9 h-9 flex items-center justify-center !rounded-full transition-all ${
                     showAttachMenu || attachMode !== 'none'
                       ? 'bg-teal-100 text-teal-600'
                       : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
@@ -615,7 +615,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               />
 
               {/* Input bubble */}
-              <div className="flex-1 min-w-0 bg-slate-50/90 border border-slate-200/70 rounded-[22px] px-4 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all">
+              <div className="flex-1 min-w-0 bg-slate-50/90 border border-slate-200/70 !rounded-[22px] px-4 py-2 focus-within:border-teal-400/60 focus-within:ring-2 focus-within:ring-teal-400/15 focus-within:bg-white transition-all">
                 <div
                   ref={editorRef}
                   role="textbox"
@@ -651,7 +651,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60"
+                className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 active:scale-95 text-white !rounded-full transition-all disabled:opacity-30 shadow-md shadow-teal-200/60"
               >
                 {posting || uploading
                   ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

@@ -9,7 +9,7 @@ import { ADMIN, SegTabs, Sheet, SHEET } from '@/components/bus/adminUI'
 import { CYCLE_STATUS_LABEL } from '@/components/salary/adminUi'
 import {
   DriverCycle, DriverCycleStatus,
-  fetchDriverCycles, fetchDriverCycleRecordCounts, formatPeriod,
+  fetchDriverCycles, fetchDriverCycleTallies, formatPeriod,
 } from '@/lib/driverSalary'
 
 type SectionKey = 'cycles' | 'base' | 'bank'
@@ -47,12 +47,15 @@ export default function DriverPayrollSection() {
 function PayCyclesPanel() {
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<DriverCycle[]>([])
-  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [tallies, setTallies] = useState<Record<string, { total: number; paid: number }>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [cs, cnt] = await Promise.all([fetchDriverCycles(), fetchDriverCycleRecordCounts()])
-    setCycles(cs); setCounts(cnt)
+    // Tallies exclude resigned/hidden drivers, matching the Salary Manager's
+    // own Pay Cycles list — the plain record count didn't, and could show a
+    // driver-only cycle as having more records than the cycle's own page.
+    const [cs, t] = await Promise.all([fetchDriverCycles(), fetchDriverCycleTallies()])
+    setCycles(cs); setTallies(t)
     setLoading(false)
   }, [])
 
@@ -111,7 +114,7 @@ function PayCyclesPanel() {
                       {CYCLE_STATUS_LABEL[c.status]}
                     </span>
                   </div>
-                  <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{counts[c.id] ?? 0} record{(counts[c.id] ?? 0) === 1 ? '' : 's'}</span>
+                  <span className="hidden sm:block w-28 text-sm text-[#71717A] flex-shrink-0 tabular-nums">{tallies[c.id]?.total ?? 0} record{(tallies[c.id]?.total ?? 0) === 1 ? '' : 's'}</span>
                   <ChevronRight size={18} className="text-[#D4D4D8] flex-shrink-0 w-8" />
                 </div>
               </Link>

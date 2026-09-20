@@ -218,13 +218,22 @@ export async function fetchAllStudents(): Promise<UserProfile[]> {
 // Fees & collection
 // ============================================
 
-export async function fetchFeesForStudent(studentId: string, year?: string): Promise<SchoolFee[]> {
+export async function fetchFeesForStudent(
+  studentId: string,
+  year?: string,
+  // Restricts to these statuses server-side. Callers building a full
+  // statement need every row (default, unfiltered); callers that only care
+  // about outstanding fees (e.g. the home overdue-fees card) can ask for
+  // just 'unpaid'/'partial' and skip pulling years of paid/cancelled history.
+  statuses?: FeeStatus[],
+): Promise<SchoolFee[]> {
   let q = supabase
     .from('school_fees')
     .select('*, fee_head:fee_heads!fee_head_id(id, name)')
     .eq('student_id', studentId)
     .order('created_at', { ascending: false })
   if (year) q = q.eq('academic_year', year)
+  if (statuses && statuses.length > 0) q = q.in('status', statuses)
   const { data, error } = await q
   if (error) { console.error('fetchFeesForStudent failed:', error); return [] }
   return (data as SchoolFee[]) || []

@@ -7,13 +7,15 @@ import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 
 const SIZE: Record<ModalSize, string> = {
   sm: 'sm:max-w-md',
   md: 'sm:max-w-2xl',
   lg: 'sm:max-w-4xl',
   xl: 'sm:max-w-6xl',
+  // For editors with their own multi-column layout (the timetable entity hubs).
+  '2xl': 'sm:max-w-[96rem]',
 }
 
 interface ModalProps {

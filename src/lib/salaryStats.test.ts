@@ -168,9 +168,14 @@ describe('recordFigures — locked cycle', () => {
 })
 
 describe('aggregateMonth', () => {
-  it('leaves ₹0 placeholder records out of the headcount and payout progress', () => {
+  it('leaves ₹0 placeholder records out of the payout progress, but not the headcount', () => {
     // Running a cycle generates a row for everyone, including people who have
-    // no base salary set. Counting them made a fully-paid month read "80/95".
+    // no base salary set. Counting them in the disbursement ratio made a
+    // fully-paid month read "80/95" — so totalCount/paidCount exclude them.
+    // headcount stays every roster record though, so it always agrees with
+    // what the cycle detail page and Pay Cycles list count as this month's
+    // records — otherwise this dashboard silently disagrees with every other
+    // screen that reads the same records.
     const s = aggregateMonth(2026, 8, [{
       locked: true,
       live: {},
@@ -181,7 +186,7 @@ describe('aggregateMonth', () => {
       ],
     }])
 
-    expect(s.headcount).toBe(2)
+    expect(s.headcount).toBe(3)
     expect(s.totalCount).toBe(2)
     expect(s.paidCount).toBe(1)
     expect(s.pendingAmount).toBe(25000)   // the paid record is not pending

@@ -22,11 +22,14 @@ function formatWhen(ts: number): string {
 
 interface ExamsMiniCardProps {
   userId: string
+  /** Reports whether there's neither an upcoming exam nor a recent result,
+   *  once loaded — lets the home carousel drop the slot entirely. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Student exam snapshot: the next upcoming exam (highlighted if within ~10h)
  *  and the most recent released result. */
-export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
+export default function ExamsMiniCard({ userId, onEmptyChange }: ExamsMiniCardProps) {
   const [upcoming, setUpcoming] = useState<ExamStudentSummary | null>(null)
   const [latestResult, setLatestResult] = useState<ExamStudentSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,8 +60,10 @@ export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
   const upcomingTs = upcoming ? examTime(upcoming) : null
   const soon = upcomingTs !== null && (upcomingTs - Date.now()) < 10 * 3_600_000
 
+  useEffect(() => { if (!loading) onEmptyChange?.(!upcoming && !latestResult) }, [loading, upcoming, latestResult, onEmptyChange])
+
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center gap-2">
         <FileSpreadsheet size={16} className="text-purple-500" />
         <span className="text-sm font-bold text-slate-700">Exams</span>
@@ -75,7 +80,7 @@ export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
           <p className="text-sm font-medium text-slate-400">No exams yet</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-3">
+        <div className="home-card-stack flex-1 overflow-y-auto scrollbar-hide p-4 space-y-3">
           {upcoming && (
             <Link href={`/more/exam/${upcoming.id}/take`}>
               <div className={`rounded-2xl border p-3.5 transition-colors cursor-pointer group ${soon ? 'bg-amber-50/80 border-amber-200' : 'bg-white/60 border-white/50 hover:bg-white/80'}`}>

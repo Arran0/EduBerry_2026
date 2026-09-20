@@ -24,11 +24,11 @@ import { EXAM, Skeleton, StatStrip, ExamPhaseChip, ImmediateResultsChip } from '
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const TABS: { id: Tab; label: string; shortLabel?: string; icon: React.ReactNode }[] = [
   { id: 'graders', label: 'Graders', icon: <Shield size={15} /> },
   { id: 'grading', label: 'Grading', icon: <ClipboardCheck size={15} /> },
   { id: 'sheet', label: 'Sheet', icon: <FileSpreadsheet size={15} /> },
-  { id: 'results', label: 'Link Results', icon: <Link2 size={15} /> },
+  { id: 'results', label: 'Link Results', shortLabel: 'Results', icon: <Link2 size={15} /> },
 ]
 
 const TAB_IDS: Tab[] = ['graders', 'grading', 'sheet', 'results']
@@ -160,6 +160,7 @@ function ExamDetailPageContent() {
                   items={TABS.map(t => ({
                     id: t.id,
                     label: t.label,
+                    shortLabel: t.shortLabel,
                     icon: t.icon,
                     active: tab === t.id,
                     onClick: () => setTab(t.id),

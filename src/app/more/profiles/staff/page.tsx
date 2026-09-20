@@ -1,13 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
-import { useRouter } from 'next/navigation'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   Briefcase,
@@ -41,7 +40,7 @@ import {
   NewUserInput,
 } from '@/lib/admin'
 import { UserRole, getDisplayRole } from '@/lib/supabase'
-import { upsertStaffDetails, fetchStaffDetailsMap, StaffDetails } from '@/lib/staffDetails'
+import { upsertStaffDetails, fetchStaffDirectoryMap, StaffDirectoryEntry } from '@/lib/staffDetails'
 import {
   SupportStaff,
   fetchSupportStaff,
@@ -131,6 +130,14 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'recent', label: 'Recently Added' },
 ]
 
+/** "12 Jan 2026" for a resignation date, or null if there isn't one on file (resigned before this was tracked). */
+function formatResignedDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 /** Blank values always sort after real ones, whichever direction is asked for. */
 function compareBlanksLast(a: string, b: string, desc = false): number {
   const av = a?.trim() ?? ''
@@ -153,12 +160,11 @@ const itemVariants = {
 export default function StaffProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
   const { openProfileCard } = useProfileCard()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
   const [supportStaff, setSupportStaff] = useState<SupportStaff[]>([])
-  const [details, setDetails] = useState<Record<string, StaffDetails>>({})
+  const [details, setDetails] = useState<Record<string, StaffDirectoryEntry>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -175,7 +181,7 @@ export default function StaffProfileManagerPage() {
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -223,57 +229,76 @@ export default function StaffProfileManagerPage() {
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
-    const [data, support] = await Promise.all([fetchAllProfiles(), fetchSupportStaff()])
-    const staffList = data.filter(p => STAFF_ROLES.includes(p.role))
+    const [staffList, support] = await Promise.all([
+      fetchAllProfiles({ roles: STAFF_ROLES, withTeams: false }),
+      fetchSupportStaff(),
+    ])
     setProfiles(staffList)
     setSupportStaff(support)
-    const map = await fetchStaffDetailsMap(staffList.map(s => s.id))
+    // The list only ever shows an employee code, a designation and a
+    // department, so it asks for those rather than the whole HR record.
+    const map = await fetchStaffDirectoryMap(staffList.map(s => s.id))
     setDetails(map)
     setLoading(false)
   }, [])
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const searchedProfiles = profiles.filter(p => {
-    const q = searchQuery.toLowerCase()
-    const d = details[p.id]
-    return (
-      p.full_name?.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) ||
-      p.role?.toLowerCase().includes(q) ||
-      getDisplayRole(p).toLowerCase().includes(q) ||
-      d?.employee_id?.toLowerCase().includes(q) ||
-      d?.designation?.toLowerCase().includes(q) ||
-      d?.department?.toLowerCase().includes(q)
-    )
-  })
+  // Handed to the bulk-import modal; rebuilding the Set on every render made
+  // the modal re-check the whole roster for each keystroke behind it.
+  const existingEmails = useMemo(
+    () => new Set(profiles.map(p => p.email.toLowerCase())),
+    [profiles],
+  )
 
-  const searchedSupport = supportStaff.filter(s => {
+  // Both rosters are filtered, counted and sorted below. The Add Staff modal
+  // keeps ~35 inputs in this component's state, so without memoisation every
+  // keystroke in any of them re-ran all of it over the whole staff list.
+  const searchedProfiles = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    return (
+    return profiles.filter(p => {
+      const d = details[p.id]
+      return (
+        p.full_name?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.role?.toLowerCase().includes(q) ||
+        getDisplayRole(p).toLowerCase().includes(q) ||
+        d?.employee_id?.toLowerCase().includes(q) ||
+        d?.designation?.toLowerCase().includes(q) ||
+        d?.department?.toLowerCase().includes(q)
+      )
+    })
+  }, [profiles, details, searchQuery])
+
+  const searchedSupport = useMemo(() => {
+    const q = searchQuery.toLowerCase()
+    return supportStaff.filter(s => (
       s.full_name?.toLowerCase().includes(q) ||
       // Matches the way the staff rows above match on their role name.
       'support'.includes(q) ||
       s.employee_id?.toLowerCase().includes(q) ||
       s.designation?.toLowerCase().includes(q) ||
       s.department?.toLowerCase().includes(q)
-    )
-  })
+    ))
+  }, [supportStaff, searchQuery])
 
   // Counts for the role filter dropdown — computed off the search-filtered
   // set (not role/status-filtered) so switching the role filter never moves
   // the numbers the admin is reading right before they click it.
-  const roleCounts: Record<string, number> = {}
-  for (const p of searchedProfiles) {
-    const key = roleStyleKey(p)
-    roleCounts[key] = (roleCounts[key] ?? 0) + 1
-  }
-  roleCounts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of searchedProfiles) {
+      const key = roleStyleKey(p)
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    counts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+    return counts
+  }, [searchedProfiles, searchedSupport])
 
   const matchesStatus = (isInactive: boolean) =>
     statusFilter === 'all' || (statusFilter === 'inactive' ? isInactive : !isInactive)
 
-  const filteredProfiles = searchedProfiles
+  const filteredProfiles = useMemo(() => searchedProfiles
     .filter(p => (roleFilter === 'all' || roleFilter === roleStyleKey(p)) && matchesStatus(!!p.is_banned))
     .sort((a, b) => {
       if (sortBy === 'role') {
@@ -285,9 +310,11 @@ export default function StaffProfileManagerPage() {
       if (sortBy === 'designation') return compareBlanksLast(details[a.id]?.designation ?? '', details[b.id]?.designation ?? '')
       if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
       return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
-    })
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedProfiles, details, roleFilter, statusFilter, sortBy])
 
-  const filteredSupport = searchedSupport
+  const filteredSupport = useMemo(() => searchedSupport
     .filter(s => (roleFilter === 'all' || roleFilter === SUPPORT_ROLE_VALUE) && matchesStatus(!s.is_active))
     .sort((a, b) => {
       if (sortBy === 'name_desc') return b.full_name.localeCompare(a.full_name)
@@ -295,7 +322,9 @@ export default function StaffProfileManagerPage() {
       if (sortBy === 'designation') return compareBlanksLast(a.designation ?? '', b.designation ?? '')
       if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
       return a.full_name.localeCompare(b.full_name) // role and name_asc both fall back to name for support staff
-    })
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedSupport, roleFilter, statusFilter, sortBy])
 
   const totalRows = filteredProfiles.length + filteredSupport.length
   const filtersActive = roleFilter !== 'all' || statusFilter !== 'all'
@@ -327,7 +356,7 @@ export default function StaffProfileManagerPage() {
 
   const handleToggleSupportActive = async (person: SupportStaff) => {
     const msg = person.is_active
-      ? `Mark "${person.full_name}" as left? They stop appearing in attendance, and their past records are kept.`
+      ? `Resign "${person.full_name}"? They stop appearing in attendance, and their past records are kept.`
       : `Restore "${person.full_name}" to the support staff roster?`
     if (!window.confirm(msg)) return
     const result = await setSupportStaffActive(person.id, !person.is_active)
@@ -435,7 +464,6 @@ export default function StaffProfileManagerPage() {
           title="Staff Profile Manager"
           subtitle="Manage all non-student staff with full CBSE HR records"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}
@@ -463,59 +491,66 @@ export default function StaffProfileManagerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
-            {/* Search */}
-            <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
-              {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
-            </div>
-
-            {/* Filter & sort */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Filter size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-                <select
-                  value={roleFilter}
-                  onChange={e => setRoleFilter(e.target.value)}
-                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
-                >
-                  {ROLE_FILTER_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
-                    </option>
-                  ))}
-                </select>
+            {/* Search + filter & sort — one row on desktop, search then a
+                sleeker filter row underneath on a narrow phone. */}
+            <div className="mb-4 relative z-10 flex flex-col sm:flex-row sm:items-center gap-2" style={{ marginTop: '-22px' }}>
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
+                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                className="px-3 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">Active Only</option>
-                <option value="inactive">Resigned / Left Only</option>
-              </select>
+              {/* Every control shrinks to share the row rather than wrapping
+                  or scrolling — each is flex-1 with its own text truncated,
+                  so all of them stay readable-but-tight on one line even on
+                  a narrow phone. */}
+              <div className="flex items-center gap-1 flex-nowrap w-full sm:w-auto min-w-0">
+                <div className="relative flex-1 min-w-0">
+                  <Filter size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={roleFilter}
+                    onChange={e => setRoleFilter(e.target.value)}
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {ROLE_FILTER_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="relative">
-                <ArrowUpDown size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
                 <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as SortKey)}
-                  className="pl-7 pr-7 py-2 text-xs font-medium border border-[#E4E4E7] bg-white rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer"
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                  className="flex-1 min-w-0 px-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
                 >
-                  {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Resignation Only</option>
                 </select>
-              </div>
 
-              {filtersActive && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-lg transition-colors"
-                >
-                  <X size={12} /> Clear filters
-                </button>
-              )}
+                <div className="relative flex-1 min-w-0">
+                  <ArrowUpDown size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value as SortKey)}
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    aria-label="Clear filters"
+                    className="flex-shrink-0 flex items-center gap-1 px-1.5 py-1 text-[9px] sm:text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-md sm:rounded-lg transition-colors"
+                  >
+                    <X size={10} /> <span className="hidden sm:inline">Clear</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* List */}
@@ -557,7 +592,11 @@ export default function StaffProfileManagerPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
-                                {p.is_banned && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Resigned</span>}
+                                {p.is_banned && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                    <Ban size={8} /> Resigned{formatResignedDate(p.banned_at) ? ` · ${formatResignedDate(p.banned_at)}` : ''}
+                                  </span>
+                                )}
                               </div>
                               <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                             </div>
@@ -625,7 +664,11 @@ export default function StaffProfileManagerPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className={`text-sm font-semibold truncate ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
-                              {!s.is_active && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Left</span>}
+                              {!s.is_active && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                  <Ban size={8} /> Resigned{formatResignedDate(s.resigned_at) ? ` · ${formatResignedDate(s.resigned_at)}` : ''}
+                                </span>
+                              )}
                             </div>
                             <p className="hidden sm:block text-xs text-[#71717A] truncate">
                               {s.phone || <span className="text-[#C4C4C8]">No phone</span>}
@@ -648,7 +691,7 @@ export default function StaffProfileManagerPage() {
                             {isAdmin && (
                               <>
                                 <button onClick={() => setEditingSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit details"><Pencil size={14} /></button>
-                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Mark as left' : 'Restore'}>
+                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Resign' : 'Restore'}>
                                   {s.is_active ? <Ban size={14} /> : <ShieldCheck size={14} />}
                                 </button>
                                 <button onClick={() => handleDeleteSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
@@ -841,7 +884,7 @@ export default function StaffProfileManagerPage() {
                                 <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
                             ) : (
-                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member's address.</p>
+                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member&rsquo;s address.</p>
                             )}
                           </div>
                           </>
@@ -869,7 +912,7 @@ export default function StaffProfileManagerPage() {
       {showBulkImport && (
         <BulkImportModal
           mode="staff"
-          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          existingEmails={existingEmails}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles() }}
         />

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CalendarClock, ChevronRight } from 'lucide-react'
 import {
   fetchTimetableForStudent,
+  entryTeacherLabel,
   WEEKDAYS,
   type PeriodSlot,
   type TimetableEntry,
@@ -27,11 +28,14 @@ function formatTime(t: string | null): string {
 
 interface TodayTimetableCardProps {
   userId: string
+  /** Reports whether today has no periods, once loaded — lets the home
+   *  carousel drop the slot entirely on a day with nothing scheduled. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Compact view of the student's periods for today, opening the full
  *  timetable app on tap. */
-export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) {
+export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimetableCardProps) {
   const [periods, setPeriods] = useState<Period[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -64,9 +68,11 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
 
   const hasAny = periods && periods.some(p => p.entry?.subject_id)
 
+  useEffect(() => { if (!loading) onEmptyChange?.(!hasAny) }, [loading, hasAny, onEmptyChange])
+
   return (
     <Link href="/more/timetable">
-      <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer group">
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer group">
         <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarClock size={16} className="text-indigo-500" />
@@ -88,7 +94,7 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
         ) : (
           <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
             {periods!.filter(p => p.entry?.subject_id).map(({ slot, entry }) => (
-              <div key={slot.id} className="flex items-center gap-3 px-5 py-2.5">
+              <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 py-2.5">
                 <span className="text-[11px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0">
                   {formatTime(slot.start_time)}
                 </span>
@@ -96,8 +102,8 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
                   <h4 className="font-semibold text-slate-800 text-sm truncate">
                     {entry?.subject?.name || slot.label || 'Period'}
                   </h4>
-                  {entry?.teacher_name && (
-                    <p className="text-[11px] text-slate-400 truncate">{entry.teacher_name}</p>
+                  {entry && entryTeacherLabel(entry) && (
+                    <p className="text-[11px] text-slate-400 truncate">{entryTeacherLabel(entry)}</p>
                   )}
                 </div>
               </div>

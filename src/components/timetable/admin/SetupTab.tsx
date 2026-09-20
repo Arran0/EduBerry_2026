@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle,
 } from 'lucide-react'
@@ -11,7 +11,6 @@ import {
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, Weekday } from '@/lib/timetable'
 import { INPUT, BTN_PRIMARY, Section, Field } from '../ui'
-import ClassTeacherGrid from './setup/ClassTeacherGrid'
 
 const _cy = new Date().getFullYear()
 const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
@@ -157,8 +156,8 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
         )}
       </Section>
 
-      {/* Class teachers — excel-style bulk grid (homeroom-level, config-independent) */}
-      <ClassTeacherGrid />
+      {/* Class teachers live in the Homeroom hub (Homeroom → Class teacher),
+          alongside that class's groups, requirements and time off. */}
 
       {/* Working days + period slots for selected config */}
       {selectedConfig ? (

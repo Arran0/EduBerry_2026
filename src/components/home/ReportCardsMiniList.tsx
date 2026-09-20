@@ -18,13 +18,16 @@ interface ReportCardGroup {
 
 interface ReportCardsMiniListProps {
   userId: string
+  /** Reports whether the list ended up empty, once loaded — lets the home
+   *  carousel drop the slot entirely when there are no report cards yet. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Vertically scrollable list of buttons, one per released report card for
  *  the student's most recent academic year, each opening the full report
  *  card section on the academics page. Buttons are revealed a few at a time
  *  (see useAutoLoadMore) instead of rendering the whole list at once. */
-export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps) {
+export default function ReportCardsMiniList({ userId, onEmptyChange }: ReportCardsMiniListProps) {
   const [groups, setGroups] = useState<ReportCardGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [year, setYear] = useState<string | null>(null)
@@ -56,6 +59,8 @@ export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps
     return () => { cancelled = true }
   }, [userId])
 
+  useEffect(() => { if (!loading) onEmptyChange?.(groups.length === 0) }, [loading, groups, onEmptyChange])
+
   const { visibleCount, containerRef, handleScroll } = useAutoLoadMore({
     total: groups.length,
     initialCount: 4,
@@ -66,7 +71,7 @@ export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps
   const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount])
 
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />
@@ -87,7 +92,7 @@ export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps
         >
           {visibleGroups.map(group => (
             <Link key={group.title} href="/academics?section=reportcards">
-              <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
+              <div className="home-card-row flex items-center gap-3 px-5 py-3.5 hover:bg-white/45 transition-colors group cursor-pointer">
                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-rose-500" />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">{group.title}</h4>

@@ -14,11 +14,15 @@ interface DatedItem extends MiniCalendarItem {
 interface SchoolWorkMiniCalendarProps {
   userId: string
   classrooms: ClassroomWithDetails[]
+  /** Reports whether this week's school work list ended up empty, once
+   *  loaded — lets the home carousel drop the slot entirely when there's
+   *  nothing due. */
+  onEmptyChange?: (empty: boolean) => void
 }
 
 /** Compact week-at-a-glance school work calendar for the home card carousel.
  *  See SchoolWorkManager for the full academics-page version this links out to. */
-export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWorkMiniCalendarProps) {
+export default function SchoolWorkMiniCalendar({ userId, classrooms, onEmptyChange }: SchoolWorkMiniCalendarProps) {
   const [items, setItems] = useState<DatedItem[]>([])
   const [loading, setLoading] = useState(true)
   const weekStart = useMemo(() => getWeekStart(new Date()), [])
@@ -61,6 +65,7 @@ export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWor
   }, [classrooms, userId, weekStart])
 
   useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { if (!loading) onEmptyChange?.(items.length === 0) }, [loading, items, onEmptyChange])
 
   const itemsByDay = useMemo(() => {
     const map = new Map<string, MiniCalendarItem[]>()

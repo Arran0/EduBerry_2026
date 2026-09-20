@@ -156,41 +156,46 @@ export default function GradingTab({
           const meta = STATUS_META[st]
           const sub = row.submission
           return (
-            <div key={row.student.id} className={EXAM.listRow}>
-              <Avatar avatarUrl={row.student.avatar_url} name={row.student.full_name} size={34} userId={row.student.id} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#18181B] truncate">{row.student.full_name}</p>
-                <p className="text-[11px] text-[#A8A29A] truncate">{row.student.email}</p>
-              </div>
-              <span className="w-16 text-right text-sm font-semibold tabular-nums text-[#18181B] shrink-0">
-                {sub && st === 'graded' && sub.total_score != null
-                  ? `${sub.total_score}/${sub.max_score}`
-                  : <span className="text-[#D8D2C4]">—</span>}
-              </span>
-              <span className="w-24 flex justify-end shrink-0">
-                <StatusPill label={meta.label} tone={meta.cls} />
-              </span>
-              {canManage && (
-                <div className="w-32 flex items-center justify-end gap-1 shrink-0">
-                  {(st === 'submitted' || st === 'graded') && (
-                    <button
-                      onClick={() => router.push(`/more/exam/${exam.id}/grade/${row.student.id}`)}
-                      className={EXAM.darkBtnSm}
-                    >
-                      <Pencil size={12} /> {locked || st === 'graded' ? 'Review' : 'Grade'}
-                    </button>
-                  )}
-                  {!locked && (st === 'not_started' || st === 'in_progress') && (
-                    <button
-                      onClick={() => handleAbsent(row.student.id)}
-                      disabled={busyId === row.student.id}
-                      className={EXAM.dangerBtnSm}
-                    >
-                      {busyId === row.student.id ? <Loader2 size={12} className="animate-spin" /> : <UserX size={12} />} Absent
-                    </button>
-                  )}
+            <div key={row.student.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-[#FAF9F6] transition-colors">
+              <div className="flex flex-1 min-w-0 items-center gap-3">
+                <Avatar avatarUrl={row.student.avatar_url} name={row.student.full_name} size={34} userId={row.student.id} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#18181B] truncate">{row.student.full_name}</p>
+                  <p className="text-[11px] text-[#A8A29A] truncate">{row.student.email}</p>
                 </div>
-              )}
+              </div>
+
+              <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-3 pl-[46px] sm:pl-0">
+                <span className="text-sm font-semibold tabular-nums text-[#18181B] sm:w-16 sm:text-right shrink-0">
+                  {sub && st === 'graded' && sub.total_score != null
+                    ? `${sub.total_score}/${sub.max_score}`
+                    : <span className="text-[#D8D2C4]">—</span>}
+                </span>
+                <span className="sm:w-24 flex justify-end shrink-0">
+                  <StatusPill label={meta.label} tone={meta.cls} />
+                </span>
+                {canManage && (
+                  <div className="sm:w-32 flex items-center justify-end gap-1 shrink-0">
+                    {(st === 'submitted' || st === 'graded') && (
+                      <button
+                        onClick={() => router.push(`/more/exam/${exam.id}/grade/${row.student.id}`)}
+                        className={EXAM.darkBtnSm}
+                      >
+                        <Pencil size={12} /> {locked || st === 'graded' ? 'Review' : 'Grade'}
+                      </button>
+                    )}
+                    {!locked && (st === 'not_started' || st === 'in_progress') && (
+                      <button
+                        onClick={() => handleAbsent(row.student.id)}
+                        disabled={busyId === row.student.id}
+                        className={EXAM.dangerBtnSm}
+                      >
+                        {busyId === row.student.id ? <Loader2 size={12} className="animate-spin" /> : <UserX size={12} />} Absent
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )
         })}

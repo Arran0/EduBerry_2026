@@ -187,11 +187,10 @@ export default function SmartboardDashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {ctx!.classrooms.map((c, i) => (
+                {ctx!.classrooms.map(c => (
                   <ClassroomButton
                     key={c.id}
                     classroom={{ ...c, members: [] } as ClassroomWithDetails}
-                    index={i}
                     heightClass="h-[42px]"
                     navigating={navigatingId === c.id}
                     onNavigate={() => setNavigatingId(c.id)}

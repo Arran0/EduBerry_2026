@@ -17,9 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Ban, CheckCircle2, Gavel, Loader2, Play, Plus,
+  AlertTriangle, Ban, CheckCircle2, Gavel, Loader2, Play, Plus,
   Power, ShieldOff, Timer,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -28,7 +27,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, StatStrip, TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import LateFeeRuleBuilder, { type ScopeOption } from '@/components/fees/charges/LateFeeRuleBuilder'
 import { gradeLabel } from '@/lib/grades'

@@ -8,8 +8,9 @@ import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, Cal
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
+import { fetchRawSetting } from '@/lib/pageConfig'
 import { fetchStudentDetails } from '@/lib/studentDetails'
-import { fetchStaffDetails } from '@/lib/staffDetails'
+import { fetchStaffDirectory } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { currentAcademicYear } from '@/lib/fees'
 import Avatar from '@/components/Avatar'
@@ -116,8 +117,8 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     && (isStudentProfile || isDriverProfile || isSalaryStaffProfile)
 
   useEffect(() => {
-    supabase.from('site_settings').select('value').eq('key', 'profile_banner').single()
-      .then(({ data }) => { if (data?.value && typeof data.value === 'string') setProfileBannerUrl(data.value) })
+    fetchRawSetting<string>('profile_banner')
+      .then(url => { if (typeof url === 'string' && url) setProfileBannerUrl(url) })
   }, [])
 
   const loadProfile = useCallback(async () => {
@@ -151,7 +152,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
         setRollNo(d?.roll_no ?? null)
       })
     } else {
-      fetchStaffDetails(targetProfile.id).then(d => {
+      fetchStaffDirectory(targetProfile.id).then(d => {
         setPhone(d?.phone ?? null)
         setEmployeeId(d?.employee_id ?? null)
         setDesignation(d?.designation ?? null)
@@ -226,7 +227,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
             <>
               {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
               <div
-                className="relative h-16 flex-shrink-0"
+                className="relative h-32 flex-shrink-0"
                 style={profileBannerUrl
                   ? { backgroundImage: `url(${profileBannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                   : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
@@ -311,7 +312,9 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
                   // Everyone can see staff contact buttons
                   const canSeeStaffActions = !isStudentProfile
                   const showAcademicRecord = canSeeStudentActions
-                  const showTaskCalendar = canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
+                  // Drivers don't use the task manager — they're routed straight to
+                  // /driver and never see it — so their profile card skips this button.
+                  const showTaskCalendar = canSeeStaffActions && !isDriverProfile && hasCalendarAccess(viewerProfile, targetProfile)
                   const showAttendanceBtn = isStudentProfile
                     ? canSeeStudentActions
                     : canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)

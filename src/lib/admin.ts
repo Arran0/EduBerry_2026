@@ -23,21 +23,67 @@ export interface NewUserInput {
 // Fetch all profiles with team memberships
 const PROFILE_PAGE_SIZE = 1000
 
-export async function fetchAllProfiles(): Promise<ProfileWithTeams[]> {
+// The roles isStaffRole() accepts, as a DB-side filter.
+const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin']
+
+/**
+ * Staff profiles only, with just the columns a picker needs. The timetable
+ * builder used to pull every profile (students included, paged 1000 at a time)
+ * plus the whole team_members table only to filter it down to staff in the
+ * browser; this asks Postgres for the ~50 rows it actually renders.
+ */
+export async function fetchStaffProfiles(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, grade, section')
+    .in('role', STAFF_ROLES)
+    .order('full_name', { ascending: true })
+
+  if (error) {
+    console.error('fetchStaffProfiles error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+export interface FetchProfilesOptions {
+  /**
+   * Restrict to these roles DB-side. The profile managers each render one side
+   * of the roster — asking Postgres for that side beats pulling every student
+   * row across the wire so the browser can filter them back out.
+   */
+  roles?: UserRole[]
+  /**
+   * Whether to join each profile's team memberships. Defaults to true for
+   * backward compatibility; callers that never render `teams` (the student and
+   * staff managers, the certificate typeahead) skip a whole extra query by
+   * passing false.
+   */
+  withTeams?: boolean
+}
+
+export async function fetchAllProfiles(
+  options: FetchProfilesOptions = {},
+): Promise<ProfileWithTeams[]> {
+  const { roles, withTeams = true } = options
+
   // PostgREST caps a plain select at 1000 rows. Past that the list silently
   // truncates, which makes existing members look absent — e.g. the bulk
   // import preview would mark them "new" and try to re-create them.
-  const fetchProfilePage = (page: number) =>
-    supabase
-      .from('profiles')
-      .select('*')
+  const fetchProfilePage = (page: number) => {
+    let q = supabase.from('profiles').select('*')
+    if (roles?.length) q = q.in('role', roles)
+    return q
       .order('role', { ascending: true })
       .order('full_name', { ascending: true })
       .range(page * PROFILE_PAGE_SIZE, page * PROFILE_PAGE_SIZE + PROFILE_PAGE_SIZE - 1)
+  }
 
   const [{ data: firstPage, error }, { data: memberships }] = await Promise.all([
     fetchProfilePage(0),
-    supabase.from('team_members').select('user_id, team:teams(id, name)'),
+    withTeams
+      ? supabase.from('team_members').select('user_id, team:teams(id, name)')
+      : Promise.resolve({ data: [] as { user_id: string; team: unknown }[] }),
   ])
 
   if (error) {
@@ -276,36 +322,6 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     console.error('Error deleting user:', err)
     return { success: false, error: 'An unexpected error occurred' }
   }
-}
-
-// Note: Creating auth users requires Supabase Admin API
-// For now, this function creates only the profile (user must sign up via auth first)
-// In production, you'd use Supabase Admin API to create auth.users
-export async function createProfileForExistingAuth(
-  userId: string,
-  input: Omit<NewUserInput, 'email'>
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      full_name: input.full_name,
-      role: input.role,
-      grade: input.grade || null,
-      section: input.section || null,
-    })
-    .eq('id', userId)
-
-  if (error) {
-    console.error('Failed to create/update profile:', error)
-    return false
-  }
-
-  // Set team memberships
-  if (input.team_ids && input.team_ids.length > 0) {
-    await updateTeamMemberships(userId, input.team_ids)
-  }
-
-  return true
 }
 
 // Directly set a new password for a user — admin only, no email step required

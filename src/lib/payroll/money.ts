@@ -153,14 +153,6 @@ export interface ArrearRow {
   status: 'pending' | 'scheduled' | 'paid' | 'cancelled'; run_id: string | null
 }
 
-export async function fetchArrears(employeeId?: string, status: string[] = ['pending', 'scheduled']): Promise<ArrearRow[]> {
-  let q = supabase.from('payroll_arrears').select('*').in('status', status)
-  if (employeeId) q = q.eq('employee_id', employeeId)
-  const { data, error } = await q
-  if (error) { console.error('fetchArrears failed:', error); return [] }
-  return (data ?? []) as unknown as ArrearRow[]
-}
-
 export function toEngineArrear(r: ArrearRow): EngineArrear {
   return {
     id: r.id, amount: Number(r.amount), fromPeriod: r.from_period,
@@ -183,8 +175,3 @@ export async function fetchLeaveAvailable(employeeId?: string, year?: string): P
   return (data ?? []) as unknown as LeaveAvailableRow[]
 }
 
-/** Total encashable days for a settlement. Zero when no ledger has been set up. */
-export async function encashableDaysFor(employeeId: string, year: string): Promise<number> {
-  const rows = await fetchLeaveAvailable(employeeId, year)
-  return rows.filter(r => r.encashable).reduce((s, r) => s + Number(r.available), 0)
-}

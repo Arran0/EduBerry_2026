@@ -11,9 +11,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, Copy, FolderTree, Layers, Loader2, Plus,
+  AlertTriangle, Check, Copy, FolderTree, Layers, Loader2, Plus,
   Receipt, Settings2, Trash2, Users,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -21,7 +20,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, STRUCTURE_CHIP, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, TabBar } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
   cloneFeeYear, createStructure, deleteHead, deleteInstallment, deleteStructure,

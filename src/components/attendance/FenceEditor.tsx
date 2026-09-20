@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { MapPin, Navigation, Trash2, Plus, Loader2, AlertTriangle, Satellite, Check } from 'lucide-react'
+import { Navigation, Trash2, Plus, Loader2, AlertTriangle, Check } from 'lucide-react'
 import { LatLng, polygonCentroid } from '@/lib/geofence'
 import { acquirePosition } from '@/lib/gpsAcquisition'
 import { FenceShape } from '@/lib/attendance'

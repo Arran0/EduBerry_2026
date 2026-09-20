@@ -7,11 +7,11 @@
 
 import type {
   PlacedEntry, PeriodSlot, Requirement, TimetableConstraint, HomeroomLite, TimetableConfig, Weekday,
+  GeneratorConflict,
 } from './types'
 import { detectConflicts } from './generator'
-import {
-  buildConstraintIndex, cellKey, timeOffBlocked, limitApplies, limitBucket, effectiveMaxInARow,
-} from './constraints'
+import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
+import { teacherIdsOf } from './types'
 
 export interface HealthComponent {
   key: string
@@ -46,6 +46,13 @@ export interface HealthInput {
   config: TimetableConfig
   homerooms: HomeroomLite[]
   unavailability?: { teacher_id: string; day: Weekday; slot_id: string; id: string; config_id: string; created_at: string }[]
+  /**
+   * detectConflicts() over the same entries, when the caller has already run it
+   * (the builder does, to highlight cells). Scanning is O(entries) and the
+   * result is identical, so re-running it here would just double the work on
+   * every edit. Omit it and this computes its own.
+   */
+  conflicts?: GeneratorConflict[]
   // Optional label resolvers for readable issues.
   homeroomName?: (id: string) => string
   teacherName?: (id: string) => string
@@ -72,7 +79,8 @@ export function computeHealth(input: HealthInput): HealthReport {
   const issues: HealthIssue[] = []
 
   // ── 1. Hard clashes (double-book / time-off / pin) ───────────
-  const hardConflicts = detectConflicts(entries, input.unavailability ?? [], constraints, homerooms)
+  const hardConflicts =
+    input.conflicts ?? detectConflicts(entries, input.unavailability ?? [], constraints, homerooms)
   const hardKinds = new Set([
     'teacher_double_booked', 'room_double_booked', 'homeroom_double_booked', 'time_off_violated',
   ])
@@ -113,10 +121,14 @@ export function computeHealth(input: HealthInput): HealthReport {
   for (const rule of index.limits) {
     const buckets = new Map<string, number>()
     for (const e of entries) {
-      const p = { homeroomId: e.homeroomId, subjectId: e.subjectId, teacherId: e.teacherId }
-      if (!limitApplies(rule, p)) continue
-      const key = limitBucket(rule, p, e.day)
-      buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      const p = {
+        homeroomId: e.homeroomId, subjectId: e.subjectId,
+        teacherId: e.teacherId, teacherIds: teacherIdsOf(e),
+      }
+      // A co-taught period counts against each of its teachers.
+      for (const key of limitBucketsFor(rule, p, e.day)) {
+        buckets.set(key, (buckets.get(key) ?? 0) + 1)
+      }
     }
     for (const count of buckets.values()) {
       constraintChecks++
@@ -130,7 +142,9 @@ export function computeHealth(input: HealthInput): HealthReport {
 
   // pins
   const filled = new Set<string>()
-  for (const e of entries) if (e.teacherId) filled.add(`${e.homeroomId}__${e.day}__${e.slotId}__${e.teacherId}`)
+  for (const e of entries) {
+    for (const t of teacherIdsOf(e)) filled.add(`${e.homeroomId}__${e.day}__${e.slotId}__${t}`)
+  }
   for (const pin of index.pins) {
     constraintChecks++
     const [day, slotId] = pin.key.split('__')
@@ -145,10 +159,11 @@ export function computeHealth(input: HealthInput): HealthReport {
   // ── 4. Teacher idle gaps ─────────────────────────────────────
   const tSlots = new Map<string, Set<number>>()
   for (const e of entries) {
-    if (!e.teacherId) continue
-    const k = `${e.teacherId}|${e.day}`
-    if (!tSlots.has(k)) tSlots.set(k, new Set())
-    tSlots.get(k)!.add(slotOrder.get(e.slotId) ?? 0)
+    for (const t of teacherIdsOf(e)) {
+      const k = `${t}|${e.day}`
+      if (!tSlots.has(k)) tSlots.set(k, new Set())
+      tSlots.get(k)!.add(slotOrder.get(e.slotId) ?? 0)
+    }
   }
   let gaps = 0
   const gapByTeacher = new Map<string, number>()

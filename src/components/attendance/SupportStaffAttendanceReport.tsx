@@ -1,9 +1,12 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import Avatar from '@/components/Avatar'
-import { Search, X, Loader2, HardHat, Umbrella, Ban, CircleSlash } from 'lucide-react'
+import { Search, X, Loader2, HardHat, Umbrella, Ban, CheckSquare } from 'lucide-react'
 import {
   SupportStaff,
   SupportAttendanceRecord,
@@ -15,8 +18,7 @@ import {
   markSupportAttendance,
   clearSupportAttendance,
   computeSupportDayStats,
-  computeSupportPersonStats,
-  groupSupportRecordsByStaff,
+  supportRecordToStaffShape,
 } from '@/lib/supportStaff'
 import {
   StaffAttendanceRecord,
@@ -27,8 +29,16 @@ import {
   clearStaffAttendance,
 } from '@/lib/attendance'
 import { UserProfile } from '@/lib/supabase'
-import { fetchStaffDetailsMap } from '@/lib/staffDetails'
-import { SECTION_LABEL } from '@/components/workspace/ui'
+import { fetchStaffDirectoryMap } from '@/lib/staffDetails'
+
+// Loaded on demand — the same read-only month calendar the main staff report
+// opens when you click a name (see AllStaffAttendanceReport.tsx). Ground
+// support staff don't have a staff_attendance_records row to read it from, so
+// their rows are adapted into that shape via fetchGroundRecords below.
+const StaffAttendanceCalendarDynamic = dynamic(
+  () => import('@/components/attendance/StaffAttendanceCalendar'),
+  { ssr: false, loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div> }
+)
 
 // ============================================
 // The Support Staff tab of the staff attendance report.
@@ -48,12 +58,15 @@ import { SECTION_LABEL } from '@/components/workspace/ui'
 // row is set by hand. The section mirrors AllStaffAttendanceReport's format —
 // the same Absent / Present / Irregular inline tabs, the same five manual
 // marks (P/A/Late/½/Exception), and the same rule for which tab a status
-// lands in. No WFH here (no punch to work from home from); Not Marked is a
-// block under the tabs rather than a tab of its own, same as the main report.
+// lands in. No WFH here (no punch to work from home from).
 //
-// An unmarked person is NOT derived as absent the way the school-staff report
-// derives it: a missing row means "not marked yet", not "away" — see
-// computeSupportDayStats.
+// Auto-absent derivation mirrors the school-staff report: on a working day
+// (not a whole-school holiday/non-working day per `dayOff`, and not still in
+// the future) an unmarked person is derived Absent, same as
+// AllStaffAttendanceReport's `virtualAbsents` — see computeSupportDayStats.
+// This also keeps the daily view in step with payroll, which already derives
+// absence the same way for support staff (computeStaffAttendanceStats via
+// supportRecordToStaffShape).
 // ============================================
 
 interface Props {
@@ -117,103 +130,169 @@ function shortName(name: string, max = 14) {
 // ── One row (ground support staff or driver) ─────────────────────────────────
 
 function SupportRow({
-  person, record, monthRecords, saving, canEdit, onSet, onClear,
+  person, record, derivedStatus, saving, canEdit, viewerId, onSet, onClear,
 }: {
   person: SectionPerson
   record?: { status: SupportAttendanceStatus }
-  monthRecords: { status: SupportAttendanceStatus }[]
+  /** Shown as the status pill when absent is auto-derived (no DB record yet). */
+  derivedStatus?: SupportAttendanceStatus
   saving: boolean
   canEdit: boolean
+  viewerId: string
   onSet: (id: string, status: SupportAttendanceStatus) => void
   onClear: (id: string) => void
 }) {
-  const mtd = useMemo(() => computeSupportPersonStats(monthRecords), [monthRecords])
+  const [showCalendar, setShowCalendar] = useState(false)
+  const effectiveStatus = record?.status ?? derivedStatus
+
+  // Ground support staff have no staff_attendance_records row of their own —
+  // their month lives in support_staff_attendance instead, so it's fetched
+  // separately and adapted into the shape StaffAttendanceCalendar already
+  // knows how to render (same trick payroll uses — see supportRecordToStaffShape).
+  const fetchGroundRecords = useCallback(async (staffId: string, year: number, month: number) => {
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
+    const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+    const recs = await fetchSupportAttendanceRange(monthStart, monthEnd)
+    return recs.filter(r => r.support_staff_id === staffId).map(supportRecordToStaffShape)
+  }, [])
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
-      <Avatar
-        avatarUrl={person.avatar_url ?? null}
-        name={person.full_name}
-        size={30}
-        userId={person.kind === 'driver' ? person.id : undefined}
-      />
+    <>
+      <motion.div
+        layout="position"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
+        transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+      >
+        <Avatar
+          avatarUrl={person.avatar_url ?? null}
+          name={person.full_name}
+          size={30}
+          userId={person.kind === 'driver' ? person.id : undefined}
+        />
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <p title={person.full_name} className="text-sm font-semibold text-[#18181B] truncate leading-tight">
-            {shortName(person.full_name)}
-          </p>
-          {saving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
-        </div>
-        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-          {person.designation && (
-            <span className="text-[10px] text-[#A1A1AA] truncate max-w-[9rem]">{person.designation}</span>
-          )}
-          {mtd.marked_days > 0 && (
-            <span
-              title={`This month: ${mtd.present} present, ${mtd.late} late, ${mtd.half_day} half day, ${mtd.absent} absent, ${mtd.on_leave} on leave, ${mtd.e} exception across ${mtd.marked_days} marked day${mtd.marked_days === 1 ? '' : 's'}`}
-              className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded ${
-                mtd.present_pct >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : mtd.present_pct >= 75 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-red-50 text-red-700 border-red-200'
-              }`}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              onClick={() => setShowCalendar(true)}
+              title={person.full_name}
+              className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
             >
-              {mtd.present_pct}% MTD
-            </span>
+              {shortName(person.full_name)}
+            </button>
+            {saving && <Loader2 size={11} className="animate-spin text-[#B8983C] flex-shrink-0" />}
+          </div>
+          {person.designation && (
+            <p className="text-[10px] text-[#A1A1AA] truncate max-w-[9rem] mt-0.5">{person.designation}</p>
           )}
         </div>
-      </div>
 
-      {record ? (
-        <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full flex-shrink-0 ${SUPPORT_ATTENDANCE_STATUS_PILL[record.status]}`}>
-          {SUPPORT_ATTENDANCE_STATUS_LABELS[record.status]}
-        </span>
-      ) : (
-        <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border border-dashed border-[#D4D4D8] text-[#A1A1AA] rounded-full flex-shrink-0`}>
-          Not marked
-        </span>
-      )}
+        {effectiveStatus ? (
+          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border rounded-full flex-shrink-0 ${SUPPORT_ATTENDANCE_STATUS_PILL[effectiveStatus]}`}>
+            {SUPPORT_ATTENDANCE_STATUS_LABELS[effectiveStatus]}
+          </span>
+        ) : (
+          <span className={`${canEdit ? 'hidden sm:inline-block' : 'inline-block'} text-[10px] font-semibold px-2 py-0.5 border border-dashed border-[#D4D4D8] text-[#A1A1AA] rounded-full flex-shrink-0`}>
+            Not marked
+          </span>
+        )}
 
-      {canEdit && (
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-          {QUICK_SET.map(st => {
-            const isWordLabel = st === 'late' || st === 'e'
-            return (
-              <button
-                key={st}
-                disabled={saving}
-                onClick={() => onSet(person.id, st)}
-                title={SUPPORT_ATTENDANCE_STATUS_LABELS[st]}
-                className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
-                  isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
-                } ${
-                  record?.status === st
-                    ? QUICK_ACTIVE[st]
-                    : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
-                }`}
+        {canEdit && (
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+            {QUICK_SET.map(st => {
+              const isWordLabel = st === 'late' || st === 'e'
+              return (
+                <button
+                  key={st}
+                  disabled={saving}
+                  onClick={() => onSet(person.id, st)}
+                  title={SUPPORT_ATTENDANCE_STATUS_LABELS[st]}
+                  className={`h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                    isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
+                  } ${
+                    effectiveStatus === st
+                      ? QUICK_ACTIVE[st]
+                      : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
+                  }`}
+                >
+                  {st === 'e'
+                    ? (<><span className="sm:hidden">Excep.</span><span className="hidden sm:inline">Exception</span></>)
+                    : QUICK_SHORT[st]}
+                </button>
+              )
+            })}
+            <button
+              disabled={saving || !record}
+              onClick={() => onClear(person.id)}
+              title={record ? 'Clear this mark' : 'Nothing to clear'}
+              className="w-6 sm:w-7 h-6 sm:h-7 border border-[#D4D4D8] text-[#A1A1AA] bg-white rounded-md hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors disabled:opacity-30 flex items-center justify-center"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showCalendar && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowCalendar(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
               >
-                {st === 'e'
-                  ? (<><span className="sm:hidden">Excep.</span><span className="hidden sm:inline">Exception</span></>)
-                  : QUICK_SHORT[st]}
-              </button>
-            )
-          })}
-          <button
-            disabled={saving || !record}
-            onClick={() => onClear(person.id)}
-            title={record ? 'Clear this mark' : 'Nothing to clear'}
-            className="w-6 sm:w-7 h-6 sm:h-7 border border-[#D4D4D8] text-[#A1A1AA] bg-white rounded-md hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors disabled:opacity-30 flex items-center justify-center"
-          >
-            <X size={12} />
-          </button>
-        </div>
+                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                  <Avatar
+                    avatarUrl={person.avatar_url ?? null}
+                    name={person.full_name}
+                    size={32}
+                    userId={person.kind === 'driver' ? person.id : undefined}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">{person.full_name}</p>
+                    {person.designation && <p className="text-[11px] text-slate-500 truncate">{person.designation}</p>}
+                  </div>
+                  <button
+                    onClick={() => setShowCalendar(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 px-4 py-4">
+                  <StaffAttendanceCalendarDynamic
+                    staffId={person.id}
+                    staffName={person.full_name}
+                    mode="self"
+                    viewerUserId={viewerId}
+                    fetchRecords={person.kind === 'ground' ? fetchGroundRecords : undefined}
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+  return (
+    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </div>
+  )
 }
 
 // ── Section ──────────────────────────────────────────────────────────────────
@@ -228,13 +307,17 @@ export default function SupportStaffAttendanceReport({
   const [driverMonthRecords, setDriverMonthRecords] = useState<StaffAttendanceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [markingAll, setMarkingAll] = useState(false)
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<Tab>('absent')
 
   const isFuture = date > todayStr
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading spinner — used after a quick mark/clear so the
+  // list stays on screen and animates the row out instead of the whole tab
+  // flashing to a spinner and back.
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     const [ground, drivers] = await Promise.all([
       fetchSupportStaff({ activeOnly: true, trackedOnly: true }),
       fetchTrackedDrivers(),
@@ -243,7 +326,7 @@ export default function SupportStaffAttendanceReport({
     const [year, month] = date.split('-').map(Number)
     const [groundMonth, driverDetails, driverMonth] = await Promise.all([
       fetchSupportAttendanceRange(monthStartOf(date), date),
-      fetchStaffDetailsMap(driverIds),
+      fetchStaffDirectoryMap(driverIds),
       fetchMonthlyAttendanceRecords(driverIds, year, month),
     ])
     setGroundRoster(ground)
@@ -256,7 +339,17 @@ export default function SupportStaffAttendanceReport({
     setLoading(false)
   }, [date])
 
-  useEffect(() => { load() }, [load, refreshKey])
+  // Full spinner only when the day actually changes (a different roster/
+  // records to fetch). A `refreshKey` bump alone — e.g. from marking someone
+  // here, which bumps the page-level refreshKey that both this and the main
+  // staff report listen to — reloads the same day's data silently instead of
+  // flashing the whole tab back to "Loading…".
+  const lastLoadedDateRef = useRef<string | null>(null)
+  useEffect(() => {
+    const silent = lastLoadedDateRef.current === date
+    lastLoadedDateRef.current = date
+    load({ silent })
+  }, [load, refreshKey, date])
 
   // Reset paging-adjacent input whenever the day changes, same as the main report.
   useEffect(() => { setQuery('') }, [date])
@@ -270,7 +363,7 @@ export default function SupportStaffAttendanceReport({
     }))
     const drivers: SectionPerson[] = driverRoster.map(d => ({
       id: d.id, kind: 'driver', full_name: d.full_name,
-      designation: driverDesignations[d.id] || 'Driver',
+      designation: driverDesignations[d.id] ?? null,
       avatar_url: d.avatar_url,
     }))
     return [...ground, ...drivers].sort((a, b) => a.full_name.localeCompare(b.full_name))
@@ -299,20 +392,23 @@ export default function SupportStaffAttendanceReport({
     [dayRecords],
   )
 
-  // Month-to-date rows per person, for the badge on each row.
-  const monthByStaff = useMemo(() => {
-    const map = new Map<string, { status: SupportAttendanceStatus }[]>(groupSupportRecordsByStaff(groundMonthRecords))
-    for (const r of driverMonthRecords) {
-      const status = asSupportStatus(r.status)
-      if (!status) continue
-      const list = map.get(r.staff_id)
-      if (list) list.push({ status })
-      else map.set(r.staff_id, [{ status }])
-    }
-    return map
-  }, [groundMonthRecords, driverMonthRecords])
+  // Anyone with no mark for the day yet — what "Mark All Present" fills in.
+  // Leaves everyone who already has a mark (present, absent, on leave, …)
+  // exactly as an admin set it.
+  const unmarkedRoster = useMemo(
+    () => roster.filter(p => !recordByStaff.has(p.id)),
+    [roster, recordByStaff],
+  )
 
-  const stats = useMemo(() => computeSupportDayStats(roster, dayRecords), [roster, dayRecords])
+  // Same rule AllStaffAttendanceReport uses for `shouldDeriveAbsents`: a whole-
+  // school day off (holiday or non-working) suppresses derivation, and so does
+  // a future date — otherwise a missing row is Absent.
+  const shouldDeriveAbsents = !dayOff && !isFuture
+
+  const stats = useMemo(
+    () => computeSupportDayStats(roster, dayRecords, shouldDeriveAbsents),
+    [roster, dayRecords, shouldDeriveAbsents],
+  )
 
   const filterByQuery = useCallback((people: SectionPerson[]) => {
     const q = query.trim().toLowerCase()
@@ -323,13 +419,16 @@ export default function SupportStaffAttendanceReport({
   }, [query])
 
   // ── Classification — same rule the main staff report uses: on_leave counts
-  // as Absent, late counts as Present, half_day/exception are Irregular.
+  // as Absent, late counts as Present, half_day/exception are Irregular. An
+  // unmarked person joins Absent too, once `shouldDeriveAbsents` says the day
+  // has settled into a real absence (see AllStaffAttendanceReport's virtualAbsents).
   const absentRoster = useMemo(
     () => roster.filter(p => {
       const s = recordByStaff.get(p.id)?.status
-      return s === 'absent' || s === 'on_leave'
+      if (s === 'absent' || s === 'on_leave') return true
+      return !s && shouldDeriveAbsents
     }),
-    [roster, recordByStaff],
+    [roster, recordByStaff, shouldDeriveAbsents],
   )
   const presentRoster = useMemo(
     () => roster.filter(p => {
@@ -345,15 +444,9 @@ export default function SupportStaffAttendanceReport({
     }),
     [roster, recordByStaff],
   )
-  const notMarkedRoster = useMemo(
-    () => roster.filter(p => !recordByStaff.has(p.id)),
-    [roster, recordByStaff],
-  )
-
   const filteredAbsent = useMemo(() => filterByQuery(absentRoster), [absentRoster, filterByQuery])
   const filteredPresent = useMemo(() => filterByQuery(presentRoster), [presentRoster, filterByQuery])
   const filteredIrregular = useMemo(() => filterByQuery(irregularRoster), [irregularRoster, filterByQuery])
-  const filteredNotMarked = useMemo(() => filterByQuery(notMarkedRoster), [notMarkedRoster, filterByQuery])
 
   const handleSet = async (id: string, status: SupportAttendanceStatus) => {
     const person = personById.get(id)
@@ -362,7 +455,7 @@ export default function SupportStaffAttendanceReport({
     const ok = person.kind === 'ground'
       ? await markSupportAttendance(id, date, status, viewerId)
       : await adminMarkStaffAttendance(id, date, status as StaffAttendanceStatus, viewerId)
-    if (ok) { await load(); onChanged?.() }
+    if (ok) { await load({ silent: true }); onChanged?.() }
     setSavingId(null)
   }
 
@@ -373,8 +466,25 @@ export default function SupportStaffAttendanceReport({
     const ok = person.kind === 'ground'
       ? await clearSupportAttendance(id, date)
       : await clearStaffAttendance(id, date)
-    if (ok) { await load(); onChanged?.() }
+    if (ok) { await load({ silent: true }); onChanged?.() }
     setSavingId(null)
+  }
+
+  // Fills in Present for everyone still unmarked today — same idea as the
+  // homeroom attendance sheet's "All P", but since every mark here writes
+  // straight to the DB (there's no local draft to bulk-save), this fires the
+  // upserts directly rather than flipping local row state.
+  const handleMarkAllPresent = async () => {
+    if (unmarkedRoster.length === 0) return
+    setMarkingAll(true)
+    await Promise.all(unmarkedRoster.map(person =>
+      person.kind === 'ground'
+        ? markSupportAttendance(person.id, date, 'present', viewerId)
+        : adminMarkStaffAttendance(person.id, date, 'present', viewerId)
+    ))
+    await load({ silent: true })
+    onChanged?.()
+    setMarkingAll(false)
   }
 
   return (
@@ -414,6 +524,20 @@ export default function SupportStaffAttendanceReport({
                   {stats.not_marked > 0 ? ` · ${stats.not_marked} not marked` : ''}
                 </p>
               </div>
+              {canEdit && unmarkedRoster.length > 0 && (
+                <button
+                  onClick={handleMarkAllPresent}
+                  disabled={markingAll}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  {markingAll
+                    ? <Loader2 size={12} className="animate-spin" />
+                    : <CheckSquare size={12} />}
+                  <span className="hidden sm:inline">Mark All Present</span>
+                  <span className="sm:hidden">All P</span>
+                  <span className="opacity-70">({unmarkedRoster.length})</span>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -495,9 +619,10 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
-                      monthRecords={monthByStaff.get(person.id) ?? []}
-                      saving={savingId === person.id}
+                      derivedStatus={recordByStaff.get(person.id) ? undefined : 'absent'}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
+                      viewerId={viewerId}
                       onSet={handleSet}
                       onClear={handleClear}
                     />
@@ -519,9 +644,9 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
-                      monthRecords={monthByStaff.get(person.id) ?? []}
-                      saving={savingId === person.id}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
+                      viewerId={viewerId}
                       onSet={handleSet}
                       onClear={handleClear}
                     />
@@ -543,40 +668,15 @@ export default function SupportStaffAttendanceReport({
                       key={person.id}
                       person={person}
                       record={recordByStaff.get(person.id)}
-                      monthRecords={monthByStaff.get(person.id) ?? []}
-                      saving={savingId === person.id}
+                      saving={savingId === person.id || markingAll}
                       canEdit={canEdit}
+                      viewerId={viewerId}
                       onSet={handleSet}
                       onClear={handleClear}
                     />
                   ))}
                 </RowList>
               )
-            )}
-
-            {/* ── Not marked ─────── */}
-            {filteredNotMarked.length > 0 && (
-              <div className="border-t border-[#E4E4E7] pt-4">
-                <div className="flex items-center gap-1.5 mb-2.5">
-                  <CircleSlash size={13} className="text-[#A1A1AA]" />
-                  <p className={SECTION_LABEL}>Not Marked</p>
-                  <span className="text-xs text-[#A1A1AA]">({filteredNotMarked.length})</span>
-                </div>
-                <RowList>
-                  {filteredNotMarked.map(person => (
-                    <SupportRow
-                      key={person.id}
-                      person={person}
-                      record={undefined}
-                      monthRecords={monthByStaff.get(person.id) ?? []}
-                      saving={savingId === person.id}
-                      canEdit={canEdit}
-                      onSet={handleSet}
-                      onClear={handleClear}
-                    />
-                  ))}
-                </RowList>
-              </div>
             )}
           </div>
         )}

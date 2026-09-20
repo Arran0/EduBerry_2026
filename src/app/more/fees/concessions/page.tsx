@@ -16,9 +16,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import {
-  ArrowLeft, Award, BadgePercent, Check, Inbox, Loader2, Plus, X,
+  Award, BadgePercent, Check, Inbox, Loader2, Plus, X,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import ModalShell from '@/components/ui/ModalShell'
@@ -26,7 +25,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
 import { gradeLabel } from '@/lib/grades'

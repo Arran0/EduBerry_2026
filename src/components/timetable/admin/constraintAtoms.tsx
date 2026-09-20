@@ -18,13 +18,25 @@ export function TimeOffGrid({
   days: Weekday[]
   slots: PeriodSlot[]
   isOn: (day: Weekday, slotId: string) => boolean
-  onToggle: (day: Weekday, slotId: string) => void
+  onToggle: (day: Weekday, slotId: string) => void | Promise<void>
   label?: string
   onColor?: 'rose' | 'indigo'
 }) {
   const on = onColor === 'rose'
     ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
     : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+
+  // Clicking a period in the left column applies it to the whole week: if every
+  // day is already on it clears the row, otherwise it fills the gaps. Each day
+  // is its own constraint row, so which days need toggling is decided up front
+  // and the writes go out together — running them one at a time cost a full
+  // round trip per working day for no benefit.
+  const toggleWeek = async (slotId: string) => {
+    const allOn = days.every((d) => isOn(d, slotId))
+    const changing = days.filter((d) => isOn(d, slotId) !== !allOn)
+    await Promise.all(changing.map((d) => onToggle(d, slotId)))
+  }
+
   return (
     <div className="overflow-x-auto border border-[#D4D4D8]">
       <table className="w-full border-collapse text-sm min-w-[22rem] sm:min-w-[34rem] table-fixed">
@@ -34,7 +46,10 @@ export function TimeOffGrid({
         </colgroup>
         <thead>
           <tr className="bg-[#FAFAF9]">
-            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">Period</th>
+            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">
+              Period
+              <span className="block font-normal normal-case tracking-normal text-[9px] text-[#A1A1AA]">tap = whole week</span>
+            </th>
             {days.map((d) => (
               <th key={d} className="p-1.5 sm:p-3 text-center text-[10px] sm:text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
@@ -46,9 +61,19 @@ export function TimeOffGrid({
         <tbody>
           {slots.map((s) => (
             <tr key={s.id}>
-              <td className="p-1 sm:p-2 text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
-                <div className="font-medium text-[#52525B] truncate">{s.label}</div>
-                {s.start_time && <div className="tabular-nums text-[#A1A1AA] hidden sm:block">{s.start_time.slice(0, 5)}</div>}
+              <td className="p-0 text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
+                <button
+                  onClick={() => toggleWeek(s.id)}
+                  title={days.every((d) => isOn(d, s.id))
+                    ? `Clear ${label.toLowerCase()} for this period all week`
+                    : `Mark ${label.toLowerCase()} for this period all week`}
+                  className={`w-full text-left p-1 sm:p-2 transition-colors hover:bg-[#F5F5F5] ${
+                    days.length > 0 && days.every((d) => isOn(d, s.id)) ? (onColor === 'rose' ? 'bg-rose-50' : 'bg-indigo-50') : ''
+                  }`}
+                >
+                  <div className="font-medium text-[#52525B] truncate">{s.label}</div>
+                  {s.start_time && <div className="tabular-nums text-[#A1A1AA] hidden sm:block">{s.start_time.slice(0, 5)}</div>}
+                </button>
               </td>
               {days.map((d) => {
                 const active = isOn(d, s.id)
@@ -118,7 +143,7 @@ const LIMIT_LABELS: Record<LimitType, string> = {
  * the impossible combination explained rather than silently saved and then
  * blamed on the generator for producing nothing.
  */
-export function limitConflicts(
+function limitConflicts(
   values: Record<LimitType, number>,
   workingDays: number,
 ): { fields: Set<LimitType>; messages: string[] } {

@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Clock, FileText, Loader2, Printer, Receipt,
+  AlertTriangle, Clock, FileText, Loader2, Printer, Receipt,
   RotateCcw, Search, Wallet,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -23,7 +23,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Btn, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import CollectSheet, { CollectedReceipt } from '@/components/fees/counter/CollectSheet'
 import { gradeLabel } from '@/lib/grades'
@@ -31,8 +31,7 @@ import { DEFAULT_FEE_SETTINGS, fetchFeeSettings, type PaymentRuleSettings } from
 import { buildReceipt, printSpec } from '@/components/fees/statements/invoiceGenerate'
 import { downloadStatement } from '@/components/fees/statements/generate'
 import {
-  fetchAllocations, fetchInstruments, fetchInvoices, fetchOutstandingInvoices,
-  fetchPayments, fetchProfileList, reversePayment, transitionInstrument,
+  fetchAllocations, fetchInstruments, fetchInvoices, fetchPayments, fetchProfileList, reversePayment, transitionInstrument,
   type CollectResult, type InstrumentRow, type InvoiceRow, type PaymentRow, type ProfileListRow,
 } from '@/lib/fees/invoices'
 

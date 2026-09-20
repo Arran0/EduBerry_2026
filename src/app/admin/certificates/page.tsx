@@ -79,7 +79,7 @@ export default function CertificateBuilderPage() {
   const [feesLoading, setFeesLoading] = useState(false)
 
   useEffect(() => {
-    fetchAllProfiles().then(ps => setStudents(ps.filter(p => p.role === 'student')))
+    fetchAllProfiles({ roles: ['student'], withTeams: false }).then(setStudents)
     listAcademicYears().then(setYears)
     fetchTemplates().then(setTemplates)
   }, [])

@@ -392,23 +392,6 @@ export async function clearDriverOverride(tripId: string, date: string): Promise
   return { success: true }
 }
 
-/** The driver responsible for a trip on a date: override if present, else default. */
-export async function resolveDriverForDate(tripId: string, date: string): Promise<string | null> {
-  const { data: override } = await supabase
-    .from('trip_driver_overrides')
-    .select('driver_id')
-    .eq('trip_id', tripId)
-    .eq('date', date)
-    .maybeSingle()
-  if (override?.driver_id) return override.driver_id
-  const { data: trip } = await supabase
-    .from('bus_trips')
-    .select('default_driver_id')
-    .eq('id', tripId)
-    .single()
-  return trip?.default_driver_id ?? null
-}
-
 /** Trips a given driver actually drives on `date` (default driver, minus days
  *  overridden to someone else, plus days overridden to them). */
 export async function fetchDriverTripsForDate(driverId: string, date: string): Promise<BusTrip[]> {

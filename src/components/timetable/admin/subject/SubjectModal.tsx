@@ -187,7 +187,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             </div>
             {config
               ? <SubjectConstraintsPanel config={config} subject={selected} homerooms={homerooms} />
-              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to set this subject's limits.</p>}
+              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to set this subject&rsquo;s limits.</p>}
           </div>
         )}
       </div>

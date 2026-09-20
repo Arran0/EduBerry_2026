@@ -5,25 +5,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  MessageSquare,
-  Send,
-  Paperclip,
-  X,
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Reply,
-  Clock,
-  CheckCircle,
-  Trash2,
-  AlertTriangle,
-  FileText,
-  ImageIcon,
-  Plus,
-  Inbox,
-  MailCheck,
-} from 'lucide-react'
+import { MessageSquare, Send, Paperclip, X, ChevronDown, ChevronUp, Download, Reply, Clock, Trash2, AlertTriangle, FileText, ImageIcon, Plus, Inbox, MailCheck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import PageBanner from '@/components/PageBanner'
 import { FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'

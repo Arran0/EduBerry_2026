@@ -69,12 +69,12 @@ function Row({
 }) {
   return (
     <div className="px-4 pt-3 pb-2">
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between mb-2.5 gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
           {icon}
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate" title={label}>{label}</span>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+        <Link href={href} className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
           View report <ChevronRight size={11} />
         </Link>
       </div>
@@ -83,7 +83,7 @@ function Row({
           <Link
             key={tile.key}
             href={tileHrefs[tile.key]}
-            className={`group flex flex-col items-center justify-center py-2.5 rounded-xl border active:scale-95 transition-all ${tile.box}`}
+            className={`group flex flex-col items-center justify-center py-2.5 border active:scale-95 transition-all ${tile.box}`}
           >
             {tile.icon}
             <span className={`text-xl font-black leading-none ${tile.value}`}>{t[tile.key]}</span>
@@ -118,7 +118,8 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
   const [staffTally, setStaffTally] = useState<Tally | null>(null)
   const [studentTally, setStudentTally] = useState<Tally | null>(null)
   const [hasHomeroom, setHasHomeroom] = useState(false)
-  const [teamCount, setTeamCount] = useState(0)
+  const [teamNames, setTeamNames] = useState<string[]>([])
+  const [homeroomNames, setHomeroomNames] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
 
       // Aggregate every team the teacher sits on — a member of two teams sees
       // one combined tally, with each teammate counted once.
-      setTeamCount(rosters.length)
+      setTeamNames(rosters.map(r => r.name))
       const teamIds = new Set([
         userId,
         ...mergeTeamRosters(rosters)
@@ -157,6 +158,7 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
 
       const homeroomIds = homerooms.map(h => h.id)
       setHasHomeroom(homeroomIds.length > 0)
+      setHomeroomNames(homerooms.map(h => h.name))
       const studentRows = await fetchStudentAttendanceStatusesForHomerooms(homeroomIds, today)
       if (cancelled) return
       setStudentTally(tally(studentRows, STUDENT_PRESENT, STUDENT_ABSENT))
@@ -167,18 +169,21 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
     return () => { cancelled = true }
   }, [userId])
 
+  const classLabel = homeroomNames.length > 0 ? homeroomNames.join(', ') : 'My class'
+  const teamLabel = teamNames.length > 0 ? teamNames.join(', ') : 'My team'
+
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+    <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="spinner" />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
+        <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-slate-200">
           {hasHomeroom && studentTally && (
             <Row
               icon={<Users size={12} className="text-slate-500" />}
-              label="My class"
+              label={classLabel}
               tally={studentTally}
               href="/more/attendance"
               tileHrefs={CLASS_HREFS}
@@ -187,7 +192,7 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
           {staffTally && (
             <Row
               icon={<Briefcase size={12} className="text-slate-500" />}
-              label={teamCount > 1 ? `My teams (${teamCount})` : 'My team'}
+              label={teamLabel}
               tally={staffTally}
               href="/more/staff-attendance"
               tileHrefs={TEAM_HREFS}

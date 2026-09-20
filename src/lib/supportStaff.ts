@@ -43,8 +43,10 @@ export interface SupportStaff {
   bank_name: string | null
   ifsc_code: string | null
   notes: string | null
-  /** false = left the school. The row stays so past attendance still has a name. */
+  /** false = resigned from the school. The row stays so past attendance still has a name. */
   is_active: boolean
+  /** When is_active was last set false — see setSupportStaffActive. Null while active, or on a resignation recorded before this column existed. */
+  resigned_at: string | null
   /** Excluded from the attendance list, counts and statistics. */
   attendance_hidden: boolean
   created_by?: string | null
@@ -98,9 +100,6 @@ export const SUPPORT_ATTENDANCE_STATUS_PILL: Record<SupportAttendanceStatus, str
   e:        'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-/** Statuses that count as the person having worked the day. */
-export const SUPPORT_PRESENT_STATUSES: SupportAttendanceStatus[] = ['present', 'late', 'half_day', 'e']
-
 // ============================================
 // Roster
 // ============================================
@@ -109,7 +108,7 @@ const SUPPORT_STAFF_COLUMNS = `
   id, full_name, employee_id, designation, department, employment_type,
   date_of_joining, monthly_wage, phone, alternate_phone, emergency_contact_name,
   emergency_contact, address, date_of_birth, gender, blood_group, aadhaar_no,
-  pan_no, bank_account_no, bank_name, ifsc_code, notes, is_active,
+  pan_no, bank_account_no, bank_name, ifsc_code, notes, is_active, resigned_at,
   attendance_hidden, created_at, updated_at
 `
 
@@ -200,33 +199,17 @@ export async function deleteSupportStaff(id: string): Promise<{ success: boolean
   return { success: true }
 }
 
-/** Marks a support staff member as left / restores them. */
+/** Marks a support staff member as resigned / restores them. */
 export async function setSupportStaffActive(
   id: string,
   active: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-  return updateSupportStaff(id, { is_active: active })
+  return updateSupportStaff(id, { is_active: active, resigned_at: active ? null : new Date().toISOString() })
 }
 
 // ============================================
 // Attendance
 // ============================================
-
-/** Every support attendance row for one date. */
-export async function fetchSupportAttendanceByDate(
-  date: string,
-): Promise<SupportAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('support_staff_attendance')
-    .select('*')
-    .eq('date', date)
-  if (error) {
-    if (isMissingRelation(error)) return []
-    console.error('fetchSupportAttendanceByDate error:', error)
-    return []
-  }
-  return (data ?? []) as SupportAttendanceRecord[]
-}
 
 /**
  * Every support attendance row in a date window (inclusive). One query backs
@@ -309,11 +292,19 @@ export interface SupportDayStats {
 }
 
 /**
- * The day's tallies across a roster. Unlike the regular staff report, an
- * unmarked support staff member is NOT derived as absent: nobody can check
- * themselves in here, so a missing row means the admin has not gotten to them
- * yet, which is a different fact from being away — and counting it as absent
- * would silently distort the salary side.
+ * The day's tallies across a roster. `deriveAbsent` mirrors the regular staff
+ * report's auto-absent rule (see AllStaffAttendanceReport's `shouldDeriveAbsents`
+ * / `virtualAbsents`, and `deriveDayStatus` in attendance.ts): on a working day
+ * that isn't a whole-school holiday or non-working day and isn't still in the
+ * future, a missing row counts as Absent rather than "not marked" — nobody can
+ * check themselves in here, so by the time that's settled (past the day, or
+ * checked at all) a missing row means the person didn't come in. Payroll
+ * already treats support staff this way (computeStaffAttendanceStats runs the
+ * same deriveDayStatus over their staff_attendance_records-shaped rows via
+ * supportRecordToStaffShape), so this keeps the daily report from disagreeing
+ * with what the pay cycle actually deducts. Pass `deriveAbsent: false` (the
+ * default) for a day that shouldn't derive — a holiday, a non-working day, or
+ * a future date — where a missing row stays "not marked".
  *
  * Roster and records are typed loosely (just an id, just a status keyed by
  * support_staff_id) so the same function also covers drivers folded into
@@ -324,6 +315,7 @@ export interface SupportDayStats {
 export function computeSupportDayStats(
   roster: { id: string }[],
   records: { support_staff_id: string; status: SupportAttendanceStatus }[],
+  deriveAbsent = false,
 ): SupportDayStats {
   const byStaff = new Map(records.map(r => [r.support_staff_id, r]))
   const stats: SupportDayStats = {
@@ -333,7 +325,11 @@ export function computeSupportDayStats(
   }
   for (const person of roster) {
     const record = byStaff.get(person.id)
-    if (!record) { stats.not_marked++; continue }
+    if (!record) {
+      if (deriveAbsent) stats.absent++
+      else stats.not_marked++
+      continue
+    }
     switch (record.status) {
       case 'present': stats.present++; break
       case 'late': stats.late++; stats.present++; break
@@ -345,65 +341,6 @@ export function computeSupportDayStats(
   }
   stats.present_pct = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0
   return stats
-}
-
-export interface SupportPersonStats {
-  marked_days: number
-  present: number
-  late: number
-  half_day: number
-  absent: number
-  on_leave: number
-  e: number
-  /** (present + late + e + ½·half_day) / (marked days − leave), over marked days only. */
-  present_pct: number
-}
-
-/**
- * Month-to-date figures for one person, computed over the days actually
- * marked. Unmarked days are left out of both sides of the fraction for the
- * reason given on computeSupportDayStats — it keeps the percentage a
- * statement about observed days rather than about how far the admin has got.
- *
- * Takes just `{ status }[]` (SupportAttendanceRecord satisfies this) so a
- * driver's staff_attendance_records rows can be passed in after mapping
- * their status into this narrower enum, without a second copy of this math.
- */
-export function computeSupportPersonStats(
-  records: { status: SupportAttendanceStatus }[],
-): SupportPersonStats {
-  const stats: SupportPersonStats = {
-    marked_days: records.length,
-    present: 0, late: 0, half_day: 0, absent: 0, on_leave: 0, e: 0, present_pct: 0,
-  }
-  for (const r of records) {
-    switch (r.status) {
-      case 'present': stats.present++; break
-      case 'late': stats.late++; break
-      case 'half_day': stats.half_day++; break
-      case 'absent': stats.absent++; break
-      case 'on_leave': stats.on_leave++; break
-      case 'e': stats.e++; break
-    }
-  }
-  const denominator = stats.marked_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.e + stats.half_day * 0.5
-  stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
-  return stats
-}
-
-/** Groups a flat range of records by person, each list sorted by date. */
-export function groupSupportRecordsByStaff(
-  records: SupportAttendanceRecord[],
-): Map<string, SupportAttendanceRecord[]> {
-  const map = new Map<string, SupportAttendanceRecord[]>()
-  for (const r of records) {
-    const list = map.get(r.support_staff_id)
-    if (list) list.push(r)
-    else map.set(r.support_staff_id, [r])
-  }
-  for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date))
-  return map
 }
 
 /**
@@ -422,14 +359,10 @@ export function supportRecordToStaffShape(r: SupportAttendanceRecord): StaffAtte
     staff_id: r.support_staff_id,
     date: r.date,
     status: r.status as StaffAttendanceStatus,
-    check_in_time: null, check_in_lat: null, check_in_lng: null, check_in_accuracy: null,
-    check_in_distance_m: null, geofence_passed: null,
-    check_out_time: null, check_out_lat: null, check_out_lng: null, check_out_accuracy: null,
-    check_out_distance_m: null,
-    check_in_time_2: null, check_in_lat_2: null, check_in_lng_2: null, check_in_accuracy_2: null,
-    check_in_distance_m_2: null,
-    check_out_time_2: null, check_out_lat_2: null, check_out_lng_2: null, check_out_accuracy_2: null,
-    check_out_distance_m_2: null,
+    check_in_time: null, check_in_distance_m: null, geofence_passed: null,
+    check_out_time: null, check_out_distance_m: null,
+    check_in_time_2: null, check_in_distance_m_2: null,
+    check_out_time_2: null, check_out_distance_m_2: null,
     leave_application_id: null, marked_by: r.marked_by, remarks: r.remarks,
     created_at: r.created_at ?? '', updated_at: r.updated_at ?? '',
     check_in_verdict: null, check_out_verdict: null, check_in_verdict_2: null, check_out_verdict_2: null,

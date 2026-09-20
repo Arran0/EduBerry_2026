@@ -13,6 +13,7 @@ import {
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
+import ModalErrorBoundary from '@/components/ui/ModalErrorBoundary'
 import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/SalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
 import DownloadCentreModal from '@/components/salary/DownloadCentreModal'
@@ -34,9 +35,11 @@ import {
   fetchCycle, fetchCycleRecords, setCycleStatus, setCyclePayrollConfig, salaryNet, formatPeriod,
   fetchPayoutConfig, initiateCyclePayouts, fetchBankAccountsMap, fetchBaseSalaries,
   fetchMonthlyBonusPoints, bulkInsertSalaryItems, deleteSalaryItemsByLabel, bulkSetSalaryRecordStatus,
+  deleteSalaryRecordsByIds,
   updateSalaryRecordOverrides, SalaryRecordOverrides, fetchSalaryRecord, fetchHiddenSalaryMemberIds,
   recordPersonId, recordPersonName, recordPersonLeft, recordPersonKind,
   generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle,
+  freezeCycleRecordSnapshots, CycleRecordSnapshot,
 } from '@/lib/salary'
 import { fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
@@ -58,11 +61,13 @@ import {
   StatementSpec, buildSalaryRegister, buildBankTransferStatement, buildPayslip,
 } from '@/components/salary/statements/generate'
 import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/statements/csv'
+import { SalarySheetCategory, SalarySheetRow } from '@/components/salary/statements/salarySheetXlsx'
 import type { StatutorySourceRow } from '@/lib/statutory'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const SalaryStatementsModal = dynamic(() => import('@/components/salary/SalaryStatementsModal'))
 const EpfDocumentsModal = dynamic(() => import('@/components/salary/EpfDocumentsModal'))
+const SalarySheetPreviewModal = dynamic(() => import('@/components/salary/statements/SalarySheetPreviewModal'))
 
 /**
  * How many rows mount at a time.
@@ -79,6 +84,28 @@ const ROWS_PER_CHUNK = 30
 /** Sum every stored item carrying this label — tolerates duplicates left by an interrupted close. */
 function sumItems(items: SalaryRecordItem[] | undefined, label: string): number {
   return (items ?? []).filter(i => i.label === label).reduce((s, i) => s + Number(i.amount || 0), 0)
+}
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
+/** Which Salary Sheet tab a record belongs on — the same Teaching / Non-Teaching /
+ *  Support / Drivers split the office's own paper sheet uses, derived from the
+ *  roster kind and (for staff) the same is_non_teaching flag the role badge
+ *  already reads. Support staff (house-keeping etc., no profiles row) are kept
+ *  apart from non-teaching office staff rather than folded into that tab. */
+function salarySheetCategory(r: SalaryRecord): SalarySheetCategory {
+  const kind = recordPersonKind(r)
+  if (kind === 'driver') return 'driver'
+  if (kind === 'support') return 'support'
+  return r.staff?.is_non_teaching ? 'non_teaching' : 'teaching'
+}
+
+function salarySheetDesignation(r: SalaryRecord): string {
+  if (r.staff) return getDisplayRole(r.staff)
+  if (r.support_staff) return r.support_staff.designation || 'Support Staff'
+  return r.person_role_snapshot ? capitalize(r.person_role_snapshot) : '—'
 }
 
 /**
@@ -169,6 +196,7 @@ export default function SalaryCycleDetailPage() {
   const [preview, setPreview] = useState<{ spec: StatementSpec; title: string } | null>(null)
   const [showDocs, setShowDocs] = useState(false)
   const [showEpfDocs, setShowEpfDocs] = useState(false)
+  const [showSalarySheet, setShowSalarySheet] = useState(false)
   const [docsStaff, setDocsStaff] = useState<UserProfile | null>(null)
   const [calendarPerson, setCalendarPerson] = useState<UserProfile | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -177,6 +205,8 @@ export default function SalaryCycleDetailPage() {
   const [filters, setFilters] = useState<CycleFilters>(DEFAULT_CYCLE_FILTERS)
   /** Records left out of the sheet because the person has resigned or is hidden. */
   const [excludedCount, setExcludedCount] = useState(0)
+  /** Their record ids — dropped for good when this (still open) cycle locks. See closeCycle. */
+  const [excludedRecordIds, setExcludedRecordIds] = useState<string[]>([])
   /** How many rows are actually mounted — the rest arrive as you scroll. */
   const [renderLimit, setRenderLimit] = useState(ROWS_PER_CHUNK)
   const verified = useVerifiedEdits(cycleId)
@@ -193,10 +223,19 @@ export default function SalaryCycleDetailPage() {
     setLoading(true)
     // Late and Half Day are LOP occurrences, so an attendance rule edited after
     // the day it covers moves real money on this sheet. Settle any such change
-    // before the month's attendance is read, rather than computing a payslip
+    // before the month's ATTENDANCE is read, rather than computing a payslip
     // from statuses the attendance app has already stopped agreeing with. Costs
     // one read of an empty queue when nothing has changed.
-    await recomputePendingAttendance()
+    //
+    // Only the attendance fetch below depends on it, so it runs alongside the
+    // cycle/records/config round trips rather than in front of them — waiting
+    // for it there delayed everything on the page, including the rows and
+    // totals that have nothing to do with attendance.
+    // Kept settled even on the branch below that never awaits it (a cycle with
+    // no rows reads no attendance), so a failure can't surface as an unhandled
+    // rejection — the recompute is best-effort either way.
+    const recompute = recomputePendingAttendance()
+      .catch(e => { console.error('recomputePendingAttendance failed:', e); return null })
     const [c, allRecs, cfg, bm, bases, driverBases, driverBanks, supportBases, supportBanks, globalCal, hiddenIds] = await Promise.all([
       fetchCycle(cycleId), fetchCycleRecords(cycleId), fetchPayoutConfig(), fetchBankAccountsMap(),
       fetchBaseSalaries(), fetchDriverBaseSalaries(), fetchDriverBankAccounts(),
@@ -229,13 +268,21 @@ export default function SalaryCycleDetailPage() {
     // A cycle is generated for everyone on the roster at the time it was run,
     // so months later it still carries rows for people who have since resigned
     // (staff/driver) or left (support staff) — and for anyone an admin has
-    // hidden from the salary app. Neither should be paid, and neither should be
-    // counted in the month's totals, so they come out here rather than being
-    // left for the eye to skip. The rows stay in the database; they are simply
-    // not this sheet's business.
+    // hidden from the salary app. While the cycle is still OPEN, neither
+    // should be paid nor counted in the month's totals, so they come out here
+    // rather than being left for the eye to skip — the rows stay in the
+    // database; they are simply not this sheet's business yet.
+    //
+    // A CLOSED cycle is history: it must show every record exactly as it was
+    // at the moment it was locked, whether the person behind it has since
+    // resigned, been banned, changed role, or been deleted outright. So this
+    // exclusion — and the roster sync above — only ever apply to an open
+    // cycle; a closed one is never filtered.
     const hidden = new Set(hiddenIds)
-    const recs = cycleRecs.filter(r => !recordPersonLeft(r) && !hidden.has(recordPersonId(r)))
-    setExcludedCount(cycleRecs.length - recs.length)
+    const isExcluded = (r: SalaryRecord) => recordPersonLeft(r) || hidden.has(recordPersonId(r))
+    const recs = c && c.status === 'closed' ? cycleRecs : cycleRecs.filter(r => !isExcluded(r))
+    setExcludedCount(c && c.status === 'closed' ? 0 : cycleRecs.length - recs.length)
+    setExcludedRecordIds(c && c.status === 'closed' ? [] : cycleRecs.filter(isExcluded).map(r => r.id))
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     // A cycle lists staff, drivers and support staff together, but their
@@ -274,6 +321,8 @@ export default function SalaryCycleDetailPage() {
       // staffIds.
       const staffIds = recs.filter(r => r.staff_id).map(r => r.staff_id as string)
       const supportStaffIds = new Set(recs.filter(r => r.support_staff_id).map(r => r.support_staff_id as string))
+      // Here is where the recompute started above actually has to have landed.
+      await recompute
       const [staffAttRecs, hols, nonWorking, bonusPts, supportAttRecs] = await Promise.all([
         fetchMonthlyAttendanceRecords(staffIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
@@ -327,6 +376,7 @@ export default function SalaryCycleDetailPage() {
   const computedRows = useMemo(() => {
     const out: Record<string, RowComputed> = {}
     if (!cycle) return out
+    const closed = cycle.status === 'closed'
     // Non-working days shrink the payable days for everyone (whole-school
     // rows only, same as holidays' is_default-only scope for payroll);
     // holidays no longer do — see computeMonthlyStats for the same rule on
@@ -341,15 +391,30 @@ export default function SalaryCycleDetailPage() {
     for (const r of records) {
       const personId = recordPersonId(r)
       const base = baseMap[personId]
-      const derived = computeStaffAttendanceStats(
-        personId, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
-        schoolToday ?? undefined, grace,
-      )
-      // A hand-typed override wins over the derived figure; null falls back to it.
-      const workingDays = r.working_days_override ?? calendarDays
-      const leaveCount = r.leave_override ?? derived.leaveCount
-      const lateCount = r.late_override ?? derived.lateCount
-      const halfDayCount = r.half_day_override ?? derived.halfDayCount
+      // A closed cycle whose lock already froze every one of these counts
+      // (see closeCycle's freezeCycleRecordSnapshots call) has no business
+      // re-deriving them from *today's* attendance, holidays or grace
+      // settings — that would let a change made after the lock quietly move
+      // a figure that was supposed to be fixed. Only fall back to a live
+      // derive when a count was never frozen: an open cycle (still a live
+      // preview by design), or a cycle closed before this snapshotting
+      // existed.
+      const frozen = closed
+        && r.working_days_snapshot != null && r.leave_snapshot != null
+        && r.late_snapshot != null && r.half_day_snapshot != null
+      const derived = frozen
+        ? { leaveCount: 0, lateCount: 0, halfDayCount: 0 }
+        : computeStaffAttendanceStats(
+            personId, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+            schoolToday ?? undefined, grace,
+          )
+      // A hand-typed override wins outright (it's an explicit correction,
+      // made and re-affirmed by an admin); next the value frozen at lock
+      // time; only then the live derive.
+      const workingDays = r.working_days_override ?? r.working_days_snapshot ?? calendarDays
+      const leaveCount = r.leave_override ?? r.leave_snapshot ?? derived.leaveCount
+      const lateCount = r.late_override ?? r.late_snapshot ?? derived.lateCount
+      const halfDayCount = r.half_day_override ?? r.half_day_snapshot ?? derived.halfDayCount
 
       const row = computePayrollRow({
         baseAmount: Number(r.base_amount) || 0,
@@ -369,7 +434,8 @@ export default function SalaryCycleDetailPage() {
         lopHalfDayRs: Math.round(row.lopFromHalfDay * row.salaryPerDay),
         pf: r.pf_amount_override ?? row.pf,
         esi: r.esi_amount_override ?? row.esi,
-        bonusPoints: bonusPoints[personId] ?? 0, bonusAmount: bonusAmounts[personId] ?? 0,
+        bonusPoints: (closed && r.bonus_points_snapshot != null) ? r.bonus_points_snapshot : (bonusPoints[personId] ?? 0),
+        bonusAmount: bonusAmounts[personId] ?? 0,
       }
     }
     return out
@@ -458,6 +524,11 @@ export default function SalaryCycleDetailPage() {
     }),
     [records, editsOf, verified],
   )
+
+  /** Sign off every currently-unverified row at once, against the values it holds right now. */
+  const verifyAll = () => {
+    for (const r of unverified) verified.setVerified(r.id, editFingerprint(editsOf(r)), true)
+  }
 
   /**
    * Every record flattened into what the EPF and ESI monthly returns need.
@@ -657,6 +728,7 @@ export default function SalaryCycleDetailPage() {
     if (!del.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${del.error}`); return }
 
     const items: { record_id: string; label: string; amount: number }[] = []
+    const snapshots: CycleRecordSnapshot[] = []
     for (const r of records) {
       const c = computedRows[r.id]
       if (!c) continue
@@ -666,12 +738,47 @@ export default function SalaryCycleDetailPage() {
       if (c.lopLeaveRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopLeave, amount: -c.lopLeaveRs })
       if (c.lopHalfDayRs > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.lopHalfDay, amount: -c.lopHalfDayRs })
       if (c.bonusAmount > 0) items.push({ record_id: r.id, label: PAYROLL_ITEM_LABELS.bonus, amount: c.bonusAmount })
+
+      // Freeze who this record is for and its attendance-derived counts, so
+      // once locked nothing about this row recomputes again — see
+      // computedRows and load()'s roster filter for the read side of this.
+      // A field the admin had already hand-overridden keeps whatever the
+      // record already carries rather than taking a freshly derived value:
+      // the override is what fixes that figure, and the snapshot must not
+      // move it. (computedRows reads the override ahead of the snapshot
+      // either way, so the stored value only matters if the override is
+      // ever cleared.)
+      snapshots.push({
+        id: r.id,
+        cycle_id: r.cycle_id,
+        staff_id: r.staff_id,
+        support_staff_id: r.support_staff_id,
+        person_name_snapshot: recordPersonName(r) || null,
+        person_role_snapshot: r.support_staff_id ? 'support' : (r.staff?.role ?? r.person_role_snapshot ?? null),
+        working_days_snapshot: r.working_days_override == null ? c.workingDays : r.working_days_snapshot,
+        leave_snapshot: r.leave_override == null ? c.leaveCount : r.leave_snapshot,
+        late_snapshot: r.late_override == null ? c.lateCount : r.late_snapshot,
+        half_day_snapshot: r.half_day_override == null ? c.halfDayCount : r.half_day_snapshot,
+        bonus_points_snapshot: c.bonusPoints,
+      })
     }
     const ins = await bulkInsertSalaryItems(items)
     if (!ins.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${ins.error}`); return }
 
+    const snap = await freezeCycleRecordSnapshots(snapshots)
+    if (!snap.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${snap.error}`); return }
+
     const st = await bulkSetSalaryRecordStatus(recordIds, 'approved')
     if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
+
+    // Drop draft records for anyone who resigned or was hidden while this
+    // cycle was open — a closed cycle shows every record it has with no such
+    // filter, so left alone these would silently reappear the moment it
+    // locks. See deleteSalaryRecordsByIds.
+    if (excludedRecordIds.length > 0) {
+      const purge = await deleteSalaryRecordsByIds(excludedRecordIds)
+      if (!purge.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${purge.error}`); return }
+    }
 
     const cy = await setCycleStatus(cycleId, 'closed')
     if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }
@@ -768,6 +875,45 @@ export default function SalaryCycleDetailPage() {
     )
   }
 
+  /**
+   * Every record's Salary Sheet row, built once from the whole cycle — the
+   * Salary Sheet preview does its own category/department/search filtering
+   * (see SalarySheetPreviewModal), independent of whatever the cycle sheet's
+   * own toolbar currently shows.
+   */
+  const salarySheetAllRows = useMemo<SalarySheetRow[]>(() => records.map(r => {
+    const c = computedRows[r.id]
+    const { pf, esi, bonus, manualItems, net, lopLateRs, lopLeaveRs, lopHalfDayRs } = rowFigures(r)
+    const positiveManual = manualItems.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount), 0)
+    const negativeManual = Math.abs(manualItems.filter(i => Number(i.amount) < 0).reduce((s, i) => s + Number(i.amount), 0))
+    // Leave/late/half-day counts (c?.*) already fold in the late-arrival and
+    // half-day grace periods — see computeStaffAttendanceStats — for an open
+    // cycle's live figures, and are the values frozen at lock time for a
+    // closed one. The grace periods are payroll-only: they never change what
+    // a staff member's own attendance calendar shows for the same day.
+    const workingDays = c?.workingDays ?? 0
+    const leaveCount = c?.leaveCount ?? 0
+    const lateCount = c?.lateCount ?? 0
+    const halfDayCount = c?.halfDayCount ?? 0
+    return {
+      category: salarySheetCategory(r),
+      personId: recordPersonId(r),
+      name: recordPersonName(r) || '—',
+      designation: salarySheetDesignation(r),
+      payByCash: r.pay_by_cash,
+      baseAmount: Number(r.base_amount) || 0,
+      workingDays,
+      daysWorked: workingDays - (leaveCount + lateCount + halfDayCount),
+      leaveCount, lateCount, halfDayCount,
+      lopAmount: lopLateRs + lopLeaveRs + lopHalfDayRs,
+      salaryPerDay: c?.salaryPerDay ?? 0,
+      pf, esi,
+      advance: negativeManual,
+      extraOther: bonus + positiveManual,
+      net,
+    }
+  }), [records, computedRows, rowFigures])
+
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
@@ -828,8 +974,12 @@ export default function SalaryCycleDetailPage() {
                     <SlidersHorizontal size={13} />
                   </button>
                   {records.length > 0 && (
-                    <button onClick={() => setShowDocs(true)} title="Download Centre"
-                      className={`${SHARP.darkBtn} !py-[7px]`}>
+                    <button
+                      onClick={() => closed && setShowDocs(true)}
+                      disabled={!closed}
+                      title={closed ? 'Download Centre' : 'Lock the cycle first — its figures are still a live preview until then'}
+                      className={`${SHARP.darkBtn} !py-[7px]`}
+                    >
                       <Download size={13} /> <span className="hidden sm:inline">Download Centre</span>
                     </button>
                   )}
@@ -886,11 +1036,17 @@ export default function SalaryCycleDetailPage() {
                   {!closed && unverified.length > 0 && (
                     <div className="flex items-start gap-1.5 bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] px-2.5 py-2 mb-2 mx-2 sm:mx-0">
                       <ShieldAlert size={13} className="flex-shrink-0 mt-px" />
-                      <p className="text-[11px] leading-snug">
+                      <p className="text-[11px] leading-snug flex-1">
                         <span className="font-semibold">{unverified.length} row(s) have hand-typed figures.</span>{' '}
                         They are pinned to the top of the sheet — tick each one to confirm it before locking the
                         cycle. Editing a row again clears its tick.
                       </p>
+                      <button
+                        onClick={verifyAll}
+                        className="flex-shrink-0 text-[11px] font-semibold underline decoration-[#EFE3C4] hover:decoration-[#8A6D1F] underline-offset-2"
+                      >
+                        Tick all
+                      </button>
                     </div>
                   )}
 
@@ -936,7 +1092,11 @@ export default function SalaryCycleDetailPage() {
                           ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role }
                           : r.support_staff
                             ? { full_name: r.support_staff.full_name, email: null, role: r.support_staff.designation || 'Support Staff' }
-                            : undefined
+                            // Account deleted since this cycle was locked — the name/role
+                            // frozen at lock time is all a payslip can still say about them.
+                            : r.person_name_snapshot
+                              ? { full_name: r.person_name_snapshot, email: null, role: r.person_role_snapshot || '' }
+                              : undefined
                         const key = `payslip-${r.id}`
                         const open = expanded.has(r.id)
                         const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
@@ -988,7 +1148,15 @@ export default function SalaryCycleDetailPage() {
                                   <div className="min-w-0 flex-1 leading-tight">
                                     <p className="text-[11px] font-semibold text-[#18181B] truncate">{recordPersonName(r) || 'Staff'}</p>
                                     <p className="text-[9px] text-[#71717A] truncate">
-                                      {r.staff ? getDisplayRole(r.staff) : r.support_staff ? (r.support_staff.designation || 'Support Staff') : ''}
+                                      {r.staff
+                                        ? getDisplayRole(r.staff)
+                                        : r.support_staff
+                                          ? (r.support_staff.designation || 'Support Staff')
+                                          // Profile/support-staff row is gone (account deleted) — the role
+                                          // frozen at lock time is all that's left to describe them.
+                                          : r.person_role_snapshot
+                                            ? `${r.person_role_snapshot.charAt(0).toUpperCase()}${r.person_role_snapshot.slice(1)} · Deleted`
+                                            : 'Deleted'}
                                     </p>
                                   </div>
                                   {!hasBank && !r.pay_by_cash && (
@@ -1139,38 +1307,80 @@ export default function SalaryCycleDetailPage() {
         </div>
       </div>
 
+      {/*
+        Every direct child here carries its own `key`, and must keep it.
+
+        AnimatePresence identifies its children *only* by key
+        (`getChildKey = child => child.key || ''`) and its own documentation
+        requires each one to be unique. Keyless siblings therefore all collapse
+        onto a single anonymous slot, and this page puts two popups on screen
+        at once — the EPF/ESI panel opens the remittance preview alongside
+        itself — so React was being handed two children under one key. React's
+        behaviour for a duplicate key is undefined by design: it cannot tell
+        the two subtrees apart, so which one is kept, torn down, or reconciled
+        into the other is not something this page can rely on.
+
+        That matters more here than a misdrawn popup would, because of what
+        these children are. ModalShell portals a `fixed inset-0` root onto
+        <body>; a child whose exit never completes leaves that root mounted,
+        faded to nothing but still covering the viewport and still taking every
+        click. Nothing is thrown, so no error boundary fires and the console
+        stays clean — the page just looks entirely normal and answers nothing,
+        which is exactly how the Download Centre freeze was reported.
+
+        (See also the route-level error.tsx and the inert-while-leaving guard
+        in ModalShell, which make that symptom unreachable from either cause.)
+      */}
       <AnimatePresence>
         {showDocs && cycle && (
-          <DownloadCentreModal
-            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
-            recordCount={records.length}
-            busyKey={pdfBusy}
-            sharp
-            onClose={() => setShowDocs(false)}
-            onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
-            onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
-            onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
-          />
+          <ModalErrorBoundary key="download-centre" onClose={() => setShowDocs(false)}>
+            <DownloadCentreModal
+              periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
+              recordCount={records.length}
+              busyKey={pdfBusy}
+              sharp
+              onClose={() => setShowDocs(false)}
+              onRegister={() => { setShowDocs(false); openPdf('register', 'Salary Register', () => buildSalaryRegister(cycle, records)) }}
+              onBankTransfer={() => { setShowDocs(false); openPdf('bank', 'Bank Transfer Statement', () => buildBankTransferStatement(cycle, records, bankMap)) }}
+              onSalarySheet={() => { setShowDocs(false); setShowSalarySheet(true) }}
+              onStatutory={() => { setShowDocs(false); setShowEpfDocs(true) }}
+            />
+          </ModalErrorBoundary>
         )}
         {showEpfDocs && cycle && (
-          <EpfDocumentsModal
-            cycle={cycle}
-            sourceRows={statutoryRows}
-            daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
-            onClose={() => setShowEpfDocs(false)}
-          />
+          <ModalErrorBoundary key="epf-docs" onClose={() => setShowEpfDocs(false)}>
+            <EpfDocumentsModal
+              cycle={cycle}
+              sourceRows={statutoryRows}
+              daysInMonth={daysInMonth(cycle.period_year, cycle.period_month)}
+              onClose={() => setShowEpfDocs(false)}
+              onPreview={(spec, title) => setPreview({ spec, title })}
+            />
+          </ModalErrorBoundary>
+        )}
+        {showSalarySheet && cycle && (
+          <ModalErrorBoundary key="salary-sheet" onClose={() => setShowSalarySheet(false)}>
+            <SalarySheetPreviewModal
+              cycle={cycle}
+              rows={salarySheetAllRows}
+              teams={teams}
+              onClose={() => setShowSalarySheet(false)}
+            />
+          </ModalErrorBoundary>
         )}
         {showSettings && cycle && (
-          <CycleSettingsModal
-            initial={calibration}
-            hasOverride={!!cycle.payroll_config}
-            periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
-            onClose={() => setShowSettings(false)}
-            onSave={saveCycleConfig}
-          />
+          <ModalErrorBoundary key="cycle-settings" onClose={() => setShowSettings(false)}>
+            <CycleSettingsModal
+              initial={calibration}
+              hasOverride={!!cycle.payroll_config}
+              periodLabel={formatPeriod(cycle.period_month, cycle.period_year)}
+              onClose={() => setShowSettings(false)}
+              onSave={saveCycleConfig}
+            />
+          </ModalErrorBoundary>
         )}
         {confirmAction && (
-          <ModalShell onClose={() => setConfirmAction(null)} size="sm" sharp>
+          <ModalShell key="confirm-lock" onClose={() => setConfirmAction(null)} size="sm" sharp>
             <h3 className="font-bold text-[#18181B] mb-1.5">
               {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
@@ -1192,22 +1402,39 @@ export default function SalaryCycleDetailPage() {
           </ModalShell>
         )}
         {docsStaff && (
-          <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
+          <ModalErrorBoundary key="staff-statements" onClose={() => setDocsStaff(null)}>
+            <SalaryStatementsModal staff={docsStaff} onClose={() => setDocsStaff(null)} />
+          </ModalErrorBoundary>
         )}
         {calendarPerson && (
-          <AttendanceCalendarModal
-            person={calendarPerson}
-            viewerId={viewerId}
-            year={cycle?.period_year}
-            month={cycle?.period_month}
-            periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
-            sharp
-            onClose={() => setCalendarPerson(null)}
-            onClosed={load}
-          />
+          <ModalErrorBoundary key="attendance-calendar" onClose={() => setCalendarPerson(null)}>
+            <AttendanceCalendarModal
+              person={calendarPerson}
+              viewerId={viewerId}
+              year={cycle?.period_year}
+              month={cycle?.period_month}
+              periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
+              sharp
+              onClose={() => setCalendarPerson(null)}
+              onClosed={load}
+            />
+          </ModalErrorBoundary>
         )}
+        {/*
+          Wrapped like the rest. This one is the whole reason the EPF/ESI flow
+          could take the page down: it is what the Remittance Summary tile
+          opens, and it mounts @react-pdf/renderer's PDFViewer, by some margin
+          the heaviest thing any of these popups render. Left unguarded, an
+          uncaught error in it had no boundary between it and the root, so
+          React's recovery was to unmount the entire app — a page that still
+          looks completely normal and answers nothing, with no dialog to say
+          so. The containment added around the other Download Centre popups
+          never covered this one.
+        */}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <ModalErrorBoundary key="statement-preview" onClose={() => setPreview(null)}>
+            <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} sharp />
+          </ModalErrorBoundary>
         )}
       </AnimatePresence>
     </ProtectedLayout>

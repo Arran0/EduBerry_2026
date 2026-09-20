@@ -221,6 +221,8 @@ export interface UserProfile {
   grade?: number
   section?: string
   is_banned?: boolean
+  /** When is_banned was last set true — see /api/admin/toggle-ban. Null while active, or on a resignation recorded before this column existed. */
+  banned_at?: string | null
   geofence_exempt?: boolean
   attendance_hidden?: boolean
   // Cosmetic-only flag: a 'teacher' account displayed as "Non-Teaching" (e.g.
@@ -242,27 +244,6 @@ export const isStaffRole = (role: UserRole): boolean => {
 
 export const isAdminRole = (role: UserRole): boolean => {
   return role === 'admin'
-}
-
-// Bus drivers get a dedicated dashboard-only experience (no normal app nav).
-export const isDriverRole = (role: UserRole): boolean => {
-  return role === 'driver'
-}
-
-// Smart boards get a dedicated dashboard-only experience (no normal app nav),
-// opened on the homeroom's physical board for most of the school day.
-export const isSmartboardRole = (role: UserRole): boolean => {
-  return role === 'smartboard'
-}
-
-// Check if user has coordinator tag
-export const isCoordinatorRole = (role: UserRole): boolean => {
-  return role === 'coordinator'
-}
-
-// Check if user has principal tag
-export const isPrincipalRole = (role: UserRole): boolean => {
-  return role === 'principal'
 }
 
 // Check if user can see Team Analytics (all staff roles)

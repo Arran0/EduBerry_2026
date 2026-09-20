@@ -17,10 +17,7 @@
 //                  that references it must sit later in the sequence
 // ============================================================================
 
-import type {
-  ComponentDef, EngineAssignment, EngineStructure, EngineOverride, StructureComponent,
-  ResolvedComponent, ExplainNode, CalcType,
-} from './types'
+import type { ComponentDef, EngineAssignment, EngineStructure, EngineOverride, StructureComponent, ExplainNode, CalcType } from './types'
 import { evaluateFormula, formulaDependencies, FormulaError } from './expr'
 import { applyRounding, round2 } from './money'
 

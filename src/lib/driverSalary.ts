@@ -104,13 +104,18 @@ export { formatPeriod } from './salary'
 
 /** All drivers (role = 'driver'), ordered by name. */
 export async function fetchEligibleDrivers(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('role', 'driver')
-    .order('full_name', { ascending: true })
+  const [{ data, error }, hiddenIds] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'driver')
+      .eq('is_banned', false)
+      .order('full_name', { ascending: true }),
+    fetchHiddenSalaryMemberIds(),
+  ])
   if (error) { console.error('fetchEligibleDrivers failed:', error); return [] }
-  return (data as UserProfile[]) || []
+  const hidden = new Set(hiddenIds)
+  return ((data as UserProfile[]) || []).filter(p => !hidden.has(p.id))
 }
 
 // ============================================
@@ -164,17 +169,6 @@ export async function fetchDriverCycleRecords(cycleId: string): Promise<DriverSa
   )
 }
 
-/** Count of records per cycle, keyed by cycle_id (for the cycles list). */
-export async function fetchDriverCycleRecordCounts(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('driver_payroll_records').select('cycle_id')
-  if (error) { console.error('fetchDriverCycleRecordCounts failed:', error); return {} }
-  const counts: Record<string, number> = {}
-  for (const r of (data || []) as { cycle_id: string }[]) {
-    counts[r.cycle_id] = (counts[r.cycle_id] ?? 0) + 1
-  }
-  return counts
-}
-
 /** Per-cycle record and paid-record counts, so the list can flag fully-disbursed cycles. */
 /**
  * Per-cycle record and paid-record counts for the legacy driver-only cycles
@@ -184,34 +178,15 @@ export async function fetchDriverCycleRecordCounts(): Promise<Record<string, num
  * app, the same way fetchCycleTallies does for the unified cycles.
  */
 export async function fetchDriverCycleTallies(): Promise<Record<string, CycleTally>> {
-  const [{ data, error }, hiddenIds] = await Promise.all([
-    supabase.from('driver_payroll_records').select('cycle_id, status, driver_id, driver:profiles!driver_id(is_banned)'),
-    fetchHiddenSalaryMemberIds(),
-  ])
+  // Aggregated in Postgres — see fetchCycleTallies in src/lib/salary.ts and
+  // supabase-migrations/salary_cycle_tally_rpcs.sql for why.
+  const { data, error } = await supabase.rpc('driver_cycle_tallies')
   if (error) { console.error('fetchDriverCycleTallies failed:', error); return {} }
-  const hidden = new Set(hiddenIds)
   const out: Record<string, CycleTally> = {}
-  for (const r of (data || []) as unknown as { cycle_id: string; status: DriverSalaryStatus; driver_id: string; driver: { is_banned?: boolean } | null }[]) {
-    if (r.driver?.is_banned || hidden.has(r.driver_id)) continue
-    const t = out[r.cycle_id] ?? (out[r.cycle_id] = { total: 0, paid: 0 })
-    t.total += 1
-    if (r.status === 'paid') t.paid += 1
+  for (const r of (data ?? []) as { cycle_id: string; total: number; paid: number }[]) {
+    out[r.cycle_id] = { total: Number(r.total) || 0, paid: Number(r.paid) || 0 }
   }
   return out
-}
-
-/** Run a monthly cycle: ensure the cycle exists and generate a draft record per active driver. */
-export async function generateDriverCycle(
-  month: number,
-  year: number,
-): Promise<{ success: boolean; cycleId?: string; created?: number; error?: string }> {
-  const { data, error } = await supabase.rpc('generate_driver_payroll_cycle', {
-    p_month: month,
-    p_year: year,
-  })
-  if (error) { console.error('generateDriverCycle failed:', error); return { success: false, error: error.message } }
-  const row = Array.isArray(data) ? data[0] : data
-  return { success: true, cycleId: row?.cycle_id, created: row?.created_count ?? 0 }
 }
 
 export async function setDriverCycleStatus(
@@ -265,15 +240,6 @@ export async function deleteDriverSalaryItem(itemId: string): Promise<{ success:
   return { success: true }
 }
 
-export async function setDriverSalaryRecordStatus(
-  recordId: string,
-  status: DriverSalaryStatus,
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('driver_payroll_records').update({ status }).eq('id', recordId)
-  if (error) { console.error('setDriverSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
 /** Save hand-typed overrides for one record. Pass null for a field to clear it and fall back to the derived value. */
 export async function updateDriverSalaryRecordOverrides(
   recordId: string,
@@ -316,6 +282,20 @@ export async function bulkSetDriverSalaryRecordStatus(
   if (recordIds.length === 0) return { success: true }
   const { error } = await supabase.from('driver_payroll_records').update({ status }).in('id', recordIds)
   if (error) { console.error('bulkSetDriverSalaryRecordStatus failed:', error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+/**
+ * Drop draft records for drivers who have since resigned (been banned) or
+ * been hidden from the salary app, right before a cycle locks — mirrors
+ * deleteSalaryRecordsByIds in src/lib/salary.ts (see it for why).
+ */
+export async function deleteDriverSalaryRecordsByIds(
+  recordIds: string[],
+): Promise<{ success: boolean; error?: string }> {
+  if (recordIds.length === 0) return { success: true }
+  const { error } = await supabase.from('driver_payroll_records').delete().in('id', recordIds)
+  if (error) { console.error('deleteDriverSalaryRecordsByIds failed:', error); return { success: false, error: error.message } }
   return { success: true }
 }
 

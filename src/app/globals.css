@@ -327,6 +327,133 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
+/* Professional surface — a crisper, square-cornered material for staff/admin
+   -only home cards (attendance, ledgers, grading, tasks), set apart from the
+   frosted rounded glass-card used for student-facing/shared cards. Solid
+   near-white ground, a hairline slate border and a tighter shadow read as
+   "reporting tool" rather than "consumer app". */
+.pro-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 10px 24px -16px rgba(15, 23, 42, 0.28);
+}
+
+/* ============================================================ */
+/* Home card strip — desktop density                             */
+/* ============================================================ */
+
+/* The home cards are sized for a phone: 260px tall with rows on 12px of
+   vertical padding, which is right when the card is most of the screen. On a
+   desktop the same card is one band across a 1280px page, and that height buys
+   nothing — the strip just pushes the statistics below it down the page.
+
+   Inside `.strip-compact` (the desktop card strip), every card drops to 195px
+   (a quarter off) and its rows tighten, so the same card shows *more* rows in
+   *less* height rather than the same three rows with air around them.
+
+   Why CSS rather than a `compact` prop threaded through nine card components:
+   the breakpoint is the only input, and a media query already knows it — no
+   component needs to re-render, and a card dropped into the strip later picks
+   the density up for free by carrying `.home-card`.
+
+   The hooks:
+     .home-card       the card's own 260px box
+     .home-card-row   one record inside it (vertical padding)
+     .home-card-stack a scroll area whose records are spaced by margin, not
+                      padding (space-y-*), so it needs the sibling selector
+   Each rule is one class more specific than the Tailwind utility it overrides,
+   which is what lets it win without !important. */
+@media (min-width: 1024px) {
+  .strip-compact .home-card {
+    height: 195px;
+  }
+
+  /* The track reserves room for the tallest card plus the dots below it. */
+  .strip-compact.strip-compact {
+    min-height: 265px;
+  }
+
+  .strip-compact .home-card-row {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .strip-compact .home-card-stack {
+    padding: 0.625rem;
+  }
+
+  /* Matches space-y-*'s own `> :not([hidden]) ~ :not([hidden])` shape so it
+     outranks it; a plain `> * + *` would lose on specificity. */
+  .strip-compact .home-card-stack > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem;
+  }
+}
+
+/* Professional chrome — the .pro-card idea applied to a whole page. Staff work
+   the academics page and the classrooms behind it as a tool, so every corner
+   inside squares off: cards, day columns, icon chips, inputs, tabs and pill
+   buttons all drop the consumer-app radius. Students keep the rounded, frosted
+   treatment, so the scope is opted into per page (see the academics and
+   classroom pages) rather than applied globally.
+
+   Modals raised from such a page portal to <body>, outside this subtree, so
+   .modal-portal squares off too for as long as a pro page is mounted.
+
+   Two things stay round, because squaring them reads as broken rather than
+   crisp: anything mid-spin (loader rings), and anything explicitly opted out
+   with .keep-round — avatars, and the "New Homework" button the staff work
+   calendars lead with.
+
+   The class is doubled (.pro-chrome.pro-chrome) purely for specificity: the
+   component classes below bake their own radius in (.icon-chip, .btn-primary,
+   .input-field…), and a single class would only tie with them — leaving the
+   winner down to which rule sits later in this file. Doubling outranks them
+   wherever they are declared; the keep-round exceptions then need one class
+   more again. */
+.pro-chrome.pro-chrome,
+.pro-chrome.pro-chrome *,
+body:has(.pro-chrome) .modal-portal.modal-portal,
+body:has(.pro-chrome) .modal-portal.modal-portal * {
+  border-radius: 0;
+}
+
+.pro-chrome.pro-chrome .keep-round,
+.pro-chrome.pro-chrome .spinner,
+.pro-chrome.pro-chrome .spinner-sm,
+.pro-chrome.pro-chrome [class*='animate-spin'],
+body:has(.pro-chrome) .modal-portal.modal-portal .keep-round,
+body:has(.pro-chrome) .modal-portal.modal-portal .spinner,
+body:has(.pro-chrome) .modal-portal.modal-portal .spinner-sm,
+body:has(.pro-chrome) .modal-portal.modal-portal [class*='animate-spin'] {
+  border-radius: 9999px;
+}
+
+/* Field focus for the homework / classwork authoring cards — tinted from the
+   page palette an admin sets in app settings, so the ring matches the card's
+   header band and primary button (see WorkFormKit). */
+.themed-input:focus {
+  border-color: var(--page-primary, #6366f1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--page-primary, #6366f1) 12%, transparent);
+}
+
+/* Icon chip for the authoring cards' headers — a tint of the page palette, so
+   the four cards (new/edit homework, new/edit classwork) carry the school's
+   colour without a full colour band across the top. */
+.themed-chip {
+  background: color-mix(in srgb, var(--page-primary, #6366f1) 16%, white);
+  color: var(--page-primary-dark, #4338ca);
+}
+
+/* Icon chips keep their rounded-square badge shape — the icon is a piece of
+   identity, like an app tile, and squaring it off flattens the whole page's
+   rhythm. Same radius as .icon-chip itself. */
+.pro-chrome.pro-chrome .icon-chip,
+body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
+  border-radius: 0.85rem;
+}
+
 /* Spring-like pressable — subtle lift on hover, crisp tap feedback. */
 .pressable {
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1),
@@ -643,10 +770,16 @@ body {
     rgba(255, 255, 255, 0) 100%
   );
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  /* Lets a placeholder start its sweep late, so a row/column of them fills in
+     left to right instead of flashing as one block. Set `--sk-delay` inline. */
+  animation-delay: var(--sk-delay, 0s);
 }
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
 }
+/* Cool variant — for skeletons on a white card (the week calendar), where the
+   warm base above reads as a smudge rather than a placeholder. */
+.skeleton-cool { background: #E6ECF3; }
 @media (prefers-reduced-motion: reduce) {
   .skeleton::after { animation: none; }
 }

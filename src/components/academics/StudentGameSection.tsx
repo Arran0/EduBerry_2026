@@ -2,15 +2,13 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, useMotionValue, useTransform, animate, MotionValue } from 'framer-motion'
-import { ArrowUp, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
+import { ArrowUp, ChevronLeft, ChevronRight, Crown, Medal, Sparkles, Star, Trophy } from 'lucide-react'
 import {
-  fetchStudentEduStandings, fetchStudentHwEduPoints, fetchStudentEduRankTrend,
-  EduStanding, RankTrendInfo,
+  fetchStudentEduDashboard, rankTrendOf, EduDashboardRow, EduStanding,
 } from '@/lib/gamification'
 
 interface StudentGameSectionProps {
   userId: string
-  userName: string
 }
 
 const DOY = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000)
@@ -105,57 +103,6 @@ function getShortMessage(s: EduStanding, idx: number, improved: boolean, delta: 
   return msgs[rot % msgs.length]
 }
 
-function getClassroomMessage(s: EduStanding, first: string, idx: number, improved: boolean, delta: number): string {
-  const cls = s.classroom_title
-  const rot = DOY + idx
-  if (improved && s.points) {
-    const msgs = [
-      `${first} climbed ${delta} place${delta === 1 ? '' : 's'} in ${cls} this month!`,
-      `On the rise in ${cls}, ${first} — up ${delta} since last month.`,
-      `Momentum! ${first} jumped ${delta} spot${delta === 1 ? '' : 's'} in ${cls}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (!s.points) {
-    const msgs = [
-      `${cls} is waiting — earn your first EduPoints, ${first}!`,
-      `First task = first win in ${cls}, ${first}.`,
-      `Claim your spot on the ${cls} leaderboard, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank === 1) {
-    const msgs = [
-      `${first} owns ${cls}. Defend that crown!`,
-      `Unbeatable in ${cls}, ${first}. Stay #1.`,
-      `Nobody touches the top of ${cls}, ${first}.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 3) {
-    const msgs = [
-      `Top 3 in ${cls} — that #1 is one push away, ${first}.`,
-      `${first} at #${s.rank} in ${cls}. Almost at the summit!`,
-      `Hunting the top of ${cls}, ${first} — #${s.rank} and climbing.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  if (s.rank <= 10) {
-    const msgs = [
-      `#${s.rank} in ${cls}, ${first}. Top 3 is in range.`,
-      `${first} holds #${s.rank} in ${cls}. Keep it flowing.`,
-      `Every point lifts you in ${cls}, ${first}. #${s.rank} now.`,
-    ]
-    return msgs[rot % msgs.length]
-  }
-  const msgs = [
-    `${s.points} pts in ${cls}, ${first}. The top 10 is reachable.`,
-    `Building momentum in ${cls} with ${s.points} pts, ${first}.`,
-    `Keep stacking in ${cls}, ${first} — climb the board.`,
-  ]
-  return msgs[rot % msgs.length]
-}
-
 /* ─────────────────────────── tier animation overlays ─────────────────────────── */
 
 const CONFETTI_COLORS = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#06b6d4']
@@ -244,7 +191,7 @@ function RisingParticles() {
 /* ─────────────────────────────── cover card ─────────────────────────────── */
 
 function CoverCard({
-  pos, spacingMV, index, isActive, cardW, cardH, brief, first, onSelect,
+  pos, spacingMV, index, isActive, cardW, cardH, brief,
 }: {
   pos: MotionValue<number>
   spacingMV: MotionValue<number>
@@ -253,8 +200,6 @@ function CoverCard({
   cardW: number
   cardH: number
   brief: Brief
-  first: string
-  onSelect: () => void
 }) {
   const x = useTransform([pos, spacingMV], (v: number[]) => (index - v[0]) * v[1])
   const dist = useTransform(pos, p => Math.min(Math.abs(index - p), 1))
@@ -269,8 +214,10 @@ function CoverCard({
   const showRankUp = brief.improved && ranked
 
   return (
+    /* Taps are handled by the carousel wrapper, not here: it owns pointer
+       capture for dragging, and a captured pointer delivers its click to the
+       capture target rather than to the card under the finger. */
     <motion.div
-      onClick={onSelect}
       style={{
         x, scale, opacity, zIndex, filter: blur,
         width: cardW, height: cardH,
@@ -369,13 +316,19 @@ function CoverCard({
 
 /* ─────────────────────────────── carousel ─────────────────────────────── */
 
+/** Movement (px) past which a gesture counts as a swipe rather than a tap. */
+const TAP_SLOP = 8
+/** Swipe speed (px/ms) that carries the strip one card further than the nearest. */
+const FLICK_VELOCITY = 0.35
+
 /**
  * Presentational coverflow: shows three cards at a time — a magnified, bright
- * centre flanked by two dimmed, scaled-down neighbours — that the student can
- * drag through. Auto-advances right every 5s. Pure props, no data fetching, so
- * it can be previewed in isolation.
+ * centre flanked by two dimmed, scaled-down neighbours. Tapping a card slides
+ * the strip so that card becomes the centre, and dragging/flicking moves it
+ * with the finger. Auto-advances right every 5s. Pure props, no data fetching,
+ * so it can be previewed in isolation.
  */
-export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: string }) {
+export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
   const [active, setActive] = useState(0)
   const activeRef = useRef(0)
   activeRef.current = active
@@ -389,6 +342,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   // drag state
   const draggingRef = useRef(false)
   const startXRef = useRef(0)
+  const startTRef = useRef(0)
+  const lastXRef = useRef(0)
   const basePosRef = useRef(0)
   const movedRef = useRef(false)
 
@@ -401,10 +356,13 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     const measure = () => {
       const w = el.offsetWidth
       const isMobile = w < 640
-      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square
+      // Phone: 0.28 × 1.20 = 0.336 (20% bigger than previous); always square.
+      // Wide: capped well below the phone-relative share it used to take —
+      // three cards of a readable size, not a band of the page. The strip is
+      // a glance at where the student stands, so it earns a strip's height.
       const cw = isMobile
         ? Math.round(Math.min(132, Math.max(72, w * 0.336)))
-        : Math.round(Math.min(260, Math.max(100, w * 0.22)))
+        : Math.round(Math.min(128, Math.max(96, w * 0.10)))
       const ch = cw  // always square
       const sp = Math.round(cw * 1.09)  // 9% gap (halved from previous 18%)
       setCardW(cw)
@@ -430,6 +388,12 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     animate(pos, clamped, { type: 'spring', stiffness: 300, damping: 22, mass: 0.85 })
   }, [n, pos])
 
+  /** Like `go`, but stops at the ends instead of wrapping — gestures should
+   *  never jump the whole strip back to the other side. */
+  const goClamped = useCallback((target: number) => {
+    go(Math.max(0, Math.min(n - 1, target)))
+  }, [go, n])
+
   // Auto-advance one card to the right every 5 seconds (paused while dragging).
   useEffect(() => {
     if (n <= 1) return
@@ -445,6 +409,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     draggingRef.current = true
     movedRef.current = false
     startXRef.current = e.clientX
+    lastXRef.current = e.clientX
+    startTRef.current = performance.now()
     basePosRef.current = pos.get()
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }, [n, pos])
@@ -453,7 +419,8 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     if (!draggingRef.current) return
     const sp = spacingMV.get() || 1
     const dx = e.clientX - startXRef.current
-    if (Math.abs(dx) > 8) movedRef.current = true
+    if (Math.abs(dx) > TAP_SLOP) movedRef.current = true
+    lastXRef.current = e.clientX
     let p = basePosRef.current - dx / sp
     // rubber-band past the ends
     if (p < 0) p = p * 0.32
@@ -461,17 +428,40 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
     pos.set(p)
   }, [n, pos, spacingMV])
 
-  const endDrag = useCallback(() => {
+  /** Pointer released: either a tap on a card, or the end of a swipe. */
+  const endDrag = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return
     draggingRef.current = false
-    go(Math.round(Math.max(0, Math.min(n - 1, pos.get()))))
-  }, [n, pos, go])
+    const sp = spacingMV.get() || 1
 
-  // Tap a side card to focus it — but ignore the click that trails a drag.
-  const selectCard = useCallback((i: number) => {
-    if (movedRef.current) { movedRef.current = false; return }
-    go(i)
-  }, [go])
+    // Tap — cards sit at (index - pos) × spacing from the centre, so the card
+    // under the finger is pos + (offset from centre) / spacing. Tapping the
+    // card on the left therefore slides the strip right, and vice versa.
+    if (!movedRef.current) {
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const offset = e.clientX - (rect.left + rect.width / 2)
+      goClamped(Math.round(pos.get() + offset / sp))
+      return
+    }
+
+    // Swipe — settle on the nearest card, but let a quick flick carry one
+    // further in the direction of travel so short, fast swipes still advance.
+    const totalDx  = lastXRef.current - startXRef.current
+    const velocity = Math.abs(totalDx) / Math.max(1, performance.now() - startTRef.current)
+    const nearest  = Math.round(pos.get())
+    if (velocity < FLICK_VELOCITY || totalDx === 0) { goClamped(nearest); return }
+    // Dragging left (negative dx) advances the strip, dragging right rewinds it.
+    const flick = Math.round(basePosRef.current) + (totalDx < 0 ? 1 : -1)
+    goClamped(totalDx < 0 ? Math.max(nearest, flick) : Math.min(nearest, flick))
+  }, [pos, spacingMV, goClamped])
+
+  /** The gesture was taken away (system scroll, etc.) — just settle. */
+  const cancelDrag = useCallback(() => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    goClamped(Math.round(pos.get()))
+  }, [pos, goClamped])
 
   if (n === 0) {
     return (
@@ -488,16 +478,21 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
   const activeBrief = briefs[active]
   return (
     <>
-      <div style={{ position: 'relative', left: '50%', width: '100vw', transform: 'translateX(-50%)', overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px' }}>
+      {/* The strip is clipped to its card rather than bleeding to the
+          viewport: it lives inside the section's bordered container now, and
+          the side cards are cut by that edge. */}
+      <div style={{
+        position: 'relative', width: '100%',
+        overflowX: 'clip', zIndex: 0, isolation: 'isolate', paddingBottom: '8px',
+      }}>
         <div
           ref={wrapRef}
-          className="w-full relative"
+          className="w-full relative group/strip"
           style={{ height: cardH, touchAction: 'pan-y', overflow: 'visible' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onPointerLeave={endDrag}
+          onPointerCancel={cancelDrag}
         >
           {briefs.map((b, i) => (
             <CoverCard
@@ -509,15 +504,33 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
               cardW={cardW}
               cardH={cardH}
               brief={b}
-              first={first}
-              onSelect={() => selectCard(i)}
             />
+          ))}
+
+          {/* Prev/next: dragging is a touch affordance, so a mouse gets real
+              controls. Anchored to the card box and revealed on hover or
+              keyboard focus, so touch (which has neither) keeps the swipe and
+              the dots alone. */}
+          {n > 1 && ([-1, 1] as const).map(dir => (
+            <button
+              key={dir}
+              // The strip captures the pointer to drive dragging, and a
+              // captured pointer delivers its click to the capture target
+              // rather than this button — so keep pointerdown from reaching it.
+              onPointerDown={e => e.stopPropagation()}
+              onClick={() => go(activeRef.current + dir)}
+              aria-label={dir < 0 ? 'Previous classroom' : 'Next classroom'}
+              style={{ [dir < 0 ? 'right' : 'left']: `calc(50% + ${cardW * 0.62}px)` }}
+              className="absolute top-1/2 -translate-y-1/2 z-[31] w-8 h-8 inline-flex items-center justify-center rounded-full bg-white/85 backdrop-blur-sm border border-white/70 text-slate-500 shadow-sm opacity-0 group-hover/strip:opacity-100 focus-visible:opacity-100 hover:text-amber-600 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+            >
+              {dir < 0 ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
           ))}
         </div>
 
         {/* Dots */}
         {n > 1 && (
-          <div className="flex justify-center items-center gap-1.5 mt-4">
+          <div className="flex justify-center items-center gap-1.5 mt-3">
             {n <= 10 ? (
               briefs.map((_, i) => (
                 <button
@@ -537,7 +550,7 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
       </div>
 
       {/* Per-card motivation — centered, below the carousel */}
-      <p className="text-center text-[13px] font-semibold text-slate-500 mt-3 leading-snug">
+      <p className="text-center text-[13px] font-semibold text-slate-500 mt-2 leading-snug">
         {getShortMessage(activeBrief, active, activeBrief.improved, activeBrief.delta)}
       </p>
     </>
@@ -546,41 +559,37 @@ export function EduPointsCarousel({ briefs, first }: { briefs: Brief[]; first: s
 
 /* ───────────────────────── data wrapper (default export) ───────────────────────── */
 
-export default function StudentGameSection({ userId, userName }: StudentGameSectionProps) {
-  const [standings, setStandings] = useState<EduStanding[]>([])
-  const [trend, setTrend] = useState<Record<string, RankTrendInfo>>({})
+export default function StudentGameSection({ userId }: StudentGameSectionProps) {
+  const [rows, setRows] = useState<EduDashboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
-    Promise.all([
-      fetchStudentEduStandings(userId),
-      fetchStudentHwEduPoints(userId),
-      fetchStudentEduRankTrend(userId),
-    ]).then(([std, hw, tr]) => {
+    fetchStudentEduDashboard(userId).then(data => {
       if (!alive) return
-      setStandings(std.map(s => ({ ...s, points: s.points + (hw[s.classroom_id] ?? 0) })))
-      setTrend(tr)
+      setRows(data)
       setLoading(false)
     })
     return () => { alive = false }
   }, [userId])
 
-  const first = useMemo(() => (userName || 'there').split(' ')[0], [userName])
-
   const briefs = useMemo<Brief[]>(() => {
-    return [...standings]
+    return [...rows]
       .sort((a, b) => a.rank - b.rank || b.points - a.points)
-      .map(s => {
-        const tr = trend[s.classroom_id]
+      .map(row => {
+        // Homework points count towards the displayed total; the rank itself is
+        // the leaderboard's own, which is derived from coursework.
+        const points = row.points + row.hw_points
+        const trend = rankTrendOf(row)
         return {
-          ...s,
-          tier: tierOf(s.rank, s.points),
-          improved: !!tr?.improved,
-          delta: tr?.delta ?? 0,
+          ...row,
+          points,
+          tier: tierOf(row.rank, points),
+          improved: trend.improved,
+          delta: trend.delta,
         }
       })
-  }, [standings, trend])
+  }, [rows])
 
   if (loading) {
     return (
@@ -596,5 +605,5 @@ export default function StudentGameSection({ userId, userName }: StudentGameSect
     )
   }
 
-  return <EduPointsCarousel briefs={briefs} first={first} />
+  return <EduPointsCarousel briefs={briefs} />
 }

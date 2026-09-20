@@ -23,7 +23,7 @@ import {
   DEFAULT_FEE_SETTINGS, fetchFeeSettings, saveFeeSetting, type WhatsAppSettings as WaSettings,
 } from '@/lib/fees/settings'
 import {
-  fetchWhatsAppSecrets, saveWhatsAppSecrets, whatsAppCredentialStatus,
+  saveWhatsAppSecrets, whatsAppCredentialStatus,
 } from '@/lib/whatsapp/secrets'
 
 interface Step {

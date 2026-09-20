@@ -32,7 +32,7 @@ function statusOf(row: TripRosterRow): TripAttendanceStatus {
 export default function DriverTripPage() {
   const params = useParams<{ tripId: string }>()
   const tripId = params.tripId
-  const { profile, dataRefreshKey } = useAuth()
+  const { dataRefreshKey } = useAuth()
   const today = todayISO()
 
   const [loading, setLoading] = useState(true)

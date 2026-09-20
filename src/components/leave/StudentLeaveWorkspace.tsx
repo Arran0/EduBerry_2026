@@ -30,7 +30,6 @@ import {
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
-  type LeaveApplicationWithDetails,
   type LeaveType,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'

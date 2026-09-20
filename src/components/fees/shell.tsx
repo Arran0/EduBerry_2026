@@ -20,9 +20,9 @@
 import React from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { TONE, LABEL, BLEED } from '@/components/salary/ui'
+import { LABEL, BLEED } from '@/components/salary/ui'
 
-export { TONE, LABEL, BLEED, Panel, PanelHead, SectionBar, SearchField, Btn, Chip }
+export { LABEL, BLEED, Panel, PanelHead, SectionBar, SearchField, Btn, Chip }
   from '@/components/salary/ui'
 
 /**

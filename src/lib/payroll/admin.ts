@@ -8,14 +8,11 @@
 
 import { supabase } from '@/lib/supabase'
 import type {
-  ComponentRow, StructureRow, AssignmentRow, OverrideRow, PolicyGroupRow,
+  ComponentRow, StructureRow, AssignmentRow, PolicyGroupRow,
   CalendarRow, RuleSetRow, StatutoryRow,
 } from './rows'
-import {
-  toComponentDef, toEngineStructure, toEngineAssignment, toPolicyGroup,
-  toWorkingCalendar, toRuleSet,
-} from './rows'
-import type { ComponentDef, PolicyGroup, WorkingCalendar, RuleSet, EngineStructure } from './engine/types'
+import { toComponentDef, toPolicyGroup, toWorkingCalendar } from './rows'
+import type { ComponentDef, PolicyGroup, WorkingCalendar } from './engine/types'
 
 type Result = { success: boolean; error?: string }
 
@@ -38,18 +35,6 @@ export async function fetchComponents(): Promise<ComponentDef[]> {
   return ((data ?? []) as unknown as ComponentRow[]).map(toComponentDef)
 }
 
-export async function upsertComponent(c: Partial<ComponentRow> & { code: string; name: string }): Promise<Result> {
-  const { error } = await supabase.from('payroll_components').upsert(c, { onConflict: 'code' })
-  return fail('upsertComponent', error)
-}
-
-export async function deleteComponent(id: string): Promise<Result> {
-  // System heads are emitted by the engine itself; deleting one would leave a
-  // run unable to name its own PF line.
-  const { error } = await supabase.from('payroll_components').delete().eq('id', id).eq('is_system', false)
-  return fail('deleteComponent', error)
-}
-
 // ── Structures ──────────────────────────────────────────────────────────
 
 const STRUCTURE_SELECT = `
@@ -69,11 +54,6 @@ export async function fetchStructures(): Promise<StructureRow[]> {
   return (data ?? []) as unknown as StructureRow[]
 }
 
-export async function fetchEngineStructures(): Promise<EngineStructure[]> {
-  const rows = await fetchStructures()
-  return rows.map(r => toEngineStructure(r, new Map()))
-}
-
 export interface StructureInput {
   code: string
   name: string
@@ -81,44 +61,6 @@ export interface StructureInput {
   effectiveFrom: string
   notes: string | null
   components: { componentId: string; calcType: string | null; value: number | null; formula: string | null; sequence: number }[]
-}
-
-/**
- * Create a structure, or fork the next version of an existing one.
- *
- * An active structure is never edited in place. A run that already paid against
- * v1 has to be able to say what v1 contained, and the only way to guarantee that
- * is for v1 to still exist. `supersedes_id` links the chain so the UI can show a
- * version diff.
- */
-export async function saveStructureVersion(
-  input: StructureInput, supersedesId: string | null, createdBy: string,
-): Promise<{ success: boolean; error?: string; id?: string }> {
-  const { data: existing } = await supabase
-    .from('payroll_structures').select('version').eq('code', input.code)
-    .order('version', { ascending: false }).limit(1)
-  const version = (existing?.[0]?.version ?? 0) + 1
-
-  const { data: created, error } = await supabase
-    .from('payroll_structures')
-    .insert({
-      code: input.code, name: input.name, employee_category: input.employeeCategory,
-      version, supersedes_id: supersedesId, status: 'draft',
-      effective_from: input.effectiveFrom, notes: input.notes, created_by: createdBy,
-    })
-    .select('id').single()
-  if (error || !created) { console.error('saveStructureVersion failed:', error); return { success: false, error: error?.message } }
-
-  if (input.components.length > 0) {
-    const { error: cErr } = await supabase.from('payroll_structure_components').insert(
-      input.components.map(c => ({
-        structure_id: created.id, component_id: c.componentId,
-        calc_type: c.calcType, value: c.value, formula: c.formula, sequence: c.sequence,
-      })),
-    )
-    if (cErr) { console.error('saveStructureVersion components failed:', cErr); return { success: false, error: cErr.message } }
-  }
-  return { success: true, id: created.id }
 }
 
 /** Publish a draft and close the version it supersedes the day before it starts. */
@@ -145,14 +87,6 @@ export async function activateStructure(id: string): Promise<Result> {
 const ASSIGNMENT_SELECT =
   'id, employee_id, structure_id, effective_from, effective_to, anchor_amount, ' +
   'revision_id, reason, created_at, structure:payroll_structures(name, version, code)'
-
-export async function fetchAssignments(employeeId: string): Promise<AssignmentRow[]> {
-  const { data, error } = await supabase
-    .from('payroll_employee_structures').select(ASSIGNMENT_SELECT)
-    .eq('employee_id', employeeId).order('effective_from', { ascending: false })
-  if (error) { console.error('fetchAssignments failed:', error); return [] }
-  return (data ?? []) as unknown as AssignmentRow[]
-}
 
 export async function fetchAllAssignments(): Promise<AssignmentRow[]> {
   const { data, error } = await supabase
@@ -191,15 +125,6 @@ export async function assignStructure(input: {
   return fail('assignStructure', error)
 }
 
-export async function fetchOverrides(employeeId: string): Promise<OverrideRow[]> {
-  const { data, error } = await supabase
-    .from('payroll_employee_overrides')
-    .select('id, employee_id, component_id, calc_type, value, formula, effective_from, effective_to, reason, component:payroll_components(code)')
-    .eq('employee_id', employeeId).order('effective_from', { ascending: false })
-  if (error) { console.error('fetchOverrides failed:', error); return [] }
-  return (data ?? []) as unknown as OverrideRow[]
-}
-
 // ── Revisions ───────────────────────────────────────────────────────────
 
 export interface RevisionInput {
@@ -223,15 +148,6 @@ export async function createRevision(input: RevisionInput, createdBy: string): P
   }).select('id').single()
   if (error || !data) { console.error('createRevision failed:', error); return { success: false, error: error?.message } }
   return { success: true, id: data.id }
-}
-
-export async function fetchRevisions() {
-  const { data, error } = await supabase
-    .from('payroll_revisions')
-    .select('id, label, kind, basis, value, effective_from, arrears_from, status, reason, applied_at, created_at')
-    .order('effective_from', { ascending: false })
-  if (error) { console.error('fetchRevisions failed:', error); return [] }
-  return data ?? []
 }
 
 /** What a revision would do to each person, before anybody commits to it. */
@@ -271,20 +187,45 @@ export function previewIncrement(
   }).sort((x, y) => y.delta - x.delta)
 }
 
-/** Apply a revision: one new assignment per employee, previous ones closed. */
+/**
+ * Apply a revision: one new assignment per employee, previous ones closed.
+ * Every row shares the same effectiveFrom/closeDate, so — unlike the
+ * single-employee assignStructure() this mirrors — closing the previous
+ * assignments and inserting the new ones are each done in one batched query
+ * instead of two round trips per employee.
+ */
 export async function applyRevision(
   revisionId: string, rows: IncrementPreviewRow[], effectiveFrom: string,
   structureByEmployee: Record<string, string>, createdBy: string,
 ): Promise<Result> {
-  for (const r of rows) {
-    const structureId = structureByEmployee[r.employeeId]
-    if (!structureId) continue
-    const res = await assignStructure({
-      employeeId: r.employeeId, structureId, effectiveFrom,
-      anchorAmount: r.newAnchor, reason: 'Salary revision', revisionId, createdBy,
-    })
-    if (!res.success) return res
+  const targets = rows
+    .map(r => ({ r, structureId: structureByEmployee[r.employeeId] }))
+    .filter((t): t is { r: IncrementPreviewRow; structureId: string } => !!t.structureId)
+  if (targets.length === 0) {
+    return fail('applyRevision', { message: 'No employees with a target structure' })
   }
+
+  const closeOn = new Date(`${effectiveFrom}T12:00:00Z`)
+  closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+  const closeDate = closeOn.toISOString().slice(0, 10)
+
+  const { error: closeErr } = await supabase
+    .from('payroll_employee_structures')
+    .update({ effective_to: closeDate })
+    .in('employee_id', targets.map(t => t.r.employeeId))
+    .is('effective_to', null)
+    .lt('effective_from', effectiveFrom)
+  if (closeErr) return fail('applyRevision (closing previous)', closeErr)
+
+  const { error: insertErr } = await supabase.from('payroll_employee_structures').insert(
+    targets.map(({ r, structureId }) => ({
+      employee_id: r.employeeId, structure_id: structureId,
+      effective_from: effectiveFrom, anchor_amount: r.newAnchor,
+      reason: 'Salary revision', revision_id: revisionId, created_by: createdBy,
+    }))
+  )
+  if (insertErr) return fail('applyRevision', insertErr)
+
   const { error } = await supabase
     .from('payroll_revisions')
     .update({ status: 'applied', applied_at: new Date().toISOString(), approved_by: createdBy })
@@ -349,15 +290,6 @@ export async function saveCalendar(c: Partial<CalendarRow> & { name: string }): 
   return { success: true, id: data.id }
 }
 
-export async function setCalendarMembers(calendarId: string, employeeIds: string[]): Promise<Result> {
-  const { error: delErr } = await supabase.from('payroll_calendar_members').delete().eq('calendar_id', calendarId)
-  if (delErr) return fail('setCalendarMembers (clear)', delErr)
-  if (employeeIds.length === 0) return { success: true }
-  const { error } = await supabase.from('payroll_calendar_members')
-    .insert(employeeIds.map(employee_id => ({ calendar_id: calendarId, employee_id })))
-  return fail('setCalendarMembers', error)
-}
-
 // ── Statutory rule sets ─────────────────────────────────────────────────
 
 const RULE_SELECT =
@@ -369,19 +301,6 @@ export async function fetchRuleSets(includeDrafts = true): Promise<RuleSetRow[]>
   const { data, error } = await q.order('domain').order('effective_from', { ascending: false })
   if (error) { console.error('fetchRuleSets failed:', error); return [] }
   return (data ?? []) as RuleSetRow[]
-}
-
-/** The set in force for a domain on a date, preferring the state-specific one. */
-export function ruleSetInForce(rows: RuleSetRow[], domain: string, jurisdiction: string, onDate: string): RuleSet | null {
-  const candidates = rows.filter(r =>
-    r.domain === domain && r.status === 'published' &&
-    r.effective_from <= onDate && (r.effective_to === null || r.effective_to >= onDate) &&
-    (r.jurisdiction === jurisdiction || r.jurisdiction === 'IN'),
-  ).sort((a, b) =>
-    (b.jurisdiction === jurisdiction ? 1 : 0) - (a.jurisdiction === jurisdiction ? 1 : 0) ||
-    b.effective_from.localeCompare(a.effective_from),
-  )
-  return candidates[0] ? toRuleSet(candidates[0]) : null
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { CalendarRange, Loader2, Download } from 'lucide-react'
-import { fetchTimetableForStudent } from '@/lib/timetable'
+import { fetchTimetableForStudent, entryTeacherLabel } from '@/lib/timetable'
 import type { TimetableViewData } from '@/lib/timetable'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
 import TimetableGrid from './TimetableGrid'
@@ -53,7 +53,7 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
                   days: config.working_days,
                   slots,
                   entries,
-                  secondary: (e) => e.teacher?.full_name ?? e.teacher_name ?? null,
+                  secondary: (e) => entryTeacherLabel(e),
                 })
               }
               className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
@@ -65,7 +65,7 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
             days={config.working_days}
             slots={slots}
             entries={entries}
-            secondary={(e) => e.teacher?.full_name ?? e.teacher_name ?? null}
+            secondary={(e) => entryTeacherLabel(e)}
           />
         </div>
       ))}

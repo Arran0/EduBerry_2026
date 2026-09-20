@@ -20,7 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Bell, CalendarClock, Check, CheckCheck, History, Loader2,
+  Bell, CalendarClock, Check, CheckCheck, History, Loader2,
   MessageSquare, PhoneOff, Send, Users,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -29,7 +29,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading } from '@/components/fees/shell'
+import { FeeScreen, StatStrip, TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { daysBetween, todayIn } from '@/lib/fees/engine/dates'

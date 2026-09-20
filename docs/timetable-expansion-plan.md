@@ -439,3 +439,38 @@ score; zero hard violations required for a "green" band.
   editor renders every entry shape once.
 </content>
 </invoke>
+
+---
+
+## Shipped after the plan — co-teaching, pinning, dense master grid
+
+- **Several teachers per session** (`add_timetable_r8_multi_teacher.sql`).
+  Requirements, combined classes and entries gained a `teacher_ids` array (plus
+  `teacher_names` on entries for the student view). The legacy `teacher_id`
+  stays as the *primary* teacher so old queries and RLS keep working;
+  `teacherIdsOf()` merges both shapes. A split group is still one requirement
+  per group — each of them can now carry its own set of teachers. The solver
+  books every teacher of a lesson: clash, time-off, max-in-a-row and per-teacher
+  min/max limits are all evaluated per teacher (`limitBucketsFor`), and a
+  class-teacher pin is satisfied when the class teacher is *one of* the
+  lesson's teachers.
+- **Weekly slot counter** in the Homeroom hub's "This homeroom's schedule":
+  filled / total periods for the week, with whole-class and per-group splits.
+  Parallel groups share a period, so the group cost is the busiest group's
+  total; homeroom time-off is subtracted from what's available.
+- **Pinning + slot details.** `is_locked` is surfaced as "Pin" everywhere:
+  clicking any cell in the master grid or the class-wise timetable opens
+  `SlotDetailsModal` — subject, every teacher, room, group/combined badges,
+  conflict reasons — with pin/unpin, inline editing and remove. A combined
+  lesson pins all its member classes together.
+- **Master grid density.** Fit-to-width (auto, via ResizeObserver), manual
+  zoom and a full-screen mode, so a whole school week fits on one screen.
+- **Follow-ups.** The admin builder runs on a much wider shell (`max-w-[112rem]`)
+  with a `2xl` entity modal, so the dense master grid gets the screen. The slot
+  counter's denominator is the *teachable* week (total − time off). Clicking a
+  period in the left column of any time-off grid toggles that period for the
+  whole week, and time-off periods are hatched in both the master grid and the
+  class-wise timetable (and called out in the slot details). `fetchCombinedClasses`
+  names its `teacher_id` foreign key explicitly — the table also has
+  `created_by → profiles`, which made the embed ambiguous (PGRST201).
+

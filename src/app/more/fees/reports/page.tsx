@@ -15,9 +15,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
-  ArrowLeft, BarChart3, CalendarDays, Download, FileClock, Loader2,
+  BarChart3, CalendarDays, Download, FileClock, Loader2,
   Landmark, Search, ScrollText, BadgePercent, Send,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -25,7 +24,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { FeeScreen, StatStrip, TabBar, Notice, Empty, Loading, type TabDef } from '@/components/fees/shell'
+import { FeeScreen, StatStrip, TabBar, Notice, type TabDef } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import FeeSearch from '@/components/fees/reports/FeeSearch'
 import RefundQueue from '@/components/fees/reports/RefundQueue'

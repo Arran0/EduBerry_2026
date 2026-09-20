@@ -268,7 +268,7 @@ export async function deleteHomeroom(id: string): Promise<boolean> {
 // Member Management
 // ============================================
 
-export async function addHomeroomMember(homeroomId: string, studentId: string): Promise<boolean> {
+async function addHomeroomMember(homeroomId: string, studentId: string): Promise<boolean> {
   const { error } = await supabase
     .from('homeroom_members')
     .insert({ homeroom_id: homeroomId, student_id: studentId })
@@ -323,12 +323,91 @@ export async function removeHomeroomMember(homeroomId: string, studentId: string
   return true
 }
 
-// ============================================
-// Display Helpers
-// ============================================
+/**
+ * Every classroom that holds at least one student of these homerooms — the set
+ * a class teacher may map homework onto from the homeroom calendar. Returns
+ * plain classroom rows (id + title are what the pickers need), sorted by title.
+ *
+ * This runs through the `get_homeroom_classrooms` RPC because the join is
+ * invisible to a class teacher from the client: `classroom_members` and
+ * `classrooms` are only selectable for classrooms you belong to, created, or
+ * coordinate, and a class teacher is none of those for the classes their
+ * students attend with other teachers. The RPC is SECURITY DEFINER and checks
+ * the caller owns the homeroom (see
+ * supabase-migrations/add_homeroom_classrooms_rpc.sql).
+ *
+ * Until that migration is applied the RPC is missing, so we fall back to the
+ * direct queries — correct for admins and principals, and for the classrooms a
+ * teacher created themselves, which is all RLS would have allowed anyway.
+ */
+export async function fetchClassroomsHoldingHomeroomStudents(
+  homeroomIds: string[],
+): Promise<{ id: string; title: string }[]> {
+  if (homeroomIds.length === 0) return []
 
-export function homeroomDisplayName(homeroom: Homeroom): string {
-  return homeroom.name
+  const viaRpc = await Promise.all(
+    homeroomIds.map(id => supabase.rpc('get_homeroom_classrooms', { p_homeroom_id: id })),
+  )
+
+  // PGRST202 = the function isn't deployed yet; anything else is a real error
+  // worth surfacing rather than silently degrading.
+  const missingRpc = viaRpc.some(r => r.error?.code === 'PGRST202')
+  if (!missingRpc) {
+    const byId = new Map<string, { id: string; title: string }>()
+    for (const res of viaRpc) {
+      if (res.error) {
+        console.error('fetchClassroomsHoldingHomeroomStudents rpc error:', res.error)
+        continue
+      }
+      for (const row of (res.data ?? []) as { id: string; title: string }[]) byId.set(row.id, row)
+    }
+    return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
+  }
+
+  console.warn(
+    'get_homeroom_classrooms RPC not found — falling back to direct queries. ' +
+    'Apply supabase-migrations/add_homeroom_classrooms_rpc.sql so class teachers ' +
+    'can see the classrooms their homeroom students attend.',
+  )
+
+  const { data: members, error: memErr } = await supabase
+    .from('homeroom_members')
+    .select('student_id')
+    .in('homeroom_id', homeroomIds)
+
+  if (memErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents members error:', memErr)
+    return []
+  }
+
+  const studentIds = [...new Set((members ?? []).map((m: { student_id: string }) => m.student_id))]
+  if (studentIds.length === 0) return []
+
+  const { data: enrolments, error: enrErr } = await supabase
+    .from('classroom_members')
+    .select('classroom_id')
+    .in('user_id', studentIds)
+    .eq('role', 'student')
+
+  if (enrErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents enrolments error:', enrErr)
+    return []
+  }
+
+  const classroomIds = [...new Set((enrolments ?? []).map((e: { classroom_id: string }) => e.classroom_id))]
+  if (classroomIds.length === 0) return []
+
+  const { data: classrooms, error: clsErr } = await supabase
+    .from('classrooms')
+    .select('id, title')
+    .in('id', classroomIds)
+    .order('title', { ascending: true })
+
+  if (clsErr) {
+    console.error('fetchClassroomsHoldingHomeroomStudents classrooms error:', clsErr)
+    return []
+  }
+  return (classrooms ?? []) as { id: string; title: string }[]
 }
 
 // ============================================
@@ -352,21 +431,6 @@ export async function fetchHomeroomSmartboard(homeroomId: string): Promise<UserP
     .single()
 
   return (profile as UserProfile) ?? null
-}
-
-/** Returns the homeroom whose smart board account is the given profile id. */
-export async function fetchHomeroomForSmartboard(smartboardId: string): Promise<Homeroom | null> {
-  const { data, error } = await supabase
-    .from('homerooms')
-    .select('*')
-    .eq('smartboard_id', smartboardId)
-    .maybeSingle()
-
-  if (error) {
-    console.error('fetchHomeroomForSmartboard error:', error)
-    return null
-  }
-  return data ?? null
 }
 
 /** Links an existing smart board account (e.g. created in the Profile Manager)
@@ -422,21 +486,28 @@ export async function unlinkSmartboardFromHomeroom(homeroomId: string): Promise<
   return true
 }
 
-/** Persists the customisable smart board banner for a homeroom. */
+/**
+ * Persists the customisable smart board banner for a homeroom.
+ *
+ * Goes through the set_smartboard_banner RPC rather than a table update: the
+ * homerooms UPDATE policy is admin-only, because granting a smart board account
+ * row-level update rights so it could save this one column also let it rewrite
+ * the homeroom's name, grade, section and class teacher.
+ */
 export async function updateSmartboardBanner(
   homeroomId: string,
   banner: SmartboardBanner
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('homerooms')
-    .update({ smartboard_banner: banner })
-    .eq('id', homeroomId)
+  const { data, error } = await supabase.rpc('set_smartboard_banner', {
+    p_homeroom: homeroomId,
+    p_banner: banner,
+  })
 
   if (error) {
     console.error('updateSmartboardBanner error:', error)
     return false
   }
-  return true
+  return data === true
 }
 
 export function homeroomGradeSectionBadge(homeroom: Homeroom): string | null {

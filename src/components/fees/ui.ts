@@ -11,7 +11,7 @@
 // can restyle the other by accident.
 
 export { ADMIN_GOLD, SHARP } from '@/components/salary/adminUi'
-export { TONE, LABEL, BLEED } from '@/components/salary/ui'
+export { LABEL, BLEED } from '@/components/salary/ui'
 
 export const ADMIN = {
   /** A raised surface. Square, hairlined, no shadow. */

@@ -131,15 +131,6 @@ export interface DiscussionPost {
   replies?: DiscussionPost[]
 }
 
-export interface FolderWithFiles extends ClassroomFolder {
-  files: ClassroomFile[]
-}
-
-export interface FileWithProgress extends ClassroomFile {
-  progress: FileProgress[]
-  submissions: FileSubmission[]
-}
-
 // --- Helpers ---
 
 /** Returns true if the classroom's end_date is in the past (classroom is closed). */
@@ -302,6 +293,10 @@ export async function fetchClassroomsForUser(
   userRole: UserRole,
   includeAll = false,
   limit?: number,
+  // Callers that render only title/grade/banner (e.g. the home and academics
+  // dashboard grids) never display this — skip it there to avoid pulling
+  // every classroom_members row for the whole school just to count them.
+  withMemberCount = true,
 ): Promise<ClassroomWithDetails[]> {
   const today = new Date().toISOString().split('T')[0]
 
@@ -325,7 +320,7 @@ export async function fetchClassroomsForUser(
     }
 
     // Skip member-count query when a preview limit is set (saves a full-table scan)
-    if (limit) {
+    if (limit || !withMemberCount) {
       return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
     }
 
@@ -377,7 +372,7 @@ export async function fetchClassroomsForUser(
     return []
   }
 
-  if (limit) {
+  if (limit || !withMemberCount) {
     return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
   }
 
@@ -791,18 +786,6 @@ export async function fetchSubmissions(fileId: string): Promise<FileSubmission[]
   return (data ?? []) as FileSubmission[]
 }
 
-export async function fetchStudentSubmission(fileId: string, studentId: string): Promise<FileSubmission | null> {
-  const { data, error } = await supabase
-    .from('classroom_submissions')
-    .select('*')
-    .eq('file_id', fileId)
-    .eq('student_id', studentId)
-    .single()
-
-  if (error) return null
-  return data as FileSubmission
-}
-
 export async function fetchStudentSubmissionsForFiles(fileIds: string[], studentId: string): Promise<FileSubmission[]> {
   if (fileIds.length === 0) return []
   const { data, error } = await supabase
@@ -944,6 +927,36 @@ export async function upsertAssessmentMark(
   return true
 }
 
+/** Batch form of upsertAssessmentMark — one round trip for a whole marksheet
+ *  instead of one upsert per student. Entries failing the same range check
+ *  upsertAssessmentMark applies are silently dropped from the batch. */
+export async function upsertAssessmentMarks(
+  assessmentId: string,
+  entries: { studentId: string; marks: number | null; maxMarks: number; isAbsent?: boolean }[],
+): Promise<boolean> {
+  const rows = entries
+    .filter(e => e.isAbsent || e.marks == null || (e.marks >= 0 && e.marks <= e.maxMarks))
+    .map(e => ({
+      assessment_id: assessmentId,
+      student_id: e.studentId,
+      marks: e.isAbsent ? null : e.marks,
+      max_marks: e.maxMarks,
+      is_absent: e.isAbsent ?? false,
+      updated_at: new Date().toISOString(),
+    }))
+  if (rows.length === 0) return true
+
+  const { error } = await supabase
+    .from('classroom_assessment_marks')
+    .upsert(rows, { onConflict: 'assessment_id,student_id' })
+
+  if (error) {
+    console.error('Failed to upsert marks:', error.message)
+    return false
+  }
+  return true
+}
+
 export async function fetchAssessmentMarks(assessmentId: string): Promise<AssessmentMark[]> {
   const { data, error } = await supabase
     .from('classroom_assessment_marks')
@@ -955,6 +968,28 @@ export async function fetchAssessmentMarks(assessmentId: string): Promise<Assess
     return []
   }
   return (data ?? []) as AssessmentMark[]
+}
+
+/** One student's marks across a set of assessments, in one round trip instead
+ *  of fetching every student's marks per assessment and filtering client-side. */
+export async function fetchStudentAssessmentMarks(
+  studentId: string,
+  assessmentIds: string[],
+): Promise<Record<string, AssessmentMark>> {
+  if (assessmentIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*')
+    .eq('student_id', studentId)
+    .in('assessment_id', assessmentIds)
+
+  if (error) {
+    console.error('Failed to fetch student marks:', error.message)
+    return {}
+  }
+  const byAssessment: Record<string, AssessmentMark> = {}
+  for (const m of (data ?? []) as AssessmentMark[]) byAssessment[m.assessment_id] = m
+  return byAssessment
 }
 
 export interface StudentMarkWithContext {
@@ -1102,21 +1137,6 @@ export async function fetchCoordinators(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
-/** Returns all users eligible to be set as responsible coordinator (coordinator, principal, admin). */
-export async function fetchCoordinatorEligible(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('role', ['coordinator', 'principal', 'admin'])
-    .order('full_name', { ascending: true })
-
-  if (error) {
-    console.error('Failed to fetch coordinator-eligible users:', error.message)
-    return []
-  }
-  return (data ?? []) as UserProfile[]
-}
-
 /** Fetches ALL file progress records across the given file IDs (any student). For staff use. */
 export async function fetchProgressForFiles(fileIds: string[]): Promise<FileProgress[]> {
   if (fileIds.length === 0) return []
@@ -1247,6 +1267,29 @@ export async function fetchStudentMembers(classroomId: string): Promise<(Classro
     .filter((m: ClassroomMember & { user?: UserProfile }) => m.user) as (ClassroomMember & { user: UserProfile })[]
 }
 
+// Batch-fetch profiles for a set of ids (e.g. the `created_by` of a page's
+// folders/files/assessments) and return them keyed by id, so callers can look
+// up "created by" names without one round trip per row.
+export async function fetchProfilesByIds(
+  ids: (string | null | undefined)[],
+  // Callers that render a name and an avatar (rather than a whole profile) can
+  // narrow this; the default keeps every existing caller's shape unchanged.
+  columns = '*',
+): Promise<Record<string, UserProfile>> {
+  const uniqueIds = [...new Set(ids.filter((id): id is string => !!id))]
+  if (uniqueIds.length === 0) return {}
+
+  const { data } = await supabase
+    .from('profiles')
+    .select(columns)
+    .in('id', uniqueIds)
+
+  const map: Record<string, UserProfile> = {}
+  // `columns` is a runtime string, so supabase-js can't infer the row shape.
+  for (const p of ((data ?? []) as unknown as UserProfile[])) map[p.id] = p
+  return map
+}
+
 // Fetch all files across all folders for a classroom (for student dashboard calendar)
 export async function fetchAllFilesForClassroom(classroomId: string): Promise<(ClassroomFile & { folder: ClassroomFolder })[]> {
   const { data: folders, error: fErr } = await supabase
@@ -1346,13 +1389,6 @@ export async function fetchClassroomFilesForDateRange(
 
 // ── Report Card Titles & Remarks ─────────────────────────────────────────────
 
-export interface ReportCardTitle {
-  id: string
-  title: string
-  created_by: string | null
-  created_at: string
-}
-
 export interface ReportCardRemark {
   id: string
   student_id: string
@@ -1361,8 +1397,12 @@ export interface ReportCardRemark {
   remark: string
   created_at: string
   updated_at: string
-  author?: UserProfile
+  /** Hydrated by fetchRemarksForStudent — only the fields a remark bubble
+   *  renders, so the lookup does not pull whole profile rows. */
+  author?: RemarkAuthor
 }
+
+export type RemarkAuthor = Pick<UserProfile, 'id' | 'full_name' | 'role' | 'avatar_url'>
 
 /** Hard-coded default report card titles. These are always available in the
  *  picker without needing a row in `report_card_titles`. */
@@ -1377,8 +1417,16 @@ export const DEFAULT_REPORT_CARD_TITLES: string[] = [
   'Practice 7', 'Practice 8', 'Practice 9', 'Practice 10', 'Practice 11', 'Practice 12',
 ]
 
+/** Reference data for the report-card views: a handful of rows that changes
+ *  only when an admin edits it, but was refetched on every mount (switching
+ *  the staff Individual/Class Marks tabs remounts the view). Cached for the
+ *  page session and invalidated by the writes below. */
+let reportCardTitleCache: string[] | null = null
+let gradeSectionCache: { grade: number; section: string }[] | null = null
+
 /** Fetches the union of default + custom report card titles. */
 export async function fetchAllReportCardTitles(): Promise<string[]> {
+  if (reportCardTitleCache) return reportCardTitleCache
   const { data, error } = await supabase
     .from('report_card_titles')
     .select('title')
@@ -1399,6 +1447,7 @@ export async function fetchAllReportCardTitles(): Promise<string[]> {
       seen.add(t.toLowerCase())
     }
   }
+  reportCardTitleCache = merged
   return merged
 }
 
@@ -1415,10 +1464,11 @@ export async function createReportCardTitle(title: string, createdBy: string): P
     .insert({ title: trimmed, created_by: createdBy })
 
   if (error) {
-    if (error.code === '23505') return true // already exists
+    if (error.code === '23505') { reportCardTitleCache = null; return true } // already exists
     console.error('Failed to create report card title:', error.message)
     return false
   }
+  reportCardTitleCache = null
   return true
 }
 
@@ -1429,32 +1479,125 @@ export interface StudentReportCardEntry {
   mark: AssessmentMark | null
 }
 
+/** PostgREST returns a to-one embed as a single object, but supabase-js types
+ *  every embed as an array — normalise whichever shape arrives. */
+function embeddedOne<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+/** Classroom fields the report-card views need off a student's memberships. */
+interface ReportCardClassroom {
+  id: string
+  title: string
+  start_date: string | null
+  end_date: string | null
+}
+
+/** Every classroom the student belongs to, in one round trip (the membership
+ *  rows carry the classroom inline instead of a second `.in('id', ids)` query).
+ *  Date filtering is left to the caller: a student's membership list is small,
+ *  so filtering it in JS is cheaper than another round trip. */
+async function fetchStudentClassrooms(studentId: string): Promise<ReportCardClassroom[]> {
+  const { data, error } = await supabase
+    .from('classroom_members')
+    .select('classroom:classrooms!inner(id, title, start_date, end_date)')
+    .eq('user_id', studentId)
+
+  if (error) {
+    console.error('Failed to fetch student classrooms:', error.message)
+    return []
+  }
+  return (data ?? [])
+    .map(row => embeddedOne<ReportCardClassroom>(row.classroom as never))
+    .filter((c): c is ReportCardClassroom => !!c)
+}
+
+/** True when the classroom is still running (no end date, or not yet past). */
+function isActiveOn(classroom: Pick<ReportCardClassroom, 'end_date'>, today: string): boolean {
+  return !classroom.end_date || classroom.end_date >= today
+}
+
+/** True when the classroom's start_date falls in the given academic year
+ *  (e.g. "2025-26" matches any start_date in calendar 2025). */
+function startsInAcademicYear(
+  classroom: Pick<ReportCardClassroom, 'start_date'>,
+  academicYear: string,
+): boolean {
+  if (!classroom.start_date) return false
+  return parseInt(classroom.start_date.split('-')[0]) === parseInt(academicYear.split('-')[0])
+}
+
+/** Requests in flight right now, keyed by function + arguments.
+ *
+ *  The academics page renders the report-card digest and the full Report Cards
+ *  section together, and a student's copy of each asks for the same year list
+ *  and the same cards at the same moment. Coalescing means they share one
+ *  request instead of issuing two identical ones. Nothing is kept once the
+ *  request settles — this de-duplicates concurrent callers, it is not a cache,
+ *  so no caller can be handed a stale result. */
+const inFlight = new Map<string, Promise<unknown>>()
+
+function coalesce<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(key) as Promise<T> | undefined
+  if (existing) return existing
+  const p = run().finally(() => { inFlight.delete(key) })
+  inFlight.set(key, p)
+  return p
+}
+
 /** Returns distinct academic years (e.g. ["2026-27", "2025-26"]) for all
  *  classrooms the student belongs to that have a start_date set.
  *  Sorted descending so the most recent year comes first. */
-export async function fetchAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
-  const { data: memberships } = await supabase
+export function fetchAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
+  return coalesce(`years:${studentId}`, () => loadAvailableAcademicYearsForStudent(studentId))
+}
+
+async function loadAvailableAcademicYearsForStudent(studentId: string): Promise<string[]> {
+  // One round trip: the membership rows carry their classroom's start_date via
+  // an inner join, so there is no second query keyed on the ids from the first.
+  const { data, error } = await supabase
     .from('classroom_members')
-    .select('classroom_id')
+    .select('classroom:classrooms!inner(start_date)')
     .eq('user_id', studentId)
 
-  const classroomIds = (memberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
-  if (classroomIds.length === 0) return []
-
-  const { data: classrooms } = await supabase
-    .from('classrooms')
-    .select('start_date')
-    .in('id', classroomIds)
-    .not('start_date', 'is', null)
+  if (error) {
+    console.error('Failed to fetch academic years:', error.message)
+    return []
+  }
 
   const years = new Set<string>()
-  for (const c of classrooms ?? []) {
-    if (c.start_date) {
-      const y = parseInt(c.start_date.split('-')[0])
-      years.add(`${y}-${String(y + 1).slice(-2)}`)
-    }
+  for (const row of data ?? []) {
+    const startDate = embeddedOne<{ start_date: string | null }>(row.classroom as never)?.start_date
+    if (!startDate) continue
+    const y = parseInt(startDate.split('-')[0])
+    years.add(`${y}-${String(y + 1).slice(-2)}`)
   }
   return Array.from(years).sort().reverse()
+}
+
+/** A student's own marks for the report-card-tagged assessments of the given
+ *  classrooms. The assessment is inner-joined purely so its classroom and tag
+ *  can be filtered on, which is what lets this run alongside (rather than
+ *  after) the assessments query itself. */
+async function fetchStudentMarksForClassrooms(
+  studentId: string,
+  classroomIds: string[],
+): Promise<AssessmentMark[]> {
+  if (classroomIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('classroom_assessment_marks')
+    .select('*, classroom_assessments!inner(classroom_id)')
+    .eq('student_id', studentId)
+    .in('classroom_assessments.classroom_id', classroomIds)
+    .not('classroom_assessments.report_card_title', 'is', null)
+
+  if (error) {
+    console.error('Failed to fetch student marks:', error.message)
+    return []
+  }
+  // Drop the join-only column so callers see a plain AssessmentMark.
+  return (data ?? []).map(({ classroom_assessments: _joined, ...mark }) => mark as AssessmentMark)
 }
 
 /** Fetches every assessment that has a non-null `report_card_title` for the
@@ -1462,65 +1605,53 @@ export async function fetchAvailableAcademicYearsForStudent(studentId: string): 
  *  for each. When `academicYear` (e.g. "2025-26") is provided, classrooms with
  *  a matching start_date year are used (active or not). When omitted, only
  *  active classrooms (end_date null or in future) are used. */
-export async function fetchReportCardsForStudent(
+export function fetchReportCardsForStudent(
   studentId: string,
   academicYear?: string | null,
 ): Promise<Map<string, StudentReportCardEntry[]>> {
-  // 1. Classrooms the student is a member of.
-  const { data: memberships } = await supabase
-    .from('classroom_members')
-    .select('classroom_id')
-    .eq('user_id', studentId)
+  return coalesce(
+    `cards:${studentId}:${academicYear ?? ''}`,
+    () => loadReportCardsForStudent(studentId, academicYear),
+  )
+}
 
-  const classroomIds = (memberships ?? []).map((m: { classroom_id: string }) => m.classroom_id)
-  if (classroomIds.length === 0) return new Map()
+async function loadReportCardsForStudent(
+  studentId: string,
+  academicYear?: string | null,
+): Promise<Map<string, StudentReportCardEntry[]>> {
+  // 1. Classrooms the student is a member of (one round trip, classroom inline).
+  const classrooms = await fetchStudentClassrooms(studentId)
+  const today = new Date().toISOString().split('T')[0]
+  const inScope = academicYear
+    ? classrooms.filter(c => startsInAcademicYear(c, academicYear))
+    : classrooms.filter(c => isActiveOn(c, today))
 
-  let classroomQuery = supabase
-    .from('classrooms')
-    .select('id, title, end_date')
-    .in('id', classroomIds)
-
-  if (academicYear) {
-    const startYear = parseInt(academicYear.split('-')[0])
-    classroomQuery = classroomQuery
-      .gte('start_date', `${startYear}-01-01`)
-      .lt('start_date', `${startYear + 1}-01-01`)
-  } else {
-    const today = new Date().toISOString().split('T')[0]
-    classroomQuery = classroomQuery.or(`end_date.is.null,end_date.gte.${today}`)
-  }
-
-  const { data: classrooms } = await classroomQuery
-
-  const filteredClassroomIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  const filteredClassroomIds = inScope.map(c => c.id)
   if (filteredClassroomIds.length === 0) return new Map()
   const classroomMap = new Map<string, { id: string; title: string }>(
-    (classrooms ?? []).map((c: { id: string; title: string }) => [c.id, { id: c.id, title: c.title }])
+    inScope.map(c => [c.id, { id: c.id, title: c.title }])
   )
 
-  // 2. All tagged assessments in those classrooms.
-  const { data: assessments } = await supabase
-    .from('classroom_assessments')
-    .select('*')
-    .in('classroom_id', filteredClassroomIds)
-    .not('report_card_title', 'is', null)
-    .order('date', { ascending: false })
+  // 2. Tagged assessments in those classrooms, and this student's marks —
+  //    in parallel: the marks query keys off the assessment's classroom (an
+  //    inner join) rather than off the ids the first query returns.
+  const [{ data: assessments }, marks] = await Promise.all([
+    supabase
+      .from('classroom_assessments')
+      .select('*')
+      .in('classroom_id', filteredClassroomIds)
+      .not('report_card_title', 'is', null)
+      .order('date', { ascending: false }),
+    fetchStudentMarksForClassrooms(studentId, filteredClassroomIds),
+  ])
 
   if (!assessments || assessments.length === 0) return new Map()
-
-  // 3. Marks for this student.
-  const assessmentIds = assessments.map((a: ClassroomAssessment) => a.id)
-  const { data: marks } = await supabase
-    .from('classroom_assessment_marks')
-    .select('*')
-    .in('assessment_id', assessmentIds)
-    .eq('student_id', studentId)
 
   const markMap = new Map<string, AssessmentMark>(
     (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
   )
 
-  // 4. Group.
+  // 3. Group.
   const grouped = new Map<string, StudentReportCardEntry[]>()
   for (const a of assessments as ClassroomAssessment[]) {
     if (!a.report_card_title) continue
@@ -1549,61 +1680,47 @@ export async function fetchReportCardsForStudentAsViewer(
   viewerRole: UserRole,
 ): Promise<Map<string, StudentReportCardEntry[]>> {
   const today = new Date().toISOString().split('T')[0]
+  const isSeniorStaff = ['principal', 'admin'].includes(viewerRole)
 
-  // 1. Active classrooms the student is in.
-  const { data: studentMemberships } = await supabase
-    .from('classroom_members')
-    .select('classroom_id')
-    .eq('user_id', studentId)
+  // 1-3. The student's classrooms and (for staff who aren't principal/admin)
+  //      the viewer's own, fetched in parallel — neither needs the other's
+  //      result — then intersected and filtered to active ones in JS.
+  const [studentClassrooms, viewerMemberships] = await Promise.all([
+    fetchStudentClassrooms(studentId),
+    isSeniorStaff
+      ? Promise.resolve(null)
+      : supabase.from('classroom_members').select('classroom_id').eq('user_id', viewerId),
+  ])
 
-  const studentClassroomIds = (studentMemberships ?? []).map(
-    (m: { classroom_id: string }) => m.classroom_id
-  )
-  if (studentClassroomIds.length === 0) return new Map()
+  if (studentClassrooms.length === 0) return new Map()
 
-  // 2. Restrict to classrooms the viewer also belongs to (unless admin/principal).
-  let allowedIds = studentClassroomIds
-  if (!['principal', 'admin'].includes(viewerRole)) {
-    const { data: viewerMemberships } = await supabase
-      .from('classroom_members')
-      .select('classroom_id')
-      .eq('user_id', viewerId)
-      .in('classroom_id', studentClassroomIds)
-    allowedIds = (viewerMemberships ?? []).map(
-      (m: { classroom_id: string }) => m.classroom_id
+  let allowed = studentClassrooms
+  if (!isSeniorStaff) {
+    const viewerIds = new Set(
+      (viewerMemberships?.data ?? []).map((m: { classroom_id: string }) => m.classroom_id)
     )
+    allowed = studentClassrooms.filter(c => viewerIds.has(c.id))
   }
-  if (allowedIds.length === 0) return new Map()
 
-  // 3. Filter to active.
-  const { data: classrooms } = await supabase
-    .from('classrooms')
-    .select('id, title, end_date')
-    .in('id', allowedIds)
-    .or(`end_date.is.null,end_date.gte.${today}`)
-
-  const activeIds = (classrooms ?? []).map((c: { id: string }) => c.id)
+  const active = allowed.filter(c => isActiveOn(c, today))
+  const activeIds = active.map(c => c.id)
   if (activeIds.length === 0) return new Map()
   const classroomMap = new Map<string, { id: string; title: string }>(
-    (classrooms ?? []).map((c: { id: string; title: string }) => [c.id, { id: c.id, title: c.title }])
+    active.map(c => [c.id, { id: c.id, title: c.title }])
   )
 
-  // 4. Tagged assessments + marks.
-  const { data: assessments } = await supabase
-    .from('classroom_assessments')
-    .select('*')
-    .in('classroom_id', activeIds)
-    .not('report_card_title', 'is', null)
-    .order('date', { ascending: false })
+  // 4. Tagged assessments and the student's marks, in parallel.
+  const [{ data: assessments }, marks] = await Promise.all([
+    supabase
+      .from('classroom_assessments')
+      .select('*')
+      .in('classroom_id', activeIds)
+      .not('report_card_title', 'is', null)
+      .order('date', { ascending: false }),
+    fetchStudentMarksForClassrooms(studentId, activeIds),
+  ])
 
   if (!assessments || assessments.length === 0) return new Map()
-
-  const assessmentIds = assessments.map((a: ClassroomAssessment) => a.id)
-  const { data: marks } = await supabase
-    .from('classroom_assessment_marks')
-    .select('*')
-    .in('assessment_id', assessmentIds)
-    .eq('student_id', studentId)
 
   const markMap = new Map<string, AssessmentMark>(
     (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
@@ -1709,12 +1826,13 @@ export async function fetchRemarksForStudent(studentId: string): Promise<ReportC
   // Hydrate authors.
   const authorIds = Array.from(new Set(remarks.map(r => r.author_id)))
   if (authorIds.length === 0) return remarks
+  // A remark bubble renders the author's name, role and avatar only.
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('*')
+    .select('id, full_name, role, avatar_url')
     .in('id', authorIds)
-  const profileMap = new Map<string, UserProfile>(
-    (profiles ?? []).map((p: UserProfile) => [p.id, p])
+  const profileMap = new Map<string, RemarkAuthor>(
+    ((profiles ?? []) as RemarkAuthor[]).map(p => [p.id, p])
   )
   return remarks.map(r => ({ ...r, author: profileMap.get(r.author_id) }))
 }
@@ -1793,28 +1911,47 @@ export interface ClasswiseMarksResult {
 
 /** Returns distinct grade + section pairs that have at least one student profile. */
 export async function fetchGradeSectionsWithStudents(): Promise<{ grade: number; section: string }[]> {
-  const { data, error } = await supabase
+  if (gradeSectionCache) return gradeSectionCache
+
+  // The RPC does the DISTINCT server-side (tens of rows instead of one row per
+  // student). It runs as the caller, so RLS still decides what is visible.
+  const { data, error } = await supabase.rpc('get_grade_sections_with_students')
+
+  if (!error) {
+    gradeSectionCache = ((data ?? []) as { grade: number; section: string }[])
+      .map(r => ({ grade: Number(r.grade), section: r.section }))
+    return gradeSectionCache
+  }
+  if (error.code !== 'PGRST202') {
+    console.error('Failed to fetch grade/sections:', error.message)
+    return []
+  }
+
+  // The RPC isn't deployed yet — fall back to de-duplicating client-side.
+  const { data: rows, error: rowsError } = await supabase
     .from('profiles')
     .select('grade, section')
     .eq('role', 'student')
     .not('grade', 'is', null)
     .not('section', 'is', null)
 
-  if (error) {
-    console.error('Failed to fetch grade/sections:', error.message)
+  if (rowsError) {
+    console.error('Failed to fetch grade/sections:', rowsError.message)
     return []
   }
 
   const seen = new Set<string>()
   const result: { grade: number; section: string }[] = []
-  for (const p of data ?? []) {
+  for (const p of rows ?? []) {
     const key = `${p.grade}-${p.section}`
     if (!seen.has(key)) {
       seen.add(key)
       result.push({ grade: Number(p.grade), section: p.section as string })
     }
   }
-  return result.sort((a, b) => a.grade - b.grade || a.section.localeCompare(b.section))
+  result.sort((a, b) => a.grade - b.grade || a.section.localeCompare(b.section))
+  gradeSectionCache = result
+  return result
 }
 
 /** Fetches the class-wide marks matrix for a given grade, section, and report card title.
@@ -1827,27 +1964,32 @@ export async function fetchClasswiseMarks(
   const empty: ClasswiseMarksResult = { students: [], subjects: [], cellData: {} }
   const today = new Date().toISOString().split('T')[0]
 
-  // 1. Students matching the grade + section
-  const { data: studentData, error: stuErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('role', 'student')
-    .eq('grade', grade)
-    .ilike('section', section)
-    .order('full_name', { ascending: true })
+  // 1 & 2. Students and their classrooms — independent queries, so in parallel.
+  //         The matrix renders name/email/avatar only, so the student columns
+  //         are listed out rather than selected with `*`.
+  const [
+    { data: studentData, error: stuErr },
+    { data: classroomData, error: clsErr },
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, role, avatar_url, grade, section')
+      .eq('role', 'student')
+      .eq('grade', grade)
+      .ilike('section', section)
+      .order('full_name', { ascending: true }),
+    supabase
+      .from('classrooms')
+      .select('id, title, subject')
+      .eq('grade', grade)
+      .ilike('section', section)
+      .not('subject', 'is', null)
+      .or(`end_date.is.null,end_date.gte.${today}`),
+  ])
 
   if (stuErr || !studentData || studentData.length === 0) return empty
   const students = studentData as UserProfile[]
   const studentIds = students.map(s => s.id)
-
-  // 2. Active classrooms for this grade + section that have a subject set
-  const { data: classroomData, error: clsErr } = await supabase
-    .from('classrooms')
-    .select('id, title, subject')
-    .eq('grade', grade)
-    .ilike('section', section)
-    .not('subject', 'is', null)
-    .or(`end_date.is.null,end_date.gte.${today}`)
 
   if (clsErr || !classroomData || classroomData.length === 0) return { ...empty, students }
   const classroomIds = classroomData.map((c: { id: string }) => c.id)

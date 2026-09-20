@@ -38,11 +38,6 @@ export async function buildFeeReceipt(fee: SchoolFee, student?: StudentLike, pay
   return { element: React.createElement(FeeReceiptDoc, { branding, student, fee, payment }), fileName: `fee-receipt-${slug(student?.full_name)}-${fee.upi_reference}` }
 }
 
-export async function buildPaymentCertificate(fee: SchoolFee, student?: StudentLike, payment?: SchoolFeePayment | null): Promise<StatementSpec> {
-  const [branding, { PaymentCertificateDoc }] = await Promise.all([fetchBranding(), import('./documents')])
-  return { element: React.createElement(PaymentCertificateDoc, { branding, student, fee, payment }), fileName: `payment-certificate-${slug(student?.full_name)}` }
-}
-
 export async function buildTranscript(student: StudentLike | undefined, year: string, fees: SchoolFee[]): Promise<StatementSpec> {
   const [branding, { FeeTranscriptDoc }] = await Promise.all([fetchBranding(), import('./documents')])
   return { element: React.createElement(FeeTranscriptDoc, { branding, student, year, fees }), fileName: `fee-statement-${slug(student?.full_name)}-${year}` }
