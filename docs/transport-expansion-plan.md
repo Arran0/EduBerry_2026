@@ -82,7 +82,8 @@ These hold for every round.
 |---|---|---|
 | **1** | **Foundation — fleet, crew, routes, geofenced stops, schedules, student→stop assignments, admin management** | — |
 | 2 | Live operations — trip runs, telemetry pipeline, derivation engine, driver app, parent view, fleet map & exceptions | 1 |
-| 3 | Communication, safety & interop — notifications (push + WhatsApp), SOS & incidents, GPS hardware ingest, replay, reports, GTFS | 2 |
+| 3 | Communication, safety & interop — notifications (push + WhatsApp), SOS & incidents, GPS hardware ingest | 2 |
+| 4 | History & openness — telemetry archive and replay, nightly metrics and reports, card/QR boarding, GTFS export | 3 |
 
 Three rounds, each independently shippable:
 
@@ -329,7 +330,7 @@ alert; a run cannot be closed with a child unaccounted for.
 
 ---
 
-## Round 3 — Communication, safety & interop  ✅ DONE (interop partial)
+## Round 3 — Communication, safety & interop  ✅ DONE
 
 Shipped: migrations `transport_r3_a…f`; the notification outbox with per-event
 channel routing and quiet hours; the extracted `src/lib/notifications/push.ts`
@@ -338,10 +339,9 @@ WhatsApp adapter with Meta Cloud as its first driver; SOS with a frozen
 context snapshot and the admin incident console; and `/api/transport/ingest`
 with `generic`/`traccar`/`flespi` adapters plus the device registry.
 
-**Still open from this round**, and deliberately deferred rather than
-half-built: the downsampled telemetry archive and replay scrubber, the nightly
-metrics rollup and its reports, RFID/NFC/QR readers (the enum and write path
-carry them already), and the GTFS / GTFS-Realtime export.
+The four items deferred from this round — the telemetry archive and replay,
+the metrics rollup and reports, card/QR boarding, and the GTFS export — became
+Round 4 rather than being half-built here.
 
 **Goal.** Get the facts out, handle the emergencies, accept positions from
 hardware EdZee doesn't own, and keep the history that makes it auditable.
@@ -420,6 +420,79 @@ to `delivered` on the status webhook, while an un-opted-in number is skipped
 with a clear reason; an SOS produces an incident whose snapshot still names
 everyone aboard after the route is later edited; a signed `curl` and a driver
 phone can both feed one run and the device wins; a run from 60 days ago replays.
+
+---
+
+## Round 4 — History & openness  ✅ BUILT · ⚠️ MIGRATIONS NOT YET APPLIED
+
+Shipped in code: migrations `transport_r4_a…d`; the downsampled telemetry
+archive with `transport_replay_run` and the admin History tab's replay
+scrubber; the nightly metrics rollup with five reports and CSV export;
+RFID/NFC/QR credentials with a driver-side scan field; and the GTFS static
+(`.zip`) and GTFS-Realtime exports.
+
+> **The four Round 4 migrations have not been run against the live project.**
+> The Supabase connector was not authorised in the session that wrote them, and
+> no database password is on disk, so they could not be applied the way Rounds
+> 1–3 were. Everything above is inert until they are — see
+> `docs/transport-round-4-checklist.md`.
+
+**Goal.** Make the history answerable, the operation measurable, boarding
+faster without making it less supervised, and the school's own timetable
+portable.
+
+**Archive & replay.** `transport_telemetry` keeps 7 days at full resolution and
+is then purged, which is right for the firehose and wrong for the product:
+"show me what happened on Tuesday" is asked on Thursday. Finished runs are
+folded to one fix per 30 seconds into `transport_telemetry_archive` and kept
+180 days — enough to draw the line and say where the bus was at 07:41, and
+deliberately too coarse to reconstruct a child's doorstep. `suspect` fixes
+never enter it. `DISTINCT ON` takes the first fix in each bucket rather than an
+average, because an averaged position is a place the bus never was and on a
+curve can be the wrong side of the road. `transport_replay_run` merges archive
+and firehose, so a run from this morning replays at full resolution and one
+from last month replays coarsely without the caller knowing which. A parent
+sees only their own child on the timeline; crew and admin see the roster.
+
+**Metrics & reports.** `transport_run_metrics` and `transport_stop_metrics` are
+written nightly, idempotently by primary key — a run an admin reconciles the
+next morning must be able to change yesterday's figures. Reports read the
+rollup and never aggregate live tables. Two judgements are in the numbers:
+coverage is measured against the run's own elapsed time, so a run that ended
+early was not offline for the remainder; and excused absences are not no-shows,
+because a child on approved leave was never expected and counting them as waste
+would make every Monday look broken. The screen leads with GPS coverage, which
+decides whether the rest can be believed, and states that today is absent until
+tomorrow's rollup. `transport_report_attendance_mismatch` — boarded the bus,
+marked absent in class, leave already excluded — is the report a standalone
+tracker structurally cannot produce.
+
+**Card & QR boarding.** `transport_scan_method` has carried `rfid`/`nfc`/`qr`
+since Round 2 on the promise that a reader would be a reader and not a schema
+change; `transport_student_credentials` is that reader. Tokens are stored as
+SHA-256 only. A scan resolves a token to a student and then goes through
+`transport_mark_boarding` like every other boarding, so a card can do nothing a
+tap could not — and the attendant still sees the name that comes back, which is
+what catches a child holding a friend's card. A card whose owner is not on that
+bus is a loud, specific answer rather than a failure. On the device: an RFID or
+NFC reader behaves as a keyboard, so a focused text field is the whole
+integration, and a printed QR goes through `BarcodeDetector` where it exists.
+
+**GTFS.** The receipt on Round 1's bet that adopting the vocabulary would make
+an export a view rather than a migration — not one column was added.
+`transport_gtfs_static()` emits the six required files plus `shapes.txt`;
+`transport_gtfs_realtime()` emits `VehiclePosition` and `TripUpdate` as JSON,
+with protobuf encoding left to a route rather than to PL/pgSQL. The realtime
+feed inherits the ETA engine's honesty rule: a run whose telemetry is not live
+emits no `VehiclePosition` at all, because a consumer cannot tell a stale
+position from a fresh one and will draw the bus somewhere it is not.
+
+**Acceptance.** A run from 60 days ago replays with its stop times and
+boardings; running the rollup twice over one date changes no number; a QR
+issued to a child on route A is refused loudly when scanned on route B; the
+GTFS `.zip` validates and contains a stop whose name has a comma and a quote
+in it; a run whose telemetry went offline appears in `TripUpdate` and not in
+`VehiclePosition`.
 
 ---
 
