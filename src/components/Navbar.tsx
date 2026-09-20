@@ -5,12 +5,13 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
-import { isStaffRole, getRoleDisplayName, getRoleBadgeColor } from '@/lib/supabase'
+import { isStaffRole, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import MPSLogo from './MPSLogo'
 import Avatar from './Avatar'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
 import { useAnnouncementNotifications } from '@/hooks/useAnnouncementNotifications'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
+import { useScrolled } from '@/hooks/useScrolled'
 import {
   Home,
   ClipboardList,
@@ -65,14 +66,13 @@ export default function Navbar() {
 
   const isStaff = profile ? isStaffRole(profile.role) : false
   const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
+  // Once the user starts scrolling, fade the bar toward translucent so it
+  // gives up some of its opacity for a more immersive, content-forward feel
+  // — still blurred so text scrolling underneath stays legible.
+  const scrolled = useScrolled()
 
   const { unreadCount: taskUnreadCount } = useTaskNotifications(isStaff ? (user?.id ?? null) : null)
-  const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(
-    user?.id ?? null,
-    profile?.role ?? null,
-    profile?.grade,
-    profile?.section,
-  )
+  const { unreadCount: announcementUnreadCount } = useAnnouncementNotifications(user?.id ?? null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -99,7 +99,9 @@ export default function Navbar() {
 
   if (loading) {
     return (
-      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-sm pt-[env(safe-area-inset-top)]">
+      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
+        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -120,7 +122,9 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-sm pt-[env(safe-area-inset-top)]">
+      <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-sm pt-[env(safe-area-inset-top)] transition-colors duration-300 ${
+        scrolled ? 'bg-white/60 border-slate-200/50' : 'bg-white/95 border-slate-200/80'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
 
@@ -222,7 +226,7 @@ export default function Navbar() {
                     <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block leading-tight ${
                       profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'
                     }`}>
-                      {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
+                      {profile ? getDisplayRole(profile) : '\u2026'}
                     </p>
                   </div>
                   <ChevronDown
@@ -289,7 +293,7 @@ export default function Navbar() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{profile?.full_name}</p>
                 <p className={`text-[10px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${profile ? getRoleBadgeColor(profile.role, profile.is_non_teaching) : 'bg-slate-100 text-slate-600'}`}>
-                  {profile ? getRoleDisplayName(profile.role, profile.is_non_teaching) : '\u2026'}
+                  {profile ? getDisplayRole(profile) : '\u2026'}
                 </p>
               </div>
             </div>

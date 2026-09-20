@@ -121,7 +121,7 @@ const STATUS_DOT: Record<StaffAttendanceStatus, string> = {
 }
 
 export default function StaffCheckIn({
-  staffId, geofenceConfig, lateCutoff, exempt, onCheckedIn,
+  staffId, geofenceConfig, lateCutoff, exempt: _exempt, onCheckedIn,
 }: StaffCheckInProps) {
   const [checkInState, setCheckInState] = useState<CheckInState>('loading')
   // Today's row, narrowed to what this card renders. The verdict and distance
@@ -311,13 +311,11 @@ export default function StaffCheckIn({
     // Decides what the acquisition panel does afterwards (see the finally
     // block): a punch that went through has nothing left to instruct anyone
     // about, even though it got here via a failed acquisition.
-    let succeeded = false
 
     try {
       const result = action === 'checkin'
         ? await checkInStaff(reading, failure)
         : await checkOutStaff(reading, failure)
-      succeeded = result.success
       await applyResult(result, action)
     } catch (e) {
       // Guarantees the button never gets stuck mid-save if the network call

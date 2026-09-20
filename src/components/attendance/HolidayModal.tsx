@@ -3,10 +3,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Umbrella, Calendar, Users, Plus, Trash2, AlertTriangle, Loader2, Check } from 'lucide-react'
+import { X, Umbrella, Calendar, Repeat, Users, Plus, Trash2, AlertTriangle, Loader2, Check } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
-import { HolidayGroup, HolidayGroupInput, fetchHolidaysForDate, saveHolidays } from '@/lib/attendance'
+import {
+  HolidayGroupInput, DayTimingScope, fetchHolidaysByScope, saveHolidays,
+  recomputePendingAttendance,
+} from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
+
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] // index matches JS Date#getDay()
 
 interface GroupDraft {
   key: string
@@ -28,6 +33,8 @@ const chipInactive = 'bg-slate-100 text-slate-600 active:bg-slate-200'
 
 interface Props {
   initialDate: string
+  /** Opens the modal already scoped to an existing rule (e.g. editing from a management list). */
+  initialScope?: DayTimingScope
   viewerId: string
   teams: { id: string; name: string }[]
   allStaff: UserProfile[]
@@ -36,9 +43,12 @@ interface Props {
 }
 
 export default function HolidayModal({
-  initialDate, viewerId, teams, allStaff, onClose, onSaved,
+  initialDate, initialScope, viewerId, teams, allStaff, onClose, onSaved,
 }: Props) {
-  const [date, setDate] = useState(initialDate)
+  const [scopeKind, setScopeKind] = useState<'date' | 'weekday'>(initialScope?.type ?? 'date')
+  const [scopeDate, setScopeDate] = useState(initialScope?.type === 'date' ? initialScope.date : initialDate)
+  const [scopeWeekdays, setScopeWeekdays] = useState<number[]>(initialScope?.type === 'weekday' ? [initialScope.weekday] : [])
+
   const [applyMode, setApplyMode] = useState<'everyone' | 'teams'>('everyone')
   const [everyoneName, setEveryoneName] = useState('')
   const [groups, setGroups] = useState<GroupDraft[]>([])
@@ -53,9 +63,9 @@ export default function HolidayModal({
 
   const staffById = useMemo(() => new Map(allStaff.map(s => [s.id, s])), [allStaff])
 
-  const loadExisting = useCallback(async (d: string) => {
+  const loadExistingForScope = useCallback(async (scope: DayTimingScope) => {
     setLoadingExisting(true)
-    const rules = await fetchHolidaysForDate(d)
+    const rules = await fetchHolidaysByScope(scope)
     const everyoneRule = rules.find(r => r.is_default) ?? null
     const overrideRules = rules.filter(r => !r.is_default)
 
@@ -82,7 +92,26 @@ export default function HolidayModal({
     setLoadingExisting(false)
   }, [])
 
-  useEffect(() => { loadExisting(date) }, [date, loadExisting])
+  const singleWeekday = scopeKind === 'weekday' && scopeWeekdays.length === 1 ? scopeWeekdays[0] : null
+
+  useEffect(() => {
+    if (scopeKind === 'date') {
+      loadExistingForScope({ type: 'date', date: scopeDate })
+      return
+    }
+    if (singleWeekday !== null) {
+      loadExistingForScope({ type: 'weekday', weekday: singleWeekday })
+      return
+    }
+    // Zero or multiple weekdays selected at once — nothing unambiguous to prefill.
+    setHasExistingRule(false)
+    setApplyMode('everyone')
+    setEveryoneName('')
+    setGroups([])
+  }, [scopeKind, scopeDate, singleWeekday, loadExistingForScope])
+
+  const toggleWeekday = (d: number) =>
+    setScopeWeekdays(prev => (prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]))
 
   const ensureTeamLoaded = useCallback((teamId: string) => {
     if (teamCacheRef.current.has(teamId)) return
@@ -164,7 +193,14 @@ export default function HolidayModal({
     }))
   }
 
-  const canSave = !saving && !!date &&
+  // ── Scopes this save/clear should apply to ──────────────────────────────────
+  const activeScopes = useMemo((): DayTimingScope[] => (
+    scopeKind === 'date'
+      ? [{ type: 'date', date: scopeDate }]
+      : scopeWeekdays.map(w => ({ type: 'weekday', weekday: w }))
+  ), [scopeKind, scopeDate, scopeWeekdays])
+
+  const canSave = !saving && activeScopes.length > 0 &&
     (applyMode === 'everyone'
       ? !!everyoneName.trim()
       : conflicts.length === 0 &&
@@ -173,7 +209,7 @@ export default function HolidayModal({
 
   const handleSave = async () => {
     setError(null)
-    if (!date) { setError('Pick a date.'); return }
+    if (activeScopes.length === 0) { setError('Pick a date, or at least one weekday to repeat on.'); return }
 
     let payload: HolidayGroupInput[]
     if (applyMode === 'everyone') {
@@ -192,17 +228,26 @@ export default function HolidayModal({
     }
 
     setSaving(true)
-    const ok = await saveHolidays(date, payload, viewerId)
+    const results = await Promise.all(activeScopes.map(scope => saveHolidays(scope, payload, viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to save. Please try again.'); return }
+    // A day declared a holiday after the fact has no cutoffs in force any more,
+    // so anyone who came in and was scored Late or Half Day on it is re-derived
+    // back to Present rather than being penalised for a day off.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (ok) { onSaved(); onClose() } else { setError('Failed to save. Please try again.') }
+    onSaved(); onClose()
   }
 
   const handleClear = async () => {
+    if (activeScopes.length === 0) return
     setError(null)
     setSaving(true)
-    const ok = await saveHolidays(date, [], viewerId)
+    const results = await Promise.all(activeScopes.map(scope => saveHolidays(scope, [], viewerId)))
+    if (!results.every(Boolean)) { setSaving(false); setError('Failed to clear. Please try again.'); return }
+    // The day is a working day again, so its cutoffs apply again.
+    await recomputePendingAttendance()
     setSaving(false)
-    if (ok) { onSaved(); onClose() } else { setError('Failed to clear. Please try again.') }
+    onSaved(); onClose()
   }
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
@@ -256,33 +301,81 @@ export default function HolidayModal({
 
           {/* Scrollable body */}
           <div className="overflow-y-auto flex-1 px-4 sm:px-5 py-3 sm:py-4 space-y-5">
-            {/* Date */}
+            {/* When */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                <Calendar size={12} /> Date
+                <Calendar size={12} /> When
               </label>
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  { label: 'Today', value: todayStr },
-                  { label: 'Tomorrow', value: tomorrowStr },
-                  { label: 'Next Week', value: nextWeekStr },
-                ].map(opt => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => setDate(opt.value)}
-                    className={`${chipBase} ${date === opt.value ? chipActive : chipInactive}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setScopeKind('date')}
+                  className={`py-1.5 rounded-md transition-all ${scopeKind === 'date' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                >
+                  This date
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeKind('weekday')}
+                  className={`py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${scopeKind === 'weekday' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                >
+                  <Repeat size={11} /> Every week
+                </button>
               </div>
-              <input
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
-              />
+
+              {scopeKind === 'date' ? (
+                <>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { label: 'Today', value: todayStr },
+                      { label: 'Tomorrow', value: tomorrowStr },
+                      { label: 'Next Week', value: nextWeekStr },
+                    ].map(opt => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setScopeDate(opt.value)}
+                        className={`${chipBase} ${scopeDate === opt.value ? chipActive : chipInactive}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="date"
+                    value={scopeDate}
+                    onChange={e => setScopeDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {WEEKDAY_SHORT.map((label, i) => {
+                      const active = scopeWeekdays.includes(i)
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => toggleWeekday(i)}
+                          className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                            active
+                              ? 'bg-violet-500 text-white border-violet-500 shadow-sm'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-400 pl-0.5">
+                    {scopeWeekdays.length === 0
+                      ? 'Pick one or more days — the holiday repeats on those days every week (e.g. a standing Sunday off).'
+                      : 'A specific date’s holiday (if any) still wins over this repeating rule for that day.'}
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Apply to */}

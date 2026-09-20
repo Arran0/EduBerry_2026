@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
-import { getRoleDisplayName, getRoleBadgeColor, supabase } from '@/lib/supabase'
+import { getDisplayRole, getRoleBadgeColor, supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
+import { fetchRawSetting } from '@/lib/pageConfig'
 import {
   Mail,
   Shield,
@@ -45,12 +46,8 @@ export default function ProfilePage() {
     new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   const loadBanner = React.useCallback(async () => {
-    const { data } = await supabase
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'profile_banner')
-      .single()
-    if (data?.value) setBannerUrl(data.value)
+    const url = await fetchRawSetting<string>('profile_banner')
+    if (url) setBannerUrl(url)
   }, [])
 
   useEffect(() => {
@@ -225,7 +222,7 @@ export default function ProfilePage() {
               </h1>
               <div className="mt-2 flex flex-wrap justify-center gap-2">
                 <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${getRoleBadgeColor(profile.role, profile.is_non_teaching)}`}>
-                  {getRoleDisplayName(profile.role, profile.is_non_teaching)}
+                  {getDisplayRole(profile)}
                 </span>
               </div>
             </div>
@@ -243,7 +240,7 @@ export default function ProfilePage() {
                 <Shield size={18} className="text-purple-500 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Role</p>
-                  <p className="font-medium text-slate-700 text-sm">{getRoleDisplayName(profile.role, profile.is_non_teaching)}</p>
+                  <p className="font-medium text-slate-700 text-sm">{getDisplayRole(profile)}</p>
                 </div>
               </div>
               {profile.created_at && (

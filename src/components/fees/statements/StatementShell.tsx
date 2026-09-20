@@ -1,4 +1,7 @@
 'use client'
+/* eslint-disable jsx-a11y/alt-text -- <Image> here is @react-pdf/renderer's PDF
+   primitive, not an <img>: it draws into the PDF and has no alt concept, so the
+   prop jsx-a11y asks for would be inert. */
 
 import React from 'react'
 import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer'
@@ -26,7 +29,7 @@ export interface StudentLike {
 
 const INK = '#27272A'
 const MUTED = '#71717A'
-const LINE = '#E4E4E7'
+const LINE = '#E3DFD3'
 const GOLD = '#A8896B'
 
 export const styles = StyleSheet.create({

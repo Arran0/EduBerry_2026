@@ -1,4 +1,4 @@
-import { supabase, UserProfile, UserRole } from './supabase'
+import { supabase, UserProfile, UserRole, isMissingRelation } from './supabase'
 
 /**
  * The profile columns a bus screen actually renders.
@@ -622,10 +622,21 @@ export function maskAccountNumber(acc: string): string {
   return '••••' + s.slice(-4)
 }
 
-/** All driver bank accounts (admin). Caller keys them by driver_id. */
+/**
+ * All driver bank accounts (admin). Caller keys them by driver_id.
+ *
+ * Payroll pages that list staff and drivers together call this whether or not
+ * the school runs buses, so a database without the bus migrations applied is a
+ * normal state here, not a fault — it means "no driver accounts", and says so
+ * quietly instead of logging a 404 on every load of the salary sheet.
+ */
 export async function fetchDriverBankAccounts(): Promise<DriverBankAccount[]> {
   const { data, error } = await supabase.from('driver_bank_accounts').select('*')
-  if (error) { console.error('fetchDriverBankAccounts failed:', error); return [] }
+  if (error) {
+    if (isMissingRelation(error)) console.warn('driver_bank_accounts is not set up in this database — treating as none.')
+    else console.error('fetchDriverBankAccounts failed:', error)
+    return []
+  }
   return (data as DriverBankAccount[]) || []
 }
 
@@ -648,18 +659,36 @@ export interface DriverBankAccountInput {
   bank_name?: string | null
 }
 
+/**
+ * Reads treat a missing `driver_bank_accounts` as "no accounts" (see
+ * `fetchDriverBankAccounts`), which means the shared Bank Accounts sheet
+ * happily shows driver rows in a database where the bus migrations were never
+ * run — and then the save fails with PostgREST's own wording, "Could not find
+ * the table 'public.driver_bank_accounts' in the schema cache". That sentence
+ * names the cause to somebody who already knows the schema and nobody else.
+ * Both writers translate it into the actual next step.
+ */
+const DRIVER_BANK_MIGRATION_HINT =
+  'Driver bank accounts are not set up in this database yet. Run supabase-migrations/add_bus_payroll_payouts.sql, then try again.'
+
 export async function upsertDriverBankAccount(input: DriverBankAccountInput): Promise<{ success: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
     .from('driver_bank_accounts')
     .upsert({ ...input, created_by: user?.id }, { onConflict: 'driver_id' })
-  if (error) { console.error('upsertDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  if (error) {
+    console.error('upsertDriverBankAccount failed:', error)
+    return { success: false, error: isMissingRelation(error) ? DRIVER_BANK_MIGRATION_HINT : error.message }
+  }
   return { success: true }
 }
 
 export async function deleteDriverBankAccount(driverId: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('driver_bank_accounts').delete().eq('driver_id', driverId)
-  if (error) { console.error('deleteDriverBankAccount failed:', error); return { success: false, error: error.message } }
+  if (error) {
+    console.error('deleteDriverBankAccount failed:', error)
+    return { success: false, error: isMissingRelation(error) ? DRIVER_BANK_MIGRATION_HINT : error.message }
+  }
   return { success: true }
 }
 

@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  const { userId, full_name, role, is_non_teaching, grade, section } = await request.json()
+  const { userId, full_name, role, is_non_teaching, grade, section, display_role } = await request.json()
   if (!userId) return NextResponse.json({ success: false, error: 'userId is required' }, { status: 400 })
 
   // Snapshot old grade/section before applying updates (needed for homeroom sync)
@@ -72,6 +72,7 @@ export async function PATCH(request: NextRequest) {
   else if (is_non_teaching !== undefined) updates.is_non_teaching = !!is_non_teaching
   updates.grade = grade ?? null
   updates.section = section ?? null
+  if (display_role !== undefined) updates.display_role = display_role ? String(display_role).trim() || null : null
 
   const { error } = await adminClient.from('profiles').update(updates).eq('id', userId)
   if (error) {

@@ -12,7 +12,7 @@
  * src/app/api/announcements/notify and src/app/api/leave/notify.
  */
 
-import { supabase } from './supabase'
+import { supabase, authHeader } from './supabase'
 
 const SW_PATH = '/sw.js'
 
@@ -64,12 +64,6 @@ export async function getPushStatus(): Promise<PushStatus> {
   } catch {
     return 'disabled'
   }
-}
-
-/** Bearer token for our own API routes — they verify the caller themselves. */
-async function authHeader(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
 }
 
 /**

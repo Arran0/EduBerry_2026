@@ -50,47 +50,96 @@ export function NumberInput({ value, onChange, min, step, placeholder }: {
   )
 }
 
+/**
+ * Status line under a write-only credential.
+ *
+ * The form never receives a stored secret's value (see
+ * src/lib/paymentSecrets.ts), so an empty box does not mean "not set". This
+ * says which it is, and offers the only way to actually erase one.
+ */
+function SecretStatus({ configured, dirty, onClear }: {
+  configured?: boolean; dirty: boolean; onClear?: () => void
+}) {
+  if (!configured) return null
+  return (
+    <p className="text-[11px] text-[#71717A] flex items-center gap-2">
+      <span>
+        {dirty
+          ? 'Will be replaced when you save.'
+          : 'Saved. Leave blank to keep it, or type a new value to replace it.'}
+      </span>
+      {onClear && !dirty && (
+        <button
+          type="button" onClick={onClear}
+          className="font-medium text-[#B91C1C] hover:underline"
+        >
+          Clear
+        </button>
+      )}
+    </p>
+  )
+}
+
 /** Secret input. Reveal is deliberate and per-field so an admin can check a
- *  pasted key without exposing every credential on the screen at once. */
-export function PwInput({ value, onChange, placeholder }: {
+ *  pasted key without exposing every credential on the screen at once.
+ *
+ *  `configured` marks a value that exists server-side but was deliberately not
+ *  sent to the browser; the box stays empty and blank means "unchanged". */
+export function PwInput({ value, onChange, placeholder, configured, onClear }: {
   value: string; onChange: (v: string) => void; placeholder?: string
+  configured?: boolean; onClear?: () => void
 }) {
   const [shown, setShown] = useState(false)
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type={shown ? 'text' : 'password'} autoComplete="off" value={value}
-        onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className={`${inputCls}${shown ? ' font-mono' : ''}`}
-      />
-      <button
-        type="button" onClick={() => setShown(s => !s)}
-        className="flex-shrink-0 px-3 py-2 text-[11px] font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
-      >
-        {shown ? 'Hide' : 'Show'}
-      </button>
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type={shown ? 'text' : 'password'} autoComplete="off" value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={configured && !value ? '••••••••  (saved)' : placeholder}
+          className={`${inputCls}${shown ? ' font-mono' : ''}`}
+        />
+        <button
+          type="button" onClick={() => setShown(s => !s)}
+          className="flex-shrink-0 px-3 py-2 text-[11px] font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
+        >
+          {shown ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      <SecretStatus configured={configured} dirty={value !== ''} onClear={onClear} />
     </div>
   )
 }
 
 /** Multi-line secret — PEM certificates and keys are pasted whole. */
-export function PemInput({ value, onChange, placeholder }: {
+export function PemInput({ value, onChange, placeholder, configured, onClear }: {
   value: string; onChange: (v: string) => void; placeholder?: string
+  configured?: boolean; onClear?: () => void
 }) {
   const [shown, setShown] = useState(false)
   const lines = value ? value.split('\n').length : 0
   if (!shown) {
+    // `configured` without a local value is a write-only PEM (the private key):
+    // stored, but never sent here, so there are no lines to count.
+    const summary = value
+      ? `Pasted — ${lines} lines, not yet saved`
+      : configured
+        ? 'Saved — not shown here'
+        : 'Nothing saved'
     return (
-      <div className="flex items-center gap-2">
-        <div className={`${inputCls} text-[#71717A] flex items-center justify-between`}>
-          <span>{value ? `Certificate saved — ${lines} lines` : 'No certificate saved'}</span>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <div className={`${inputCls} text-[#71717A] flex items-center justify-between`}>
+            <span>{summary}</span>
+          </div>
+          <button
+            type="button" onClick={() => setShown(true)}
+            className="flex-shrink-0 px-3 py-2 text-[11px] font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
+          >
+            {value || configured ? 'Replace' : 'Paste'}
+          </button>
         </div>
-        <button
-          type="button" onClick={() => setShown(true)}
-          className="flex-shrink-0 px-3 py-2 text-[11px] font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
-        >
-          {value ? 'Replace' : 'Paste'}
-        </button>
+        <SecretStatus configured={configured} dirty={value !== ''} onClear={onClear} />
       </div>
     )
   }

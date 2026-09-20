@@ -10,16 +10,18 @@ import {
   StaffAttendanceStatus,
   StaffMonthlyStats,
   Holiday,
+  NonWorkingDay,
   STAFF_ATTENDANCE_STATUS_LABELS,
   STAFF_ATTENDANCE_STATUS_COLORS,
   fetchMyStaffAttendance,
   fetchHolidays,
+  fetchNonWorkingDays,
   deriveDayStatus,
   computeMonthlyStats,
   describeLocationWarning,
   hasLocationWarning,
 } from '@/lib/attendance'
-import { LocationWarningModal } from '@/components/attendance/LocationWarning'
+import DayAttendanceDetailModal from '@/components/attendance/DayAttendanceDetailModal'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   LeaveApplicationWithDetails,
@@ -29,7 +31,7 @@ import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-type EffectiveStatus = StaffAttendanceStatus | 'holiday'
+type EffectiveStatus = StaffAttendanceStatus | 'holiday' | 'non_working'
 
 const STATUS_BG: Record<EffectiveStatus, string> = {
   present:  'bg-green-100 text-green-800',
@@ -40,10 +42,11 @@ const STATUS_BG: Record<EffectiveStatus, string> = {
   wfh:      'bg-cyan-100 text-cyan-800',
   half_day: 'bg-orange-100 text-orange-800',
   holiday:  'bg-violet-50 text-violet-500',
+  non_working: 'bg-slate-100 text-slate-500',
 }
 
 const STATUS_SHORT: Record<EffectiveStatus, string> = {
-  present: 'P', absent: 'A', late: 'Late', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'Exception', holiday: 'H',
+  present: 'P', absent: 'A', late: 'Late', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'Exception', holiday: 'H', non_working: 'NW',
 }
 // 'late'/'e' spell out as tiny-font words instead of an ambiguous single letter.
 const TINY_LABEL_STATUSES = new Set<EffectiveStatus>(['late', 'e'])
@@ -80,6 +83,14 @@ interface Props {
   markerId?: string
   refreshKey?: number
   /**
+   * Month to open on, 1-based, instead of the current one. Payroll opens this
+   * calendar to explain a pay cycle's figures, so it has to land on that
+   * cycle's month — the stats underneath are what its Leave column counted.
+   * The user can still page away from it.
+   */
+  initialYear?: number
+  initialMonth?: number
+  /**
    * Enables day selection. Fires with the inclusive range the user picked —
    * one day for a tap, several for a drag across the grid. Omit it and the
    * grid stays read-only.
@@ -94,28 +105,39 @@ interface Props {
   /** Stretch to fill the parent's height (day cells grow) instead of sizing to
    *  content. Used when the calendar shares a matched-height row with the report. */
   fill?: boolean
+  /**
+   * Overrides how the month's records are fetched, in place of the default
+   * fetchMyStaffAttendance(staffId, ...) — for a person whose attendance
+   * doesn't live in staff_attendance_records (ground support staff, whose
+   * rows live in support_staff_attendance and get adapted into this shape
+   * by the caller). Leave apps are skipped for these — support staff have
+   * no leave_applications rows to look up.
+   */
+  fetchRecords?: (staffId: string, year: number, month: number) => Promise<StaffAttendanceRecord[]>
 }
 
 export default function StaffAttendanceCalendar({
-  staffId, staffName, mode, refreshKey = 0,
-  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false,
+  staffId, staffName, mode: _mode, refreshKey = 0, initialYear, initialMonth,
+  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false, fetchRecords,
 }: Props) {
   // Server clock in the school's timezone — "today" decides which days can turn
   // Absent, so it is not read off the device. The device date stands in only
   // until the server's lands.
   const { today: schoolToday } = useSchoolClock()
   const today = schoolToday ?? new Date().toISOString().split('T')[0]
-  const [year, setYear] = useState(() => new Date().getFullYear())
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1)
+  const [year, setYear] = useState(() => initialYear ?? new Date().getFullYear())
+  const [month, setMonth] = useState(() => initialMonth ?? new Date().getMonth() + 1)
   const [records, setRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([])
   const [leaveApps, setLeaveApps] = useState<LeaveApplicationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  // Day whose location warning is open. The month grid has no room to explain
-  // one, so the marked cell opens the same notice the office sees — which also
-  // makes it reachable on a phone, where a tooltip never is.
-  const [warningDay, setWarningDay] = useState<string | null>(null)
+  // Day whose punch-timing detail is open. The month grid has no room to show
+  // check-in/checkout times (or explain a location warning), so a marked cell
+  // opens the same detail the office sees — which also makes it reachable on
+  // a phone, where a tooltip never is.
+  const [detailDay, setDetailDay] = useState<string | null>(null)
 
   // ── Day selection (drag a range, or tap a single day) ──────────────────────
   const canSelect = !!onApplyLeave
@@ -143,16 +165,18 @@ export default function StaffAttendanceCalendar({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [recs, hols, apps] = await Promise.all([
-      fetchMyStaffAttendance(staffId, year, month),
+    const [recs, hols, nonWorking, apps] = await Promise.all([
+      (fetchRecords ?? fetchMyStaffAttendance)(staffId, year, month),
       fetchHolidays(year, month),
-      fetchLeaveApplicationsForApplicant(staffId),
+      fetchNonWorkingDays(year, month),
+      fetchRecords ? Promise.resolve([]) : fetchLeaveApplicationsForApplicant(staffId),
     ])
     setRecords(recs)
     setHolidays(hols)
+    setNonWorkingDays(nonWorking)
     setLeaveApps(apps)
     setLoading(false)
-  }, [staffId, year, month])
+  }, [staffId, year, month, fetchRecords])
 
   useEffect(() => { load() }, [load, refreshKey])
 
@@ -237,6 +261,7 @@ export default function StaffAttendanceCalendar({
 
   const recordByDate = new Map(records.map(r => [r.date, r]))
   const holidaySet = new Set(holidays.map(h => h.date))
+  const nonWorkingSet = new Set(nonWorkingDays.map(h => h.date))
 
   const leaveByDate = new Map<string, LeaveApplicationWithDetails>()
   for (const app of leaveApps) {
@@ -253,12 +278,12 @@ export default function StaffAttendanceCalendar({
     }
   }
 
-  const stats: StaffMonthlyStats = computeMonthlyStats(year, month, records, holidays, today)
+  const stats: StaffMonthlyStats = computeMonthlyStats(year, month, records, holidays, today, nonWorkingDays)
 
   // Days this month whose punches were accepted with no position measured.
   const warningDates = records.filter(hasLocationWarning).map(r => r.date)
   const strictWarningCount = records.filter(r => describeLocationWarning(r)?.strict).length
-  const openWarning = warningDay ? describeLocationWarning(recordByDate.get(warningDay)) : null
+  const detailRecord = detailDay ? recordByDate.get(detailDay) : undefined
 
   const totalDays = daysInMonth(year, month)
   const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
@@ -271,9 +296,11 @@ export default function StaffAttendanceCalendar({
 
   const selectedLeave = selectedDay ? leaveByDate.get(selectedDay) : undefined
 
-  // Stats items (only those with values > 0)
+  // Stats items (only those with values > 0). Late still gets its own chip
+  // for punctuality visibility, but also counts toward Present here — a late
+  // arrival is still a day the staff member showed up.
   const statItems = ([
-    ['present', stats.present], ['late', stats.late], ['half_day', stats.half_day],
+    ['present', stats.present + stats.late], ['late', stats.late], ['half_day', stats.half_day],
     ['wfh', stats.wfh], ['on_leave', stats.on_leave], ['absent', stats.absent], ['e', stats.e],
   ] as [StaffAttendanceStatus, number][]).filter(([, v]) => v > 0)
 
@@ -330,13 +357,14 @@ export default function StaffAttendanceCalendar({
             const dateStr = `${year}-${pad(month)}-${pad(day)}`
             const rec = recordByDate.get(dateStr)
             const leave = leaveByDate.get(dateStr)
-            const eff = deriveDayStatus(dateStr, rec, holidaySet, today)
+            const eff = deriveDayStatus(dateStr, rec, holidaySet, nonWorkingSet, today)
             const isTodayCell = dateStr === today
             const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : ''
             // A day is a valid drag anchor when it is a plain, unclaimed
-            // workday — no record, no leave already on it, and not a holiday.
-            // Any day can be the far end of a range that started on one.
-            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr)
+            // workday — no record, no leave already on it, and not a holiday
+            // or non-working day. Any day can be the far end of a range that
+            // started on one.
+            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr) && !nonWorkingSet.has(dateStr)
             const inRange = !!range && dateStr >= range.start && dateStr <= range.end
             const dayWarning = rec ? describeLocationWarning(rec) : null
 
@@ -368,8 +396,8 @@ export default function StaffAttendanceCalendar({
                   if (dragged.current) return
                   if (leave) { setSelectedDay(dateStr); return }
                   // A marked day is never selectable (it already has a record),
-                  // so the tap is free to open its notice.
-                  if (dayWarning) { setWarningDay(dateStr); return }
+                  // so the tap is free to open its punch-timing detail instead.
+                  if (rec) { setDetailDay(dateStr); return }
                   if (!canSelect) return
                   // Shift-click stretches the current selection to this day.
                   if (e.shiftKey && anchor) { setFocus(dateStr); return }
@@ -383,20 +411,23 @@ export default function StaffAttendanceCalendar({
                   ${inRange ? 'bg-violet-200/80 text-violet-900 ring-2 ring-inset ring-violet-500' : cellBg}
                   ${!inRange && isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
                   ${pickable && !inRange ? `cursor-pointer${eff ? '' : ' hover:bg-violet-50'}` : ''}
-                  ${dayWarning && !inRange ? 'cursor-pointer' : ''}
+                  ${(dayWarning || rec) && !inRange ? 'cursor-pointer' : ''}
                 `}
                 title={dayWarning ? `${dayWarning.title} — tap for details` : undefined}
               >
                 <span className={`text-xs font-bold leading-none ${inRange ? '' : eff ? '' : 'text-[#52525B]'}`}>
                   {day}
                 </span>
-                {eff && eff !== 'holiday' && (
+                {eff && eff !== 'holiday' && eff !== 'non_working' && (
                   <span className={`font-bold leading-none opacity-60 ${TINY_LABEL_STATUSES.has(eff) ? 'text-[6.5px] uppercase tracking-tight' : 'text-[10px]'}`}>
                     {STATUS_SHORT[eff]}
                   </span>
                 )}
                 {eff === 'holiday' && (
                   <span className="text-[8px] font-bold leading-none uppercase tracking-wide opacity-60">Hol</span>
+                )}
+                {eff === 'non_working' && (
+                  <span className="text-[8px] font-bold leading-none uppercase tracking-wide opacity-60">NW</span>
                 )}
                 {leave && (
                   <span
@@ -506,12 +537,12 @@ export default function StaffAttendanceCalendar({
         )}
       </div>
 
-      {warningDay && openWarning && (
-        <LocationWarningModal
-          warning={openWarning}
-          title={staffName ?? 'Location notice'}
-          subtitle={formatDayLabel(warningDay)}
-          onClose={() => setWarningDay(null)}
+      {detailDay && detailRecord && (
+        <DayAttendanceDetailModal
+          record={detailRecord}
+          dateLabel={formatDayLabel(detailDay)}
+          staffName={staffName}
+          onClose={() => setDetailDay(null)}
         />
       )}
 

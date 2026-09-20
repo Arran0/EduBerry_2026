@@ -23,7 +23,9 @@ import {
 import QuestionTypePicker from '@/components/exam/QuestionTypePicker'
 import ExcelQuestionImportModal from '@/components/exam/ExcelQuestionImportModal'
 import AudienceEditor from '@/components/exam/AudienceEditor'
-import { EXAM, Skeleton, QuestionImage, ExamPhaseChip, ImmediateResultsChip } from '@/components/exam/examUi'
+import {
+  EXAM, Skeleton, StatStrip, QuestionImage, ExamPhaseChip, ImmediateResultsChip, PHASE_SHORT,
+} from '@/components/exam/examUi'
 import { FormattedTextarea, FormattedInput } from '@/components/exam/FormattedField'
 
 function newOptionId(existing: QuestionOption[]): string {
@@ -202,14 +204,14 @@ export default function ExamBuilder({ examId }: { examId: string }) {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-64 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-40 w-full" />
       </div>
     )
   }
   if (!exam || !settings) {
-    return <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+    return <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>Exam not found.</div>
   }
 
   return (
@@ -217,27 +219,37 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       {/* Header — mirrors the Post-Exam Manager: eyebrow label, exam title and
           metadata chips. Exams are never closed by hand: they close when
           results are published, or at an immediate-results exam's auto-close. */}
-      <div className="flex items-start gap-3 min-w-0">
+      <div className="flex items-start gap-3 min-w-0 pb-4 border-b border-[#E4E1D8]">
         <div className={`w-11 h-11 ${EXAM.iconTile}`}>
           <Settings2 size={22} className="text-[#D4BC6A]" />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Pre-Exam Manager</p>
-          <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+          <p className={EXAM.eyebrow}>Pre-Exam Manager</p>
+          <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-1">{exam.title}</h1>
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
-            {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{totalMarks} marks</span>
+            {exam.subject && <span className={EXAM.tag}>{exam.subject}</span>}
+            {modeLabel && <span className={EXAM.tagGold}>{modeLabel}</span>}
             <ExamPhaseChip phase={phase} />
             {exam.immediate_results && <ImmediateResultsChip />}
           </div>
-          <p className="text-[11px] text-[#A1A1AA] mt-1.5">{EXAM_PHASE_META[phase].hint}</p>
         </div>
       </div>
 
+      <div>
+        <StatStrip
+          items={[
+            { label: 'Questions', value: questions.length },
+            { label: 'Total marks', value: totalMarks },
+            { label: 'Duration', value: exam.duration_minutes ? `${exam.duration_minutes}m` : '—' },
+            { label: 'Stage', value: PHASE_SHORT[phase], accent: true },
+          ]}
+        />
+        <p className="mt-2 text-[11px] text-[#A8A29A]">{EXAM_PHASE_META[phase].hint}</p>
+      </div>
+
       {locked && (
-        <div className="flex items-start gap-2 rounded-xl border border-[#E4E4E7] bg-[#F8F8F7] px-4 py-3 text-sm text-[#71717A]">
-          <Lock size={15} className="mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 border border-[#E4E1D8] bg-[#FAF9F6] px-4 py-3 text-sm text-[#71717A]">
+          <Lock size={15} className="mt-0.5 shrink-0 text-[#B8983C]" />
           <span>
             This exam is closed — results are published, so its settings and questions are locked.
           </span>
@@ -251,12 +263,12 @@ export default function ExamBuilder({ examId }: { examId: string }) {
       >
       {/* Settings */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Exam settings</h2>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>Exam settings</h2>
           <button
             onClick={handleSaveSettings}
             disabled={savingSettings}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--page-primary)] text-white text-sm hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors"
+            className={EXAM.darkBtn}
           >
             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
             {settingsSaved ? 'Saved' : 'Save'}
@@ -268,21 +280,38 @@ export default function ExamBuilder({ examId }: { examId: string }) {
 
       {/* Participants */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Participants</h2>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>Participants</h2>
         </div>
-        <div className={`${EXAM.card} shadow-sm p-5`}>
+        <div className={`${EXAM.cardBleed} p-4`}>
           <AudienceEditor examId={examId} />
         </div>
       </div>
 
       {/* Questions */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-[#27272A]">Questions <span className="text-[#A1A1AA] font-normal">({questions.length} · {totalMarks} marks)</span></h2>
-          <button onClick={() => setImportOpen(true)} className={EXAM.ghostBtn}>
-            <FileSpreadsheet size={14} /> Import from Excel
-          </button>
+        <div className={EXAM.sectionHeader}>
+          <h2 className={EXAM.sectionLabel}>
+            Questions <span className="ml-1 font-semibold text-[#A8A29A] tabular-nums">{questions.length} · {totalMarks} marks</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            {questionsDirty && !savingQuestions && (
+              <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-[0.12em] text-[#B8983C]">Unsaved</span>
+            )}
+            <button onClick={() => setImportOpen(true)} className={EXAM.ghostBtnSm}>
+              <FileSpreadsheet size={13} /> Import
+            </button>
+            {questions.length > 0 && (
+              <button
+                onClick={handleSaveQuestions}
+                disabled={savingQuestions || !questionsDirty}
+                className={EXAM.darkBtnSm}
+              >
+                {savingQuestions ? <Loader2 size={13} className="animate-spin" /> : questionsSaved ? <Check size={13} /> : <Save size={13} />}
+                {savingQuestions ? 'Saving…' : questionsSaved ? 'Saved' : 'Save questions'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="space-y-3">
           {questions.map((q, idx) => (
@@ -297,32 +326,24 @@ export default function ExamBuilder({ examId }: { examId: string }) {
               onMove={dir => handleMove(idx, dir)}
             />
           ))}
+          {questions.length === 0 && (
+            <div className={`${EXAM.cardBleed} px-4 py-10 text-center`}>
+              <p className="text-sm font-semibold text-[#18181B]">No questions yet</p>
+              <p className="mt-1 text-xs text-[#A8A29A]">Add them one at a time, or import a whole paper from Excel.</p>
+            </div>
+          )}
         </div>
         <button
           onClick={handleAddQuestion}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-[#E4E4E7] text-sm text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors"
+          className="mt-3 w-full flex items-center justify-center gap-2 h-11 border border-dashed border-[#D8D2C4] bg-white text-xs font-bold uppercase tracking-[0.1em] text-[#8A8578] hover:border-[#B8983C] hover:text-[#B8983C] hover:bg-[#FAF9F6] transition-colors"
         >
-          <Plus size={16} /> Add question
+          <Plus size={15} /> Add question
         </button>
-
-        {questions.length > 0 && (
-          <div className="mt-3 flex items-center justify-end gap-2">
-            {questionsDirty && !savingQuestions && <span className="text-xs text-[#A1A1AA]">Unsaved changes</span>}
-            <button
-              onClick={handleSaveQuestions}
-              disabled={savingQuestions || !questionsDirty}
-              className={EXAM.goldBtn}
-            >
-              {savingQuestions ? <Loader2 size={14} className="animate-spin" /> : questionsSaved ? <Check size={14} /> : <Save size={14} />}
-              {savingQuestions ? 'Saving…' : questionsSaved ? 'Saved' : 'Save questions'}
-            </button>
-          </div>
-        )}
       </div>
       </div>
 
-      <div className="flex justify-end">
-        <button onClick={handleDone} className="px-5 py-2.5 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] transition-colors">
+      <div className="flex justify-end border-t border-[#E4E1D8] pt-4">
+        <button onClick={handleDone} className={EXAM.goldBtn}>
           Done
         </button>
       </div>
@@ -376,7 +397,8 @@ function QuestionEditor({
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imageError, setImageError] = useState('')
 
-  const field = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors'
+  const field = EXAM.field
+  const numField = 'w-20 h-8 bg-white border border-[#E4E1D8] px-2 text-sm tabular-nums text-[#18181B] focus:outline-none focus:border-[#B8983C] focus:ring-1 focus:ring-[#B8983C]/25 transition-colors'
   const options = question.options ?? []
   const correct = question.correct_answer
   const correctIds: string[] = Array.isArray(correct) ? correct : []
@@ -414,22 +436,24 @@ function QuestionEditor({
   }
 
   return (
-    <div className={`${EXAM.card} shadow-sm p-4`}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-[#A1A1AA]">
-          <GripVertical size={16} />
-          <span className="text-sm font-medium text-[#52525B]">Question {index + 1}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8] font-semibold">{meta.label}</span>
+    <div className={EXAM.cardBleed}>
+      {/* Question header band — index, kind, and the reorder/delete controls. */}
+      <div className="flex items-center justify-between gap-2 h-10 px-3 bg-[#FAF9F6] border-b border-[#E4E1D8]">
+        <div className="flex items-center gap-2 min-w-0">
+          <GripVertical size={14} className="text-[#C7C2B6] shrink-0" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#18181B] tabular-nums">Q{index + 1}</span>
+          <span className={EXAM.tagGold}>{meta.label}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onMove(-1)} disabled={index === 0} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronUp size={15} /></button>
-          <button onClick={() => onMove(1)} disabled={index === total - 1} className="p-1.5 text-[#A1A1AA] hover:bg-[#F4F4F5] rounded disabled:opacity-30 transition-colors"><ChevronDown size={15} /></button>
-          <button onClick={onDelete} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded transition-colors"><Trash2 size={15} /></button>
+        <div className="flex items-center">
+          <button onClick={() => onMove(-1)} disabled={index === 0} title="Move up" className="h-7 w-7 flex items-center justify-center text-[#A8A29A] hover:text-[#18181B] hover:bg-white disabled:opacity-25 transition-colors"><ChevronUp size={15} /></button>
+          <button onClick={() => onMove(1)} disabled={index === total - 1} title="Move down" className="h-7 w-7 flex items-center justify-center text-[#A8A29A] hover:text-[#18181B] hover:bg-white disabled:opacity-25 transition-colors"><ChevronDown size={15} /></button>
+          <button onClick={onDelete} title="Delete question" className="h-7 w-7 flex items-center justify-center text-[#C7B6B6] hover:text-rose-600 hover:bg-rose-50 transition-colors"><Trash2 size={15} /></button>
         </div>
       </div>
 
+      <div className="p-4">
       <FormattedTextarea
-        className={`${field} mb-3`}
+        className={`${EXAM.textarea} mb-3`}
         rows={2}
         value={question.prompt}
         onChange={text => onChange({ prompt: text })}
@@ -444,7 +468,7 @@ function QuestionEditor({
             <button
               onClick={() => onChange({ image_url: null })}
               title="Remove image"
-              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
+              className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center bg-black/70 text-white hover:bg-black transition-colors"
             >
               <X size={14} />
             </button>
@@ -454,14 +478,14 @@ function QuestionEditor({
             type="button"
             onClick={handlePickImage}
             disabled={uploadingImage}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#E4E4E7] text-xs text-[#71717A] hover:border-[var(--page-accent)] hover:text-[var(--page-accent)] transition-colors disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 h-9 border border-dashed border-[#E4E1D8] text-[11px] font-semibold uppercase tracking-[0.08em] text-[#A8A29A] hover:border-[#B8983C] hover:text-[#B8983C] transition-colors disabled:opacity-60"
           >
             {uploadingImage ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
-            {uploadingImage ? 'Uploading…' : 'Attach a figure (diagram, graph, image)'}
+            {uploadingImage ? 'Uploading…' : 'Attach a figure'}
           </button>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={handleImageFile} />
-        {imageError && <p className="text-xs text-rose-600 mt-1">{imageError}</p>}
+        {imageError && <p className={EXAM.error}>{imageError}</p>}
       </div>
 
       {isMcq && (
@@ -472,9 +496,11 @@ function QuestionEditor({
                 type="button"
                 onClick={() => toggleCorrect(opt.id)}
                 title="Mark correct"
-                className={`w-7 h-7 shrink-0 flex items-center justify-center border ${
-                  kind === 'multiple_correct' ? 'rounded-lg' : 'rounded-full'
-                } ${correctIds.includes(opt.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#E4E4E7] text-transparent'}`}
+                className={`w-9 h-9 shrink-0 flex items-center justify-center border transition-colors ${
+                  correctIds.includes(opt.id)
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'border-[#E4E1D8] text-transparent hover:border-emerald-400 hover:text-emerald-300'
+                }`}
               >
                 <Check size={14} />
               </button>
@@ -490,13 +516,19 @@ function QuestionEditor({
                   options: options.filter(o => o.id !== opt.id),
                   correct_answer: correctIds.filter(x => x !== opt.id),
                 })}
-                className="p-1.5 text-[#D4D4D8] hover:text-rose-400 transition-colors"
+                title="Remove option"
+                className="h-9 w-9 shrink-0 flex items-center justify-center text-[#C7C2B6] hover:text-rose-600 hover:bg-rose-50 transition-colors"
               >
                 <Trash2 size={14} />
               </button>
             </div>
           ))}
-          <button onClick={() => onChange({ options: [...options, { id: newOptionId(options), text: '' }] })} className="text-xs text-[var(--page-accent)] font-medium hover:underline">+ Add option</button>
+          <button
+            onClick={() => onChange({ options: [...options, { id: newOptionId(options), text: '' }] })}
+            className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#B8983C] hover:text-[#9C7F2C] transition-colors"
+          >
+            + Add option
+          </button>
         </div>
       )}
 
@@ -511,14 +543,16 @@ function QuestionEditor({
       )}
 
       {kind === 'true_false' && (
-        <div className="flex gap-2 mb-3">
-          {[{ l: 'True', v: true }, { l: 'False', v: false }].map(o => (
+        <div className="flex mb-3 border border-[#E4E1D8]">
+          {[{ l: 'True', v: true }, { l: 'False', v: false }].map((o, i) => (
             <button
               key={o.l}
               onClick={() => onChange({ correct_answer: o.v })}
-              className={`flex-1 px-3 py-2 rounded-lg border text-sm ${correct === o.v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-[#E4E4E7] text-[#52525B]'}`}
+              className={`flex-1 h-9 text-xs font-bold uppercase tracking-[0.1em] transition-colors ${i > 0 ? 'border-l border-[#E4E1D8]' : ''} ${
+                correct === o.v ? 'bg-emerald-600 text-white' : 'bg-white text-[#8A8578] hover:bg-[#FAF9F6] hover:text-[#18181B]'
+              }`}
             >
-              {o.l} {correct === o.v && '✓'}
+              {o.l}
             </button>
           ))}
         </div>
@@ -534,46 +568,49 @@ function QuestionEditor({
       )}
 
       {kind === 'subjective' && (
-        <p className="text-xs text-[#A1A1AA] mb-3">Subjective — graded manually, no preset answer.</p>
+        <p className="text-xs text-[#A8A29A] mb-3">Subjective — graded manually, no preset answer.</p>
       )}
+      </div>
 
-      {/* Scoring */}
-      <div className="border-t border-[#F0F0F0] pt-3">
+      {/* Scoring — a footer band, so every question card ends on the same line. */}
+      <div className="flex flex-wrap items-end gap-4 px-4 py-2.5 bg-[#FAF9F6] border-t border-[#E4E1D8]">
         {!editable ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A1A1AA]">Scoring</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#52525B]">
+            <span className={EXAM.label}>Scoring</span>
+            <span className="text-xs font-semibold text-[#52525B] tabular-nums">
               {scoringSummary(question.scoring_strategy ?? 'manual', params)}
             </span>
           </div>
         ) : meta.manual ? (
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-[#71717A]">Marks</label>
-            <input
-              type="number" min={0}
-              className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
-              value={String(params.correct)}
-              onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
-            />
-            <span className="text-xs text-[#A1A1AA]">graded manually</span>
+          <div className="flex items-end gap-2">
+            <div>
+              <label className={EXAM.fieldLabel}>Marks</label>
+              <input
+                type="number" min={0}
+                className={numField}
+                value={String(params.correct)}
+                onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
+              />
+            </div>
+            <span className="pb-2 text-[11px] text-[#A8A29A]">graded manually</span>
           </div>
         ) : (
-          <div className="flex flex-wrap items-end gap-3">
+          <>
             <div>
-              <label className="block text-[11px] text-[#71717A] mb-0.5">Correct (+)</label>
+              <label className={EXAM.fieldLabel}>Correct (+)</label>
               <input
                 type="number"
-                className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                className={numField}
                 value={String(params.correct)}
                 onChange={e => setParam({ correct: Number(e.target.value) || 0 })}
               />
             </div>
             {fullCustom && (
               <div>
-                <label className="block text-[11px] text-[#71717A] mb-0.5">Wrong (−)</label>
+                <label className={EXAM.fieldLabel}>Wrong (−)</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                  className={numField}
                   value={String(params.wrong)}
                   onChange={e => setParam({ wrong: Number(e.target.value) || 0 })}
                 />
@@ -581,16 +618,16 @@ function QuestionEditor({
             )}
             {fullCustom && kind === 'multiple_correct' && (
               <div>
-                <label className="block text-[11px] text-[#71717A] mb-0.5">Partial</label>
+                <label className={EXAM.fieldLabel}>Partial</label>
                 <input
                   type="number"
-                  className="w-24 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-sm text-[#27272A] focus:outline-none focus:border-[var(--page-primary)] transition-colors"
+                  className={numField}
                   value={String(params.partial ?? 0)}
                   onChange={e => setParam({ partial: Number(e.target.value) || 0 })}
                 />
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

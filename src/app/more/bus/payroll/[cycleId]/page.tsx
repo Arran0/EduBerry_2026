@@ -20,20 +20,24 @@ import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP } from '@/components/salary/adminUi'
-import { getRoleDisplayName, UserProfile } from '@/lib/supabase'
+import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   DriverCycle, DriverSalaryRecord, DriverSalaryBase, PayoutConfig,
   fetchDriverCycle, fetchDriverCycleRecords, setDriverCycleStatus, setDriverCyclePayrollConfig,
   driverSalaryNet, formatPeriod, fetchPayoutConfig, initiateDriverCyclePayouts, fetchDriverBaseSalaries,
   bulkInsertDriverSalaryItems, deleteDriverSalaryItemsByLabel, bulkSetDriverSalaryRecordStatus,
+  deleteDriverSalaryRecordsByIds,
   updateDriverSalaryRecordOverrides, DriverSalaryRecordOverrides,
 } from '@/lib/driverSalary'
 import { fetchDriverBankAccounts } from '@/lib/bus'
-import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints } from '@/lib/salary'
+import { SalaryRecord, SalaryRecordItem, SalaryCycle, StaffBankAccount, fetchMonthlyBonusPoints, fetchHiddenSalaryMemberIds } from '@/lib/salary'
 import {
-  fetchMonthlyAttendanceRecords, fetchHolidays, Holiday, StaffAttendanceRecord,
+  fetchMonthlyAttendanceRecords, fetchHolidays, fetchNonWorkingDays,
+  recomputePendingAttendance,
+  Holiday, NonWorkingDay, StaffAttendanceRecord,
 } from '@/lib/attendance'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
 import {
   PayrollCalibration, DEFAULT_PAYROLL_CALIBRATION, mergeCalibration, fetchPayrollCalibration,
   computeStaffAttendanceStats, computePayrollRow, computeBonusAmounts, daysInMonth,
@@ -54,15 +58,25 @@ const ADMIN_GOLD = '#B8983C'
 // payroll cycle share the salary cycle's Download Centre + bank CSV.
 function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   return {
-    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id,
+    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id, support_staff_id: null,
     base_amount: r.base_amount, status: r.status,
     payout_status: r.payout_status, payout_reference: r.payout_reference,
+    // This legacy driver-only cycle has no cash flag of its own — the unified
+    // Salary Manager cycle is where that lives.
+    pay_by_cash: false,
     notes: r.notes, created_at: r.created_at, updated_at: r.updated_at,
     working_days_override: r.working_days_override,
     leave_override: r.leave_override,
     late_override: r.late_override,
+    half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
+    // This legacy driver-only cycle predates lock-time snapshotting (see
+    // src/lib/salary.ts) — its own driver_payroll_records table has no such
+    // columns, so a locked cycle here still recomputes live as it always has.
+    person_name_snapshot: null, person_role_snapshot: null,
+    working_days_snapshot: null, leave_snapshot: null, late_snapshot: null, half_day_snapshot: null,
+    bonus_points_snapshot: null,
     items: r.items, staff: r.driver ?? null,
   }
 }
@@ -119,6 +133,8 @@ export default function DriverCycleDetailPage() {
   const cycleId = params.cycleId as string
   const { profile } = useAuth()
   const viewerId = profile?.id ?? ''
+  // Same clock the attendance calendar reads — see the staff cycle page.
+  const { today: schoolToday } = useSchoolClock()
 
   const [loading, setLoading] = useState(true)
   const [cycle, setCycle] = useState<DriverCycle | null>(null)
@@ -128,6 +144,7 @@ export default function DriverCycleDetailPage() {
   const [baseMap, setBaseMap] = useState<Record<string, DriverSalaryBase>>({})
   const [attendanceRecords, setAttendanceRecords] = useState<StaffAttendanceRecord[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([])
   const [bonusPoints, setBonusPoints] = useState<Record<string, number>>({})
   const [globalCalibration, setGlobalCalibration] = useState<PayrollCalibration>(DEFAULT_PAYROLL_CALIBRATION)
   const [busy, setBusy] = useState(false)
@@ -141,6 +158,9 @@ export default function DriverCycleDetailPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'reopen' | null>(null)
   const [search, setSearch] = useState('')
+  /** Records left out of the sheet because the driver has resigned or is hidden —
+   *  dropped for good when this (still open) cycle locks. See closeCycle. */
+  const [excludedRecordIds, setExcludedRecordIds] = useState<string[]>([])
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -152,10 +172,23 @@ export default function DriverCycleDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, recs, cfg, banks, bases, globalCal] = await Promise.all([
+    // Same reason as the staff cycle sheet: a driver's Late and Half Day days
+    // are LOP here too, so any attendance rule changed after the day it covers
+    // is settled before the month's attendance is read.
+    await recomputePendingAttendance()
+    const [c, allRecs, cfg, banks, bases, globalCal, hiddenIds] = await Promise.all([
       fetchDriverCycle(cycleId), fetchDriverCycleRecords(cycleId), fetchPayoutConfig(), fetchDriverBankAccounts(),
-      fetchDriverBaseSalaries(), fetchPayrollCalibration(),
+      fetchDriverBaseSalaries(), fetchPayrollCalibration(), fetchHiddenSalaryMemberIds(),
     ])
+    // Mirrors the staff cycle page exactly: while a cycle is still OPEN, a
+    // driver who has since resigned (is_banned) or been hidden from the
+    // salary app is excluded from the sheet and every total on it — neither
+    // should be paid or counted yet. A CLOSED cycle is history and keeps
+    // every record regardless, whatever the driver's status is today.
+    const hidden = new Set(hiddenIds)
+    const isExcluded = (r: DriverSalaryRecord) => !!r.driver?.is_banned || hidden.has(r.driver_id)
+    const recs = c && c.status === 'closed' ? allRecs : allRecs.filter(r => !isExcluded(r))
+    setExcludedRecordIds(c && c.status === 'closed' ? [] : allRecs.filter(isExcluded).map(r => r.id))
     setCycle(c); setRecords(recs); setPayoutCfg(cfg); setGlobalCalibration(globalCal)
 
     const bm: Record<string, StaffBankAccount> = {}
@@ -168,14 +201,16 @@ export default function DriverCycleDetailPage() {
 
     if (c && recs.length > 0) {
       const driverIds = recs.map(r => r.driver_id)
-      const [attRecs, hols, bonusPts] = await Promise.all([
+      const [attRecs, hols, nonWorking, bonusPts] = await Promise.all([
         fetchMonthlyAttendanceRecords(driverIds, c.period_year, c.period_month),
         fetchHolidays(c.period_year, c.period_month),
+        fetchNonWorkingDays(c.period_year, c.period_month),
         fetchMonthlyBonusPoints(driverIds, c.period_year, c.period_month),
       ])
-      setAttendanceRecords(attRecs); setHolidays(hols); setBonusPoints(bonusPts)
+      setAttendanceRecords(attRecs); setHolidays(hols); setNonWorkingDays(nonWorking)
+      setBonusPoints(bonusPts)
     } else {
-      setAttendanceRecords([]); setHolidays([]); setBonusPoints({})
+      setAttendanceRecords([]); setHolidays([]); setNonWorkingDays([]); setBonusPoints({})
     }
     setLoading(false)
   }, [cycleId])
@@ -204,8 +239,15 @@ export default function DriverCycleDetailPage() {
     const bonusAmounts = computeBonusAmounts(bonusPoints, calibration.bonus)
     for (const r of records) {
       const base = baseMap[r.driver_id]
+      // Half days and the grace rework stay staff-only for now (see
+      // manage/[cycleId]/page.tsx) — driver rows carry a fixed halfDayCount of
+      // 0. Non-working days are not optional though: the driver's own
+      // attendance calendar excludes them from Absent, so leaving them out
+      // here would count a day the calendar doesn't and put the Leave column
+      // at odds with the popup opened from the same row.
       const derived = computeStaffAttendanceStats(
-        r.driver_id, attendanceRecords, holidays, cycle.period_year, cycle.period_month,
+        r.driver_id, attendanceRecords, holidays, nonWorkingDays, cycle.period_year, cycle.period_month,
+        schoolToday ?? undefined,
       )
       // A hand-typed override wins over the derived figure; null falls back to it.
       const workingDays = r.working_days_override ?? calendarDays
@@ -218,7 +260,7 @@ export default function DriverCycleDetailPage() {
         pfApplicable: base?.pf_applicable ?? false,
         esiOverride: base?.esi_override ?? null,
         workingDaysInMonth: workingDays,
-        lateCount, leaveCount,
+        lateCount, leaveCount, halfDayCount: 0,
         calibration,
       })
       out[r.id] = {
@@ -232,7 +274,7 @@ export default function DriverCycleDetailPage() {
       }
     }
     return out
-  }, [cycle, records, calibration, attendanceRecords, holidays, bonusPoints, baseMap])
+  }, [cycle, records, calibration, attendanceRecords, holidays, nonWorkingDays, bonusPoints, baseMap, schoolToday])
 
   const closed = cycle?.status === 'closed'
 
@@ -344,6 +386,13 @@ export default function DriverCycleDetailPage() {
     const st = await bulkSetDriverSalaryRecordStatus(recordIds, 'approved')
     if (!st.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${st.error}`); return }
 
+    // Drop draft records for drivers who resigned or were hidden while this
+    // cycle was open — see deleteDriverSalaryRecordsByIds.
+    if (excludedRecordIds.length > 0) {
+      const purge = await deleteDriverSalaryRecordsByIds(excludedRecordIds)
+      if (!purge.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${purge.error}`); return }
+    }
+
     const cy = await setDriverCycleStatus(cycleId, 'closed')
     if (!cy.success) { setBusy(false); setDisburseMsg(`Could not lock cycle: ${cy.error}`); return }
 
@@ -391,7 +440,7 @@ export default function DriverCycleDetailPage() {
   const downloadBankCsv = () => {
     if (!salaryCycle) return
     setDisburseMsg(null)
-    const { fileName, rows, included, skipped } = buildBankDisbursementCsv(salaryCycle, salaryRecords, bankMap)
+    const { fileName, rows, included, missingBank } = buildBankDisbursementCsv(salaryCycle, salaryRecords, bankMap)
     if (included === 0) {
       setDisburseMsg('No records with bank details on file to export. Add bank accounts first.')
       return
@@ -399,7 +448,7 @@ export default function DriverCycleDetailPage() {
     downloadCsv(fileName, rows)
     setDisburseMsg(
       `Exported ${included} record(s) to ${fileName}.csv.` +
-      (skipped.length ? ` Skipped (no bank details): ${skipped.join(', ')}.` : ''),
+      (missingBank.length ? ` Skipped (no bank details): ${missingBank.join(', ')}.` : ''),
     )
   }
 
@@ -567,7 +616,7 @@ export default function DriverCycleDetailPage() {
                                     <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
                                     <div className="min-w-0 flex-1">
                                       <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
-                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getRoleDisplayName(r.driver.role) : ''}</p>
+                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getDisplayRole(r.driver) : ''}</p>
                                     </div>
                                     <button
                                       type="button"
@@ -600,7 +649,8 @@ export default function DriverCycleDetailPage() {
                                   />
                                   <EditableCell
                                     value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
-                                    align="center" format={n => String(n)} title="Leave days — clear to use attendance"
+                                    align="center" format={n => String(n)}
+                                    title="Leave days — the Absent count on this driver's attendance calendar for this month. Clear to go back to it."
                                     onSave={v => saveOverride(r.id, { leave_override: v })}
                                   />
                                   <EditableCell
@@ -668,6 +718,7 @@ export default function DriverCycleDetailPage() {
       <AnimatePresence>
         {showDocs && salaryCycle && (
           <DownloadCentreModal
+            key="download-centre"
             periodLabel={formatPeriod(salaryCycle.period_month, salaryCycle.period_year)}
             recordCount={records.length}
             busyKey={pdfBusy}
@@ -678,6 +729,7 @@ export default function DriverCycleDetailPage() {
         )}
         {showSettings && cycle && (
           <CycleSettingsModal
+            key="cycle-settings"
             initial={calibration}
             hasOverride={!!cycle.payroll_config}
             onClose={() => setShowSettings(false)}
@@ -685,7 +737,7 @@ export default function DriverCycleDetailPage() {
           />
         )}
         {confirmAction && (
-          <ModalShell onClose={() => setConfirmAction(null)} size="sm">
+          <ModalShell key="confirm-lock" onClose={() => setConfirmAction(null)} size="sm">
             <h3 className="font-bold text-slate-800 mb-1.5">
               {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
             </h3>
@@ -707,18 +759,22 @@ export default function DriverCycleDetailPage() {
           </ModalShell>
         )}
         {docsDriver && (
-          <DriverStatementsModal driver={docsDriver} onClose={() => setDocsDriver(null)} />
+          <DriverStatementsModal key="driver-statements" driver={docsDriver} onClose={() => setDocsDriver(null)} />
         )}
         {calendarPerson && (
           <AttendanceCalendarModal
+            key="attendance-calendar"
             person={calendarPerson}
             viewerId={viewerId}
+            year={cycle?.period_year}
+            month={cycle?.period_month}
+            periodLabel={cycle ? formatPeriod(cycle.period_month, cycle.period_year) : undefined}
             onClose={() => setCalendarPerson(null)}
             onClosed={load}
           />
         )}
         {preview && (
-          <StatementPreviewModal spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
+          <StatementPreviewModal key="statement-preview" spec={preview.spec} title={preview.title} onClose={() => setPreview(null)} />
         )}
       </AnimatePresence>
     </ProtectedLayout>

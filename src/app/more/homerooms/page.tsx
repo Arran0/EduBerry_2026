@@ -40,7 +40,6 @@ const itemVariants = {
 }
 
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
 
 function autoName(grade: number | '', section: string): string {
   if (grade && section) return `Grade ${grade} Section ${section}`
@@ -202,20 +201,25 @@ export default function HomeroomsPage() {
     setLoadingSmartboard(true)
     // Reset class teacher section for the newly expanded homeroom.
     setClassTeacherProfile(null); setClassTeacherQuery(''); setClassTeacherSuggestions([])
-    const [data, sb] = await Promise.all([
+    // class_teacher_id is already on the row this list is rendering, so the
+    // teacher's profile is fetched alongside the homeroom rather than in a
+    // third round trip chained behind it.
+    const classTeacherId = homerooms.find(h => h.id === id)?.class_teacher_id ?? null
+    const [data, sb, teacher] = await Promise.all([
       fetchHomeroomWithMembers(id),
       fetchHomeroomSmartboard(id),
+      classTeacherId
+        ? supabase
+            .from('profiles')
+            .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+            .eq('id', classTeacherId)
+            .single()
+            .then(r => r.data as UserProfile | null)
+        : Promise.resolve(null),
     ])
     setExpandedData(data); setLoadingExpanded(false)
     setSmartboard(sb); setLoadingSmartboard(false)
-    if (data?.class_teacher_id) {
-      const { data: teacher } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
-        .eq('id', data.class_teacher_id)
-        .single()
-      setClassTeacherProfile((teacher as UserProfile) ?? null)
-    }
+    setClassTeacherProfile(teacher)
   }
 
   const handleSetClassTeacher = async (teacher: UserProfile) => {
@@ -359,9 +363,13 @@ export default function HomeroomsPage() {
 
   const handleRemoveMember = async (studentId: string) => {
     if (!expandedId) return
-    await removeHomeroomMember(expandedId, studentId)
-    const updated = await fetchHomeroomWithMembers(expandedId)
-    setExpandedData(updated)
+    // The row leaving the roster is already on screen, so drop it immediately
+    // and only re-read the homeroom if the delete actually failed.
+    const previous = expandedData
+    setExpandedData(prev =>
+      prev ? { ...prev, members: prev.members.filter(m => m.student_id !== studentId) } : prev)
+    const ok = await removeHomeroomMember(expandedId, studentId)
+    if (!ok) setExpandedData(previous)
   }
 
   if (!user || !profile) return null

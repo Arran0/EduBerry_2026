@@ -179,6 +179,37 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Types for our database
+/**
+ * True when a PostgREST error means the table (or view) simply isn't in this
+ * database yet — a migration that hasn't been applied to this environment.
+ *
+ * It surfaces in the browser as a bare `404` on the REST URL, which reads like
+ * a broken deploy. Optional features fall back to an empty result for it and
+ * log at `warn` rather than `error`, so a genuine failure (RLS, a bad column,
+ * the network) still stands out in the console instead of being buried under
+ * the same red line every page load.
+ */
+export function isMissingRelation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  // PGRST205: unknown table in PostgREST's schema cache. 42P01: Postgres'
+  // own "relation does not exist", which comes through on some deployments.
+  return error.code === 'PGRST205' || error.code === '42P01'
+    || /does not exist|schema cache/i.test(error.message ?? '')
+}
+
+/**
+ * Bearer token for our own API routes.
+ *
+ * Every route under /api authenticates the caller from this header rather than
+ * a cookie — see src/lib/serverAuth.ts. Lived in push.ts until the fee module
+ * needed it too; one copy, so a route can never be called with a header shaped
+ * slightly differently.
+ */
+export async function authHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
+
 export type UserRole = 'student' | 'teacher' | 'coordinator' | 'principal' | 'admin' | 'driver' | 'smartboard'
 
 export interface UserProfile {
@@ -190,12 +221,19 @@ export interface UserProfile {
   grade?: number
   section?: string
   is_banned?: boolean
+  /** When is_banned was last set true — see /api/admin/toggle-ban. Null while active, or on a resignation recorded before this column existed. */
+  banned_at?: string | null
   geofence_exempt?: boolean
   attendance_hidden?: boolean
   // Cosmetic-only flag: a 'teacher' account displayed as "Non-Teaching" (e.g.
   // office staff, librarians). Grants no different permissions than a teacher —
   // see supabase-migrations/add_non_teaching_staff_flag.sql for why.
   is_non_teaching?: boolean
+  // Free-text label an admin can set to override the role label shown across
+  // the app (e.g. "Head of Department"). Does not affect permissions, which
+  // always key off `role`. Falls back to getRoleDisplayName(role) when unset —
+  // see getDisplayRole below.
+  display_role?: string | null
   created_at: string
   updated_at: string
 }
@@ -206,27 +244,6 @@ export const isStaffRole = (role: UserRole): boolean => {
 
 export const isAdminRole = (role: UserRole): boolean => {
   return role === 'admin'
-}
-
-// Bus drivers get a dedicated dashboard-only experience (no normal app nav).
-export const isDriverRole = (role: UserRole): boolean => {
-  return role === 'driver'
-}
-
-// Smart boards get a dedicated dashboard-only experience (no normal app nav),
-// opened on the homeroom's physical board for most of the school day.
-export const isSmartboardRole = (role: UserRole): boolean => {
-  return role === 'smartboard'
-}
-
-// Check if user has coordinator tag
-export const isCoordinatorRole = (role: UserRole): boolean => {
-  return role === 'coordinator'
-}
-
-// Check if user has principal tag
-export const isPrincipalRole = (role: UserRole): boolean => {
-  return role === 'principal'
 }
 
 // Check if user can see Team Analytics (all staff roles)
@@ -246,6 +263,13 @@ export const getRoleDisplayName = (role: UserRole, isNonTeaching?: boolean): str
     smartboard: 'Smart Board',
   }
   return roleNames[role] || role
+}
+
+// Label shown wherever the app displays a person's role: their admin-set
+// display_role when present, otherwise the standard label for their actual
+// role. Never affects permissions — those always check `role` directly.
+export const getDisplayRole = (profile: { role: UserRole; is_non_teaching?: boolean; display_role?: string | null }): string => {
+  return profile.display_role?.trim() || getRoleDisplayName(profile.role, profile.is_non_teaching)
 }
 
 export const getRoleBadgeColor = (role: UserRole, isNonTeaching?: boolean): string => {

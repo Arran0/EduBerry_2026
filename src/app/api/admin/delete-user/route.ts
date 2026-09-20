@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { deleteUserAccountServerSide } from '@/lib/adminAccountDeletion'
 
 export async function DELETE(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,72 +46,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'You cannot delete your own account' }, { status: 400 })
   }
 
-  // Tasks this user created are deleted outright rather than handed to the
-  // deleting admin — reassigning created_by used to dump the departed
-  // staffer's entire task backlog (including anything awaiting verification
-  // or overdue) onto whichever admin performed the delete. task_assignees,
-  // task_checklist_items and task_comments all cascade-delete with the task.
-  const { error: taskDeleteError } = await adminClient.from('tasks').delete().eq('created_by', userId)
-  if (taskDeleteError) {
-    console.error('Failed to delete tasks created by deleted user:', taskDeleteError.message)
-  }
-
-  // Reassign remaining records created by this user to the admin to satisfy
-  // NOT NULL foreign key constraints on created_by/user_id columns before
-  // profile deletion.
-  const reassignTables: { table: string; column: string }[] = [
-    { table: 'classrooms', column: 'created_by' },
-    { table: 'classroom_folders', column: 'created_by' },
-    { table: 'classroom_files', column: 'created_by' },
-    { table: 'classroom_assessments', column: 'created_by' },
-    { table: 'task_comments', column: 'user_id' },
-    { table: 'projects', column: 'created_by' },
-    { table: 'announcements', column: 'created_by' },
-  ]
-
-  for (const { table, column } of reassignTables) {
-    const { error } = await adminClient
-      .from(table)
-      .update({ [column]: callerUser.id })
-      .eq(column, userId)
-    if (error) {
-      console.error(`Failed to reassign ${table}.${column}:`, error.message)
-    }
-  }
-
-  // Nullify nullable FK references to this profile that have no ON DELETE action.
-  // These columns reference profiles without CASCADE or SET NULL, so they must be
-  // cleared before the profile row can be deleted.
-  const nullifyTables: { table: string; column: string }[] = [
-    { table: 'subtasks', column: 'assignee_id' },
-    { table: 'subtasks', column: 'created_by' },
-    { table: 'teams', column: 'coordinator_id' },
-    { table: 'feedbacks', column: 'replied_by' },
-  ]
-
-  for (const { table, column } of nullifyTables) {
-    const { error } = await adminClient
-      .from(table)
-      .update({ [column]: null })
-      .eq(column, userId)
-    if (error) {
-      console.error(`Failed to nullify ${table}.${column}:`, error.message)
-    }
-  }
-
-  // Delete profile row (foreign key constraints are now cleared)
-  const { error: profileDeleteError } = await adminClient.from('profiles').delete().eq('id', userId)
-  if (profileDeleteError) {
-    return NextResponse.json({ success: false, error: `Failed to delete profile: ${profileDeleteError.message}` }, { status: 500 })
-  }
-
-  // Delete auth user if service role key is available
-  if (serviceRoleKey) {
-    const { error } = await adminClient.auth.admin.deleteUser(userId)
-    if (error) {
-      // Profile is already deleted; auth user removal failed — not critical
-      console.error('Auth user deletion failed:', error.message)
-    }
+  const result = await deleteUserAccountServerSide(adminClient, userId, callerUser.id, serviceRoleKey)
+  if (!result.success) {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 })
   }
 
   return NextResponse.json({ success: true })

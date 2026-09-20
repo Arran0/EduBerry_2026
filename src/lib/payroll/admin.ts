@@ -1,0 +1,360 @@
+// ============================================================================
+// Payroll v2 admin data layer — catalogue, structures, policies, rules.
+// ----------------------------------------------------------------------------
+// Browser-side reads and writes for everything an admin configures before a run
+// exists. Nothing here calculates: the engine does that, and it is imported by
+// the screens directly for previews.
+// ============================================================================
+
+import { supabase } from '@/lib/supabase'
+import type {
+  ComponentRow, StructureRow, AssignmentRow, PolicyGroupRow,
+  CalendarRow, RuleSetRow, StatutoryRow,
+} from './rows'
+import { toComponentDef, toPolicyGroup, toWorkingCalendar } from './rows'
+import type { ComponentDef, PolicyGroup, WorkingCalendar } from './engine/types'
+
+type Result = { success: boolean; error?: string }
+
+function fail(where: string, error: { message: string } | null): Result {
+  if (error) { console.error(`${where} failed:`, error); return { success: false, error: error.message } }
+  return { success: true }
+}
+
+// ── Salary heads ────────────────────────────────────────────────────────
+
+const COMPONENT_COLUMNS =
+  'id, code, name, kind, calc_type, percent_of, formula, slabs, sequence, rounding, ' +
+  'is_taxable, counts_for_pf, counts_for_esi, counts_for_pt, lop_applicable, ' +
+  'prorate_on_join_exit, show_on_payslip, is_system'
+
+export async function fetchComponents(): Promise<ComponentDef[]> {
+  const { data, error } = await supabase
+    .from('payroll_components').select(COMPONENT_COLUMNS).order('sequence')
+  if (error) { console.error('fetchComponents failed:', error); return [] }
+  return ((data ?? []) as unknown as ComponentRow[]).map(toComponentDef)
+}
+
+// ── Structures ──────────────────────────────────────────────────────────
+
+const STRUCTURE_SELECT = `
+  id, code, name, employee_category, version, supersedes_id, status,
+  effective_from, effective_to, notes,
+  components:payroll_structure_components(
+    id, structure_id, component_id, calc_type, value, formula, sequence,
+    component:payroll_components(code)
+  )
+`
+
+export async function fetchStructures(): Promise<StructureRow[]> {
+  const { data, error } = await supabase
+    .from('payroll_structures').select(STRUCTURE_SELECT)
+    .order('code').order('version', { ascending: false })
+  if (error) { console.error('fetchStructures failed:', error); return [] }
+  return (data ?? []) as unknown as StructureRow[]
+}
+
+export interface StructureInput {
+  code: string
+  name: string
+  employeeCategory: string | null
+  effectiveFrom: string
+  notes: string | null
+  components: { componentId: string; calcType: string | null; value: number | null; formula: string | null; sequence: number }[]
+}
+
+/** Publish a draft and close the version it supersedes the day before it starts. */
+export async function activateStructure(id: string): Promise<Result> {
+  const { data: s } = await supabase
+    .from('payroll_structures').select('supersedes_id, effective_from').eq('id', id).single()
+  if (!s) return { success: false, error: 'Structure not found' }
+
+  const { error } = await supabase.from('payroll_structures').update({ status: 'active' }).eq('id', id)
+  if (error) return fail('activateStructure', error)
+
+  if (s.supersedes_id) {
+    const closeOn = new Date(`${s.effective_from}T12:00:00Z`)
+    closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+    await supabase.from('payroll_structures')
+      .update({ status: 'archived', effective_to: closeOn.toISOString().slice(0, 10) })
+      .eq('id', s.supersedes_id)
+  }
+  return { success: true }
+}
+
+// ── Assignments ─────────────────────────────────────────────────────────
+
+const ASSIGNMENT_SELECT =
+  'id, employee_id, structure_id, effective_from, effective_to, anchor_amount, ' +
+  'revision_id, reason, created_at, structure:payroll_structures(name, version, code)'
+
+export async function fetchAllAssignments(): Promise<AssignmentRow[]> {
+  const { data, error } = await supabase
+    .from('payroll_employee_structures').select(ASSIGNMENT_SELECT)
+    .order('effective_from', { ascending: false })
+  if (error) { console.error('fetchAllAssignments failed:', error); return [] }
+  return (data ?? []) as unknown as AssignmentRow[]
+}
+
+/**
+ * Assign a structure from a date. Append-only: the open assignment is closed the
+ * day before rather than edited, so the employee's salary history stays complete
+ * and the database's non-overlap constraint is satisfied.
+ */
+export async function assignStructure(input: {
+  employeeId: string; structureId: string; effectiveFrom: string
+  anchorAmount: number; reason: string | null; revisionId?: string | null; createdBy: string
+}): Promise<Result> {
+  const closeOn = new Date(`${input.effectiveFrom}T12:00:00Z`)
+  closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+  const closeDate = closeOn.toISOString().slice(0, 10)
+
+  const { error: closeErr } = await supabase
+    .from('payroll_employee_structures')
+    .update({ effective_to: closeDate })
+    .eq('employee_id', input.employeeId)
+    .is('effective_to', null)
+    .lt('effective_from', input.effectiveFrom)
+  if (closeErr) return fail('assignStructure (closing previous)', closeErr)
+
+  const { error } = await supabase.from('payroll_employee_structures').insert({
+    employee_id: input.employeeId, structure_id: input.structureId,
+    effective_from: input.effectiveFrom, anchor_amount: input.anchorAmount,
+    reason: input.reason, revision_id: input.revisionId ?? null, created_by: input.createdBy,
+  })
+  return fail('assignStructure', error)
+}
+
+// ── Revisions ───────────────────────────────────────────────────────────
+
+export interface RevisionInput {
+  label: string
+  kind: 'individual' | 'bulk_increment' | 'promotion'
+  basis: 'percent' | 'amount' | 'new_structure'
+  value: number | null
+  targetStructureId: string | null
+  effectiveFrom: string
+  arrearsFrom: string | null
+  scope: Record<string, unknown>
+  reason: string | null
+}
+
+export async function createRevision(input: RevisionInput, createdBy: string): Promise<{ success: boolean; error?: string; id?: string }> {
+  const { data, error } = await supabase.from('payroll_revisions').insert({
+    label: input.label, kind: input.kind, basis: input.basis, value: input.value,
+    target_structure_id: input.targetStructureId, effective_from: input.effectiveFrom,
+    arrears_from: input.arrearsFrom, scope: input.scope, reason: input.reason,
+    status: 'draft', created_by: createdBy,
+  }).select('id').single()
+  if (error || !data) { console.error('createRevision failed:', error); return { success: false, error: error?.message } }
+  return { success: true, id: data.id }
+}
+
+/** What a revision would do to each person, before anybody commits to it. */
+export interface IncrementPreviewRow {
+  employeeId: string
+  employeeName: string
+  currentAnchor: number
+  newAnchor: number
+  delta: number
+  structureName: string
+}
+
+export function previewIncrement(
+  assignments: AssignmentRow[],
+  names: Record<string, string>,
+  basis: 'percent' | 'amount',
+  value: number,
+): IncrementPreviewRow[] {
+  const latest = new Map<string, AssignmentRow>()
+  for (const a of assignments) {
+    if (a.effective_to !== null) continue
+    if (!latest.has(a.employee_id)) latest.set(a.employee_id, a)
+  }
+  return [...latest.values()].map(a => {
+    const current = Number(a.anchor_amount) || 0
+    const newAnchor = basis === 'percent'
+      ? Math.round(current * (1 + value / 100))
+      : Math.round(current + value)
+    return {
+      employeeId: a.employee_id,
+      employeeName: names[a.employee_id] ?? a.employee_id,
+      currentAnchor: current,
+      newAnchor,
+      delta: newAnchor - current,
+      structureName: a.structure ? `${a.structure.name} v${a.structure.version}` : '—',
+    }
+  }).sort((x, y) => y.delta - x.delta)
+}
+
+/**
+ * Apply a revision: one new assignment per employee, previous ones closed.
+ * Every row shares the same effectiveFrom/closeDate, so — unlike the
+ * single-employee assignStructure() this mirrors — closing the previous
+ * assignments and inserting the new ones are each done in one batched query
+ * instead of two round trips per employee.
+ */
+export async function applyRevision(
+  revisionId: string, rows: IncrementPreviewRow[], effectiveFrom: string,
+  structureByEmployee: Record<string, string>, createdBy: string,
+): Promise<Result> {
+  const targets = rows
+    .map(r => ({ r, structureId: structureByEmployee[r.employeeId] }))
+    .filter((t): t is { r: IncrementPreviewRow; structureId: string } => !!t.structureId)
+  if (targets.length === 0) {
+    return fail('applyRevision', { message: 'No employees with a target structure' })
+  }
+
+  const closeOn = new Date(`${effectiveFrom}T12:00:00Z`)
+  closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+  const closeDate = closeOn.toISOString().slice(0, 10)
+
+  const { error: closeErr } = await supabase
+    .from('payroll_employee_structures')
+    .update({ effective_to: closeDate })
+    .in('employee_id', targets.map(t => t.r.employeeId))
+    .is('effective_to', null)
+    .lt('effective_from', effectiveFrom)
+  if (closeErr) return fail('applyRevision (closing previous)', closeErr)
+
+  const { error: insertErr } = await supabase.from('payroll_employee_structures').insert(
+    targets.map(({ r, structureId }) => ({
+      employee_id: r.employeeId, structure_id: structureId,
+      effective_from: effectiveFrom, anchor_amount: r.newAnchor,
+      reason: 'Salary revision', revision_id: revisionId, created_by: createdBy,
+    }))
+  )
+  if (insertErr) return fail('applyRevision', insertErr)
+
+  const { error } = await supabase
+    .from('payroll_revisions')
+    .update({ status: 'applied', applied_at: new Date().toISOString(), approved_by: createdBy })
+    .eq('id', revisionId)
+  return fail('applyRevision', error)
+}
+
+// ── Policy groups ───────────────────────────────────────────────────────
+
+const POLICY_SELECT =
+  'id, name, is_default, priority, effective_from, effective_to, match, policy, notes, ' +
+  'members:payroll_policy_group_members(employee_id)'
+
+export async function fetchPolicyGroups(): Promise<PolicyGroup[]> {
+  const { data, error } = await supabase
+    .from('payroll_policy_groups').select(POLICY_SELECT)
+    .order('is_default').order('priority', { ascending: false })
+  if (error) { console.error('fetchPolicyGroups failed:', error); return [] }
+  return ((data ?? []) as unknown as PolicyGroupRow[]).map(toPolicyGroup)
+}
+
+export async function savePolicyGroup(g: Partial<PolicyGroupRow> & { name: string; policy: unknown }): Promise<{ success: boolean; error?: string; id?: string }> {
+  const { members, ...row } = g as PolicyGroupRow
+  const { data, error } = await supabase.from('payroll_policy_groups').upsert(row).select('id').single()
+  if (error || !data) { console.error('savePolicyGroup failed:', error); return { success: false, error: error?.message } }
+  return { success: true, id: data.id }
+}
+
+/** Replace a group's membership wholesale — simpler to reason about than diffing. */
+export async function setPolicyGroupMembers(groupId: string, employeeIds: string[]): Promise<Result> {
+  const { error: delErr } = await supabase.from('payroll_policy_group_members').delete().eq('group_id', groupId)
+  if (delErr) return fail('setPolicyGroupMembers (clear)', delErr)
+  if (employeeIds.length === 0) return { success: true }
+  const { error } = await supabase.from('payroll_policy_group_members')
+    .insert(employeeIds.map(employee_id => ({ group_id: groupId, employee_id })))
+  return fail('setPolicyGroupMembers', error)
+}
+
+export async function deletePolicyGroup(id: string): Promise<Result> {
+  const { error } = await supabase.from('payroll_policy_groups').delete().eq('id', id).eq('is_default', false)
+  return fail('deletePolicyGroup', error)
+}
+
+// ── Calendars ───────────────────────────────────────────────────────────
+
+const CALENDAR_SELECT =
+  'id, name, is_default, priority, effective_from, effective_to, match, basis, fixed_days, ' +
+  'week_pattern, nth_weekday_rules, members:payroll_calendar_members(employee_id)'
+
+export async function fetchCalendars(): Promise<WorkingCalendar[]> {
+  const { data, error } = await supabase
+    .from('payroll_calendars').select(CALENDAR_SELECT)
+    .order('is_default').order('priority', { ascending: false })
+  if (error) { console.error('fetchCalendars failed:', error); return [] }
+  return ((data ?? []) as unknown as CalendarRow[]).map(toWorkingCalendar)
+}
+
+export async function saveCalendar(c: Partial<CalendarRow> & { name: string }): Promise<{ success: boolean; error?: string; id?: string }> {
+  const { members, ...row } = c as CalendarRow
+  const { data, error } = await supabase.from('payroll_calendars').upsert(row).select('id').single()
+  if (error || !data) { console.error('saveCalendar failed:', error); return { success: false, error: error?.message } }
+  return { success: true, id: data.id }
+}
+
+// ── Statutory rule sets ─────────────────────────────────────────────────
+
+const RULE_SELECT =
+  'id, domain, jurisdiction, version, effective_from, effective_to, rules, source_note, status, published_at'
+
+export async function fetchRuleSets(includeDrafts = true): Promise<RuleSetRow[]> {
+  let q = supabase.from('payroll_rule_sets').select(RULE_SELECT)
+  if (!includeDrafts) q = q.eq('status', 'published')
+  const { data, error } = await q.order('domain').order('effective_from', { ascending: false })
+  if (error) { console.error('fetchRuleSets failed:', error); return [] }
+  return (data ?? []) as RuleSetRow[]
+}
+
+/**
+ * Publishing a new version closes the one it replaces the day before it starts.
+ * The range-overlap exclusion constraint would reject the insert otherwise,
+ * which is the database refusing to let two rates claim the same day.
+ */
+export async function publishRuleSet(id: string): Promise<Result> {
+  const { data: rs } = await supabase
+    .from('payroll_rule_sets').select('domain, jurisdiction, effective_from').eq('id', id).single()
+  if (!rs) return { success: false, error: 'Rule set not found' }
+
+  const closeOn = new Date(`${rs.effective_from}T12:00:00Z`)
+  closeOn.setUTCDate(closeOn.getUTCDate() - 1)
+
+  const { error: closeErr } = await supabase
+    .from('payroll_rule_sets')
+    .update({ effective_to: closeOn.toISOString().slice(0, 10), status: 'superseded' })
+    .eq('domain', rs.domain).eq('jurisdiction', rs.jurisdiction)
+    .eq('status', 'published').is('effective_to', null)
+  if (closeErr) return fail('publishRuleSet (closing previous)', closeErr)
+
+  const { error } = await supabase.from('payroll_rule_sets')
+    .update({ status: 'published', published_at: new Date().toISOString() }).eq('id', id)
+  return fail('publishRuleSet', error)
+}
+
+export async function createRuleSetDraft(
+  domain: string, jurisdiction: string, effectiveFrom: string, rules: unknown, sourceNote: string, createdBy: string,
+): Promise<{ success: boolean; error?: string; id?: string }> {
+  const { data: existing } = await supabase
+    .from('payroll_rule_sets').select('version').eq('domain', domain).eq('jurisdiction', jurisdiction)
+    .order('version', { ascending: false }).limit(1)
+  const version = (existing?.[0]?.version ?? 0) + 1
+
+  const { data, error } = await supabase.from('payroll_rule_sets').insert({
+    domain, jurisdiction, version, effective_from: effectiveFrom,
+    rules, source_note: sourceNote, status: 'draft', created_by: createdBy,
+  }).select('id').single()
+  if (error || !data) { console.error('createRuleSetDraft failed:', error); return { success: false, error: error?.message } }
+  return { success: true, id: data.id }
+}
+
+// ── Employee statutory identity ─────────────────────────────────────────
+
+export async function fetchStatutoryRows(): Promise<Record<string, StatutoryRow>> {
+  const { data, error } = await supabase.from('payroll_employee_statutory').select('*')
+  if (error) { console.error('fetchStatutoryRows failed:', error); return {} }
+  const out: Record<string, StatutoryRow> = {}
+  for (const r of (data ?? []) as StatutoryRow[]) out[r.employee_id] = r
+  return out
+}
+
+export async function upsertStatutory(row: Partial<StatutoryRow> & { employee_id: string }): Promise<Result> {
+  const { error } = await supabase.from('payroll_employee_statutory').upsert(row, { onConflict: 'employee_id' })
+  return fail('upsertStatutory', error)
+}

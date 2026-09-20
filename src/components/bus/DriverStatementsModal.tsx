@@ -8,7 +8,7 @@ import {
   ChevronLeft, Download, Banknote,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import {
   DriverSalaryRecord, driverSalaryNet, formatPeriod,
   fetchSalaryForDriver, fetchDriverBaseSalaries,
@@ -38,15 +38,22 @@ const STATUS_CHIP: Record<string, string> = {
 // reuse the staff salary statement builders (payslip / register / certificate / etc.).
 function toSalaryRecord(r: DriverSalaryRecord): SalaryRecord {
   return {
-    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id,
+    id: r.id, cycle_id: r.cycle_id, staff_id: r.driver_id, support_staff_id: null,
     base_amount: r.base_amount, status: r.status,
     payout_status: r.payout_status, payout_reference: r.payout_reference,
+    pay_by_cash: false,
     notes: r.notes, created_at: r.created_at, updated_at: r.updated_at,
     working_days_override: r.working_days_override,
     leave_override: r.leave_override,
     late_override: r.late_override,
+    half_day_override: r.half_day_override,
     pf_amount_override: r.pf_amount_override,
     esi_amount_override: r.esi_amount_override,
+    // Legacy driver-only cycles predate lock-time snapshotting — see the
+    // matching adapter in app/more/bus/payroll/[cycleId]/page.tsx.
+    person_name_snapshot: null, person_role_snapshot: null,
+    working_days_snapshot: null, leave_snapshot: null, late_snapshot: null, half_day_snapshot: null,
+    bonus_points_snapshot: null,
     items: r.items, cycle: (r.cycle as unknown as SalaryCycle) ?? null,
   }
 }
@@ -163,7 +170,7 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
             <Avatar avatarUrl={driver.avatar_url} name={driver.full_name} size={36} userId={driver.id} />
             <div className="min-w-0">
               <p className="font-bold text-[#18181B] text-sm truncate">{driver.full_name}</p>
-              <p className="text-[11px] text-[#71717A]">{getRoleDisplayName(driver.role)}</p>
+              <p className="text-[11px] text-[#71717A]">{getDisplayRole(driver)}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">

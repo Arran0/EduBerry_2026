@@ -47,6 +47,13 @@ export default function BankCollectSettings({ ctx }: Props) {
   const [upi, setUpi] = useState<UpiConfig>({ vpa: '', payee_name: '' })
   const [rzp, setRzp] = useState<RazorpayConfig>({ enabled: false, key_id: '' })
   const [rzpSecrets, setRzpSecrets] = useState<RazorpaySecrets>({ key_secret: '', webhook_secret: '' })
+  // Which credentials exist server-side, and which the admin asked to erase.
+  // Stored secrets are never sent to the browser, so the inputs above always
+  // start blank and a blank one means "leave it alone" on save.
+  const [configured, setConfigured] = useState<Set<string>>(new Set())
+  const [rzpConfigured, setRzpConfigured] = useState<Set<string>>(new Set())
+  const [clearKeys, setClearKeys] = useState<string[]>([])
+  const [rzpClearKeys, setRzpClearKeys] = useState<string[]>([])
   const [mapText, setMapText] = useState('')
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState<string | null>(null)
@@ -61,10 +68,15 @@ export default function BankCollectSettings({ ctx }: Props) {
       fetchPaymentSecrets('razorpay'),
     ])
     setCfg(c)
-    setSecrets(withSecretDefaults(BANK_CONNECTION_SECRET_DEFAULTS, s))
+    setSecrets(withSecretDefaults(BANK_CONNECTION_SECRET_DEFAULTS, s.values))
+    setConfigured(s.configured)
+    setClearKeys([])
     setUpi(u)
     setRzp(r)
-    setRzpSecrets({ key_secret: rs.key_secret ?? '', webhook_secret: rs.webhook_secret ?? '' })
+    // Razorpay's two fields are both write-only, so neither comes back.
+    setRzpSecrets({ key_secret: '', webhook_secret: '' })
+    setRzpConfigured(rs.configured)
+    setRzpClearKeys([])
     setMapText(Object.keys(c.request_map).length ? JSON.stringify(c.request_map, null, 2) : '')
     setLoaded(true)
   }, [])
@@ -74,6 +86,17 @@ export default function BankCollectSettings({ ctx }: Props) {
   const flash = (key: string) => {
     setSavedKey(key)
     setTimeout(() => setSavedKey(k => (k === key ? null : k)), 2000)
+  }
+
+  // "Clear" only marks the credential; it is erased when the card is saved, so
+  // the admin can still back out by leaving the page.
+  const queueClear = (key: string) => {
+    setClearKeys(ks => (ks.includes(key) ? ks : [...ks, key]))
+    setConfigured(c => { const next = new Set(c); next.delete(key); return next })
+  }
+  const queueRzpClear = (key: string) => {
+    setRzpClearKeys(ks => (ks.includes(key) ? ks : [...ks, key]))
+    setRzpConfigured(c => { const next = new Set(c); next.delete(key); return next })
   }
 
   const saveUpi = async () => {
@@ -90,20 +113,20 @@ export default function BankCollectSettings({ ctx }: Props) {
     setSavingKey('bank')
     const [res] = await Promise.all([
       saveBankCollectConfig({ ...cfg, request_map: map }),
-      savePaymentSecrets('bank_collect', { ...secrets }),
+      savePaymentSecrets('bank_collect', { ...secrets }, clearKeys),
     ])
     setSavingKey(null)
-    if (res.success) flash('bank'); else setError(res.error ?? 'Could not save')
+    if (res.success) { flash('bank'); await load() } else setError(res.error ?? 'Could not save')
   }
 
   const saveRzp = async () => {
     setSavingKey('rzp')
     const [res] = await Promise.all([
       saveRazorpayConfig(rzp),
-      savePaymentSecrets('razorpay', { ...rzpSecrets }),
+      savePaymentSecrets('razorpay', { ...rzpSecrets }, rzpClearKeys),
     ])
     setSavingKey(null)
-    if (res.success) flash('rzp'); else setError(res.error ?? 'Could not save')
+    if (res.success) { flash('rzp'); await load() } else setError(res.error ?? 'Could not save')
   }
 
   if (!loaded) {
@@ -173,6 +196,8 @@ export default function BankCollectSettings({ ctx }: Props) {
                     value={secrets.webhook_secret}
                     onChange={v => setSecrets({ ...secrets, webhook_secret: v })}
                     placeholder="HMAC secret for incoming callbacks"
+                    configured={configured.has('webhook_secret')}
+                    onClear={() => queueClear('webhook_secret')}
                   />
                 </Field>
                 <InfoNote tone="info">
@@ -187,6 +212,8 @@ export default function BankCollectSettings({ ctx }: Props) {
                   onConnection={c => set('connection', c)}
                   secrets={secrets}
                   onSecrets={setSecrets}
+                  configured={configured}
+                  onClear={queueClear}
                 />
                 <Field label="Allocation path" hint="Endpoint that allots a virtual handle for one fee. Appended to the API base URL.">
                   <TextInput value={cfg.allocate_path} onChange={v => set('allocate_path', v)} placeholder="/virtual-accounts" mono />
@@ -262,10 +289,10 @@ export default function BankCollectSettings({ ctx }: Props) {
               <TextInput value={rzp.key_id} onChange={v => setRzp({ ...rzp, key_id: v })} placeholder="rzp_live_xxxxxxxx" />
             </Field>
             <Field label="Key secret">
-              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" />
+              <PwInput value={rzpSecrets.key_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, key_secret: v })} placeholder="Razorpay key secret" configured={rzpConfigured.has('key_secret')} onClear={() => queueRzpClear('key_secret')} />
             </Field>
             <Field label="Webhook secret">
-              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" />
+              <PwInput value={rzpSecrets.webhook_secret} onChange={v => setRzpSecrets({ ...rzpSecrets, webhook_secret: v })} placeholder="HMAC secret for the payment.captured webhook" configured={rzpConfigured.has('webhook_secret')} onClear={() => queueRzpClear('webhook_secret')} />
             </Field>
             <WebhookUrlField path={rzpWebhook} label="Razorpay webhook URL" />
           </div>

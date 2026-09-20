@@ -1,7 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { computeSubmissionScores, allManualGraded } from './examGrading'
 import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
-import { createAssessment, upsertAssessmentMark, fetchStudentMembers } from './classrooms'
+import { createAssessment, upsertAssessmentMarks, fetchStudentMembers } from './classrooms'
 import { compressImageIfNeeded } from './imageCompression'
 
 // ============================================================
@@ -221,11 +221,6 @@ export function examPhase(
   const deadline = attemptDeadline(exam)
   if (deadline != null && now > deadline) return 'grading'
   return 'open'
-}
-
-/** Students may only attempt while the exam is open. */
-export function canAttemptExam(exam: Parameters<typeof examPhase>[0], now: number = Date.now()): boolean {
-  return examPhase(exam, now) === 'open'
 }
 
 /** An immediate-results exam whose preset auto-close moment has passed. */
@@ -545,24 +540,6 @@ export async function addQuestionsBulk(examId: string, inputs: QuestionInput[]):
   return (data ?? []) as ExamQuestion[]
 }
 
-export async function updateQuestion(
-  questionId: string,
-  updates: Partial<QuestionInput>,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('exam_questions')
-    .update(updates)
-    .eq('id', questionId)
-    .select('exam_id')
-    .single()
-  if (error) {
-    console.error('updateQuestion error:', error.message)
-    return false
-  }
-  if (data?.exam_id) await recomputeTotalMarks(data.exam_id as string)
-  return true
-}
-
 /**
  * Persist edits to many questions at once — used by the single "Save
  * questions" action so every in-progress edit in the builder is written in
@@ -601,16 +578,18 @@ export async function deleteQuestion(questionId: string): Promise<boolean> {
   return true
 }
 
-/** Persist a new order; orderedIds must be the full set of question ids. */
+/**
+ * Persist a new order; orderedIds must be the full set of question ids.
+ * Applied by a single RPC so a 40-question paper is one round trip, not 40.
+ */
 export async function reorderQuestions(examId: string, orderedIds: string[]): Promise<boolean> {
-  const results = await Promise.all(
-    orderedIds.map((id, idx) =>
-      supabase.from('exam_questions').update({ position: idx }).eq('id', id).eq('exam_id', examId),
-    ),
-  )
-  const failed = results.find(r => r.error)
-  if (failed?.error) {
-    console.error('reorderQuestions error:', failed.error.message)
+  if (orderedIds.length === 0) return true
+  const { error } = await supabase.rpc('reorder_exam_questions', {
+    p_exam_id: examId,
+    p_ids: orderedIds,
+  })
+  if (error) {
+    console.error('reorderQuestions error:', error.message)
     return false
   }
   return true
@@ -650,31 +629,71 @@ export async function setExamAudience(
   return true
 }
 
-/** Expand an exam's audience (homerooms + individuals) into a deduped student list. */
-export async function resolveAudienceStudents(examId: string): Promise<UserProfile[]> {
-  const audiences = await fetchAudience(examId)
-  const homeroomIds = audiences.map(a => a.homeroom_id).filter((v): v is string => !!v)
-  const userIds = audiences.map(a => a.user_id).filter((v): v is string => !!v)
+/**
+ * Expand many exams' audiences at once, deduped per exam.
+ *
+ * Resolving one exam at a time costs three round trips each, which turns a
+ * teacher's exam list into a query storm. This resolves the whole list in
+ * three queries total and stitches the rosters back onto their exams in
+ * memory. Every exam id passed in gets an entry, empty audience included.
+ */
+async function resolveAudienceStudentsBulk(examIds: string[]): Promise<Map<string, UserProfile[]>> {
+  const byExam = new Map<string, UserProfile[]>()
+  for (const id of examIds) byExam.set(id, [])
+  if (examIds.length === 0) return byExam
 
-  const byId = new Map<string, UserProfile>()
+  const { data: audienceRows } = await supabase
+    .from('exam_audiences')
+    .select('exam_id, homeroom_id, user_id')
+    .in('exam_id', examIds)
 
-  if (homeroomIds.length > 0) {
-    const { data } = await supabase
-      .from('homeroom_members')
-      .select('student:profiles!homeroom_members_student_id_fkey(id, full_name, avatar_url, email, role)')
-      .in('homeroom_id', homeroomIds)
-    for (const row of data ?? []) {
-      const s = (Array.isArray(row.student) ? row.student[0] : row.student) as UserProfile | undefined
-      if (s) byId.set(s.id, s)
+  const rows = (audienceRows ?? []) as Pick<ExamAudience, 'exam_id' | 'homeroom_id' | 'user_id'>[]
+  const homeroomIds = [...new Set(rows.map(r => r.homeroom_id).filter((v): v is string => !!v))]
+  const userIds = [...new Set(rows.map(r => r.user_id).filter((v): v is string => !!v))]
+
+  const [memberRes, profileRes] = await Promise.all([
+    homeroomIds.length > 0
+      ? supabase
+          .from('homeroom_members')
+          .select('homeroom_id, student:profiles!homeroom_members_student_id_fkey(id, full_name, avatar_url, email, role)')
+          .in('homeroom_id', homeroomIds)
+      : Promise.resolve({ data: [] }),
+    userIds.length > 0
+      ? supabase.from('profiles').select('id, full_name, avatar_url, email, role').in('id', userIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const studentsByHomeroom = new Map<string, UserProfile[]>()
+  for (const row of (memberRes.data ?? []) as { homeroom_id: string; student: UserProfile | UserProfile[] | null }[]) {
+    const s = (Array.isArray(row.student) ? row.student[0] : row.student) as UserProfile | undefined
+    if (!s) continue
+    const list = studentsByHomeroom.get(row.homeroom_id)
+    if (list) list.push(s)
+    else studentsByHomeroom.set(row.homeroom_id, [s])
+  }
+  const profileById = new Map(((profileRes.data ?? []) as UserProfile[]).map(p => [p.id, p]))
+
+  // A student reachable by both a homeroom and by name must count once.
+  const seenByExam = new Map<string, Map<string, UserProfile>>()
+  for (const id of examIds) seenByExam.set(id, new Map())
+  for (const row of rows) {
+    const seen = seenByExam.get(row.exam_id)
+    if (!seen) continue
+    if (row.homeroom_id) {
+      for (const s of studentsByHomeroom.get(row.homeroom_id) ?? []) seen.set(s.id, s)
+    } else if (row.user_id) {
+      const p = profileById.get(row.user_id)
+      if (p) seen.set(p.id, p)
     }
   }
+  for (const [examId, seen] of seenByExam) byExam.set(examId, [...seen.values()])
 
-  if (userIds.length > 0) {
-    const { data } = await supabase.from('profiles').select('*').in('id', userIds)
-    for (const s of (data ?? []) as UserProfile[]) byId.set(s.id, s)
-  }
+  return byExam
+}
 
-  return [...byId.values()]
+/** Expand an exam's audience (homerooms + individuals) into a deduped student list. */
+export async function resolveAudienceStudents(examId: string): Promise<UserProfile[]> {
+  return (await resolveAudienceStudentsBulk([examId])).get(examId) ?? []
 }
 
 // ── Profile lookups (for audience / grader editors) ──────────
@@ -691,7 +710,10 @@ export async function fetchProfilesByIds(ids: string[]): Promise<UserProfile[]> 
 
 /** Smart search for students by name or email (for audience pickers). */
 export async function searchStudents(query: string, limit = 20): Promise<UserProfile[]> {
-  const q = query.trim().replace(/[,()]/g, ' ')
+  // The needle is interpolated into a PostgREST `or()` filter string, so strip
+  // that grammar's structural characters (`,` `(` `)` `"` `\`) along with the
+  // LIKE wildcards — otherwise a crafted query escapes the filter it sits in.
+  const q = query.trim().replace(/[,()"\\%_*]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!q) return []
   const { data, error } = await supabase
     .from('profiles')
@@ -773,32 +795,42 @@ export async function removeGrader(examId: string, teacherId: string): Promise<b
  * Closed = results published. Everything before that (scheduled, open,
  * past-due-but-grading) stays in the Active list, segmented by phase.
  */
-async function summariseTeacherExam(exam: Exam, ownerId: string): Promise<ExamTeacherSummary> {
-  const students = await resolveAudienceStudents(exam.id)
-  const audienceIds = new Set(students.map(s => s.id))
-  const audienceCount = audienceIds.size
+async function summariseTeacherExams(exams: Exam[], ownerId: string): Promise<ExamTeacherSummary[]> {
+  if (exams.length === 0) return []
+  const examIds = exams.map(e => e.id)
 
-  const { data: subs } = await supabase
-    .from('exam_submissions')
-    .select('student_id, status, is_absent')
-    .eq('exam_id', exam.id)
+  // Two batched round trips for the whole list rather than four per exam.
+  const [audienceByExam, { data: subs }] = await Promise.all([
+    resolveAudienceStudentsBulk(examIds),
+    supabase
+      .from('exam_submissions')
+      .select('exam_id, student_id, status, is_absent')
+      .in('exam_id', examIds),
+  ])
 
-  const doneIds = new Set(
-    (subs ?? [])
-      .filter(s => s.status === 'graded' || s.is_absent)
-      .map(s => s.student_id as string)
-      .filter(id => audienceIds.has(id)),
-  )
-  const gradedCount = doneIds.size
-
-  return {
-    ...exam,
-    isOwner: exam.created_by === ownerId,
-    audienceCount,
-    gradedCount,
-    closed: isExamClosed(exam),
-    phase: examPhase(exam),
+  const doneByExam = new Map<string, Set<string>>()
+  for (const s of (subs ?? []) as Pick<ExamSubmission, 'exam_id' | 'student_id' | 'status' | 'is_absent'>[]) {
+    if (s.status !== 'graded' && !s.is_absent) continue
+    const set = doneByExam.get(s.exam_id)
+    if (set) set.add(s.student_id)
+    else doneByExam.set(s.exam_id, new Set([s.student_id]))
   }
+
+  return exams.map(exam => {
+    const audienceIds = new Set((audienceByExam.get(exam.id) ?? []).map(s => s.id))
+    let gradedCount = 0
+    for (const id of doneByExam.get(exam.id) ?? []) {
+      if (audienceIds.has(id)) gradedCount++
+    }
+    return {
+      ...exam,
+      isOwner: exam.created_by === ownerId,
+      audienceCount: audienceIds.size,
+      gradedCount,
+      closed: isExamClosed(exam),
+      phase: examPhase(exam),
+    }
+  })
 }
 
 /**
@@ -819,32 +851,32 @@ export async function fetchExamsForTeacher(
     const { data } = await supabase.from('exams').select('*')
     for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
   } else {
-    const { data: owned } = await supabase.from('exams').select('*').eq('created_by', userId)
+    // Owned exams, grader assignments and (for a coordinator) the team roster
+    // are independent lookups — run them together rather than in a chain.
+    const [{ data: owned }, { data: graderRows }, creatorIds] = await Promise.all([
+      supabase.from('exams').select('*').eq('created_by', userId),
+      supabase.from('exam_graders').select('exam_id').eq('teacher_id', userId),
+      role === 'coordinator' ? fetchCoordinatorTeamMemberIds(userId) : Promise.resolve<string[]>([]),
+    ])
     for (const e of (owned ?? []) as Exam[]) byId.set(e.id, e)
 
-    const { data: graderRows } = await supabase
-      .from('exam_graders')
-      .select('exam_id')
-      .eq('teacher_id', userId)
     const graderIds = (graderRows ?? []).map(r => r.exam_id as string)
-    if (graderIds.length > 0) {
-      const { data } = await supabase.from('exams').select('*').in('id', graderIds)
-      for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
-    }
-
-    if (role === 'coordinator') {
-      const creatorIds = await fetchCoordinatorTeamMemberIds(userId)
-      if (creatorIds.length > 0) {
-        const { data } = await supabase.from('exams').select('*').in('created_by', creatorIds)
-        for (const e of (data ?? []) as Exam[]) byId.set(e.id, e)
-      }
-    }
+    const [graderExams, teamExams] = await Promise.all([
+      graderIds.length > 0
+        ? supabase.from('exams').select('*').in('id', graderIds)
+        : Promise.resolve({ data: [] }),
+      creatorIds.length > 0
+        ? supabase.from('exams').select('*').in('created_by', creatorIds)
+        : Promise.resolve({ data: [] }),
+    ])
+    for (const e of (graderExams.data ?? []) as Exam[]) byId.set(e.id, e)
+    for (const e of (teamExams.data ?? []) as Exam[]) byId.set(e.id, e)
   }
 
   // Apply any due auto-closures before summarising, so an immediate-results
   // exam past its auto_close_at shows up (and behaves) as closed.
   const exams = await Promise.all([...byId.values()].map(reconcileExamClosure))
-  const summaries = await Promise.all(exams.map(e => summariseTeacherExam(e, userId)))
+  const summaries = await summariseTeacherExams(exams, userId)
   summaries.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
 
   return {
@@ -853,10 +885,10 @@ export async function fetchExamsForTeacher(
   }
 }
 
-/** Ids of every member of the teams where `coordinatorId` is the coordinator. */
+/** Ids of every member of the teams where `coordinatorId` is a coordinator. */
 async function fetchCoordinatorTeamMemberIds(coordinatorId: string): Promise<string[]> {
-  const { data: teams } = await supabase.from('teams').select('id').eq('coordinator_id', coordinatorId)
-  const teamIds = (teams ?? []).map(t => t.id as string)
+  const { data: teamRows } = await supabase.from('team_coordinators').select('team_id').eq('user_id', coordinatorId)
+  const teamIds = [...new Set((teamRows ?? []).map(t => t.team_id as string))]
   if (teamIds.length === 0) return []
   const { data: members } = await supabase
     .from('team_members')
@@ -1044,11 +1076,10 @@ export async function fetchSubmissionForStudent(
 
 /** Every audience student paired with their submission (if any). */
 export async function fetchGradingQueue(examId: string): Promise<GradingQueueRow[]> {
-  const students = await resolveAudienceStudents(examId)
-  const { data: subs } = await supabase
-    .from('exam_submissions')
-    .select('*')
-    .eq('exam_id', examId)
+  const [students, { data: subs }] = await Promise.all([
+    resolveAudienceStudents(examId),
+    supabase.from('exam_submissions').select('*').eq('exam_id', examId),
+  ])
   const subByStudent = new Map<string, ExamSubmission>()
   for (const s of (subs ?? []) as ExamSubmission[]) subByStudent.set(s.student_id, s)
 
@@ -1081,18 +1112,44 @@ export async function fetchGraderGradingQueues(userId: string): Promise<GraderEx
   const graderIds = [...new Set((graderRows ?? []).map(r => r.exam_id as string))]
   if (graderIds.length === 0) return []
 
-  const { data: exams } = await supabase.from('exams').select('*').in('id', graderIds)
+  // Only the columns examPhase() and the progress summary below actually use —
+  // full exam rows (description, settings, etc.) aren't needed here.
+  const { data: exams } = await supabase
+    .from('exams')
+    .select('id, title, results_published, is_closed, start_at, due_at, end_at')
+    .in('id', graderIds)
   const underGrading = ((exams ?? []) as Exam[]).filter(e => examPhase(e) === 'grading')
   if (underGrading.length === 0) return []
 
-  const results = await Promise.all(
-    underGrading.map(async (e): Promise<GraderExamProgress> => {
-      const queue = await fetchGradingQueue(e.id)
-      const gradedCount = queue.filter(r => r.submission?.status === 'graded').length
-      const toGradeCount = queue.filter(r => r.submission?.status === 'submitted').length
-      return { examId: e.id, title: e.title, gradedCount, toGradeCount }
-    }),
-  )
+  // One batched audience + submission read for every exam under grading,
+  // rather than building a full grading queue per exam.
+  const underGradingIds = underGrading.map(e => e.id)
+  const [audienceByExam, { data: subs }] = await Promise.all([
+    resolveAudienceStudentsBulk(underGradingIds),
+    supabase
+      .from('exam_submissions')
+      .select('exam_id, student_id, status')
+      .in('exam_id', underGradingIds),
+  ])
+
+  const statusByExam = new Map<string, Map<string, SubmissionStatus>>()
+  for (const s of (subs ?? []) as Pick<ExamSubmission, 'exam_id' | 'student_id' | 'status'>[]) {
+    const m = statusByExam.get(s.exam_id)
+    if (m) m.set(s.student_id, s.status)
+    else statusByExam.set(s.exam_id, new Map([[s.student_id, s.status]]))
+  }
+
+  const results = underGrading.map((e): GraderExamProgress => {
+    const byStudent = statusByExam.get(e.id)
+    let gradedCount = 0
+    let toGradeCount = 0
+    for (const student of audienceByExam.get(e.id) ?? []) {
+      const status = byStudent?.get(student.id)
+      if (status === 'graded') gradedCount++
+      else if (status === 'submitted') toGradeCount++
+    }
+    return { examId: e.id, title: e.title, gradedCount, toGradeCount }
+  })
   return results
     .filter(r => r.gradedCount + r.toGradeCount > 0)
     .sort((a, b) => b.toGradeCount - a.toGradeCount)
@@ -1318,11 +1375,11 @@ export async function linkResultsToClassrooms(
     )
     if (!assessment) continue
 
-    for (const m of matched) {
+    await upsertAssessmentMarks(assessment.id, matched.map(m => {
       const score = scoreByStudent.get(m.user_id)!
-      await upsertAssessmentMark(assessment.id, m.user_id, score.total, score.max)
-      totalLinked++
-    }
+      return { studentId: m.user_id, marks: score.total, maxMarks: score.max }
+    }))
+    totalLinked += matched.length
 
     await supabase.from('exam_result_links').insert({
       exam_id: examId,
@@ -1380,6 +1437,21 @@ export async function saveAsPyq(examId: string, createdBy: string): Promise<Exam
   return data as ExamTemplate
 }
 
+/** Whether this exam already has a snapshot saved in the PYQ library. */
+export async function fetchPyqBySourceExam(examId: string): Promise<ExamTemplate | null> {
+  const { data, error } = await supabase
+    .from('exam_templates')
+    .select('*')
+    .eq('source_exam_id', examId)
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.error('fetchPyqBySourceExam error:', error.message)
+    return null
+  }
+  return data as ExamTemplate | null
+}
+
 export async function fetchPyqLibrary(): Promise<ExamTemplate[]> {
   const { data, error } = await supabase
     .from('exam_templates')
@@ -1417,20 +1489,19 @@ export async function createExamFromTemplate(
   const exam = await createExam({ title: tpl.title, subject: tpl.subject }, createdBy)
   if (!exam) return null
 
-  let position = 0
-  for (const q of tpl.questions ?? []) {
-    await addQuestion(exam.id, {
-      type: q.type,
-      prompt: q.prompt,
-      marks: q.marks,
-      options: q.options,
-      correct_answer: q.correct_answer,
-      multiple_select: q.multiple_select,
-      scoring_strategy: q.scoring_strategy ?? null,
-      scoring_params: q.scoring_params ?? null,
-      image_url: q.image_url ?? null,
-      position: position++,
-    })
-  }
+  // One insert for the whole paper — the per-question path costs a count, an
+  // insert and a total-marks recompute each.
+  await addQuestionsBulk(exam.id, (tpl.questions ?? []).map((q, position) => ({
+    type: q.type,
+    prompt: q.prompt,
+    marks: q.marks,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    multiple_select: q.multiple_select,
+    scoring_strategy: q.scoring_strategy ?? null,
+    scoring_params: q.scoring_params ?? null,
+    image_url: q.image_url ?? null,
+    position,
+  })))
   return exam
 }

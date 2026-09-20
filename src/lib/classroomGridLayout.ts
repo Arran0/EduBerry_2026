@@ -25,3 +25,15 @@ export function classroomGridMaxHeight(rows: number, rowGapPx: number): number {
   const padBottom = rowGapPx * CLASSROOM_PAD_BOTTOM_RATIO
   return rows * CLASSROOM_ROW_HEIGHT + (rows - 1) * rowGapPx + padTop + padBottom
 }
+
+/**
+ * Fixed per-button width (as a CSS `calc()` string) for a `columns`-wide row
+ * with `columnGapPx` between buttons. Used on a `flex flex-wrap
+ * justify-center` grid (instead of CSS Grid's `grid-cols-N`) so that a
+ * trailing, less-than-full row of buttons is centred rather than left-
+ * pinned with empty cells trailing it — the same fixed width holds whether
+ * a row is full or not, so full rows look identical to today's grid.
+ */
+export function classroomItemWidth(columns: number, columnGapPx: number): string {
+  return `calc((100% - ${columnGapPx * (columns - 1)}px) / ${columns})`
+}

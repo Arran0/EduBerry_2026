@@ -1,77 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  AlertTriangle,
-  FolderKanban,
-  Calendar,
-  Clock,
-  Star,
-  X,
-  Check,
-  Circle,
-  CircleDot,
-  CheckCircle2,
-  CheckSquare,
-  Square,
-  MessageSquare,
-  Send,
-  ShieldCheck,
-  Repeat,
-  Trash2,
-  Paperclip,
-  Link2,
-  Image as ImageIcon,
-  FileText,
-  ExternalLink,
-  Ban,
-  MinusCircle,
-  RotateCcw,
-  HelpCircle,
-  FileSpreadsheet,
-  Lock,
-  Maximize2,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, FolderKanban, Calendar, Clock, Star, X, Circle, CircleDot, CheckCircle2, CheckSquare, Square, MessageSquare, Send, ShieldCheck, Repeat, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, Ban, MinusCircle, RotateCcw, HelpCircle, FileSpreadsheet, Lock, Maximize2 } from 'lucide-react'
 import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
 import SubtaskCard from './SubtaskCard'
-import {
-  fetchCalendarData,
-  fetchOverdueTasks,
-  fetchBonusTasksForCalendar,
-  fetchTaskDetails,
-  createTask,
-  TaskDetails,
-  Task,
-  TaskWithDetails,
-  TaskStatus,
-  STATUS_DOT_COLORS,
-  STATUS_LABELS,
-  STATUS_COLORS,
-  RECURRENCE_LABELS,
-  getDynamicStatusLabel,
-  getDynamicStatusColors,
-  getDynamicDotColor,
-  getNextStatus,
-  canVerifyTask,
-  updateTaskStatus,
-  submitTaskWork,
-  needsSubmissionFirst,
-  toggleChecklistItem,
-  addChecklistItem,
-  addComment,
-  deleteTask,
-  uploadTaskAttachment,
-  isTaskCompleted,
-  formatDateTime,
-  TaskChecklistItem,
-  TaskComment,
-} from '@/lib/tasks'
+import { fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, fetchTaskDetails, createTask, TaskDetails, Task, TaskWithDetails, TaskStatus, RECURRENCE_LABELS, getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask, updateTaskStatus, submitTaskWork, needsSubmissionFirst, toggleChecklistItem, addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime, TaskChecklistItem, TaskComment } from '@/lib/tasks'
 import {
   fetchSubtasksForCalendar,
   Subtask,
@@ -245,22 +181,45 @@ export default function WeeklyCalendar({
   const overdueLoadedRef = useRef(false)
   const bonusLoadedRef = useRef(false)
   // Horizontal-scroll container + the expanded (wide) column, so phones open with
-  // the focal column — today by default — already in view.
+  // the focal column — today by default — already in view (this matters most on
+  // Fri/Sat/Sun, which sit past the first four columns visible without scrolling).
   const gridScrollRef = useRef<HTMLDivElement>(null)
-  const expandedColRef = useRef<HTMLButtonElement>(null)
+  // A callback ref rather than a plain effect: the grid lives behind
+  // AnimatePresence mode="wait", which defers mounting it until the loading
+  // skeleton's exit animation finishes. An effect keyed off `loading` fires as
+  // soon as that state flips — before the grid (and its ref) exist in the DOM —
+  // so it would silently no-op. A callback ref instead runs exactly when the
+  // expanded column's button is actually committed, whether that's on first
+  // mount, after switching which day is expanded, or after a week navigation.
+  const scrollExpandedIntoView = useCallback((colEl: HTMLButtonElement) => {
+    requestAnimationFrame(() => {
+      const container = gridScrollRef.current
+      if (!container || !colEl.isConnected) return
+      if (container.scrollWidth <= container.clientWidth) return // fully visible
+      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
+    })
+  }, [])
+  const expandedColRef = useCallback((node: HTMLButtonElement | null) => {
+    if (node) scrollExpandedIntoView(node)
+  }, [scrollExpandedIntoView])
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
-    const [calendarData, subtaskData] = await Promise.all([
-      fetchCalendarData(targetUserId, weekStart),
-      fetchSubtasksForCalendar(targetUserId),
-    ])
+    const calendarData = await fetchCalendarData(targetUserId, weekStart)
     taskRenderKeys.current.clear()
     setTasks(calendarData.week)
-    setSubtasks(subtaskData)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
+
+  // Subtasks are fetched for the whole user, not the visible week, so this is
+  // deliberately keyed on targetUserId alone — bundling it into loadTasks meant
+  // every click of the week arrows refetched the user's entire subtask list to
+  // redisplay data already in state.
+  const loadSubtasks = useCallback(async () => {
+    setSubtasks(await fetchSubtasksForCalendar(targetUserId))
+  }, [targetUserId])
 
   // Silent background refresh — never clears taskRenderKeys or sets loading state.
   // Use this after optimistic inserts so existing items don't blink.
@@ -324,6 +283,8 @@ export default function WeeklyCalendar({
     loadTasks()
   }, [loadTasks])
 
+  useEffect(() => { loadSubtasks() }, [loadSubtasks])
+
   // The grid's period rows come from the school's active Timetable, not the
   // viewed user specifically — fetch once.
   useEffect(() => {
@@ -335,22 +296,6 @@ export default function WeeklyCalendar({
     })
     return () => { cancelled = true }
   }, [])
-
-  // On phones the 7-day grid overflows horizontally; bring the expanded (wider)
-  // column — today by default — into view once the grid has rendered so the user
-  // doesn't have to scroll right to find it. No-op on desktop where everything fits.
-  useEffect(() => {
-    if (loading) return
-    const id = requestAnimationFrame(() => {
-      const container = gridScrollRef.current
-      const colEl = expandedColRef.current
-      if (!container || !colEl) return
-      if (container.scrollWidth <= container.clientWidth) return // fully visible
-      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
-      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [loading, weekStart, expandedDay])
 
   // Re-trigger a focus jump when the parent requests one for the same calendar
   // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
@@ -420,24 +365,55 @@ export default function WeeklyCalendar({
 
   const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
 
-  const getTasksForDay    = (dateStr: string) => tasks
-    .filter(t => t.due_date === dateStr)
-    .sort((a, b) => {
-      if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
-      if (!a.timing) return 1
-      if (!b.timing) return -1
-      return a.timing.localeCompare(b.timing)
-    })
-  const getSubtasksForDay = (dateStr: string) => subtasks.filter(s => s.due_date === dateStr)
+  // Bucket by due date once per data change. The grid asks for a day's items
+  // about sixty times per render (once per day column, then again per period
+  // row × day), and re-filtering + re-sorting the whole task list on each of
+  // those calls made every keystroke in the inline composer walk the week's
+  // tasks sixty times over.
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, TaskWithDetails[]>()
+    for (const task of tasks) {
+      if (!task.due_date) continue
+      const bucket = map.get(task.due_date)
+      if (bucket) bucket.push(task)
+      else map.set(task.due_date, [task])
+    }
+    // Timed tasks first in clock order, undated ones after in creation order.
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => {
+        if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
+        if (!a.timing) return 1
+        if (!b.timing) return -1
+        return a.timing.localeCompare(b.timing)
+      })
+    }
+    return map
+  }, [tasks])
+
+  const subtasksByDay = useMemo(() => {
+    const map = new Map<string, SubtaskWithProject[]>()
+    for (const sub of subtasks) {
+      if (!sub.due_date) continue
+      const bucket = map.get(sub.due_date)
+      if (bucket) bucket.push(sub)
+      else map.set(sub.due_date, [sub])
+    }
+    return map
+  }, [subtasks])
+
+  const EMPTY_TASKS: TaskWithDetails[] = useMemo(() => [], [])
+  const EMPTY_SUBTASKS: SubtaskWithProject[] = useMemo(() => [], [])
+  const getTasksForDay    = (dateStr: string) => tasksByDay.get(dateStr) ?? EMPTY_TASKS
+  const getSubtasksForDay = (dateStr: string) => subtasksByDay.get(dateStr) ?? EMPTY_SUBTASKS
 
   // Subtasks that are undated or overdue (and not completed)
-  const overdueUndatedSubtasks = subtasks.filter(s => {
+  const overdueUndatedSubtasks = useMemo(() => subtasks.filter(s => {
     if (s.status === 'dismissed') return false   // dismissed = deleted
     const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
     if (isCompleted) return false
     if (!s.due_date) return true
     return s.due_date < todayStr
-  })
+  }), [subtasks, todayStr])
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
@@ -458,11 +434,26 @@ export default function WeeklyCalendar({
     const s = subtask as SubtaskWithProject
     const next = getNextStatus(s.status, canVerifyTask(s, user?.id, canCheck), true)
     if (next === s.status) return
-    const result = await updateSubtaskStatus(s.id, next, s.project_id, s.project_sequential)
-    if (result.success) {
-      setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status: next } : sub))
-      setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status: next } : prev)
+
+    const apply = (status: TaskStatus) => {
+      setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status } : sub))
+      setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status } : prev)
     }
+
+    // In a sequential project the server legitimately refuses an out-of-order
+    // change, so painting `next` first would flash a state the user isn't
+    // allowed to reach. Everywhere else the only failure is a real error, so
+    // the chip updates on tap and rolls back if the write doesn't land.
+    if (s.project_sequential) {
+      const result = await updateSubtaskStatus(s.id, next, s.project_id, true)
+      if (result.success) apply(next)
+      return
+    }
+
+    const previous = s.status
+    apply(next)
+    const result = await updateSubtaskStatus(s.id, next, s.project_id, false)
+    if (!result.success) apply(previous)
   }
 
 
@@ -1353,7 +1344,7 @@ function TaskCalendarModal({
   onStatusChange,
   onTaskDeleted,
   onTaskUpdated,
-  availableAssignees = [],
+  availableAssignees: _availableAssignees = [],
 }: {
   task: TaskWithDetails
   canCheck: boolean

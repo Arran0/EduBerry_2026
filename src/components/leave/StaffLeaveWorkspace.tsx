@@ -28,7 +28,6 @@ import {
   createStudentLeaveApplication,
   isImageFile,
   RecipientProfile,
-  type LeaveApplicationWithDetails,
 } from '@/lib/leave'
 import { usePagedLeaveLists } from '@/hooks/usePagedLeaveLists'
 import { fetchUnreadDecisionItems, onLeaveNotificationsChanged } from '@/lib/leaveNotifications'
@@ -477,14 +476,14 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
               {/* Leave type */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Application Type</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['on_duty', 'casual', 'medical', 'half_day'] as const).map(t => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(['on_duty', 'casual', 'medical', 'half_day', 'late'] as const).map(t => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => {
                         setLeaveType(t)
-                        if (t === 'half_day' && startDate) setEndDate(startDate)
+                        if ((t === 'half_day' || t === 'late') && startDate) setEndDate(startDate)
                       }}
                       className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-medium border transition-colors ${
                         leaveType === t
@@ -498,8 +497,8 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
                 </div>
               </div>
 
-              {/* Dates — a Half Day Permit is a single day, so it only needs one field */}
-              {leaveType === 'half_day' ? (
+              {/* Dates — a Half Day / Late Permit is a single day, so it only needs one field */}
+              {leaveType === 'half_day' || leaveType === 'late' ? (
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date <span className="text-red-500">*</span></label>
                   <input
@@ -539,6 +538,8 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
               )}
               {leaveType === 'half_day' ? (
                 startDate && <p className="text-xs page-accent-text font-medium -mt-1">Half day</p>
+              ) : leaveType === 'late' ? (
+                startDate && <p className="text-xs page-accent-text font-medium -mt-1">Late</p>
               ) : leaveDays !== null && (
                 <p className="text-xs page-accent-text font-medium -mt-1">
                   {leaveDays} day{leaveDays !== 1 ? 's' : ''}

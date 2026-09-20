@@ -86,7 +86,7 @@ export default function EditableCell({
           if (e.key === 'Enter') { e.preventDefault(); commit() }
           if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
         }}
-        className={`w-full min-w-0 bg-white border border-[#27272A] rounded px-1 py-0.5 text-[11px] tabular-nums text-[#27272A] focus:outline-none ${alignCls}`}
+        className={`w-full min-w-0 bg-white border border-[#27272A] px-1 py-0.5 text-[11px] tabular-nums text-[#27272A] focus:outline-none ${alignCls}`}
       />
     )
   }
@@ -96,7 +96,7 @@ export default function EditableCell({
       onClick={begin}
       title={title ?? (editable ? 'Click to edit' : undefined)}
       className={`${alignCls} text-[11px] tabular-nums truncate ${
-        editable ? 'cursor-text hover:bg-[#F4F4F5] rounded px-1 -mx-1' : ''
+        editable ? 'cursor-text hover:bg-[#F4F4F5] px-1 -mx-1' : ''
       } ${derived ? 'text-[#71717A]' : 'text-[#18181B] font-semibold underline decoration-dotted decoration-[#B8983C] underline-offset-2'}`}
     >
       {format(value)}

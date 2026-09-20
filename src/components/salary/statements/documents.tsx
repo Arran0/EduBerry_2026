@@ -3,7 +3,7 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
 import type { SiteBranding } from '@/lib/pageConfig'
-import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod, maskAccountNumber } from '@/lib/salary'
+import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod, maskAccountNumber, recordPersonId, recordPersonName } from '@/lib/salary'
 import type { StatutoryConfig, EpfTotals, EsiTotals } from '@/lib/statutory'
 import { SalaryStatementShell, Table, Col, TotalRow, styles, pdfINR, fmtDate, StaffLike } from './SalaryStatementShell'
 
@@ -107,8 +107,10 @@ export function SalaryRegisterDoc({ branding, cycle, records }: {
   const rows = records.map(r => {
     const adj = adjustments(r)
     return {
-      name: r.staff?.full_name ?? '—',
-      role: r.staff ? capitalize(r.staff.role) : '—',
+      // A deleted account still owes its row a name — the one frozen when
+      // this cycle was locked (see freezeCycleRecordSnapshots).
+      name: r.staff?.full_name ?? r.support_staff?.full_name ?? r.person_name_snapshot ?? '—',
+      role: r.staff ? capitalize(r.staff.role) : r.support_staff ? 'Support Staff' : (r.person_role_snapshot ? capitalize(r.person_role_snapshot) : '—'),
       base: pdfINR(Number(r.base_amount)),
       adj: adj === 0 ? '—' : (adj > 0 ? '+' : '') + pdfINR(Math.abs(adj)).replace('Rs. ', '') + (adj < 0 ? ' (-)' : ''),
       net: pdfINR(salaryNet(r)),
@@ -245,9 +247,9 @@ export function BankTransferStatementDoc({ branding, cycle, records, bankMap }: 
     { key: 'amount', label: 'Net Pay', flex: 1.6, align: 'right' },
   ]
   const rows = records.map(r => {
-    const bk = bankMap[r.staff_id]
+    const bk = bankMap[recordPersonId(r)]
     return {
-      name: r.staff?.full_name ?? '—',
+      name: recordPersonName(r) || '—',
       account: bk ? maskAccountNumber(bk.account_number) : 'Not on file',
       ifsc: bk?.ifsc ?? '—',
       bank: bk?.bank_name ?? '—',
@@ -255,7 +257,7 @@ export function BankTransferStatementDoc({ branding, cycle, records, bankMap }: 
     }
   })
   const totalNet = records.reduce((s, r) => s + salaryNet(r), 0)
-  const missingBank = records.filter(r => !bankMap[r.staff_id]).length
+  const missingBank = records.filter(r => !bankMap[recordPersonId(r)]).length
 
   return (
     <SalaryStatementShell branding={branding} title="Bank Transfer Statement" period={period} signatory="Authorised Signatory">

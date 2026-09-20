@@ -189,10 +189,10 @@ export default function PageBanner({
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className={`absolute top-3 right-3 p-1.5 backdrop-blur-sm rounded-lg border transition-colors z-10 ${onDark ? 'bg-black/30 hover:bg-black/50 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-black/10 text-slate-800'}`}
+          className={`absolute top-2 right-2 p-1 backdrop-blur-sm rounded-md border transition-colors z-10 ${onDark ? 'bg-black/30 hover:bg-black/50 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-black/10 text-slate-800'}`}
           title="Customise banner"
         >
-          <Pencil size={12} />
+          <Pencil size={10} />
         </button>
       )}
 

@@ -7,7 +7,7 @@ import { UserProfile } from '@/lib/supabase'
 import {
   ExamGrader, fetchGraders, addGrader, removeGrader, findUserByEmail, fetchProfilesByIds,
 } from '@/lib/exam'
-import { Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin'] as const
@@ -64,12 +64,14 @@ export default function GradersEditor({
     return (
       <div className="space-y-2">
         <Skeleton className="h-4 w-2/3 mb-4" />
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-2 py-1">
-            <Skeleton className="w-7 h-7 rounded-full shrink-0" />
-            <Skeleton className="h-3.5 w-1/3" />
-          </div>
-        ))}
+        <div className={EXAM.listWrap}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+              <Skeleton className="w-7 h-7 rounded-full shrink-0" />
+              <Skeleton className="h-3.5 w-1/3" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -79,35 +81,58 @@ export default function GradersEditor({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#71717A] flex items-center gap-2">
-        <Shield size={15} /> Graders can grade this exam and see it in their own exam lists.
+      <p className="flex items-start gap-2 text-[11px] leading-relaxed text-[#8A8578]">
+        <Shield size={14} className="mt-px text-[#B8983C] shrink-0" />
+        Graders can grade this exam and see it in their own exam lists.
       </p>
 
-      <div className="space-y-1.5">
+      <div className={EXAM.listWrap}>
+        <div className={EXAM.listHead}>
+          <span className="w-7 shrink-0" />
+          <span className="flex-1">Name</span>
+          <span className="w-56">Email</span>
+          <span className="w-24 text-right">Role</span>
+        </div>
+
         {/* Exam creator */}
         {creator && (
-          <div className="flex items-center gap-2 py-1">
+          <div className={EXAM.listRow}>
             <Avatar avatarUrl={creator.avatar_url} name={creator.full_name} size={28} userId={creator.id} />
-            <span className="text-sm text-[#27272A] flex-1 truncate">{creator.full_name}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--page-accent-light)] text-[var(--page-accent)] border border-[#E7E2D8]">
-              <Crown size={10} /> Creator
+            <span className="flex-1 min-w-0 truncate text-sm font-medium text-[#18181B]">{creator.full_name}</span>
+            <span className="hidden md:block w-56 truncate text-xs text-[#A8A29A]">{creator.email}</span>
+            <span className="w-24 flex justify-end shrink-0">
+              <span className={EXAM.tagGold}><Crown size={10} /> Owner</span>
             </span>
           </div>
         )}
 
         {otherGraders.map(g => (
-          <div key={g.id} className="flex items-center gap-2 py-1">
+          <div key={g.id} className={EXAM.listRow}>
             <Avatar avatarUrl={g.teacher?.avatar_url} name={g.teacher?.full_name} size={28} userId={g.teacher_id} />
-            <span className="text-sm text-[#27272A] flex-1 truncate">{g.teacher?.full_name ?? 'Teacher'}</span>
-            <span className="text-xs text-[#A1A1AA] truncate">{g.teacher?.email}</span>
-            {canEdit && <button onClick={() => handleRemove(g.teacher_id)} className="text-[#D4D4D8] hover:text-rose-400 transition-colors"><X size={14} /></button>}
+            <span className="flex-1 min-w-0 truncate text-sm font-medium text-[#18181B]">{g.teacher?.full_name ?? 'Teacher'}</span>
+            <span className="hidden md:block w-56 truncate text-xs text-[#A8A29A]">{g.teacher?.email}</span>
+            <span className="w-24 flex items-center justify-end gap-1 shrink-0">
+              <span className={EXAM.tag}>Grader</span>
+              {canEdit && (
+                <button
+                  onClick={() => handleRemove(g.teacher_id)}
+                  title="Remove grader"
+                  className="h-6 w-6 flex items-center justify-center text-[#C7C2B6] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </span>
           </div>
         ))}
-        {otherGraders.length === 0 && <span className="text-xs text-[#A1A1AA]">No additional graders</span>}
+        {otherGraders.length === 0 && (
+          <p className="px-3 py-4 text-center text-[11px] uppercase tracking-[0.1em] text-[#C7C2B6]">No additional graders</p>
+        )}
       </div>
 
       {canEdit && (
-        <>
+        <div className="space-y-2">
+          <label className={EXAM.fieldLabel}>Add a grader</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <UserEmailSuggest
@@ -115,16 +140,16 @@ export default function GradersEditor({
                 onChange={setEmail}
                 roles={[...STAFF_ROLES]}
                 placeholder="Search staff by name or email"
-                className="border border-[#E4E4E7] rounded-lg px-3 py-2 bg-white focus-within:border-[var(--page-primary)] transition-colors"
+                className="h-9 flex items-center border border-[#E4E1D8] px-3 bg-white focus-within:border-[#B8983C] transition-colors"
               />
             </div>
-            <button onClick={handleAdd} disabled={busy || !email.trim()} className="shrink-0 px-3 py-2 rounded-lg bg-[var(--page-primary)] text-white hover:bg-[var(--page-primary-dark)] disabled:opacity-60 transition-colors">
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            <button onClick={handleAdd} disabled={busy || !email.trim()} className={EXAM.iconBtnDark}>
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
             </button>
           </div>
-          <p className="text-[11px] text-[#A1A1AA]">Only staff members can be added as graders.</p>
-          {err && <p className="text-xs text-rose-500">{err}</p>}
-        </>
+          <p className={EXAM.hint}>Only staff members can be added as graders.</p>
+          {err && <p className={EXAM.error}>{err}</p>}
+        </div>
       )}
     </div>
   )

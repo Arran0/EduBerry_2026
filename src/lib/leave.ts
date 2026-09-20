@@ -8,7 +8,7 @@ import { compressImageIfNeeded } from './imageCompression'
 // Types
 // ============================================
 
-export type LeaveType = 'casual' | 'medical' | 'on_duty' | 'half_day'
+export type LeaveType = 'casual' | 'medical' | 'on_duty' | 'half_day' | 'late'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 
 export interface LeaveApplication {
@@ -82,6 +82,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   casual: 'Casual Leave',
   medical: 'Medical Leave',
   half_day: 'Half Day Permit',
+  late: 'Late Permit',
 }
 
 /** Two-to-six character type codes for the list rows, where a full label would
@@ -91,6 +92,7 @@ export const LEAVE_TYPE_SHORT: Record<LeaveType, string> = {
   casual: 'CL',
   medical: 'ML',
   half_day: '½ Day',
+  late: 'Late',
 }
 
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
@@ -115,11 +117,6 @@ export function isImageFile(name: string): boolean {
   return /\.(jpe?g|png|gif|webp|svg)$/i.test(name)
 }
 
-export function getLeaveFileUrl(path: string): string {
-  const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
-  return data.publicUrl
-}
-
 export async function uploadLeaveFile(
   file: File,
   folder: string
@@ -141,12 +138,6 @@ export async function uploadLeaveFile(
 // ============================================
 // Helper Functions
 // ============================================
-
-function calculateLeaveDays(startDate: string, endDate: string): number {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-}
 
 export async function fetchCoordinators(): Promise<{ id: string; full_name: string; email: string }[]> {
   const { data } = await supabase
@@ -172,51 +163,6 @@ export async function fetchAdmins(): Promise<{ id: string; full_name: string; em
 // - coordinator → all principals
 // - principal  → all admins
 // ============================================
-
-export async function fetchApproversWithCalendarAccess(
-  applicantId: string,
-  applicantRole: UserRole
-): Promise<{ id: string; full_name: string; email: string }[]> {
-  if (applicantRole === 'coordinator') return fetchPrincipals()
-  if (applicantRole === 'principal') return fetchAdmins()
-
-  if (applicantRole === 'teacher') {
-    const { data: myTeams } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('user_id', applicantId)
-
-    if (!myTeams || myTeams.length === 0) return []
-
-    const teamIds = myTeams.map(t => t.team_id)
-
-    // Use each team's designated coordinator_id — a coordinator added as a
-    // regular member of another team should not appear as an approver there.
-    const { data: teamRecords } = await supabase
-      .from('teams')
-      .select('coordinator_id')
-      .in('id', teamIds)
-      .not('coordinator_id', 'is', null)
-
-    if (!teamRecords) return []
-
-    const coordinatorIds = [
-      ...new Set(teamRecords.map(t => t.coordinator_id as string).filter(Boolean)),
-    ].filter(id => id !== applicantId)
-
-    if (coordinatorIds.length === 0) return []
-
-    const { data: coordinators } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', coordinatorIds)
-      .order('full_name')
-
-    return (coordinators ?? []) as { id: string; full_name: string; email: string }[]
-  }
-
-  return []
-}
 
 // ============================================
 // Search Recipients (teacher / coordinator / principal / admin)
@@ -323,76 +269,6 @@ export async function createStudentLeaveApplication(
 // ============================================
 // Create Leave Application (staff)
 // ============================================
-
-export async function createLeaveApplication(
-  input: NewLeaveInput,
-  applicantId: string,
-  applicantRole: UserRole,
-  selectedApproverIds: string[] = [],
-  attachmentFile?: File
-): Promise<LeaveApplication | null> {
-  let attachment_url: string | null = null
-  let attachment_name: string | null = null
-
-  if (attachmentFile) {
-    const uploaded = await uploadLeaveFile(attachmentFile, 'applications')
-    if (uploaded) { attachment_url = uploaded.url; attachment_name = uploaded.name }
-  }
-
-  const { data: application, error } = await supabase
-    .from('leave_applications')
-    .insert({
-      applicant_id: applicantId,
-      leave_type: input.leave_type,
-      start_date: input.start_date,
-      end_date: input.end_date,
-      reason: input.reason,
-      status: 'pending',
-      attachment_url,
-      attachment_name,
-    })
-    .select()
-    .single()
-
-  if (error || !application) {
-    console.error('Failed to create leave application:', error)
-    return null
-  }
-
-  const approvalRecords: {
-    leave_application_id: string
-    approver_id?: string
-    approver_role: string
-  }[] = []
-
-  if (selectedApproverIds.length > 0) {
-    let approverRole = 'coordinator'
-    if (applicantRole === 'coordinator') approverRole = 'principal'
-    else if (applicantRole === 'principal') approverRole = 'admin'
-    for (const approverId of selectedApproverIds) {
-      approvalRecords.push({ leave_application_id: application.id, approver_id: approverId, approver_role: approverRole })
-    }
-  } else {
-    let approverRole = 'coordinator'
-    if (applicantRole === 'coordinator') approverRole = 'principal'
-    else if (applicantRole === 'principal') approverRole = 'admin'
-    approvalRecords.push({ leave_application_id: application.id, approver_role: approverRole })
-  }
-
-  if (approvalRecords.length > 0) {
-    const { error: approvalError } = await supabase.from('leave_approvals').insert(approvalRecords)
-    if (approvalError) {
-      console.error('Failed to create approval records:', approvalError)
-      await supabase.from('leave_applications').delete().eq('id', application.id)
-      return null
-    }
-  }
-
-  // Tell every reviewer's devices — see the note in the student version.
-  notifyLeaveEvent(application.id, 'submitted')
-
-  return application as LeaveApplication
-}
 
 // ============================================
 // Fetch Leave Applications
@@ -654,6 +530,16 @@ export async function markLeaveApplicationViewed(applicationId: string): Promise
   if (error) console.error('Failed to mark leave application viewed:', error)
 }
 
+/** Batch form — one round trip for any number of applications, instead of
+ *  calling markLeaveApplicationViewed once per id. */
+export async function markLeaveApplicationsViewed(applicationIds: string[]): Promise<void> {
+  if (applicationIds.length === 0) return
+  const { error } = await supabase.rpc('mark_leave_applications_viewed', {
+    p_application_ids: applicationIds,
+  })
+  if (error) console.error('Failed to mark leave applications viewed:', error)
+}
+
 /**
  * The approvals on this application addressed to `userId` — named to them
  * directly, or left open to whoever holds their role.
@@ -908,8 +794,6 @@ export async function deleteLeaveApplication(id: string): Promise<boolean> {
   return true
 }
 
-export const LEAVE_ALLOWANCES: Record<Exclude<LeaveType, 'on_duty' | 'half_day'>, number> = { casual: 12, medical: 15 }
-
 /** Fetch leave applications for a student that overlap with a given month. */
 export async function fetchLeaveApplicationsForStudentByMonth(
   studentId: string,
@@ -938,28 +822,3 @@ export async function fetchLeaveApplicationsForStudentByMonth(
   return (data || []) as LeaveApplicationWithDetails[]
 }
 
-export async function fetchLeaveBalance(
-  userId: string
-): Promise<{ casual: { used: number; total: number }; medical: { used: number; total: number } }> {
-  const now = new Date()
-  const academicYearStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-  const { data } = await supabase
-    .from('leave_applications')
-    .select('leave_type, start_date, end_date')
-    .eq('applicant_id', userId)
-    .eq('status', 'approved')
-    .gte('start_date', `${academicYearStart}-04-01`)
-    .lte('end_date', `${academicYearStart + 1}-03-31`)
-
-  let casualUsed = 0, medicalUsed = 0
-  for (const app of data ?? []) {
-    if (app.leave_type === 'on_duty') continue
-    const days = calculateLeaveDays(app.start_date, app.end_date)
-    if (app.leave_type === 'casual') casualUsed += days
-    else if (app.leave_type === 'medical') medicalUsed += days
-  }
-  return {
-    casual: { used: casualUsed, total: LEAVE_ALLOWANCES.casual },
-    medical: { used: medicalUsed, total: LEAVE_ALLOWANCES.medical },
-  }
-}

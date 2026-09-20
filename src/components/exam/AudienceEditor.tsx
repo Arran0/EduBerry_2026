@@ -3,11 +3,11 @@
 import React, { useEffect, useState } from 'react'
 import { Save, Loader2, Check, Users, UserPlus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { supabase, UserProfile } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { Homeroom } from '@/lib/homerooms'
 import { fetchAudience, setExamAudience, fetchProfilesByIds } from '@/lib/exam'
 import AudiencePicker, { AudienceValue } from '@/components/exam/AudiencePicker'
-import { Skeleton } from '@/components/exam/examUi'
+import { EXAM, Skeleton } from '@/components/exam/examUi'
 
 export default function AudienceEditor({ examId, readOnly = false, onChanged }: { examId: string; readOnly?: boolean; onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
@@ -58,16 +58,16 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><Users size={15} /> Classes</h3>
+          <h3 className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]"><Users size={13} /> Classes</h3>
           <div className="flex flex-wrap gap-2">
             {value.homerooms.map(hr => (
-              <span key={hr.id} className="px-2.5 py-1 rounded-lg bg-[var(--page-accent-light)] text-[var(--page-accent)] text-sm border border-[#E7E2D8]">{hr.name}</span>
+              <span key={hr.id} className="inline-flex items-center h-6 px-2 border border-[#E7E2D8] bg-[#F4F2EC] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#9C7F2C]">{hr.name}</span>
             ))}
             {value.homerooms.length === 0 && <span className="text-xs text-[#A1A1AA]">None</span>}
           </div>
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-[#27272A] mb-2 flex items-center gap-2"><UserPlus size={15} /> Individual students</h3>
+          <h3 className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A8578]"><UserPlus size={13} /> Individual students</h3>
           <div className="space-y-1.5">
             {value.students.map(s => (
               <div key={s.id} className="flex items-center gap-2 py-1">
@@ -87,7 +87,7 @@ export default function AudienceEditor({ examId, readOnly = false, onChanged }: 
     <div className="space-y-4">
       <AudiencePicker value={value} onChange={setValue} />
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#B8983C] text-white text-sm font-semibold hover:bg-[#9C7F2C] shadow-[0_4px_14px_-4px_rgba(184,152,60,0.5)] disabled:opacity-60 transition-colors">
+        <button onClick={handleSave} disabled={saving} className={EXAM.goldBtn}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
           {saved ? 'Saved' : 'Save participants'}
         </button>

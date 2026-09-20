@@ -9,14 +9,11 @@ import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import PageBanner from '@/components/PageBanner'
 import { useRouter } from 'next/navigation'
-import {
-  Users, Plus, X, UserMinus, ChevronDown, ChevronUp,
-  Calendar, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown,
-} from 'lucide-react'
+import { Users, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown } from 'lucide-react'
 import { TEAMS_BANNER_DEFAULT } from '@/lib/pageConfig'
 import {
   TeamWithDetails, fetchAllTeams, createTeam, updateTeam, deleteTeam,
-  addTeamMemberByEmail, removeTeamMember,
+  addTeamMemberByEmail, removeTeamMember, addTeamCoordinator, removeTeamCoordinator,
 } from '@/lib/teams'
 
 const containerVariants = {
@@ -26,7 +23,6 @@ const containerVariants = {
 const itemVariants = { hidden: { opacity: 0 }, show: { opacity: 1 } }
 
 const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-const aiSm = 'border border-[#D4D4D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors'
 
 const ROLE_BADGE: Record<string, string> = {
   admin:       'bg-rose-50 text-rose-700 border-rose-200',
@@ -139,7 +135,12 @@ export default function TeacherTeamsPage() {
   }
 
   const handleSetCoordinator = async (teamId: string, userId: string) => {
-    await updateTeam(teamId, { coordinator_id: userId })
+    await addTeamCoordinator(teamId, userId)
+    await loadTeams()
+  }
+
+  const handleRemoveCoordinator = async (teamId: string, userId: string) => {
+    await removeTeamCoordinator(teamId, userId)
     await loadTeams()
   }
 
@@ -317,6 +318,7 @@ export default function TeacherTeamsPage() {
                         onAddMember={() => handleAddMember(team.id)}
                         onRemoveMember={uid => handleRemoveMember(team.id, uid)}
                         onSetCoordinator={uid => handleSetCoordinator(team.id, uid)}
+                        onRemoveCoordinator={uid => handleRemoveCoordinator(team.id, uid)}
                         onDelete={() => handleDeleteTeam(team.id)}
                         onToggleMembers={() => setShowMembersTeams(prev => { const next = new Set(prev); next.has(team.id) ? next.delete(team.id) : next.add(team.id); return next })}
                       />
@@ -391,6 +393,7 @@ export default function TeacherTeamsPage() {
                                 onAddMember={() => handleAddMember(team.id)}
                                 onRemoveMember={uid => handleRemoveMember(team.id, uid)}
                                 onSetCoordinator={uid => handleSetCoordinator(team.id, uid)}
+                        onRemoveCoordinator={uid => handleRemoveCoordinator(team.id, uid)}
                                 onDelete={() => handleDeleteTeam(team.id)}
                                 onToggleMembers={() => setShowMembersTeams(prev => { const next = new Set(prev); next.has(team.id) ? next.delete(team.id) : next.add(team.id); return next })}
                               />
@@ -472,10 +475,6 @@ export default function TeacherTeamsPage() {
 
 // ── TeamRow sub-component ────────────────────────────────────────────────────
 
-interface EditFormState {
-  name: string; description: string; start_date: string; end_date: string
-}
-
 interface TeamRowProps {
   team: TeamWithDetails
   isAdmin: boolean; expired?: boolean; expanded: boolean
@@ -485,6 +484,7 @@ interface TeamRowProps {
   onExpire: () => void
   onAddMemberEmailChange: (v: string) => void; onAddMember: () => void
   onRemoveMember: (userId: string) => void; onSetCoordinator: (userId: string) => void
+  onRemoveCoordinator: (userId: string) => void
   onDelete: () => void; onToggleMembers: () => void
 }
 
@@ -492,7 +492,7 @@ function TeamRow({
   team, isAdmin, expired = false, expanded,
   addMemberEmail, addingMember, memberError, showMembers,
   onExpand, onStartEdit,
-  onExpire, onAddMemberEmailChange, onAddMember, onRemoveMember, onSetCoordinator, onDelete, onToggleMembers,
+  onExpire, onAddMemberEmailChange, onAddMember, onRemoveMember, onSetCoordinator, onRemoveCoordinator, onDelete, onToggleMembers,
 }: TeamRowProps) {
   return (
     <motion.div variants={itemVariants}>
@@ -515,10 +515,16 @@ function TeamRow({
             {team.description && <p className="hidden sm:block text-xs text-[#71717A] truncate">{team.description}</p>}
           </div>
 
-          {/* Coordinator — desktop */}
+          {/* Coordinators — desktop */}
           <div className="hidden sm:block w-32 flex-shrink-0 min-w-0">
-            {team.coordinator ? (
-              <span className="text-xs text-[#71717A] truncate block">{team.coordinator.full_name}</span>
+            {team.coordinators.length > 0 ? (
+              <span
+                className="text-xs text-[#71717A] truncate block"
+                title={team.coordinators.map(c => c.full_name).join(', ')}
+              >
+                {team.coordinators[0].full_name}
+                {team.coordinators.length > 1 ? ` +${team.coordinators.length - 1}` : ''}
+              </span>
             ) : null}
           </div>
 
@@ -621,7 +627,7 @@ function TeamRow({
                     ) : (
                       <div className="max-h-[480px] overflow-y-auto space-y-px mt-px">
                         {team.members.map(member => {
-                          const isTeamCoordinator = member.user_id === team.coordinator_id
+                          const isTeamCoordinator = team.coordinators.some(c => c.id === member.user_id)
                           const canRemove = isAdmin && !expired && member.user?.role !== 'principal' && member.user?.role !== 'admin'
                           return (
                             <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
@@ -642,11 +648,11 @@ function TeamRow({
                                 ) : null}
                               </div>
                               <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
-                                {isAdmin && !expired && !isTeamCoordinator && (
+                                {isAdmin && !expired && (
                                   <button
-                                    onClick={() => onSetCoordinator(member.user_id)}
-                                    className="p-1.5 text-[#71717A] hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                                    title="Set as team coordinator"
+                                    onClick={() => isTeamCoordinator ? onRemoveCoordinator(member.user_id) : onSetCoordinator(member.user_id)}
+                                    className={`p-1.5 transition-colors ${isTeamCoordinator ? 'text-amber-600 bg-amber-50 hover:text-rose-600 hover:bg-rose-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`}
+                                    title={isTeamCoordinator ? 'Remove as team coordinator' : 'Set as team coordinator'}
                                   >
                                     <Crown size={13} />
                                   </button>

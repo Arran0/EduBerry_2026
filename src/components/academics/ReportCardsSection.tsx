@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronDown, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
+  ChevronDown, ChevronRight, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
   LayoutGrid, Download, Table2, ArrowUpDown, CalendarRange,
 } from 'lucide-react'
@@ -21,24 +21,17 @@ import {
   fetchAllReportCardTitles,
   fetchGradeSectionsWithStudents,
   fetchClasswiseMarks,
+  fetchProfilesByIds,
   ClasswiseSubject,
   ClasswiseCellData,
 } from '@/lib/classrooms'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
-
-// ─── Grade colour palette — green → yellow → orange → red ────────────────────
-function gradeLetter(pct: number): { letter: string; bg: string; fg: string } {
-  if (pct >= 91) return { letter: 'A1', bg: 'bg-emerald-100', fg: 'text-emerald-700' }
-  if (pct >= 81) return { letter: 'A2', bg: 'bg-green-100',   fg: 'text-green-700'   }
-  if (pct >= 71) return { letter: 'B1', bg: 'bg-lime-100',    fg: 'text-lime-700'    }
-  if (pct >= 61) return { letter: 'B2', bg: 'bg-yellow-100',  fg: 'text-yellow-700'  }
-  if (pct >= 51) return { letter: 'C1', bg: 'bg-amber-100',   fg: 'text-amber-700'   }
-  if (pct >= 41) return { letter: 'C2', bg: 'bg-orange-100',  fg: 'text-orange-700'  }
-  if (pct >= 33) return { letter: 'D',  bg: 'bg-red-100',     fg: 'text-red-600'     }
-  return               { letter: 'E',  bg: 'bg-red-100',     fg: 'text-red-700'     }
-}
+import { useKeyboardInset } from '@/hooks/useKeyboardInset'
+import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/reportCardVisits'
+import { gradeLabel } from '@/lib/grades'
+import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
 const CONGRATS_MESSAGES = [
@@ -81,67 +74,115 @@ interface ReportCardsSectionProps {
   isStudent: boolean
 }
 
+/** How many recently-opened students the idle search offers as shortcuts. */
+const RECENT_LIMIT = 5
+
+/** Breathing room left between a focused field and the top of the keyboard. */
+const KEYBOARD_GAP = 12
+
 function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectionProps) {
-  const [expanded, setExpanded] = useState(false)
   const [branding, setBranding] = useState<SiteBranding>(BRANDING_DEFAULTS)
+  // Staff open on load; a student expands when they want their cards.
+  const [expanded, setExpanded] = useState(!isStudent)
   const sectionRef = useRef<HTMLElement>(null)
   const searchParams = useSearchParams()
+  const { open: keyboardOpen } = useKeyboardInset()
 
   useEffect(() => {
     fetchBranding().then(setBranding).catch(() => {})
   }, [])
 
-  // Deep-link support, e.g. /academics?section=reportcards — opens the panel
-  // and scrolls it into view.
+  // Deep-link support, e.g. /academics?section=reportcards — the panel is
+  // always open, so this only brings it into view. The section's own
+  // scroll-margin keeps its header clear of the sticky navbar.
   useEffect(() => {
     if (searchParams.get('section') !== 'reportcards') return
+    // A deep link asks for the cards themselves, so it opens the panel too —
+    // otherwise a link from the home page lands on a closed section.
     setExpanded(true)
-    sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const raf = requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    return () => cancelAnimationFrame(raf)
   }, [searchParams])
 
+  /**
+   * The app runs with `interactiveWidget: 'resizes-visual'`, so the soft
+   * keyboard shrinks only the visual viewport — the layout viewport keeps its
+   * full height and `scrollIntoView` can't tell that a field is hidden behind
+   * the keyboard. Measure the overlap against the visual viewport instead and
+   * scroll by exactly that much.
+   */
+  const liftFocusedAboveKeyboard = useCallback(() => {
+    const vv = window.visualViewport
+    const el = document.activeElement as HTMLElement | null
+    if (!vv || !el || !sectionRef.current?.contains(el)) return
+    // Visual-viewport bottom edge in layout coords = the top of the keyboard.
+    const overlap = el.getBoundingClientRect().bottom + KEYBOARD_GAP - (vv.offsetTop + vv.height)
+    if (overlap > 1) window.scrollBy({ top: overlap, behavior: 'smooth' })
+  }, [])
+
+  // A field focused before the focusin listener below is attached (or focused
+  // by the browser itself, restoring a form) still needs lifting — catch that
+  // when the keyboard reports open. The delay lets any deep-link scroll and
+  // the keyboard's own animation settle, so the overlap is measured against
+  // final geometry rather than a frame mid-flight.
+  useEffect(() => {
+    if (!keyboardOpen) return
+    const t = window.setTimeout(liftFocusedAboveKeyboard, 420)
+    return () => window.clearTimeout(t)
+  }, [keyboardOpen, liftFocusedAboveKeyboard])
+
+  // Fields focused later (remarks, filters) get the same treatment, once the
+  // keyboard has finished animating in.
+  useEffect(() => {
+    const section = sectionRef.current
+    if (!section) return
+    let t = 0
+    const onFocusIn = () => {
+      window.clearTimeout(t)
+      t = window.setTimeout(liftFocusedAboveKeyboard, 320)
+    }
+    section.addEventListener('focusin', onFocusIn)
+    return () => {
+      window.clearTimeout(t)
+      section.removeEventListener('focusin', onFocusIn)
+    }
+  }, [liftFocusedAboveKeyboard])
+
   return (
-    <section ref={sectionRef} id="report-cards">
-      {/* ── Section header — mirrors the other academics headers exactly ── */}
+    <section
+      ref={sectionRef}
+      id="report-cards"
+      // Clears the sticky navbar (h-16 plus the notch inset) when scrolled to.
+      style={{ scrollMarginTop: 'calc(4rem + env(safe-area-inset-top) + 0.75rem)' }}
+    >
+      {/* ── Section header — mirrors the other academics headers exactly.
+          For a student the whole header is the expand control; staff keep a
+          plain heading over an always-open panel. ── */}
       <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="icon-chip w-10 h-10 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
-            <Award size={18} className="relative z-10 text-white drop-shadow-sm" />
-          </div>
-          <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">
-            Report Cards
-          </h2>
-        </div>
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className={`flex-shrink-0 inline-flex items-center gap-1.5 pl-4 pr-3 py-2 rounded-full text-sm font-semibold border shadow-sm transition-all active:scale-95 ${
-            expanded
-              ? 'bg-rose-500 text-white border-rose-500'
-              : 'bg-white/80 text-slate-600 border-white/70 hover:text-rose-600 hover:border-rose-200'
-          }`}
-        >
-          {expanded ? 'Close' : 'View'}
-          <ChevronDown size={16} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
-        </button>
+        <HeaderShell
+          asButton={isStudent}
+          expanded={expanded}
+          onToggle={() => setExpanded(v => !v)}
+        />
       </div>
 
-      {/* ── Jelly-expanding white card ── */}
+      {/* ── Panel — always open for staff, who work it as a tool. A student's
+          stays shut until asked for: their cards are an occasional read, and
+          collapsed means the cards aren't fetched at all until then. ── */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
-            key="rc-panel"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 210, damping: 24, mass: 0.9 }}
+            key="report-cards-panel"
+            id="report-cards-panel"
+            initial={isStudent ? { opacity: 0, height: 0 } : false}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <motion.div
-              initial={{ scale: 0.95, y: -8 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.97, y: -4 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 19, mass: 0.8 }}
-              className="glass-card rounded-[1.5rem] p-4 sm:p-5 origin-top"
-            >
+            <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
@@ -158,11 +199,77 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
                   branding={branding}
                 />
               )}
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Scroll room for the keyboard. This panel is the last thing on the
+          page, so without it there is nothing left to scroll and the fields at
+          the bottom stay pinned under the keyboard. `--keyboard-inset` is
+          rewritten every viewport frame (see useKeyboardInset), so the spacer
+          tracks the keyboard's open/close animation with no re-render. */}
+      <div aria-hidden style={{ height: 'var(--keyboard-inset, 0px)' }} />
     </section>
+  )
+}
+
+/** The section header: a plain heading for staff, a full-width expand control
+ *  for a student (their panel is collapsed until asked for). Both render the
+ *  identical chip and title, so the header lines up with the other academics
+ *  headings either way. */
+function HeaderShell({
+  asButton, expanded, onToggle,
+}: {
+  asButton: boolean
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const inner = (
+    <>
+      <div className="icon-chip w-10 h-10 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
+        <Award size={18} className="relative z-10 text-white drop-shadow-sm" />
+      </div>
+      <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">
+        Report Cards
+      </h2>
+      {/* The same fading hairline the other academics headings carry (see
+          SectionHeading), so all four headers read as one family. */}
+      <div
+        className="flex-1 h-px min-w-[1rem]"
+        style={{ background: 'linear-gradient(to right, rgba(148,163,184,0.45), rgba(148,163,184,0))' }}
+        aria-hidden
+      />
+    </>
+  )
+
+  if (!asButton) {
+    return <div className="flex items-center gap-3 min-w-0 flex-1">{inner}</div>
+  }
+
+  return (
+    <button
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-controls="report-cards-panel"
+      className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 group"
+    >
+      {inner}
+      {/* A labelled pill, not a bare chevron: a glyph on its own never said
+          what tapping the heading would do. */}
+      <span
+        className={`keep-round flex-shrink-0 inline-flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold border shadow-sm transition-colors ${
+          expanded
+            ? 'bg-rose-50 border-rose-200 text-rose-600'
+            : 'bg-white/80 border-white/80 text-slate-600 group-hover:text-rose-600 group-hover:border-rose-200'
+        }`}
+        aria-hidden
+      >
+        {expanded ? 'Hide' : 'View'}
+        <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </span>
+      <span className="sr-only">{expanded ? 'Collapse report cards' : 'Expand report cards'}</span>
+    </button>
   )
 }
 
@@ -230,6 +337,20 @@ function StaffReportCardView({
 
 // ─── Staff individual search ─────────────────────────────────────────────────
 
+/** True on phones, where inputs are forced to 16px (globals.css, so iOS does
+ *  not zoom in on focus) and a placeholder written for 14px no longer fits. */
+function useIsPhone(): boolean {
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setIsPhone(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  return isPhone
+}
+
 function StaffReportCardSearch({
   viewerId, viewerRole, viewer, branding,
 }: {
@@ -238,11 +359,38 @@ function StaffReportCardSearch({
   viewer: UserProfile
   branding: SiteBranding
 }) {
+  const isPhone = useIsPhone()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<UserProfile[]>([])
   const [searching, setSearching] = useState(false)
   const [selected, setSelected] = useState<UserProfile | null>(null)
+  const [recent, setRecent] = useState<UserProfile[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Students this account opened before, newest first — the shortcut back to
+  // whoever they were last looking at. Re-read whenever the view returns to
+  // the search, so a just-opened student moves to the top of the list.
+  useEffect(() => {
+    if (selected) return
+    let cancelled = false
+    const ids = getRecentReportCardStudentIds(viewerId, RECENT_LIMIT)
+    if (ids.length === 0) { setRecent([]); return }
+    // One lookup for the whole list, and only the columns a row renders.
+    fetchProfilesByIds(ids, 'id, full_name, email, avatar_url, grade, section, role')
+      .then(byId => {
+        if (cancelled) return
+        // Keep the stored recency order, and drop ids that no longer resolve
+        // (student removed, or no longer visible to this account).
+        setRecent(ids.map(id => byId[id]).filter((p): p is UserProfile => !!p))
+      })
+      .catch(err => console.error('Failed to load recently opened report cards:', err))
+    return () => { cancelled = true }
+  }, [viewerId, selected])
+
+  const openStudent = (student: UserProfile) => {
+    recordReportCardVisit(viewerId, student.id)
+    setSelected(student)
+  }
 
   useEffect(() => {
     const q = query.trim()
@@ -281,18 +429,23 @@ function StaffReportCardSearch({
     <div className="space-y-3">
       <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-slate-300">
         <Search size={16} className="text-slate-400 flex-shrink-0" />
+        {/* No autofocus: the panel is open from the moment the page loads, so
+            focusing here would scroll the page down to it and raise the
+            keyboard before the reader has asked for either. */}
         <input
           ref={inputRef}
-          autoFocus
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
             viewerRole === 'admin' || viewerRole === 'principal'
-              ? 'Search any student by name or email…'
-              : 'Search students from your classrooms by name or email…'
+              ? (isPhone ? 'Search any student…' : 'Search any student by name or email…')
+              : (isPhone ? 'Search your students…' : 'Search students from your classrooms by name or email…')
           }
-          className="flex-1 bg-transparent text-sm focus:outline-none text-slate-700 placeholder:text-slate-400"
+          // min-w-0 lets the field shrink inside the flex row, and the ellipsis
+          // catches anything still too long on the narrowest phones rather
+          // than slicing the placeholder mid-word.
+          className="flex-1 min-w-0 bg-transparent text-sm text-ellipsis focus:outline-none text-slate-700 placeholder:text-slate-400"
         />
         {searching && <Loader2 size={14} className="text-slate-400 animate-spin" />}
         {query && !searching && (
@@ -314,15 +467,46 @@ function StaffReportCardSearch({
       )}
 
       {!query.trim() && (
-        <div className="text-center py-10">
-          <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
-          <p className="text-slate-500 text-sm">Search for a student to view their report cards</p>
-          {viewerRole !== 'admin' && viewerRole !== 'principal' && (
-            <p className="text-xs text-slate-400 mt-1">
-              You can only see students from classrooms you&apos;re a member of.
-            </p>
-          )}
-        </div>
+        recent.length > 0 ? (
+          <div>
+            <p className="eyebrow text-slate-400 mb-2">Recently opened</p>
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
+              {recent.map(student => (
+                <button
+                  key={student.id}
+                  onClick={() => openStudent(student)}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-inset"
+                >
+                  <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={28} userId={student.id} />
+                  <div className="min-w-0 flex-1">
+                    <p title={student.full_name} className="text-sm font-semibold text-slate-700 truncate">
+                      {student.full_name}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {student.grade != null || student.section
+                        // gradeLabel, not `Grade ${n}`: pre-primary grades are
+                        // stored negative (-1 is UKG, not "Grade -1").
+                        ? [student.grade != null ? gradeLabel(student.grade) : null, student.section]
+                            .filter(Boolean).join(' · ')
+                        : student.email}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="flex-shrink-0 text-slate-300" />
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-10">
+            <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">Search for a student to view their report cards</p>
+            {viewerRole !== 'admin' && viewerRole !== 'principal' && (
+              <p className="text-xs text-slate-400 mt-1">
+                You can only see students from classrooms you&apos;re a member of.
+              </p>
+            )}
+          </div>
+        )
       )}
 
       {results.length > 0 && (
@@ -330,7 +514,7 @@ function StaffReportCardSearch({
           {results.map(s => (
             <button
               key={s.id}
-              onClick={() => setSelected(s)}
+              onClick={() => openStudent(s)}
               className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-colors text-left"
             >
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={36} userId={s.id} />
@@ -770,16 +954,21 @@ function ReportCardForStudent({
 
   const load = useCallback(async (year: string | null) => {
     setLoading(true)
-    const [g, r] = await Promise.all([
-      selfView
-        ? fetchReportCardsForStudent(studentProfile.id, year)
-        : fetchReportCardsForStudentAsViewer(studentProfile.id, viewerId, viewerRole),
-      fetchRemarksForStudent(studentProfile.id),
-    ])
+    const g = selfView
+      ? await fetchReportCardsForStudent(studentProfile.id, year)
+      : await fetchReportCardsForStudentAsViewer(studentProfile.id, viewerId, viewerRole)
     setGroups(g)
-    setRemarks(r)
     setLoading(false)
   }, [studentProfile.id, viewerId, viewerRole, selfView])
+
+  // Remarks are per student, not per academic year, so they load on their own
+  // rather than behind the year lookup — and switching years (or saving a
+  // remark) no longer refetches them along with every card.
+  const loadRemarks = useCallback(
+    () => fetchRemarksForStudent(studentProfile.id).then(setRemarks),
+    [studentProfile.id],
+  )
+  useEffect(() => { loadRemarks() }, [loadRemarks])
 
   // Fetch available years once, then auto-select the most recent.
   useEffect(() => {
@@ -865,7 +1054,7 @@ function ReportCardForStudent({
             viewer={viewer}
             canEditRemarks={!selfView}
             branding={branding}
-            onRemarksChanged={() => load(selfView ? selectedYear : null)}
+            onRemarksChanged={loadRemarks}
           />
         ))
       )}
@@ -993,7 +1182,7 @@ function ReportCard({
         </Field>
         <Field label="Period">
           {periodStart && periodEnd
-            ? `${formatShort(periodStart)} – ${formatShort(periodEnd)}`
+            ? `${formatShortDate(periodStart)} – ${formatShortDate(periodEnd)}`
             : '—'}
         </Field>
       </div>
@@ -1183,12 +1372,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <p className="text-sm font-medium text-slate-700 truncate mt-0.5">{children}</p>
     </div>
   )
-}
-
-function formatShort(d: string): string {
-  try {
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return d }
 }
 
 // ─── Remarks panel ────────────────────────────────────────────────────────────

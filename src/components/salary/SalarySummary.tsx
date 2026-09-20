@@ -1,168 +1,245 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { Banknote, Users, CalendarRange, Sparkles } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN_GOLD } from '@/components/salary/adminUi'
-import {
-  fetchBaseSalaries, fetchCycles, fetchCycleTallies, fetchEligibleStaff, fetchMonthlyBonusPoints,
-} from '@/lib/salary'
-import {
-  fetchDriverBaseSalaries, fetchDriverCycles, fetchDriverCycleTallies, fetchEligibleDrivers,
-} from '@/lib/driverSalary'
-import { fetchPayrollCalibration, computeBonusAmounts } from '@/lib/payroll'
+import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
+import { useSchoolClock } from '@/hooks/useSchoolClock'
+import { formatPeriod } from '@/lib/salary'
+import { recomputePendingAttendance } from '@/lib/attendance'
+import { MonthlyPayrollStats, PayrollContext, fetchMonthlyPayrollStats, fetchPayrollContext, defaultPayrollMonth, shiftMonth, monthIndex, percentChange, comparable } from '@/lib/salaryStats'
 
-/** Which admin section a card jumps to when clicked. */
+/** Which admin section a tile jumps to when clicked. */
 export type SalarySummaryKey = 'cycles' | 'base' | 'bank'
 
 interface Props {
-  /** Highlights the card matching the active section. */
-  activeKey?: SalarySummaryKey
-  /** When provided, cards become buttons that switch the active section. */
+  /** When provided, tiles become buttons that jump to the section behind the figure. */
   onSelect?: (key: SalarySummaryKey) => void
   /** Bump to force a re-fetch after edits elsewhere in the hub. */
   refreshKey?: number
 }
 
-interface Totals {
-  payroll: number
-  activeStaff: number
-  totalStaff: number
-  cycles: number
-  incompleteCycles: number
-  bonusSpend: number
-  bonusPoints: number
+/** Compact rupees for a stat tile — ₹4.52L reads at a glance where ₹4,52,000 does not. */
+export function compactINR(amount: number): string {
+  const n = Math.abs(Number(amount) || 0)
+  const sign = amount < 0 ? '−' : ''
+  if (n >= 1e7) return `${sign}₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 2)}Cr`
+  if (n >= 1e5) return `${sign}₹${(n / 1e5).toFixed(n >= 1e6 ? 1 : 2)}L`
+  if (n >= 1e3) return `${sign}₹${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K`
+  return sign + formatINR(n)
 }
 
-const EMPTY: Totals = {
-  payroll: 0, activeStaff: 0, totalStaff: 0, cycles: 0, incompleteCycles: 0, bonusSpend: 0, bonusPoints: 0,
-}
+export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
+  // Opens on the month payroll is most likely being worked on — the previous
+  // month during the first ten days, when last month's salaries are processed.
+  const [period, setPeriod] = useState(() => defaultPayrollMonth())
+  const [ctx, setCtx] = useState<PayrollContext | null>(null)
+  const [stats, setStats] = useState<MonthlyPayrollStats | null>(null)
+  const [prev, setPrev] = useState<MonthlyPayrollStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const { today, ready } = useSchoolClock()
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
-export default function SalarySummary({ activeKey, onSelect, refreshKey = 0 }: Props) {
-  const [t, setT] = useState<Totals>(EMPTY)
-
+  // The payroll setup (calibration, everyone's base salary) is the same
+  // whichever month is on screen, so it is fetched once and handed to each.
+  //
+  // It waits for the clock rather than firing once against a null date and
+  // again against the real one: the second fetch replaces the context object,
+  // which restarts every month below it. One school date, one context, one
+  // pass over the months.
+  //
+  // Settling any pending attendance recompute is gated behind the same fetch:
+  // an open month's loss of pay is computed live from the day statuses, so a
+  // cutoff or holiday added after the fact would otherwise show here as a
+  // deduction the attendance app no longer agrees with. It runs once per load,
+  // ahead of every month drawn from this context, and costs one read of an
+  // empty queue when no rule has changed. It never rejects on its own (a
+  // missing RPC is logged and swallowed), so it can't short-circuit the catch
+  // below.
   useEffect(() => {
+    if (!ready) return
     let alive = true
-    ;(async () => {
-      const [bases, cycles, tallies, staff, driverBases, driverCycles, driverTallies, drivers, calibration] =
-        await Promise.all([
-          fetchBaseSalaries(), fetchCycles(), fetchCycleTallies(), fetchEligibleStaff(),
-          fetchDriverBaseSalaries(), fetchDriverCycles(), fetchDriverCycleTallies(), fetchEligibleDrivers(),
-          fetchPayrollCalibration(),
-        ])
-      if (!alive) return
-
-      // Task-bonus spend for the month in progress. Read live from the points
-      // earned so far rather than from closed cycles, so the figure is useful
-      // before the month's payroll has been locked.
-      const now = new Date()
-      const everyone = [...staff, ...drivers].map(p => p.id)
-      const points = await fetchMonthlyBonusPoints(everyone, now.getFullYear(), now.getMonth() + 1)
-      if (!alive) return
-      const bonusSpend = Object.values(computeBonusAmounts(points, calibration.bonus))
-        .reduce((sum, amount) => sum + amount, 0)
-      const bonusPoints = Object.values(points).reduce((sum, p) => sum + (p > 0 ? p : 0), 0)
-
-      const allTallies = { ...tallies, ...driverTallies }
-      const allCycles = [...cycles, ...driverCycles]
-      const active = [...bases, ...driverBases].filter(b => b.active)
-      setT({
-        payroll: active.reduce((s, b) => s + (Number(b.base_amount) || 0), 0),
-        activeStaff: active.length,
-        totalStaff: staff.length + drivers.length,
-        cycles: allCycles.length,
-        // A cycle counts as incomplete until every record in it has been paid.
-        incompleteCycles: allCycles.filter(c => {
-          const t = allTallies[c.id]
-          return !t || t.total === 0 || t.paid < t.total
-        }).length,
-        bonusSpend,
-        bonusPoints,
+    recomputePendingAttendance()
+      .then(() => fetchPayrollContext(today))
+      .then(c => { if (alive) setCtx(c) })
+      .catch(e => {
+        console.error('fetchPayrollContext failed:', e)
+        if (!alive) return
+        setError('Could not load the payroll settings.')
+        setLoading(false)
       })
+    return () => { alive = false }
+  }, [ready, today, refreshKey, attempt])
+
+  // The selected month lands first and renders on its own; last month follows
+  // only to fill in the change chips. Waiting for both would leave the whole
+  // panel blank for the slower of two multi-query months.
+  const run = useRef(0)
+  useEffect(() => {
+    if (!ctx) return
+    const token = ++run.current
+    let alive = true
+    setLoading(true)
+    setError(null)
+    setPrev(null)
+    ;(async () => {
+      try {
+        const current = await fetchMonthlyPayrollStats(period.year, period.month, ctx)
+        if (!alive || token !== run.current) return
+        setStats(current)
+        setLoading(false)
+
+        const before = shiftMonth(period.year, period.month, -1)
+        const previous = await fetchMonthlyPayrollStats(before.year, before.month, ctx)
+        if (!alive || token !== run.current) return
+        setPrev(previous)
+      } catch (e) {
+        // Without this the panel sat at four silent ₹0 tiles and a Loading
+        // chip forever, which reads as "payroll is zero this month" — the one
+        // wrong answer a payroll dashboard must never give quietly.
+        console.error('fetchMonthlyPayrollStats failed:', e)
+        if (!alive || token !== run.current) return
+        setStats(null)
+        setError(e instanceof Error ? e.message : 'Could not load this month.')
+        setLoading(false)
+      }
     })()
     return () => { alive = false }
-  }, [refreshKey])
+  }, [ctx, period, attempt])
 
-  const cards: {
-    key: SalarySummaryKey
-    label: string
-    value: string
-    sub: string
-    icon: React.ReactNode
-    tone: 'dark' | 'light' | 'muted'
-  }[] = [
-    {
-      key: 'base',
-      label: 'Monthly payroll',
-      value: formatINR(t.payroll),
-      sub: 'active base salaries',
-      icon: <Banknote size={16} style={{ color: ADMIN_GOLD }} />,
-      tone: 'dark',
-    },
-    {
-      key: 'base',
-      label: 'On payroll',
-      value: String(t.activeStaff),
-      sub: `of ${t.totalStaff} people`,
-      icon: <Users size={16} className="text-[#71717A]" />,
-      tone: 'muted',
-    },
-    {
-      key: 'cycles',
-      label: 'Incomplete cycles',
-      value: String(t.incompleteCycles),
-      sub: `of ${t.cycles} cycle${t.cycles === 1 ? '' : 's'}`,
-      icon: <CalendarRange size={16} className="text-[#71717A]" />,
-      tone: 'light',
-    },
-    {
-      key: 'cycles',
-      label: 'Task bonus',
-      value: formatINR(t.bonusSpend),
-      // Naming the month and the point count keeps a legitimate zero (nobody
-      // has earned points yet this month) from reading like a broken figure.
-      sub: `${t.bonusPoints} pt${t.bonusPoints === 1 ? '' : 's'} · ${MONTH_NAMES[new Date().getMonth()]}`,
-      icon: <Sparkles size={16} className="text-[#A1A1AA]" />,
-      tone: 'light',
-    },
-  ]
+  const retry = useCallback(() => {
+    setError(null)
+    setLoading(true)
+    setAttempt(n => n + 1)
+  }, [])
+
+  // Nothing to see past the month in progress — no cycle can exist there yet.
+  const now = new Date()
+  const atLatest = monthIndex(period.year, period.month) >= monthIndex(now.getFullYear(), now.getMonth() + 1)
+
+  const tiles = useMemo(() => {
+    const s = stats
+    const canCompare = !!s && !!prev && comparable(s, prev)
+    const delta = (pick: (x: MonthlyPayrollStats) => number) =>
+      canCompare && s && prev ? percentChange(pick(s), pick(prev)) : null
+
+    const paid = s?.paidCount ?? 0
+    const total = s?.totalCount ?? 0
+
+    return [
+      {
+        key: 'base' as const,
+        label: 'Payroll cost',
+        value: compactINR(s?.gross ?? 0),
+        sub: s?.headcount ? `${s.headcount} on payroll` : 'nobody on payroll',
+        percent: delta(x => x.gross),
+        goodWhenUp: false,
+        shade: 0 as const,
+      },
+      {
+        key: 'cycles' as const,
+        label: 'Net pay',
+        value: compactINR(s?.net ?? 0),
+        sub: s?.bonus ? `incl. ${compactINR(s.bonus)} task bonus` : 'after deductions',
+        percent: delta(x => x.net),
+        goodWhenUp: true,
+        shade: 1 as const,
+      },
+      {
+        key: 'cycles' as const,
+        label: 'Deductions',
+        value: compactINR(s?.deductions ?? 0),
+        sub: s && (s.pf || s.esi || s.lop)
+          ? [
+              s.pf ? `PF ${compactINR(s.pf)}` : null,
+              s.esi ? `ESI ${compactINR(s.esi)}` : null,
+              s.lop ? `LOP ${compactINR(s.lop)}` : null,
+            ].filter(Boolean).join(' · ')
+          : 'PF, ESI & loss of pay',
+        percent: delta(x => x.deductions),
+        goodWhenUp: false,
+        shade: 2 as const,
+      },
+      {
+        key: 'cycles' as const,
+        label: 'Disbursed',
+        value: total > 0 ? `${paid}/${total}` : '—',
+        sub: total === 0
+          ? (s?.projected ? 'cycle not run yet' : 'no records this month')
+          : paid === total
+          ? 'everyone paid'
+          : `${compactINR(s?.pendingAmount ?? 0)} still to pay`,
+        // A payout count is progress through one month, not a trend across two.
+        percent: null,
+        goodWhenUp: true,
+        shade: 3 as const,
+      },
+    ]
+  }, [stats, prev])
+
+  const previousLabel = useMemo(() => {
+    const b = shiftMonth(period.year, period.month, -1)
+    return formatPeriod(b.month, b.year)
+  }, [period])
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-      {cards.map((c, i) => {
-        const active = activeKey === c.key
-        const base =
-          c.tone === 'dark'
-            ? 'bg-[#27272A] border-[#27272A]'
-            : c.tone === 'muted'
-            ? 'bg-[#F4F2EC] border-[#E7E2D8]'
-            : 'bg-white border-[#E4E4E7]'
-        const labelCls = c.tone === 'dark' ? 'text-[#A1A1AA]' : 'text-[#71717A]'
-        const valueCls = c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'
-        const subCls = c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#A1A1AA]'
-        const Tag = onSelect ? 'button' : 'div'
-        return (
-          <Tag
-            key={`${c.key}-${i}`}
-            onClick={onSelect ? () => onSelect(c.key) : undefined}
-            className={`text-left rounded-xl border p-3.5 sm:p-4 shadow-sm transition-all ${base} ${
-              onSelect ? 'hover:shadow-md cursor-pointer' : ''
-            } ${active ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
+    <div>
+      {/* Naming the month the arrows compare against saves anyone having to
+          work out what a "▲6.4%" on the tiles below is measured from. */}
+      <MonthStepper
+        className="mb-1.5"
+        label={formatPeriod(period.month, period.year)}
+        sub={prev ? `vs ${previousLabel}` : undefined}
+        onPrev={() => setPeriod(p => shiftMonth(p.year, p.month, -1))}
+        onNext={() => setPeriod(p => shiftMonth(p.year, p.month, 1))}
+        canNext={!atLatest}
+        right={
+          error ? (
+            <Chip tone="bad">Unavailable</Chip>
+          ) : loading ? (
+            <Chip tone="neutral">Loading</Chip>
+          ) : stats?.projected ? (
+            <Chip tone="gold">Projected</Chip>
+          ) : stats?.actual ? (
+            <Chip tone={stats.locked ? 'dark' : 'neutral'}>{stats.locked ? 'Locked' : 'Open'}</Chip>
+          ) : (
+            <Chip tone="neutral">No cycle</Chip>
+          )
+        }
+      />
+
+      {error && (
+        <div className="flex items-start gap-1.5 border border-[#EFCCCC] bg-[#FCECEC] px-2.5 py-2 mb-1.5">
+          <TriangleAlert size={13} className="text-[#A93232] flex-shrink-0 mt-px" />
+          <p className="flex-1 text-[11px] text-[#A93232] leading-snug">
+            <span className="font-semibold">These figures did not load.</span> They are not zero — nothing was
+            read. {error}
+          </p>
+          <button
+            onClick={retry}
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#A93232] hover:text-[#7A1F1F] flex-shrink-0"
           >
-            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${labelCls}`}>{c.label}</span>
-              {c.icon}
-            </div>
-            <p className={`text-lg sm:text-xl font-bold tabular-nums leading-tight ${valueCls}`}>{c.value}</p>
-            <p className={`text-[10px] sm:text-[11px] mt-0.5 truncate ${subCls}`}>{c.sub}</p>
-          </Tag>
-        )
-      })}
+            <RefreshCw size={11} /> Retry
+          </button>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-1.5 ${error ? 'opacity-40' : ''}`}>
+        {tiles.map(t => (
+          <StatTile
+            key={t.label}
+            label={t.label}
+            value={t.value}
+            sub={t.sub}
+            percent={t.percent}
+            goodWhenUp={t.goodWhenUp}
+            shade={t.shade}
+            loading={loading}
+            onClick={onSelect ? () => onSelect(t.key) : undefined}
+          />
+        ))}
+      </div>
     </div>
   )
 }

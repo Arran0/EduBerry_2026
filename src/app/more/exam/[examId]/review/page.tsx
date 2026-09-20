@@ -60,16 +60,16 @@ export default function ExamReviewPage() {
       <div data-page-theme="exam">
         <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-            <button onClick={() => router.push('/more/exam')} className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 -ml-3 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] mb-4 transition-colors">
+            <button onClick={() => router.push('/more/exam')} className={`${EXAM.ghostBtnSm} mb-4`}>
               <ChevronLeft size={16} /> Back to Exams
             </button>
 
             {loading ? (
               <ReviewSkeleton />
             ) : !review ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+              <div className={`${EXAM.card} p-10 text-center text-[#71717A]`}>Exam not found.</div>
             ) : !canReview ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center`}>
+              <div className={`${EXAM.card} p-10 text-center`}>
                 <Lock size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-[#27272A] font-semibold">Results not published yet</p>
                 <p className="text-sm text-[#A1A1AA] mt-1">Your teacher hasn&apos;t published the results for this exam.</p>
@@ -82,7 +82,7 @@ export default function ExamReviewPage() {
                     {review.exam.subject && <p className="text-xs text-[#A1A1AA]">{review.exam.subject}</p>}
                   </div>
                   {review.submission?.is_absent ? (
-                    <span className="text-sm px-3 py-1 rounded-full bg-rose-50 text-rose-500">Absent</span>
+                    <span className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-rose-600">Absent</span>
                   ) : review.submission?.total_score != null ? (
                     <div className="text-right">
                       <div className="text-lg font-bold text-[#18181B] tabular-nums">{review.submission.total_score}<span className="text-[#A1A1AA] text-sm">/{review.submission.max_score}</span></div>
@@ -101,7 +101,7 @@ export default function ExamReviewPage() {
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.28, delay: Math.min(idx * 0.04, 0.3), ease: [0.22, 0.61, 0.36, 1] }}
-                        className={`${EXAM.card} shadow-sm p-4`}
+                        className={`${EXAM.card} p-4`}
                       >
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <p className="text-sm font-medium text-[#27272A]"><span className="text-[#A1A1AA] mr-2">Q{idx + 1}.</span>{q.prompt}</p>
@@ -110,7 +110,7 @@ export default function ExamReviewPage() {
 
                         {q.image_url && <QuestionImage src={q.image_url} alt={`Figure for question ${idx + 1}`} className="mb-2" />}
 
-                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] rounded-lg px-3 py-2 mb-2">
+                        <div className="text-sm text-[#52525B] bg-[#F8F8F7] px-3 py-2 mb-2">
                           <span className="text-xs text-[#A1A1AA]">Your answer: </span>{renderResponse(q, ans?.response ?? null)}
                         </div>
 
@@ -125,7 +125,7 @@ export default function ExamReviewPage() {
                         )}
 
                         {ans?.remark && (
-                          <div className="mt-2 flex items-start gap-2 text-sm bg-[var(--page-accent-light)] border border-[#E7E2D8] rounded-lg px-3 py-2 text-[var(--page-accent)]">
+                          <div className="mt-2 flex items-start gap-2 text-sm bg-[#F4F2EC] border border-[#E7E2D8] px-3 py-2 text-[#9C7F2C]">
                             <MessageSquare size={14} className="mt-0.5 shrink-0" />
                             <span>{ans.remark}</span>
                           </div>
@@ -151,13 +151,13 @@ function ReviewSkeleton() {
           <Skeleton className="h-5 w-44" />
           <Skeleton className="h-3 w-24" />
         </div>
-        <Skeleton className="h-10 w-16 rounded-lg" />
+        <Skeleton className="h-10 w-16" />
       </div>
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={`${EXAM.card} shadow-sm p-4 space-y-2`}>
+          <div key={i} className={`${EXAM.card} p-4 space-y-2`}>
             <Skeleton className="h-3.5 w-3/4" />
-            <Skeleton className="h-8 w-full rounded-lg" />
+            <Skeleton className="h-8 w-full" />
             <Skeleton className="h-3 w-1/3" />
           </div>
         ))}

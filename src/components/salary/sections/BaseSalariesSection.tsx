@@ -1,16 +1,21 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Bus } from 'lucide-react'
+import { Bus, HardHat } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { ADMIN } from '@/components/salary/adminUi'
-import { Sheet, SHEET, SheetRowSkeleton } from '@/components/bus/adminUI'
-import PersonSearch from '@/components/salary/PersonSearch'
+import {
+  Sheet, SheetHead, SheetRow, SheetSkeleton, SectionBar, Note, Column,
+} from '@/components/salary/ui'
+import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolbar'
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
-import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, upsertBaseSalary } from '@/lib/salary'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
+import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, fetchHiddenSalaryMemberIds, upsertBaseSalary } from '@/lib/salary'
 import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries, upsertDriverBaseSalary } from '@/lib/driverSalary'
+import {
+  SupportStaff, SupportStaffSalaryBase,
+  fetchSupportStaff, fetchSupportStaffSalaryBases, upsertSupportStaffSalaryBase,
+} from '@/lib/supportStaff'
 
 /**
  * Shared column template for the header and every row. Applied as an inline
@@ -18,27 +23,44 @@ import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries, upsert
  * source, so a `grid-cols-[...]` built by joining strings never gets
  * generated and the grid silently collapses to one stacked column.
  */
-const GRID = 'grid items-center gap-x-2'
-const GRID_COLS = [
-  'minmax(180px,2fr)',    // person (avatar + name + role)
-  'minmax(104px,1fr)',    // monthly base
-  'minmax(104px,1fr)',    // PF basic
-  'minmax(56px,0.6fr)',   // PF applicable
-  'minmax(48px,0.5fr)',   // EPS applicable
-  'minmax(84px,0.9fr)',   // ESI mode
-  'minmax(122px,1.2fr)',  // UAN
-  'minmax(112px,1.1fr)',  // ESI IP number
-  'minmax(70px,0.7fr)',   // active
+const COLS = [
+  'minmax(150px,1.8fr)',  // person (avatar + name + role)
+  'minmax(88px,1fr)',     // monthly base
+  'minmax(88px,1fr)',     // PF basic
+  'minmax(30px,0.32fr)',  // PF applicable
+  'minmax(34px,0.34fr)',  // EPS applicable
+  'minmax(72px,0.8fr)',   // ESI mode
+  'minmax(104px,1.1fr)',  // UAN
+  'minmax(96px,1fr)',     // ESI IP number
+  'minmax(42px,0.42fr)',  // active
 ].join(' ')
 
-type Kind = 'staff' | 'driver'
-type Base = StaffSalaryBase | DriverSalaryBase
+const COLUMNS: Column[] = [
+  { label: 'Person', className: 'pl-[26px]' },
+  { label: 'Base', align: 'right' },
+  { label: 'PF basic', align: 'right' },
+  { label: 'PF', align: 'center' },
+  { label: 'EPS', align: 'center' },
+  { label: 'ESI', align: 'left' },
+  { label: 'UAN' },
+  { label: 'ESI IP no.' },
+  { label: 'Live', align: 'center' },
+]
+
+const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] tabular-nums text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
+const FLAG = 'ring-1 ring-[#C0392B] border-[#C0392B] placeholder:text-[#C0392B]'
+
+type Kind = 'staff' | 'driver' | 'support'
+type Base = StaffSalaryBase | DriverSalaryBase | SupportStaffSalaryBase
 type EsiChoice = 'auto' | 'on' | 'off'
+
+/** Just enough to display a row and open its profile card — support staff have no profile at all. */
+type EntryPerson = UserProfile | (SupportStaff & { avatar_url?: undefined })
 
 interface Entry {
   key: string
   kind: Kind
-  person: UserProfile
+  person: EntryPerson
   existing?: Base
 }
 
@@ -86,25 +108,40 @@ function digits(v: string): string {
   return v.replace(/\D+/g, '')
 }
 
+type SortKey = 'name' | 'base'
+
 export default function BaseSalariesSection() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<Entry[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [search, setSearch] = useState('')
+  const [kindFilter, setKindFilter] = useState<RosterKindFilter>('all')
+  const [offPayrollOnly, setOffPayrollOnly] = useState(false)
+  const [missingPfBasicOnly, setMissingPfBasicOnly] = useState(false)
+  const [missingUanOnly, setMissingUanOnly] = useState(false)
+  const [sort, setSort] = useState<SortKey>('name')
+  const [desc, setDesc] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, staffBases, drivers, driverBases] = await Promise.all([
+    const [staff, staffBases, allDrivers, driverBases, allSupport, supportBases, hiddenIds] = await Promise.all([
       fetchEligibleStaff(), fetchBaseSalaries(), fetchEligibleDrivers(), fetchDriverBaseSalaries(),
+      fetchSupportStaff(), fetchSupportStaffSalaryBases(), fetchHiddenSalaryMemberIds(),
     ])
+    const hidden = new Set(hiddenIds)
+    const drivers = allDrivers.filter(d => !hidden.has(d.id) && !d.is_banned)
+    const support = allSupport.filter(s => !hidden.has(s.id) && s.is_active)
     const staffMap: Record<string, StaffSalaryBase> = {}
     for (const b of staffBases) staffMap[b.staff_id] = b
     const driverMap: Record<string, DriverSalaryBase> = {}
     for (const b of driverBases) driverMap[b.driver_id] = b
+    const supportMap: Record<string, SupportStaffSalaryBase> = {}
+    for (const b of supportBases) supportMap[b.support_staff_id] = b
 
     const merged: Entry[] = [
       ...staff.map(person => ({ key: `staff-${person.id}`, kind: 'staff' as const, person, existing: staffMap[person.id] })),
       ...drivers.map(person => ({ key: `driver-${person.id}`, kind: 'driver' as const, person, existing: driverMap[person.id] })),
+      ...support.map(person => ({ key: `support-${person.id}`, kind: 'support' as const, person, existing: supportMap[person.id] })),
     ].sort((a, b) => a.person.full_name.localeCompare(b.person.full_name))
 
     setEntries(merged)
@@ -137,7 +174,9 @@ export default function BaseSalariesSection() {
       }
       const res = entry.kind === 'staff'
         ? await upsertBaseSalary({ staff_id: entry.person.id, ...input })
-        : await upsertDriverBaseSalary({ driver_id: entry.person.id, ...input })
+        : entry.kind === 'driver'
+          ? await upsertDriverBaseSalary({ driver_id: entry.person.id, ...input })
+          : await upsertSupportStaffSalaryBase({ support_staff_id: entry.person.id, ...input })
       if (!res.success) return res
     }
     await load()
@@ -151,104 +190,108 @@ export default function BaseSalariesSection() {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return entries
-    return entries.filter(e => e.person.full_name.toLowerCase().includes(q))
-  }, [entries, search])
-
-  // Ticking PF on without a PF Basic wage computes a silent ₹0 — surfaced per
-  // row below, but called out here too since it's easy to miss on a long sheet.
-  const pfBasicMissingCount = useMemo(
-    () => entries.filter(e => {
+    const filtered = entries.filter(e => {
+      if (q && !e.person.full_name.toLowerCase().includes(q)) return false
+      if (kindFilter !== 'all' && e.kind !== kindFilter) return false
       const d = drafts[e.key]
-      return d?.pfApplicable && !((parseFloat(d.pfBasic) || 0) > 0)
-    }).length,
-    [entries, drafts],
-  )
+      if (!d) return true
+      const onPayroll = d.active && (parseFloat(d.amount) || 0) > 0
+      if (offPayrollOnly && onPayroll) return false
+      if (missingPfBasicOnly && !(d.pfApplicable && !((parseFloat(d.pfBasic) || 0) > 0))) return false
+      if (missingUanOnly && !(d.pfApplicable && d.uan.length !== 12)) return false
+      return true
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      if (sort === 'base') {
+        const diff = (parseFloat(drafts[a.key]?.amount ?? '') || 0) - (parseFloat(drafts[b.key]?.amount ?? '') || 0)
+        if (diff !== 0) return diff
+      }
+      return a.person.full_name.localeCompare(b.person.full_name)
+    })
+    return desc ? sorted.reverse() : sorted
+  }, [entries, drafts, search, kindFilter, offPayrollOnly, missingPfBasicOnly, missingUanOnly, sort, desc])
 
-  // Same idea for the portal identifiers: a PF member with no UAN drops out of
-  // the monthly EPF return without the return itself looking wrong.
-  const uanMissingCount = useMemo(
-    () => entries.filter(e => {
+  const kindCounts = useMemo(() => ({
+    staff: entries.filter(e => e.kind === 'staff').length,
+    driver: entries.filter(e => e.kind === 'driver').length,
+    support: entries.filter(e => e.kind === 'support').length,
+  }), [entries])
+
+  // Ticking PF on without a PF Basic wage computes a silent ₹0; a PF member
+  // with no UAN drops out of the monthly EPF return without the return itself
+  // looking wrong. Both are flagged per row below, and counted here too since
+  // they are easy to miss on a long sheet.
+  const warnings = useMemo(() => {
+    let pfBasicMissing = 0, uanMissing = 0, onPayroll = 0
+    for (const e of entries) {
       const d = drafts[e.key]
-      return d?.pfApplicable && d.uan.length !== 12
-    }).length,
-    [entries, drafts],
-  )
+      if (!d) continue
+      if (d.active && (parseFloat(d.amount) || 0) > 0) onPayroll += 1
+      if (d.pfApplicable && !((parseFloat(d.pfBasic) || 0) > 0)) pfBasicMissing += 1
+      if (d.pfApplicable && d.uan.length !== 12) uanMissing += 1
+    }
+    return { pfBasicMissing, uanMissing, onPayroll }
+  }, [entries, drafts])
 
   return (
     <>
-      <div className="flex items-baseline gap-2 mb-3">
-        <h2 className={ADMIN.label}>Base salaries</h2>
-        <p className="text-xs text-[#A1A1AA]">Used when running a monthly cycle · staff &amp; drivers</p>
-      </div>
+      <SectionBar
+        title="Base salaries"
+        hint={loading
+          ? 'Used when running a monthly cycle · staff, drivers & support staff'
+          : `${warnings.onPayroll} of ${entries.length} on payroll · used when running a cycle`}
+      />
 
       {!loading && entries.length > 0 && (
-        <div className="flex items-start justify-between gap-3">
-          <PersonSearch value={search} onChange={setSearch} placeholder="Search staff or drivers…" />
-          <SaveBar dirtyCount={dirtyKeys.length} state={state} error={error} onSave={saveNow} />
-        </div>
+        <RosterToolbar
+          search={search} onSearchChange={setSearch}
+          kind={kindFilter} onKindChange={setKindFilter} kindCounts={kindCounts}
+          toggles={[
+            { key: 'offPayroll', label: 'Off payroll', selected: offPayrollOnly, onClick: () => setOffPayrollOnly(v => !v) },
+            { key: 'pfBasic', label: 'Missing PF Basic wage', selected: missingPfBasicOnly, onClick: () => setMissingPfBasicOnly(v => !v) },
+            { key: 'uan', label: 'Missing UAN', selected: missingUanOnly, onClick: () => setMissingUanOnly(v => !v) },
+          ]}
+          sortOptions={[{ key: 'name', label: 'Name' }, { key: 'base', label: 'Base salary' }]}
+          sort={sort} onSortChange={setSort} desc={desc} onDescChange={setDesc}
+          shown={visible.length} total={entries.length}
+          right={<SaveBar dirtyCount={dirtyKeys.length} state={state} error={error} onSave={saveNow} />}
+        />
       )}
 
-      {!loading && pfBasicMissingCount > 0 && (
-        <p className="text-[11px] text-rose-600 font-semibold mt-2">
-          {pfBasicMissingCount} {pfBasicMissingCount === 1 ? 'person has' : 'people have'} PF switched on with no PF Basic wage set — PF will show as ₹0 for them until a wage is entered (highlighted in red below).
-        </p>
+      {!loading && (warnings.pfBasicMissing > 0 || warnings.uanMissing > 0) && (
+        <ul className="text-[10.5px] text-[#A93232] mb-2 space-y-0.5">
+          {warnings.pfBasicMissing > 0 && (
+            <li>{warnings.pfBasicMissing} with PF on have no PF Basic wage — their PF computes to ₹0.</li>
+          )}
+          {warnings.uanMissing > 0 && (
+            <li>{warnings.uanMissing} PF members have no valid 12-digit UAN — the EPF return leaves them out.</li>
+          )}
+        </ul>
       )}
 
-      {!loading && uanMissingCount > 0 && (
-        <p className="text-[11px] text-rose-600 font-semibold mt-2">
-          {uanMissingCount} PF {uanMissingCount === 1 ? 'member has' : 'members have'} no valid 12-digit UAN — they will be left out of the monthly EPF return until one is entered (highlighted in red below).
-        </p>
-      )}
-
-      {loading ? (
-        <Sheet>
-          {Array.from({ length: 5 }, (_, i) => <SheetRowSkeleton key={i} />)}
-        </Sheet>
-      ) : entries.length === 0 ? (
-        <div className={`${ADMIN.card} shadow-sm p-6 text-center text-sm text-[#71717A]`}>
-          No teacher, coordinator, principal, or driver accounts yet.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-[1010px]">
-            <Sheet>
-              {/* Header shares GRID_COLS with every row, so labels sit above their own column. */}
-              <div className="hidden sm:flex items-stretch bg-[#27272A]">
-                <div className="w-1 flex-shrink-0" />
-                <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
-                  <span className={`${SHEET.headCell} pl-[34px]`}>Person</span>
-                  <span className={`${SHEET.headCell} text-right`}>Monthly base</span>
-                  <span className={`${SHEET.headCell} text-right`}>PF Basic</span>
-                  <span className={`${SHEET.headCell} text-center`}>PF</span>
-                  <span className={`${SHEET.headCell} text-center`}>EPS</span>
-                  <span className={`${SHEET.headCell} text-center`}>ESI</span>
-                  <span className={`${SHEET.headCell}`}>UAN</span>
-                  <span className={`${SHEET.headCell}`}>ESI IP No.</span>
-                  <span className={`${SHEET.headCell} text-center`}>Active</span>
-                </div>
-              </div>
-
-              {visible.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No one matches &quot;{search}&quot;.</div>
-              ) : visible.map(e => (
-                <BaseRow
-                  key={e.key}
-                  entry={e}
-                  draft={drafts[e.key] ?? draftOf(e.existing)}
-                  dirty={dirtyKeys.includes(e.key)}
-                  onChange={patch => setDraft(e.key, patch)}
-                />
-              ))}
-            </Sheet>
-          </div>
-        </div>
-      )}
+      <Sheet minWidth={880}>
+        {/* The header scrolls sideways with the rows it labels, so it stays on
+            phones too — nine unlabelled PF/ESI columns are unreadable without it. */}
+        <SheetHead cols={COLS} columns={COLUMNS} />
+        {loading ? (
+          <SheetSkeleton />
+        ) : entries.length === 0 ? (
+          <Note>No staff, driver or support staff accounts yet.</Note>
+        ) : visible.length === 0 ? (
+          <Note>No one matches the current search and filters.</Note>
+        ) : visible.map(e => (
+          <BaseRow
+            key={e.key}
+            entry={e}
+            draft={drafts[e.key] ?? draftOf(e.existing)}
+            dirty={dirtyKeys.includes(e.key)}
+            onChange={patch => setDraft(e.key, patch)}
+          />
+        ))}
+      </Sheet>
     </>
   )
 }
-
-const cellCls = 'bg-white border border-[#E4E4E7] rounded-md px-2 py-1 text-[11px] tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors'
 
 function BaseRow({ entry, draft, dirty, onChange }: {
   entry: Entry
@@ -276,97 +319,106 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   const uanBad = (draft.pfApplicable || draft.uan !== '') && draft.uan.length !== 12
   const ipMissing = draft.esiChoice === 'on' && draft.ipNumber === ''
   const ipBad = (draft.esiChoice === 'on' || draft.ipNumber !== '') && draft.ipNumber.length !== 10
+
+  const accent = dirty ? '#8A6D1F' : draft.active && existing ? '#B8983C' : 'transparent'
+
   return (
-    <div className={SHEET.row}>
-      {/* The bar doubles as the unsaved marker, so a pending row is obvious without a per-row control. */}
-      <div className={`${SHEET.bar} ${dirty ? 'bg-[#8A6D1F]' : draft.active && existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
-      <div className={`${GRID} flex-1 min-w-0 px-3 py-1.5`} style={{ gridTemplateColumns: GRID_COLS }}>
-        <div className="flex items-center gap-2 min-w-0">
-          <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={26} userId={person.id} />
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-[#18181B] text-xs truncate">{person.full_name}</p>
-            <p className="text-[10px] text-[#A1A1AA] truncate flex items-center gap-1">
-              {kind === 'driver' && <Bus size={9} className="flex-shrink-0" />}
-              {getRoleDisplayName(person.role, person.is_non_teaching)}
-            </p>
-          </div>
+    <SheetRow cols={COLS} accent={accent}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={kind === 'support' ? undefined : person.id} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
+          <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
+            {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
+            {kind === 'support' && <HardHat size={8} className="flex-shrink-0" />}
+            {kind === 'support' ? ((person as SupportStaff).designation || 'Support Staff') : getDisplayRole(person as UserProfile)}
+          </p>
         </div>
-
-        <div className="relative min-w-0">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-[11px]">₹</span>
-          <input type="number" min="0" step="0.01" value={draft.amount} onChange={e => onChange({ amount: e.target.value })}
-            placeholder="0.00" title="Monthly base salary"
-            className={`${cellCls} w-full pl-5 pr-2 text-right`} />
-        </div>
-
-        <div className="relative min-w-0">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-[11px]">₹</span>
-          <input type="number" min="0" step="0.01" value={draft.pfBasic} onChange={e => onChange({ pfBasic: e.target.value })}
-            placeholder={pfBasicMissing ? 'Required for PF' : '0.00'}
-            title={pfBasicMissing
-              ? 'PF is on but no PF Basic wage is set, so PF will compute to ₹0 — enter the wage PF is calculated on'
-              : 'PF Basic wage (used for PF, not gross salary)'}
-            className={`${cellCls} w-full pl-5 pr-2 text-right ${
-              pfBasicMissing ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''
-            }`} />
-        </div>
-
-        <label
-          className={`flex items-center justify-center cursor-pointer select-none rounded ${
-            pfUnticked ? 'ring-2 ring-[#B8983C] ring-offset-1' : ''
-          }`}
-          title={pfUnticked
-            ? 'PF Basic is set but PF is off, so no PF will be deducted — tick to apply it'
-            : 'PF applicable'}
-        >
-          <input type="checkbox" checked={draft.pfApplicable} onChange={e => onChange({ pfApplicable: e.target.checked })}
-            className="w-3.5 h-3.5 accent-[#27272A]" />
-        </label>
-
-        <label
-          className="flex items-center justify-center cursor-pointer select-none"
-          title={draft.pfApplicable
-            ? 'In the Employees Pension Scheme — 8.33% of the employer share is filed under EPS. Untick for members excluded from the pension scheme, whose whole employer share goes to EPF.'
-            : 'Only applies once PF is switched on'}
-        >
-          <input type="checkbox" checked={draft.epsApplicable} disabled={!draft.pfApplicable}
-            onChange={e => onChange({ epsApplicable: e.target.checked })}
-            className="w-3.5 h-3.5 accent-[#27272A] disabled:opacity-30" />
-        </label>
-
-        <select value={draft.esiChoice} onChange={e => onChange({ esiChoice: e.target.value as EsiChoice })}
-          title="ESI applicability"
-          className={`${cellCls} w-full`}>
-          <option value="auto">Auto</option>
-          <option value="on">Always</option>
-          <option value="off">Never</option>
-        </select>
-
-        {/* The two portal identifiers. Without them the member simply cannot be
-            filed for, so the field is flagged as soon as the scheme is on. */}
-        <input
-          inputMode="numeric" maxLength={12} value={draft.uan}
-          onChange={e => onChange({ uan: digits(e.target.value).slice(0, 12) })}
-          placeholder={uanMissing ? 'Required' : '12 digits'}
-          title={uanMissing
-            ? 'PF is on but no UAN is set — this member cannot be included in the EPF return until one is entered'
-            : 'EPFO Universal Account Number (12 digits)'}
-          className={`${cellCls} w-full ${uanBad ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''}`} />
-
-        <input
-          inputMode="numeric" maxLength={10} value={draft.ipNumber}
-          onChange={e => onChange({ ipNumber: digits(e.target.value).slice(0, 10) })}
-          placeholder={ipMissing ? 'Required' : '10 digits'}
-          title={ipMissing
-            ? 'ESI applies to this person but no IP number is set — they cannot be included in the ESI return until one is entered'
-            : 'ESIC Insured Person number (10 digits)'}
-          className={`${cellCls} w-full ${ipBad ? 'ring-2 ring-rose-400 ring-offset-1 placeholder:text-rose-400' : ''}`} />
-
-        <label className="flex items-center justify-center cursor-pointer select-none" title="Include in pay cycles">
-          <input type="checkbox" checked={draft.active} onChange={e => onChange({ active: e.target.checked })}
-            className="w-3.5 h-3.5 accent-[#27272A]" />
-        </label>
       </div>
+
+      <Money value={draft.amount} onChange={v => onChange({ amount: v })} title="Monthly base salary" />
+
+      <Money
+        value={draft.pfBasic}
+        onChange={v => onChange({ pfBasic: v })}
+        placeholder={pfBasicMissing ? 'Needed' : '0.00'}
+        flagged={pfBasicMissing}
+        title={pfBasicMissing
+          ? 'PF is on but no PF Basic wage is set, so PF will compute to ₹0 — enter the wage PF is calculated on'
+          : 'PF Basic wage (used for PF, not gross salary)'}
+      />
+
+      <label
+        className={`flex items-center justify-center cursor-pointer select-none h-full ${pfUnticked ? 'ring-1 ring-[#B8983C]' : ''}`}
+        title={pfUnticked
+          ? 'PF Basic is set but PF is off, so no PF will be deducted — tick to apply it'
+          : 'PF applicable'}
+      >
+        <input type="checkbox" checked={draft.pfApplicable} onChange={e => onChange({ pfApplicable: e.target.checked })}
+          className="w-3 h-3 accent-[#27272A]" />
+      </label>
+
+      <label
+        className="flex items-center justify-center cursor-pointer select-none"
+        title={draft.pfApplicable
+          ? 'In the Employees Pension Scheme — 8.33% of the employer share is filed under EPS. Untick for members excluded from the pension scheme, whose whole employer share goes to EPF.'
+          : 'Only applies once PF is switched on'}
+      >
+        <input type="checkbox" checked={draft.epsApplicable} disabled={!draft.pfApplicable}
+          onChange={e => onChange({ epsApplicable: e.target.checked })}
+          className="w-3 h-3 accent-[#27272A] disabled:opacity-30" />
+      </label>
+
+      <select value={draft.esiChoice} onChange={e => onChange({ esiChoice: e.target.value as EsiChoice })}
+        title="ESI applicability" className={CELL}>
+        <option value="auto">Auto</option>
+        <option value="on">Always</option>
+        <option value="off">Never</option>
+      </select>
+
+      {/* The two portal identifiers. Without them the member simply cannot be
+          filed for, so the field is flagged as soon as the scheme is on. */}
+      <input
+        inputMode="numeric" maxLength={12} value={draft.uan}
+        onChange={e => onChange({ uan: digits(e.target.value).slice(0, 12) })}
+        placeholder={uanMissing ? 'Needed' : '12 digits'}
+        title={uanMissing
+          ? 'PF is on but no UAN is set — this member cannot be included in the EPF return until one is entered'
+          : 'EPFO Universal Account Number (12 digits)'}
+        className={`${CELL} ${uanBad ? FLAG : ''}`} />
+
+      <input
+        inputMode="numeric" maxLength={10} value={draft.ipNumber}
+        onChange={e => onChange({ ipNumber: digits(e.target.value).slice(0, 10) })}
+        placeholder={ipMissing ? 'Needed' : '10 digits'}
+        title={ipMissing
+          ? 'ESI applies to this person but no IP number is set — they cannot be included in the ESI return until one is entered'
+          : 'ESIC Insured Person number (10 digits)'}
+        className={`${CELL} ${ipBad ? FLAG : ''}`} />
+
+      <label className="flex items-center justify-center cursor-pointer select-none" title="Include in pay cycles">
+        <input type="checkbox" checked={draft.active} onChange={e => onChange({ active: e.target.checked })}
+          className="w-3 h-3 accent-[#27272A]" />
+      </label>
+    </SheetRow>
+  )
+}
+
+/** A rupee field: the symbol sits inside the box so the digits stay right-aligned. */
+function Money({ value, onChange, placeholder = '0.00', title, flagged }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  title?: string
+  flagged?: boolean
+}) {
+  return (
+    <div className="relative min-w-0">
+      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#B5B0A1] text-[10px] pointer-events-none">₹</span>
+      <input
+        type="number" min="0" step="0.01" value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder} title={title}
+        className={`${CELL} pl-4 text-right ${flagged ? FLAG : ''}`} />
     </div>
   )
 }

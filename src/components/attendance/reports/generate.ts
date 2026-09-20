@@ -47,7 +47,7 @@ function fmtTimeCell(iso: string | null): string {
 
 /** Excel/CSV-shaped export of the same rows, mirroring the biometric system's column layout. */
 export function downloadLateSummaryExcel(rows: LateSummaryRow[], startDate: string, endDate: string): void {
-  exportRows(
+  void exportRows(
     rows.map(r => ({
       Date: fmtDateCell(r.date),
       'Employee Code': r.employee_code,

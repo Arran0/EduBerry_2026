@@ -376,13 +376,6 @@ export default function NewAnnouncementForm({
     }
   }
 
-  // ── Audience mode switch (coordinator only) ───────────────────────────────
-  const switchAudienceMode = (mode: 'student' | 'staff') => {
-    setAudienceMode(mode)
-    if (mode === 'student') { setAllStaff(false); setSelectedTeamIds([]) }
-    else { setAllStudents(false); setSelectedGrades([]); setSelectedHomerooms([]) }
-  }
-
   // ── Build audience rows ──────────────────────────────────────────────────
   const buildStudentAudiences = () => {
     if (allStudents) return [{ all_students: true }]

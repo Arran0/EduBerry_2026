@@ -1,32 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
-import { ICON_MAP } from '@/components/PageIcon'
-import {
-  PageId, PageIconMap, PAGE_DEFAULTS, PAGE_LABELS, AVAILABLE_ICONS, GRADIENT_OPTIONS,
-  SiteBranding, BRANDING_DEFAULTS,
-  LoginPageConfig, LOGIN_DEFAULTS,
-  PageThemeMap, THEME_PALETTES,
-  savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes,
-  uploadSiteAsset,
-  AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS,
-  BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT,
-  ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT,
-  LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT,
-  FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT,
-  BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT,
-} from '@/lib/pageConfig'
+import { PageIconMap, SiteBranding, LoginPageConfig, PageThemeMap, THEME_PALETTES, savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes, saveSetting, uploadSiteAsset, AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS, BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT, ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT, LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT, FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT, BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
-import {
-  Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon,
-  Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Navigation,
-  Clock, CalendarOff, ShieldCheck, Search, Bus, CreditCard, Banknote,
-  QrCode, Info, Monitor, Building2, Copy, Repeat, EyeOff,
-} from 'lucide-react'
+import { Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon, Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote, Monitor, Building2, Repeat, EyeOff } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
   fetchGeofenceConfig, saveGeofenceConfig, GeofenceConfig,
@@ -34,8 +15,10 @@ import {
   fetchAttendanceConfig, saveAttendanceConfig, AttendanceConfig,
   fetchAllStaff, setStaffExemption, setStaffAttendanceVisibility,
   fetchAllDayTimingRules, fetchAllTrackedStaff, saveDayTimings,
-  DayTimingGroup, DayTimingScope,
+  DayTimingGroup, DayTimingScope, DayTimingScopeType,
   fetchAllHolidayRules, saveHolidays, HolidayGroup,
+  fetchAllNonWorkingDayRules, saveNonWorkingDays, NonWorkingDayGroup,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { DEFAULT_TRUSTED_ACCURACY_M } from '@/lib/geofence'
 import FenceEditor from '@/components/attendance/FenceEditor'
@@ -52,6 +35,11 @@ const HolidayModalDynamic = dynamic(
   { ssr: false }
 )
 
+const NonWorkingDayModalDynamic = dynamic(
+  () => import('@/components/attendance/NonWorkingDayModal'),
+  { ssr: false }
+)
+
 const GeofenceZoneModalDynamic = dynamic(
   () => import('@/components/attendance/GeofenceZoneModal'),
   { ssr: false }
@@ -63,17 +51,22 @@ function dayTimingScopeKey(scope: DayTimingScope): string {
   return scope.type === 'weekday' ? `weekday-${scope.weekday}` : `date-${scope.date}`
 }
 
-interface DayTimingScopeGroup {
+interface ScopeGroup<T> {
   scope: DayTimingScope
   key: string
   label: string
-  rows: DayTimingGroup[]
+  rows: T[]
 }
 
 // One row per rule in the DB, but the UI manages a whole scope (date or weekday)
-// as a single unit — group rows back together for display.
-function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
-  const map = new Map<string, DayTimingScopeGroup>()
+// as a single unit — group rows back together for display. Shared by Cutoffs,
+// Holidays, and Non-working Days: all three now use the same date/weekday
+// split (a rule either applies to one exact date, or repeats every week on a
+// given weekday — see add_attendance_holiday_weekday_scope.sql).
+function groupRulesByScope<T extends { scope_type: DayTimingScopeType; scope_date: string | null; scope_weekday: number | null }>(
+  rules: T[]
+): ScopeGroup<T>[] {
+  const map = new Map<string, ScopeGroup<T>>()
   for (const r of rules) {
     const scope: DayTimingScope = r.scope_type === 'weekday'
       ? { type: 'weekday', weekday: r.scope_weekday as number }
@@ -89,34 +82,17 @@ function groupDayTimingRules(rules: DayTimingGroup[]): DayTimingScopeGroup[] {
   }
   return [...map.values()]
 }
-
-interface HolidayDateGroup {
-  date: string
-  label: string
-  rows: HolidayGroup[]
-}
-
-// One row per rule in the DB, but the UI manages a whole date as a single unit.
-function groupHolidayRules(rules: HolidayGroup[]): HolidayDateGroup[] {
-  const map = new Map<string, HolidayDateGroup>()
-  for (const r of rules) {
-    if (!map.has(r.date)) {
-      const label = new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-      map.set(r.date, { date: r.date, label, rows: [] })
-    }
-    map.get(r.date)!.rows.push(r)
-  }
-  return [...map.values()]
-}
 // Fee collection and salary payout both run against the school's own bank.
 // Their forms live in shared components so App Settings, Salary Payout Settings
 // and Driver Payroll Settings never drift apart.
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
 
-type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'payments' | 'bus'
-
-const PAGE_IDS = Object.keys(PAGE_DEFAULTS) as PageId[]
+// Fees and salary payout are no longer here: each has its own page under Admin
+// Space (/admin/fee-settings, /admin/payroll-settings). Bus Finance stays,
+// because bus fees and driver payout are a different account and a different
+// reconciliation from either.
+type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners' | 'geofence' | 'attendance' | 'bus'
 
 // Per-page gradient banners — mirrors the Page Themes list (admin-space pages excluded;
 // they stay on the uncustomisable Edzee theme). Home is covered by the image banner above.
@@ -162,7 +138,7 @@ function TextInput({ value, onChange, placeholder, list }: { value: string; onCh
   )
 }
 
-function ColorInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+function ColorInput({ value, onChange, label: _label }: { value: string; onChange: (v: string) => void; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <input
@@ -215,90 +191,6 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
 
 // ── Inline payment-settings primitives (admin palette) ─────────────────────────
 
-const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
-
-function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
-  return (
-    <button
-      role="switch" aria-checked={checked} disabled={disabled} onClick={onChange}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${checked ? 'bg-[#27272A]' : 'bg-[#D4D4D8]'}`}
-    >
-      <span className={`pointer-events-none inline-block h-5 w-5 transform bg-white shadow transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-    </button>
-  )
-}
-
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-white border border-[#E4E4E7]">
-      <span className="text-sm text-[#18181B]">{label}</span>
-      <Switch checked={checked} onChange={onChange} />
-    </div>
-  )
-}
-
-function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-[#F5F5F5] border border-[#E4E4E7] p-5">
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-8 h-8 bg-[#27272A] flex items-center justify-center flex-shrink-0">{icon}</div>
-        <h3 className="text-sm font-bold text-[#18181B]">{title}</h3>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function PwInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <input
-      type="password" autoComplete="off" value={value} onChange={e => onChange(e.target.value)}
-      placeholder={placeholder} className={ai}
-    />
-  )
-}
-
-// Read-only display of the app's full webhook endpoint that the school admin
-// pastes into their bank / PSP / Razorpay dashboard, with one-click copy. The
-// origin is resolved client-side so the URL always matches wherever the app is
-// deployed — no hardcoded domain to keep in sync.
-function WebhookUrlField({ path }: { path: string }) {
-  const [origin, setOrigin] = useState('')
-  const [copied, setCopied] = useState(false)
-  useEffect(() => { setOrigin(window.location.origin) }, [])
-  const url = origin ? `${origin}${path}` : path
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* clipboard unavailable — admin can still select the text manually */
-    }
-  }
-  return (
-    <Field label="Webhook URL (paste at your bank / gateway)">
-      <div className="flex items-center gap-2">
-        <input readOnly value={url} onFocus={e => e.target.select()}
-          className={`${ai} font-mono bg-[#FAFAFA] text-[#52525B]`} />
-        <button type="button" onClick={copy}
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors">
-          {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-        </button>
-      </div>
-    </Field>
-  )
-}
-
-function InfoNote({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'info' }) {
-  const Icon = tone === 'info' ? Info : ShieldCheck
-  return (
-    <div className="flex items-start gap-2 mt-4 p-3 bg-white border border-[#E4E4E7] text-xs text-[#71717A] leading-relaxed">
-      <Icon size={14} className="flex-shrink-0 mt-0.5 text-[#B8983C]" />
-      <span>{children}</span>
-    </div>
-  )
-}
 
 function SaveButton({ saving, saved, label, onClick }: { saving: boolean; saved: boolean; label: string; onClick: () => void }) {
   return (
@@ -370,15 +262,19 @@ export default function AdminSettingsPage() {
 
   const [holidayRules, setHolidayRules] = useState<HolidayGroup[]>([])
   const [showHolidayModal, setShowHolidayModal] = useState(false)
-  const [editingHolidayDate, setEditingHolidayDate] = useState<string | null>(null)
-  const [clearingHolidayDate, setClearingHolidayDate] = useState<string | null>(null)
+  const [editingHolidayScope, setEditingHolidayScope] = useState<DayTimingScope | null>(null)
+  const [clearingHolidayScopeKey, setClearingHolidayScopeKey] = useState<string | null>(null)
+
+  const [nonWorkingRules, setNonWorkingRules] = useState<NonWorkingDayGroup[]>([])
+  const [showNonWorkingModal, setShowNonWorkingModal] = useState(false)
+  const [editingNonWorkingScope, setEditingNonWorkingScope] = useState<DayTimingScope | null>(null)
+  const [clearingNonWorkingScopeKey, setClearingNonWorkingScopeKey] = useState<string | null>(null)
 
   const [draftIcons, setDraftIcons] = useState<PageIconMap>(pageIcons)
   const [draftBranding, setDraftBranding] = useState<SiteBranding>(branding)
   const [draftLogin, setDraftLogin] = useState<LoginPageConfig>(loginConfig)
   const [draftThemes, setDraftThemes] = useState<PageThemeMap>(pageThemes)
 
-  const [selectedPage, setSelectedPage] = useState<PageId>('tasks')
   const [selectedThemePage, setSelectedThemePage] = useState<string>('home')
   const [uploadingMap, setUploadingMap] = useState<Record<string, boolean>>({})
 
@@ -389,7 +285,6 @@ export default function AdminSettingsPage() {
   const [selectedBannerKey, setSelectedBannerKey] = useState(PAGE_BANNERS[0].key)
 
   // ── Payment gateway (shared by Fee Setting + Bus Fee) ──
-  const [paymentsSub, setPaymentsSub] = useState<'fees' | 'salary'>('fees')
   const [busSub, setBusSub] = useState<'busfee' | 'driver'>('busfee')
 
   // ── School Profile (CBSE institutional info) ──
@@ -439,11 +334,12 @@ export default function AdminSettingsPage() {
       Promise.all([
         fetchAttendanceConfig(), fetchAllStaff(),
         fetchAllDayTimingRules(), fetchTeamsForDropdown(), fetchAllTrackedStaff(),
-        fetchAllHolidayRules(),
-      ]).then(([cfg, staff, rules, teams, tracked, holRules]) => {
+        fetchAllHolidayRules(), fetchAllNonWorkingDayRules(),
+      ]).then(([cfg, staff, rules, teams, tracked, holRules, nonWorkingRls]) => {
         setAttendanceDraft(cfg); setStaffList(staff)
         setDayTimingRules(rules); setTeamOptions(teams); setTrackedStaff(tracked)
         setHolidayRules(holRules)
+        setNonWorkingRules(nonWorkingRls)
         setAttendanceLoaded(true)
       })
     }
@@ -477,9 +373,6 @@ export default function AdminSettingsPage() {
     setUploading(key, false)
   }
 
-  function updateIcon(pageId: PageId, patch: Partial<PageIconMap[PageId]>) {
-    setDraftIcons(prev => ({ ...prev, [pageId]: { ...prev[pageId], ...patch } }))
-  }
   function updateBranding(patch: Partial<SiteBranding>) { setDraftBranding(prev => ({ ...prev, ...patch })) }
   function updateLogin(patch: Partial<LoginPageConfig>) { setDraftLogin(prev => ({ ...prev, ...patch })) }
   function updateFeature(index: number, value: string) {
@@ -506,8 +399,6 @@ export default function AdminSettingsPage() {
     }
     setSaved(true); setTimeout(() => setSaved(false), 2500)
   }
-
-  const currentIcon = draftIcons[selectedPage]
 
   async function handleSaveGeofence() {
     setSavingGeofence(true)
@@ -539,6 +430,10 @@ export default function AdminSettingsPage() {
   async function handleSaveAttendance() {
     setSavingAttendance(true)
     await saveAttendanceConfig(attendanceDraft)
+    // These are the cutoffs every day without an override is scored against, so
+    // moving them leaves the Late / Half Day statuses on all of those days
+    // decided by a rule that no longer exists. Re-derive them.
+    await recomputePendingAttendance()
     setSavedAttendance(true); setTimeout(() => setSavedAttendance(false), 2500); setSavingAttendance(false)
   }
 
@@ -560,12 +455,26 @@ export default function AdminSettingsPage() {
     setHolidayRules(await fetchAllHolidayRules())
   }
 
-  async function handleClearHoliday(date: string) {
+  async function handleClearHoliday(scope: DayTimingScope) {
     if (!profile) return
-    setClearingHolidayDate(date)
-    const ok = await saveHolidays(date, [], profile.id)
-    if (ok) await reloadHolidayRules()
-    setClearingHolidayDate(null)
+    setClearingHolidayScopeKey(dayTimingScopeKey(scope))
+    const ok = await saveHolidays(scope, [], profile.id)
+    // The days this covered are working days again, so their cutoffs apply
+    // again and the statuses scored while it was a holiday have to be re-derived.
+    if (ok) { await recomputePendingAttendance(); await reloadHolidayRules() }
+    setClearingHolidayScopeKey(null)
+  }
+
+  async function reloadNonWorkingRules() {
+    setNonWorkingRules(await fetchAllNonWorkingDayRules())
+  }
+
+  async function handleClearNonWorking(scope: DayTimingScope) {
+    if (!profile) return
+    setClearingNonWorkingScopeKey(dayTimingScopeKey(scope))
+    const ok = await saveNonWorkingDays(scope, [], profile.id)
+    if (ok) { await recomputePendingAttendance(); await reloadNonWorkingRules() }
+    setClearingNonWorkingScopeKey(null)
   }
 
   async function reloadDayTimingRules() {
@@ -576,7 +485,9 @@ export default function AdminSettingsPage() {
     if (!profile) return
     setClearingScopeKey(dayTimingScopeKey(scope))
     const ok = await saveDayTimings(scope, [], profile.id)
-    if (ok) await reloadDayTimingRules()
+    // Those days fall back to the school-wide cutoffs now, which can change
+    // whether a check-in was Late or a checkout a Half Day.
+    if (ok) { await recomputePendingAttendance(); await reloadDayTimingRules() }
     setClearingScopeKey(null)
   }
 
@@ -725,100 +636,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderPageIcons() {
-    return (
-      <div className="flex flex-col sm:flex-row gap-0 min-h-[480px]">
-        {/* Page list */}
-        <div className="sm:w-44 border-b sm:border-b-0 sm:border-r border-[#E4E4E7] p-1 flex sm:flex-col gap-0.5 overflow-x-auto sm:overflow-visible flex-shrink-0">
-          {PAGE_IDS.map(pageId => {
-            const cfg = draftIcons[pageId]
-            const Icon = ICON_MAP[cfg.iconName]
-            return (
-              <button key={pageId} onClick={() => setSelectedPage(pageId)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all flex-shrink-0 w-full text-left border-l-2 ${selectedPage === pageId ? 'border-l-[#525252] bg-[#E4E4E7] text-[#18181B]' : 'border-l-transparent text-[#71717A] hover:bg-[#EBEBEB] hover:text-[#18181B]'}`}>
-                <div className={`p-0.5 bg-gradient-to-br ${cfg.gradientFrom} ${cfg.gradientTo} flex-shrink-0 overflow-hidden`} style={{ width: 18, height: 18 }}>
-                  {cfg.customImageUrl
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={cfg.customImageUrl} alt="" className="w-full h-full object-cover" />
-                    : Icon && <Icon size={12} className="text-white" />
-                  }
-                </div>
-                <span className="truncate">{PAGE_LABELS[pageId]}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Editor */}
-        <div className="flex-1 p-5 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-[#18181B]">{PAGE_LABELS[selectedPage]}</h3>
-            <button onClick={() => setDraftIcons(prev => ({ ...prev, [selectedPage]: PAGE_DEFAULTS[selectedPage] }))}
-              className="flex items-center gap-1 text-xs text-[#71717A] hover:text-[#18181B] transition-colors">
-              <RotateCcw size={10} /> Reset
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 p-3 bg-[#F5F5F5] border border-[#E4E4E7] mb-4">
-            <div className={`p-2 bg-gradient-to-br ${currentIcon.gradientFrom} ${currentIcon.gradientTo} overflow-hidden`}>
-              {currentIcon.customImageUrl
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={currentIcon.customImageUrl} alt="" className="w-6 h-6 object-cover" />
-                : (() => { const I = ICON_MAP[currentIcon.iconName]; return I ? <I className="text-white" size={22} /> : null })()
-              }
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[#18181B]">{PAGE_LABELS[selectedPage]}</p>
-              <p className="text-[10px] text-[#A1A1AA] uppercase tracking-widest">Live preview</p>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <SectionLabel>Custom Image (overrides icon)</SectionLabel>
-            <UploadField label="" currentUrl={currentIcon.customImageUrl ?? ''} uploading={!!uploadingMap[`icon-${selectedPage}`]}
-              onUpload={f => uploadAndSet(`icon-${selectedPage}`, f, url => updateIcon(selectedPage, { customImageUrl: url }))}
-              onClear={() => updateIcon(selectedPage, { customImageUrl: undefined })} />
-          </div>
-
-          <div className="mb-4">
-            <SectionLabel>Preset Icon</SectionLabel>
-            <div className="grid grid-cols-8 gap-1">
-              {AVAILABLE_ICONS.map(name => {
-                const Icon = ICON_MAP[name]
-                if (!Icon) return null
-                const isSelected = currentIcon.iconName === name && !currentIcon.customImageUrl
-                return (
-                  <button key={name} title={name}
-                    onClick={() => updateIcon(selectedPage, { iconName: name, customImageUrl: undefined })}
-                    className={`p-2 flex items-center justify-center transition-all border ${isSelected ? 'border-[#27272A] bg-[#27272A] text-white' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:border-[#525252] text-[#71717A]'}`}>
-                    <Icon size={13} />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div>
-            <SectionLabel>Icon Background Color</SectionLabel>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {GRADIENT_OPTIONS.map(opt => {
-                const isSelected = currentIcon.gradientFrom === opt.from && currentIcon.gradientTo === opt.to
-                return (
-                  <button key={opt.label}
-                    onClick={() => updateIcon(selectedPage, { gradientFrom: opt.from, gradientTo: opt.to })}
-                    className={`flex items-center gap-2 px-2.5 py-2 text-xs border transition-all ${isSelected ? 'border-[#27272A] bg-white shadow-sm' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-white hover:border-[#D4D4D8]'}`}>
-                    <div className={`w-4 h-4 bg-gradient-to-br ${opt.from} ${opt.to} flex-shrink-0`} />
-                    <span className="text-[#71717A] truncate">{opt.label}</span>
-                    {isSelected && <Check size={9} className="ml-auto text-[#525252] flex-shrink-0" />}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   function renderPageThemes() {
     const PAGE_THEME_LABELS: Record<string, string> = {
@@ -1126,8 +943,9 @@ export default function AdminSettingsPage() {
       ? staffList.filter(s => s.full_name.toLowerCase().includes(hideQuery.trim().toLowerCase()) || s.email.toLowerCase().includes(hideQuery.trim().toLowerCase()))
       : staffList
     const hiddenCount = staffList.filter(s => s.attendance_hidden).length
-    const dayTimingGroups = groupDayTimingRules(dayTimingRules)
-    const holidayDateGroups = groupHolidayRules(holidayRules)
+    const dayTimingGroups = groupRulesByScope(dayTimingRules)
+    const holidayScopeGroups = groupRulesByScope(holidayRules)
+    const nonWorkingScopeGroups = groupRulesByScope(nonWorkingRules)
 
     if (!attendanceLoaded) {
       return <div className="py-12 text-center text-[#71717A] text-sm"><Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…</div>
@@ -1222,42 +1040,96 @@ export default function AdminSettingsPage() {
           <div className="flex items-center justify-between mb-1">
             <SectionLabel>Holidays</SectionLabel>
             <button
-              onClick={() => { setEditingHolidayDate(null); setShowHolidayModal(true) }}
+              onClick={() => { setEditingHolidayScope(null); setShowHolidayModal(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
             >
               <Plus size={12} /> Add Holiday
             </button>
           </div>
           <p className="text-xs text-[#71717A] mb-3">
-            Declare a holiday for the whole school, or just specific teams. Staff aren&apos;t auto-marked absent when covered.
-            The same control is available on the Staff Attendance page.
+            Declare a holiday for one date, or repeating every week (e.g. a standing Sunday off) — for the whole school or
+            just specific teams. Staff aren&apos;t auto-marked absent when covered. The same control is available on the
+            Staff Attendance page.
           </p>
-          {holidayDateGroups.length === 0 ? (
+          {holidayScopeGroups.length === 0 ? (
             <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><CalendarOff size={12} className="text-[#71717A]" /> No holidays declared yet.</p>
           ) : (
             <div className="space-y-px max-h-64 overflow-y-auto">
-              {holidayDateGroups.map(g => {
+              {holidayScopeGroups.map(g => {
                 const everyone = g.rows.find(r => r.is_default)
                 const overrides = g.rows.filter(r => !r.is_default)
                 return (
-                  <div key={g.date} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
-                    <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />
+                  <div key={g.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {g.scope.type === 'weekday'
+                      ? <Repeat size={13} className="text-[#71717A] flex-shrink-0" />
+                      : <CalendarOff size={13} className="text-[#71717A] flex-shrink-0" />}
                     <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
                     <span className="text-sm text-[#71717A] flex-1 truncate">
                       {everyone ? everyone.name : `${overrides.length} team holiday${overrides.length === 1 ? '' : 's'}`}
                     </span>
                     <button
-                      onClick={() => { setEditingHolidayDate(g.date); setShowHolidayModal(true) }}
+                      onClick={() => { setEditingHolidayScope(g.scope); setShowHolidayModal(true) }}
                       className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleClearHoliday(g.date)}
-                      disabled={clearingHolidayDate === g.date}
+                      onClick={() => handleClearHoliday(g.scope)}
+                      disabled={clearingHolidayScopeKey === g.key}
                       className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
                     >
-                      {clearingHolidayDate === g.date ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      {clearingHolidayScopeKey === g.key ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#E4E4E7] pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Non-working Days</SectionLabel>
+            <button
+              onClick={() => { setEditingNonWorkingScope(null); setShowNonWorkingModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] transition-colors"
+            >
+              <Plus size={12} /> Add Non-working Day
+            </button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">
+            Declare a day that isn&apos;t worked and isn&apos;t paid — for one date, or repeating every week — for the whole
+            school or just specific teams. Unlike a Holiday, this reduces the working-day count for payroll. The same
+            control is available on the Staff Attendance page.
+          </p>
+          {nonWorkingScopeGroups.length === 0 ? (
+            <p className="text-xs text-[#A1A1AA] flex items-center gap-1.5"><Ban size={12} className="text-[#71717A]" /> No non-working days declared yet.</p>
+          ) : (
+            <div className="space-y-px max-h-64 overflow-y-auto">
+              {nonWorkingScopeGroups.map(g => {
+                const everyone = g.rows.find(r => r.is_default)
+                const overrides = g.rows.filter(r => !r.is_default)
+                return (
+                  <div key={g.key} className="flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+                    {g.scope.type === 'weekday'
+                      ? <Repeat size={13} className="text-[#71717A] flex-shrink-0" />
+                      : <Ban size={13} className="text-[#71717A] flex-shrink-0" />}
+                    <span className="text-sm font-medium text-[#18181B] flex-shrink-0">{g.label}</span>
+                    <span className="text-sm text-[#71717A] flex-1 truncate">
+                      {everyone ? everyone.name : `${overrides.length} team non-working day${overrides.length === 1 ? '' : 's'}`}
+                    </span>
+                    <button
+                      onClick={() => { setEditingNonWorkingScope(g.scope); setShowNonWorkingModal(true) }}
+                      className="text-[#71717A] hover:text-[#18181B] transition-colors flex-shrink-0 text-xs font-medium"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleClearNonWorking(g.scope)}
+                      disabled={clearingNonWorkingScopeKey === g.key}
+                      className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                    >
+                      {clearingNonWorkingScopeKey === g.key ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                     </button>
                   </div>
                 )
@@ -1340,12 +1212,25 @@ export default function AdminSettingsPage() {
 
         {showHolidayModal && profile && (
           <HolidayModalDynamic
-            initialDate={editingHolidayDate ?? new Date().toISOString().split('T')[0]}
+            initialDate={new Date().toISOString().split('T')[0]}
+            initialScope={editingHolidayScope ?? undefined}
             viewerId={profile.id}
             teams={teamOptions}
             allStaff={trackedStaff}
-            onClose={() => { setShowHolidayModal(false); setEditingHolidayDate(null) }}
-            onSaved={() => { reloadHolidayRules(); setEditingHolidayDate(null) }}
+            onClose={() => { setShowHolidayModal(false); setEditingHolidayScope(null) }}
+            onSaved={() => { reloadHolidayRules(); setEditingHolidayScope(null) }}
+          />
+        )}
+
+        {showNonWorkingModal && profile && (
+          <NonWorkingDayModalDynamic
+            initialDate={new Date().toISOString().split('T')[0]}
+            initialScope={editingNonWorkingScope ?? undefined}
+            viewerId={profile.id}
+            teams={teamOptions}
+            allStaff={trackedStaff}
+            onClose={() => { setShowNonWorkingModal(false); setEditingNonWorkingScope(null) }}
+            onSaved={() => { reloadNonWorkingRules(); setEditingNonWorkingScope(null) }}
           />
         )}
       </div>
@@ -1367,28 +1252,24 @@ export default function AdminSettingsPage() {
                 setUploading('home-banner', true)
                 const url = await uploadSiteAsset(f, 'welcome_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('welcome_banner', url)
                 }
                 setUploading('home-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'welcome_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('welcome_banner', '')
               }} />
             <UploadField label="Profile Page Banner Image" currentUrl={''} uploading={!!uploadingMap['profile-banner']}
               onUpload={async f => {
                 setUploading('profile-banner', true)
                 const url = await uploadSiteAsset(f, 'profile_banner')
                 if (url) {
-                  const { supabase } = await import('@/lib/supabase')
-                  await supabase.from('site_settings').upsert({ key: 'profile_banner', value: url }, { onConflict: 'key' })
+                  await saveSetting('profile_banner', url)
                 }
                 setUploading('profile-banner', false)
               }}
               onClear={async () => {
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.from('site_settings').upsert({ key: 'profile_banner', value: '' }, { onConflict: 'key' })
+                await saveSetting('profile_banner', '')
               }} />
           </div>
         </div>
@@ -1515,25 +1396,6 @@ export default function AdminSettingsPage() {
     )
   }
 
-  function renderPayments() {
-    return (
-      <div>
-        <InlineTabs
-          value={paymentsSub} onChange={setPaymentsSub}
-          items={[
-            { id: 'fees',   label: 'Fee Setting',    icon: <CreditCard size={14} /> },
-            { id: 'salary', label: 'Salary Payout',  icon: <Banknote size={14} /> },
-          ]}
-        />
-        <div className="mb-4">
-          <h3 className="text-sm font-bold text-[#18181B]">{paymentsSub === 'fees' ? 'Fee Settings' : 'Salary Payout Settings'}</h3>
-          <p className="text-xs text-[#71717A]">{paymentsSub === 'fees' ? 'How students pay school fees into your bank account.' : 'How salaries reach staff bank accounts from your bank.'}</p>
-        </div>
-        {paymentsSub === 'fees' ? <BankCollectSettings ctx="fees" /> : <BankPayoutSettings ctx="salary" />}
-      </div>
-    )
-  }
-
   function renderBusFinance() {
     return (
       <div>
@@ -1563,7 +1425,6 @@ export default function AdminSettingsPage() {
     { id: 'banners',     label: 'Banners',      icon: <Layout size={13} />  },
     { id: 'geofence',    label: 'Geofencing',   icon: <MapPin size={13} />  },
     { id: 'attendance',  label: 'Attendance',   icon: <Clock size={13} />   },
-    { id: 'payments',    label: 'Fees & Salary', icon: <CreditCard size={13} /> },
     { id: 'bus',         label: 'Bus Finance',  icon: <Bus size={13} />     },
   ]
 
@@ -1636,7 +1497,6 @@ export default function AdminSettingsPage() {
               {tab === 'banners'     && renderBanners()}
               {tab === 'geofence'    && renderGeofence()}
               {tab === 'attendance'  && renderAttendance()}
-              {tab === 'payments'    && renderPayments()}
               {tab === 'bus'         && renderBusFinance()}
             </div>
           </div>

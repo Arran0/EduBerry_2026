@@ -3,7 +3,7 @@
 // common denominator across Indian bank bulk-upload formats; admins remap
 // columns in their bank tool as needed.
 
-import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod } from '@/lib/salary'
+import { SalaryRecord, SalaryCycle, StaffBankAccount, salaryNet, formatPeriod, recordPersonId, recordPersonName } from '@/lib/salary'
 
 /** Escape a value for CSV (wrap in quotes, double embedded quotes). */
 function csvCell(value: string | number): string {
@@ -31,28 +31,53 @@ function periodSlug(cycle: SalaryCycle): string {
 }
 
 /**
- * Build the bank bulk-transfer CSV for a cycle: one row per APPROVED record that
- * has a bank account on file. Returns the file name + count of included/skipped.
- * Column layout matches the bank's own bulk-upload template.
+ * Build the bank bulk-transfer CSV for a cycle.
+ *
+ * `records` is whatever subset the caller wants paid — the whole cycle, or
+ * just the rows currently surviving the sheet's search/filter, since a school
+ * routinely releases one team or one department at a time rather than the
+ * whole payroll in a single upload.
+ *
+ * Only APPROVED rows go in the file. A locked cycle approves every row, so in
+ * practice this drops the ones already `paid` (re-uploading those would pay
+ * them twice) and everything in an unlocked cycle. Both reasons come back
+ * separately from "no bank account on file", because they need different
+ * fixes and a single lumped "skipped" count sends people hunting in the wrong
+ * place.
  */
+export interface BankCsvResult {
+  fileName: string
+  rows: (string | number)[][]
+  included: number
+  /** Named rows dropped for want of a bank account. */
+  missingBank: string[]
+  /** Rows dropped because they are not approved (already paid, or still draft). */
+  notApproved: number
+  /** Rows dropped because they're marked paid by cash for this cycle. */
+  cash: number
+}
+
 export function buildBankDisbursementCsv(
   cycle: SalaryCycle,
   records: SalaryRecord[],
   bankMap: Record<string, StaffBankAccount>,
-): { fileName: string; rows: (string | number)[][]; included: number; skipped: string[] } {
+): BankCsvResult {
   const period = formatPeriod(cycle.period_month, cycle.period_year)
   const header = [
     'Sl No.', 'Beneficiary Account Number', 'Beneficiary Account Name', 'Beneficiary Bank Name',
     'IFSC Code', 'Amount', 'Remarks', 'Beneficiary Acc Type', 'Beneficiary LEI',
   ]
   const rows: (string | number)[][] = [header]
-  const skipped: string[] = []
+  const missingBank: string[] = []
+  let notApproved = 0
+  let cash = 0
   let slNo = 0
 
   for (const r of records) {
-    if (r.status !== 'approved') continue
-    const bank = bankMap[r.staff_id]
-    if (!bank) { skipped.push(r.staff?.full_name ?? r.staff_id); continue }
+    if (r.pay_by_cash) { cash += 1; continue }
+    if (r.status !== 'approved') { notApproved += 1; continue }
+    const bank = bankMap[recordPersonId(r)]
+    if (!bank) { missingBank.push(recordPersonName(r) || recordPersonId(r)); continue }
     slNo += 1
     rows.push([
       slNo,
@@ -61,7 +86,7 @@ export function buildBankDisbursementCsv(
       bank.bank_name ?? '',
       bank.ifsc,
       salaryNet(r).toFixed(2),
-      `Salary ${period} - ${r.staff?.full_name ?? ''}`.trim(),
+      `Salary ${period} - ${recordPersonName(r)}`.trim(),
       'Savings',
       '',
     ])
@@ -71,6 +96,8 @@ export function buildBankDisbursementCsv(
     fileName: `salary-disbursement-${periodSlug(cycle)}`,
     rows,
     included: rows.length - 1,
-    skipped,
+    missingBank,
+    notApproved,
+    cash,
   }
 }

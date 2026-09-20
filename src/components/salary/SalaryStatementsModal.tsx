@@ -8,7 +8,7 @@ import {
   ChevronLeft, Download, Banknote,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { UserProfile, getRoleDisplayName } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import {
   SalaryRecord, StaffBankAccount, StaffSalaryBase,
   fetchSalaryForStaff, fetchMyBankAccount, fetchMyBaseSalary, salaryNet, formatPeriod,
@@ -140,7 +140,7 @@ export default function SalaryStatementsModal({ staff, onClose }: Props) {
             <Avatar avatarUrl={staff.avatar_url} name={staff.full_name} size={36} userId={staff.id} />
             <div className="min-w-0">
               <p className="font-bold text-[#18181B] text-sm truncate">{staff.full_name}</p>
-              <p className="text-[11px] text-[#71717A]">{getRoleDisplayName(staff.role, staff.is_non_teaching)}</p>
+              <p className="text-[11px] text-[#71717A]">{getDisplayRole(staff)}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">

@@ -20,15 +20,15 @@ import GradingTab from '@/components/exam/GradingTab'
 import SheetTab from '@/components/exam/SheetTab'
 import ResultsTab from '@/components/exam/ResultsTab'
 import MiniNav, { EXAM_MAX_W } from '@/components/exam/ExamNav'
-import { EXAM, Skeleton, ExamPhaseChip, ImmediateResultsChip } from '@/components/exam/examUi'
+import { EXAM, Skeleton, StatStrip, ExamPhaseChip, ImmediateResultsChip } from '@/components/exam/examUi'
 
 type Tab = 'graders' | 'grading' | 'sheet' | 'results'
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const TABS: { id: Tab; label: string; shortLabel?: string; icon: React.ReactNode }[] = [
   { id: 'graders', label: 'Graders', icon: <Shield size={15} /> },
   { id: 'grading', label: 'Grading', icon: <ClipboardCheck size={15} /> },
   { id: 'sheet', label: 'Sheet', icon: <FileSpreadsheet size={15} /> },
-  { id: 'results', label: 'Link Results', icon: <Link2 size={15} /> },
+  { id: 'results', label: 'Link Results', shortLabel: 'Results', icon: <Link2 size={15} /> },
 ]
 
 const TAB_IDS: Tab[] = ['graders', 'grading', 'sheet', 'results']
@@ -88,27 +88,21 @@ function ExamDetailPageContent() {
       <div data-page-theme="exam">
         <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => router.push('/more/exam')}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
-              >
-                <ListChecks size={15} /> All Exams
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <button onClick={() => router.push('/more/exam')} className={EXAM.ghostBtnSm}>
+                <ListChecks size={14} /> All Exams
               </button>
-              <button
-                onClick={() => router.push(`/more/exam/${examId}/edit`)}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
-              >
-                <Settings2 size={15} /> Pre-Exam Manager
+              <button onClick={() => router.push(`/more/exam/${examId}/edit`)} className={EXAM.ghostBtnSm}>
+                <Settings2 size={14} /> Pre-Exam Manager
               </button>
             </div>
 
             {loading ? (
               <DetailSkeleton />
             ) : !exam ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>Exam not found.</div>
+              <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>Exam not found.</div>
             ) : !isStaff ? (
-              <div className={`${EXAM.card} shadow-sm p-10 text-center text-[#71717A]`}>This page is for staff.</div>
+              <div className={`${EXAM.cardBleed} p-10 text-center text-[#71717A]`}>This page is for staff.</div>
             ) : (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -116,37 +110,49 @@ function ExamDetailPageContent() {
                 transition={{ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
               >
                 {/* Header */}
-                <div className="flex items-start justify-between gap-3 mb-5">
+                <div className="flex items-start justify-between gap-3 pb-4 mb-4 border-b border-[#E4E1D8]">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className={`w-11 h-11 ${EXAM.iconTile}`}>
                       <FileText size={22} className="text-[#D4BC6A]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#B8983C]">Post-Exam Manager</p>
-                      <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-0.5">{exam.title}</h1>
+                      <p className={EXAM.eyebrow}>Post-Exam Manager</p>
+                      <h1 className="font-display text-2xl font-bold text-[#18181B] truncate mt-1">{exam.title}</h1>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {exam.subject && <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B]">{exam.subject}</span>}
-                        {modeLabel && <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md bg-[#F4F2EC] text-[#9C7F2C] border border-[#E7E2D8]">{modeLabel}</span>}
-                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-[#F4F4F5] text-[#52525B] tabular-nums">{exam.total_marks} marks</span>
+                        {exam.subject && <span className={EXAM.tag}>{exam.subject}</span>}
+                        {modeLabel && <span className={EXAM.tagGold}>{modeLabel}</span>}
                         <ExamPhaseChip phase={examPhase(exam)} />
                         {exam.immediate_results && <ImmediateResultsChip />}
                       </div>
-                      <p className="text-[11px] text-[#A1A1AA] mt-1.5">{EXAM_PHASE_META[examPhase(exam)].hint}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {isOwner && (
-                      <button
-                        onClick={handleDelete}
-                        disabled={!canDelete || busy === 'delete'}
-                        title={canDelete ? 'Delete exam' : 'Remove all participants before deleting'}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-200 bg-white text-sm text-rose-500 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                      </button>
-                    )}
-                  </div>
+                  {isOwner && (
+                    <button
+                      onClick={handleDelete}
+                      disabled={!canDelete || busy === 'delete'}
+                      title={canDelete ? 'Delete exam' : 'Remove all participants before deleting'}
+                      className={`${EXAM.iconBtnDanger} shrink-0`}
+                    >
+                      {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    </button>
+                  )}
                 </div>
+
+                {/* Instrument panel */}
+                <StatStrip
+                  className="mb-3"
+                  items={[
+                    { label: 'Total marks', value: exam.total_marks },
+                    { label: 'Participants', value: participantCount ?? '—' },
+                    { label: 'Duration', value: exam.duration_minutes ? `${exam.duration_minutes}m` : '—' },
+                    {
+                      label: 'Results',
+                      value: exam.results_published ? 'Published' : 'Withheld',
+                      accent: !exam.results_published,
+                    },
+                  ]}
+                />
+                <p className="text-[11px] text-[#A8A29A] mb-4">{EXAM_PHASE_META[examPhase(exam)].hint}</p>
 
                 {/* Tabs */}
                 <MiniNav
@@ -154,13 +160,14 @@ function ExamDetailPageContent() {
                   items={TABS.map(t => ({
                     id: t.id,
                     label: t.label,
+                    shortLabel: t.shortLabel,
                     icon: t.icon,
                     active: tab === t.id,
                     onClick: () => setTab(t.id),
                   }))}
                 />
 
-                <div className={`${EXAM.card} shadow-sm p-5`}>
+                <div className={`${EXAM.cardBleed} p-5`}>
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={tab}
@@ -203,18 +210,19 @@ function DetailSkeleton() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start gap-3 mb-5">
-        <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
+      <div className="flex items-start gap-3 pb-4 mb-4 border-b border-[#E4E1D8]">
+        <Skeleton className="w-11 h-11 shrink-0" />
         <div className="flex-1 space-y-2 pt-1">
           <Skeleton className="h-6 w-56" />
           <Skeleton className="h-3.5 w-40" />
-          <Skeleton className="h-3 w-32" />
         </div>
       </div>
+      {/* Stats */}
+      <Skeleton className="h-[62px] w-full mb-4" />
       {/* Tabs */}
-      <Skeleton className="h-12 w-full rounded-xl mb-4" />
+      <Skeleton className="h-10 w-full mb-4" />
       {/* Body */}
-      <div className={`${EXAM.card} shadow-sm p-5 space-y-3`}>
+      <div className={`${EXAM.cardBleed} p-5 space-y-3`}>
         <Skeleton className="h-4 w-1/3" />
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 py-1">
@@ -223,7 +231,7 @@ function DetailSkeleton() {
               <Skeleton className="h-3.5 w-2/5" />
               <Skeleton className="h-2.5 w-3/5" />
             </div>
-            <Skeleton className="h-7 w-16 rounded-lg shrink-0" />
+            <Skeleton className="h-7 w-16 shrink-0" />
           </div>
         ))}
       </div>

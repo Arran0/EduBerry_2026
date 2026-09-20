@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,14 +12,17 @@ const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/Admin
 const StaffTimetableView    = dynamic(() => import('@/components/timetable/StaffTimetableView'))
 const StudentTimetableView  = dynamic(() => import('@/components/timetable/StudentTimetableView'))
 
-const MAX_W = 'max-w-7xl'
+// The admin builder hosts an information-dense master grid, so it gets a much
+// wider canvas than the single-week student / staff views.
+const MAX_W_ADMIN = 'max-w-[112rem]'
+const MAX_W_VIEWER = 'max-w-7xl'
 
 export default function TimetablePage() {
-  const router = useRouter()
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const [bannerEditing, setBannerEditing] = useState(false)
+  const MAX_W = isAdmin ? MAX_W_ADMIN : MAX_W_VIEWER
 
   return (
     <ProtectedLayout>
@@ -40,12 +42,11 @@ export default function TimetablePage() {
           }
           isAdmin={isAdmin}
           maxWidth={MAX_W}
-          onBack={() => router.back()}
           onEditingChange={setBannerEditing}
         />
 
         <div
-          className={`${MAX_W} mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 transition-all duration-200 ${
+          className={`${MAX_W} mx-auto px-2 sm:px-4 lg:px-6 py-4 sm:py-5 transition-all duration-200 ${
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
           aria-hidden={bannerEditing}

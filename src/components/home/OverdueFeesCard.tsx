@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { SchoolFee } from '@/lib/fees'
 
 function formatAmount(n: number): string {
@@ -20,13 +20,27 @@ interface OverdueFeesCardProps {
   fees: SchoolFee[]
 }
 
-/** Shown to a student only when they have fees past their due date. Each row
- *  links to the fees app. */
+/** A student's fees past their due date, each row linking to the fees app.
+ *  The mobile carousel only carries this card when there are any; the desktop
+ *  dashboard shows every card, so an empty list reads as "nothing overdue"
+ *  (good news worth stating) rather than an empty box. */
 export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
   const total = fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0)
 
+  if (fees.length === 0) {
+    return (
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col items-center justify-center">
+        <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
+          <CheckCircle2 size={22} className="text-emerald-300" />
+        </div>
+        <p className="text-sm font-medium text-slate-400">No fees overdue</p>
+        <p className="text-xs text-slate-300 mt-1">You&apos;re all paid up</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col border border-red-200/60">
+    <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col border border-red-200/60">
       <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
@@ -37,7 +51,7 @@ export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
       <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
         {fees.map(fee => (
           <Link key={fee.id} href="/more/fees">
-            <div className="flex items-center gap-3 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
+            <div className="home-card-row flex items-center gap-3 px-5 py-3 hover:bg-white/45 transition-colors group cursor-pointer">
               <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-red-500" />
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">

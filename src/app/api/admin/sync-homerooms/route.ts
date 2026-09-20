@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getAcademicYear, getDefaultExpiryDate } from '@/lib/homeroomAutoManage'
+import { getAcademicYear, getDefaultExpiryDate, expiryDateFor } from '@/lib/homeroomAutoManage'
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -67,16 +67,19 @@ export async function POST(request: NextRequest) {
   const academicYear = getAcademicYear()
   let expiryDate = getDefaultExpiryDate(academicYear)
 
-  const { data: settingsRow } = await adminClient
-    .from('admin_settings')
+  // The table is `app_settings`; this read named a non-existent
+  // `admin_settings` and discarded the error, so the admin-configured expiry
+  // map was never applied and every synced homeroom got the default date.
+  const { data: settingsRow, error: settingsError } = await adminClient
+    .from('app_settings')
     .select('value')
     .eq('key', 'homeroom_expiry_dates')
     .maybeSingle()
 
-  if (settingsRow?.value && typeof settingsRow.value === 'object') {
-    const custom = (settingsRow.value as Record<string, string>)[academicYear]
-    if (custom) expiryDate = custom
-  }
+  if (settingsError) console.error('sync-homerooms: app_settings lookup failed:', settingsError)
+
+  const custom = expiryDateFor(settingsRow?.value, academicYear)
+  if (custom) expiryDate = custom
 
   // ── Group students by grade+section ──────────────────────────────────────
   const groups = new Map<string, { grade: number; section: string; ids: string[] }>()

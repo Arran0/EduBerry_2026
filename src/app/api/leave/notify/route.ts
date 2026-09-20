@@ -23,6 +23,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   medical: 'Medical Leave',
   on_duty: 'On Duty',
   half_day: 'Half Day',
+  late: 'Late Permit',
 }
 
 type LeaveEvent = 'submitted' | 'decided'

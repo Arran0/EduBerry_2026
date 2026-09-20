@@ -3,7 +3,9 @@
 import React, { useState } from 'react'
 import { CalendarRange, AlertCircle } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
-import { generateSalaryCycle, ensureDriverRecordsInCycle } from '@/lib/salary'
+import { Btn, LABEL } from '@/components/salary/ui'
+import { generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle, formatPeriod } from '@/lib/salary'
+import { defaultPayrollMonth } from '@/lib/salaryStats'
 
 /**
  * Starts a month's payroll in one action.
@@ -18,8 +20,11 @@ export default function NewCycleForm({ onClose, onCreated }: {
   onCreated: () => void
 }) {
   const now = new Date()
-  const [month, setMonth] = useState(now.getMonth() + 1)
-  const [year, setYear] = useState(now.getFullYear())
+  // Opens on the month most likely to be run right now — the one just ended,
+  // for the first ten days of a month, which is when payroll is processed.
+  const suggested = defaultPayrollMonth(now)
+  const [month, setMonth] = useState(suggested.month)
+  const [year, setYear] = useState(suggested.year)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,11 +38,16 @@ export default function NewCycleForm({ onClose, onCreated }: {
       setError(res.error ?? 'Failed to create the cycle')
       return
     }
-    // Fill in any drivers the database function didn't add itself, so the
-    // cycle covers everyone even before that migration has been applied.
-    const drivers = await ensureDriverRecordsInCycle(res.cycleId)
+    // Fill in any drivers or support staff the database function didn't add
+    // itself, so the cycle covers everyone even before that migration has
+    // been applied.
+    const [drivers, support] = await Promise.all([
+      ensureDriverRecordsInCycle(res.cycleId),
+      ensureSupportStaffRecordsInCycle(res.cycleId),
+    ])
     setSaving(false)
     if (!drivers.success) { setError(drivers.error ?? 'Cycle created, but drivers could not be added'); return }
+    if (!support.success) { setError(support.error ?? 'Cycle created, but support staff could not be added'); return }
     onCreated()
   }
 
@@ -45,43 +55,44 @@ export default function NewCycleForm({ onClose, onCreated }: {
     <ModalShell
       onClose={onClose}
       size="sm"
+      sharp
       title="New pay cycle"
-      subtitle="Covers staff and bus drivers together"
-      icon={<CalendarRange size={16} />}
-      iconClassName="bg-slate-800 text-white"
+      subtitle="Staff, bus drivers & support staff together"
+      icon={<CalendarRange size={15} />}
+      iconClassName="bg-[#27272A] text-[#B8983C]"
       footer={
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 btn-secondary text-sm">Cancel</button>
-          <button onClick={save} disabled={saving}
-            className="flex-1 text-sm font-semibold py-2 rounded-xl bg-slate-800 text-white hover:bg-slate-900 transition-colors disabled:opacity-50">
-            {saving ? 'Creating…' : 'Create cycle'}
-          </button>
+        <div className="flex gap-1.5 justify-end">
+          <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
+          <Btn tone="dark" onClick={save} disabled={saving}>
+            {saving ? 'Creating…' : `Run ${formatPeriod(month, year)}`}
+          </Btn>
         </div>
       }
     >
-      <p className="text-sm text-slate-500 mb-4">
-        Creates a record for every staff member and bus driver, using their base salary where one is set.
-        Re-running a month only adds records for people who don&apos;t have one yet.
-      </p>
-
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Month</label>
-          <select value={month} onChange={e => setMonth(Number(e.target.value))} className={inputCls}>
+          <label className={`${LABEL} block mb-1`}>Month</label>
+          <select value={month} onChange={e => setMonth(Number(e.target.value))} className={FIELD}>
             {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-600 mb-1.5 block uppercase tracking-wide">Year</label>
-          <select value={year} onChange={e => setYear(Number(e.target.value))} className={inputCls}>
+          <label className={`${LABEL} block mb-1`}>Year</label>
+          <select value={year} onChange={e => setYear(Number(e.target.value))} className={FIELD}>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
       </div>
 
+      <p className="text-[12px] text-[#6B675A] leading-relaxed mt-3">
+        Creates a record for every staff member, bus driver and support staff member, using their base salary where one is set.
+        Re-running a month only adds records for people who don&apos;t have one yet — nothing already in the
+        cycle is touched.
+      </p>
+
       {error && (
-        <div className="flex items-center gap-2 p-3 mt-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
-          <AlertCircle size={14} className="flex-shrink-0" /> {error}
+        <div className="flex items-start gap-1.5 p-2 mt-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[11.5px]">
+          <AlertCircle size={13} className="flex-shrink-0 mt-px" /> {error}
         </div>
       )}
     </ModalShell>
@@ -93,4 +104,4 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/40 bg-white'
+const FIELD = 'w-full bg-white border border-[#E3DFD3] px-2 py-[7px] text-[12.5px] leading-none text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors'

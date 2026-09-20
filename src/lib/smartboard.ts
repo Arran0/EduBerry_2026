@@ -300,6 +300,41 @@ export async function fetchSmartboardBoardTasks(
 }
 
 /**
+ * The homeroom calendar a class teacher sees: every task set for their
+ * homeroom(s), plus tasks mapped onto any classroom that holds their homeroom
+ * students. Undated tasks are included alongside the dated ones in the window.
+ * De-duplicated by id and sorted by due date / timing.
+ */
+export async function fetchHomeroomCalendarTasks(
+  homeroomIds: string[],
+  classroomIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<SmartboardTask[]> {
+  if (homeroomIds.length === 0 && classroomIds.length === 0) return []
+  const inWindow = `due_date.is.null,and(due_date.gte.${startDate},due_date.lte.${endDate})`
+
+  const [hrRes, clRes] = await Promise.all([
+    homeroomIds.length > 0
+      ? supabase.from('smartboard_tasks').select('*').in('homeroom_id', homeroomIds).or(inWindow)
+      : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
+    classroomIds.length > 0
+      ? supabase.from('smartboard_tasks').select('*').in('classroom_id', classroomIds).or(inWindow)
+      : Promise.resolve({ data: [] as SmartboardTask[], error: null }),
+  ])
+
+  if (hrRes.error) console.error('fetchHomeroomCalendarTasks homeroom error:', hrRes.error)
+  if (clRes.error) console.error('fetchHomeroomCalendarTasks classroom error:', clRes.error)
+
+  const byId = new Map<string, SmartboardTask>()
+  for (const t of [...(hrRes.data ?? []), ...(clRes.data ?? [])] as SmartboardTask[]) byId.set(t.id, t)
+  return [...byId.values()].sort((a, b) => {
+    const d = (a.due_date ?? '').localeCompare(b.due_date ?? '')
+    return d !== 0 ? d : (a.timing ?? '~').localeCompare(b.timing ?? '~')
+  })
+}
+
+/**
  * Homework tasks streamed in a classroom's Homework tab — every smart-board
  * task linked to that classroom, newest first (like the announcement stream),
  * paginated 10 at a time to avoid data waterfalls.
@@ -405,20 +440,19 @@ export async function uploadSmartboardTaskAttachment(
 // ============================================
 
 /**
- * Completion rows for a task, one per student. The roster comes from the
- * homeroom (homeroom tasks) or, for classroom-only homework, from the
- * classroom's students. Students without a row yet are returned with a
- * synthetic 'not_done' completion so the board sees who hasn't started.
+ * Completion rows for a task, one per student. The roster is whoever the task
+ * actually reaches: the classroom's students when it names a classroom (a
+ * mapped task is scoped to that classroom — see fetchStudentHomeroomTasks),
+ * otherwise the homeroom's members. Students without a row yet are returned
+ * with a synthetic 'not_done' completion so the board sees who hasn't started.
  */
 export async function fetchTaskCompletions(
   task: Pick<SmartboardTask, 'id' | 'homeroom_id' | 'classroom_id'>,
 ): Promise<SmartboardTaskCompletion[]> {
   const studentSelect = `id, email, full_name, role, avatar_url, grade, section`
 
-  // Roster: homeroom members when the task has a homeroom, else the classroom's
-  // students (classroom-only homework).
   let memberIds: { student_id: string; student?: UserProfile }[] = []
-  if (task.homeroom_id) {
+  if (!task.classroom_id && task.homeroom_id) {
     const { data: members } = await supabase
       .from('homeroom_members')
       .select(`student_id, student:profiles!homeroom_members_student_id_fkey(${studentSelect})`)
@@ -540,6 +574,11 @@ export interface StudentHomeroomTask extends SmartboardTask {
  *   • homeroom tasks — tasks in any homeroom the student belongs to
  *   • classroom homework — tasks linked to any classroom the student is in
  * (the same task may be both; it is de-duplicated by id).
+ *
+ * Mapping a task to a classroom *narrows* it: a homeroom task that also names
+ * a classroom reaches only the homeroom students enrolled in that classroom,
+ * so a class teacher can set work for one subject group without it landing on
+ * the whole homeroom's calendar.
  */
 export async function fetchStudentHomeroomTasks(
   studentId: string,
@@ -574,9 +613,15 @@ export async function fetchStudentHomeroomTasks(
   if (hrRes.error) console.error('fetchStudentHomeroomTasks homeroom error:', hrRes.error)
   if (clRes.error) console.error('fetchStudentHomeroomTasks classroom error:', clRes.error)
 
-  // Merge + de-dupe by id, then sort by due date / timing.
+  // Merge + de-dupe by id, then sort by due date / timing. A task that names a
+  // classroom is scoped to it — drop those the student isn't enrolled in, which
+  // the homeroom query would otherwise let through.
+  const myClassroomIdSet = new Set(myClassroomIds)
   const byId = new Map<string, SmartboardTask>()
-  for (const t of [...(hrRes.data ?? []), ...(clRes.data ?? [])] as SmartboardTask[]) byId.set(t.id, t)
+  for (const t of [...(hrRes.data ?? []), ...(clRes.data ?? [])] as SmartboardTask[]) {
+    if (t.classroom_id && !myClassroomIdSet.has(t.classroom_id)) continue
+    byId.set(t.id, t)
+  }
   const tasks = [...byId.values()].sort((a, b) => {
     const d = (a.due_date ?? '').localeCompare(b.due_date ?? '')
     return d !== 0 ? d : (a.timing ?? '~').localeCompare(b.timing ?? '~')

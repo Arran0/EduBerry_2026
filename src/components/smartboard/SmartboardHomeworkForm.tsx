@@ -2,10 +2,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  Loader2, Plus, Save, Trash2, Star, ShieldCheck, Send, Paperclip, Upload, X, FileText,
+  Loader2, Plus, Save, Trash2, ShieldCheck, Send, Paperclip, Upload, X, FileText,
   Users, Circle, CircleDot, CheckCircle2, Link2, Youtube, ExternalLink,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
+import {
+  FormHeader, HeaderAction, FieldLabel, ToggleCard, PointsPicker, FormFooter, INPUT_CLASS,
+} from '@/components/classrooms/WorkFormKit'
 import { Classroom } from '@/lib/classrooms'
 import {
   SmartboardTask,
@@ -50,8 +53,13 @@ interface SmartboardHomeworkFormProps {
   homeroomId?: string | null
   /** Fixed classroom (the Homework tab). */
   classroomId?: string | null
-  /** Selectable classrooms (the board's weekly calendar). */
-  classrooms?: Classroom[]
+  /** Selectable classrooms (the board's weekly calendar, a homeroom calendar). */
+  classrooms?: Pick<Classroom, 'id' | 'title'>[]
+  /** Explainer shown under the classroom picker. */
+  classroomHint?: string
+  /** Drops the "no classroom" option — the homework must name one. Used by the
+   *  class teacher's homeroom calendar, where a classroom decides who sees it. */
+  requireClassroom?: boolean
   defaultTitle?: string
   defaultDueDate?: string
   /** Heading shown at the top of the box. */
@@ -71,6 +79,7 @@ interface SmartboardHomeworkFormProps {
  */
 export default function SmartboardHomeworkForm({
   createdBy, homeroomId, classroomId, classrooms,
+  classroomHint, requireClassroom = false,
   defaultTitle = '', defaultDueDate = '', heading,
   task, onCancel, onCreated, onUpdated, onDeleted,
 }: SmartboardHomeworkFormProps) {
@@ -79,7 +88,12 @@ export default function SmartboardHomeworkForm({
   const [description, setDescription] = useState(task?.description ?? '')
   const [dueDate, setDueDate] = useState(task?.due_date ?? defaultDueDate)
   const [timing, setTiming] = useState(task?.timing ?? '')
-  const [selectedClassroom, setSelectedClassroom] = useState(task?.classroom_id ?? classroomId ?? '')
+  // When a classroom is mandatory, a new homework starts on the first one
+  // offered; an older unmapped task being edited stays blank so the teacher has
+  // to choose deliberately.
+  const [selectedClassroom, setSelectedClassroom] = useState(
+    task?.classroom_id ?? classroomId ?? (requireClassroom && !task ? classrooms?.[0]?.id ?? '' : ''),
+  )
   const [requireCheck, setRequireCheck] = useState(task?.require_check ?? false)
   const [requiresSubmission, setRequiresSubmission] = useState(task?.requires_submission ?? false)
   const [eduPoints, setEduPoints] = useState(task?.edu_points ?? 1)
@@ -100,6 +114,7 @@ export default function SmartboardHomeworkForm({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dueDateError, setDueDateError] = useState(false)
+  const [classroomError, setClassroomError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Tracking modal (edit mode only)
@@ -167,6 +182,8 @@ export default function SmartboardHomeworkForm({
     if (!title.trim() || saving) return
     if (!dueDate) { setDueDateError(true); return }
     setDueDateError(false)
+    if (requireClassroom && !effectiveClassroom) { setClassroomError(true); return }
+    setClassroomError(false)
     setSaving(true)
 
     const customPoints = bonusPoints !== '' ? Number(bonusPoints) : null
@@ -226,143 +243,151 @@ export default function SmartboardHomeworkForm({
     <>
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm"
+        className="bg-white rounded-t-[1.75rem] sm:rounded-[1.75rem] overflow-hidden shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/[0.06]"
       >
         {/* Header */}
-        <div className="flex items-center gap-2">
-          <p className="text-xs font-semibold text-slate-600 flex-1">{heading ?? (isEdit ? 'Homework' : 'New Homework')}</p>
-          {isEdit && (
-            <button
-              type="button"
-              onClick={() => setShowTracking(true)}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-              title="Student tracking"
-            >
-              <Users size={15} />
-            </button>
-          )}
-          {isEdit && (
-            <button
-              type="button" onClick={handleDelete} disabled={deleting}
-              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
-              title="Delete homework"
-            >
-              {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-            </button>
-          )}
-          <button type="button" onClick={onCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <X size={16} />
-          </button>
+        <FormHeader
+          icon={isEdit ? <Save size={17} /> : <Plus size={17} />}
+          title={heading ?? (isEdit ? 'Homework' : 'New Homework')}
+          subtitle={isEdit ? 'Edit this homework for the whole class' : 'Appears on every student’s calendar'}
+          actions={
+            <>
+              {isEdit && (
+                <HeaderAction onClick={() => setShowTracking(true)} title="Student tracking">
+                  <Users size={16} />
+                </HeaderAction>
+              )}
+              {isEdit && (
+                <HeaderAction onClick={handleDelete} title="Delete homework" disabled={deleting}>
+                  {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </HeaderAction>
+              )}
+              <HeaderAction onClick={onCancel} title="Close">
+                <X size={17} />
+              </HeaderAction>
+            </>
+          }
+        />
+
+        <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3 space-y-3 bg-slate-50/60">
+
+        <div>
+          <FieldLabel>Title</FieldLabel>
+          <input
+            type="text" value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="e.g. Chapter 4 — questions 1 to 8"
+            className={INPUT_CLASS}
+            autoFocus
+          />
+        </div>
+        <div>
+          <FieldLabel hint="(optional)">Description</FieldLabel>
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Extra instructions for students…" rows={2}
+            className={`${INPUT_CLASS} resize-none`}
+          />
         </div>
 
-        <input
-          type="text" value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Homework title"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-          autoFocus
-        />
-        <textarea
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder="Description (optional)" rows={2}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
-        />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-col gap-0.5">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <FieldLabel>Due date</FieldLabel>
             <input type="date" value={dueDate}
               onChange={e => { setDueDate(e.target.value); setDueDateError(false) }}
-              className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${dueDateError ? 'border-red-400 focus:ring-red-400/50' : 'border-slate-200 focus:ring-indigo-400/50'}`}
+              className={`${INPUT_CLASS} ${dueDateError ? '!border-red-400 focus:!ring-red-500/10' : ''}`}
               required
             />
-            {dueDateError && <span className="text-[11px] text-red-500 font-medium px-1">Due date is required</span>}
+            {dueDateError && <span className="block text-[11px] text-red-600 font-semibold mt-1">Due date is required</span>}
           </div>
-          <input type="time" value={timing}
-            onChange={e => setTiming(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-          />
+          <div>
+            <FieldLabel hint="(optional)">Time</FieldLabel>
+            <input type="time" value={timing}
+              onChange={e => setTiming(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </div>
           {showClassroomPicker && (
-            <select
-              value={selectedClassroom}
-              onChange={e => setSelectedClassroom(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-            >
-              <option value="">No classroom</option>
-              {classrooms!.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
+            <div className="col-span-2">
+              <FieldLabel>Classroom</FieldLabel>
+              <select
+                value={selectedClassroom}
+                onChange={e => { setSelectedClassroom(e.target.value); setClassroomError(false) }}
+                className={`${INPUT_CLASS} ${classroomError ? '!border-red-400 focus:!ring-red-500/10' : ''}`}
+                required={requireClassroom}
+              >
+                {requireClassroom
+                  ? !selectedClassroom && <option value="" disabled>Choose a classroom…</option>
+                  : <option value="">No classroom</option>}
+                {classrooms!.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+              {classroomError && (
+                <span className="block text-[11px] text-red-600 font-semibold mt-1">Pick the classroom this homework belongs to</span>
+              )}
+              {classroomHint && (
+                <span className="block text-[11px] text-slate-500 mt-1 leading-snug">{classroomHint}</span>
+              )}
+            </div>
           )}
         </div>
 
         {/* Requirement toggles */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={requireCheck} onChange={e => setRequireCheck(e.target.checked)} className="rounded" />
-            <ShieldCheck size={14} className={requireCheck ? 'text-green-600' : 'text-slate-400'} /> Needs verification
-          </label>
-          <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={requiresSubmission} onChange={e => setRequiresSubmission(e.target.checked)} className="rounded" />
-            <Send size={14} className={requiresSubmission ? 'text-indigo-600' : 'text-slate-400'} /> Needs submission
-          </label>
-        </div>
-
-        {/* Edu points */}
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
-            <Star size={12} className="text-amber-500" /> Edu Points
-            <span className="text-slate-400 font-normal">— awarded on completion</span>
-          </p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[1, 2, 3, 4, 5].map(n => (
-              <button
-                key={n} type="button" onClick={() => { setEduPoints(n); setBonusPoints('') }}
-                className={`min-w-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                  eduPoints === n && bonusPoints === ''
-                    ? 'bg-amber-500 text-white border-amber-500'
-                    : 'text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-            <input
-              type="number" min={0} step={1}
-              value={bonusPoints}
-              onChange={e => setBonusPoints(e.target.value)}
-              placeholder="Custom"
-              className={`w-20 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400/50 ${
-                bonusPoints !== '' ? 'bg-amber-500 text-white border-amber-500 placeholder-amber-200' : 'text-slate-600 border-slate-200'
-              }`}
+          <FieldLabel>Requirements</FieldLabel>
+          <div className="flex flex-wrap gap-2">
+            <ToggleCard
+              checked={requireCheck}
+              onChange={setRequireCheck}
+              icon={<ShieldCheck size={16} />}
+              label="Needs verification"
+              description="Staff confirm before it counts as done"
+              activeClass="border-emerald-400 bg-emerald-50/70"
+            />
+            <ToggleCard
+              checked={requiresSubmission}
+              onChange={setRequiresSubmission}
+              icon={<Send size={16} />}
+              label="Needs submission"
+              description="Students attach a note or link"
             />
           </div>
         </div>
 
+        {/* Edu points */}
+        <PointsPicker
+          value={eduPoints}
+          custom={bonusPoints}
+          onPreset={n => { setEduPoints(n); setBonusPoints('') }}
+          onCustom={setBonusPoints}
+        />
+
         {/* Attachment */}
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1"><Paperclip size={12} /> Attachment (optional)</p>
+          <FieldLabel icon={<Paperclip size={12} />} hint="(optional)">Attachment</FieldLabel>
 
           {attachMode === 'none' ? (
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setAttachMode('youtube')}
-                className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-red-400 hover:text-red-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors"
               >
-                <Youtube size={13} /> YouTube
+                <Youtube size={14} /> YouTube
               </button>
               <button
                 type="button"
                 onClick={() => setAttachMode('link')}
-                className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
               >
-                <ExternalLink size={13} /> Link
+                <ExternalLink size={14} /> Link
               </button>
               <button
                 type="button"
                 onClick={() => setAttachMode('upload')}
-                className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
               >
-                <Upload size={13} /> Doc / Image
+                <Upload size={14} /> Doc / Image
               </button>
             </div>
           ) : attachMode === 'youtube' ? (
@@ -374,14 +399,14 @@ export default function SmartboardHomeworkForm({
                   value={youtubeInput}
                   onChange={e => setYoutubeInput(e.target.value)}
                   placeholder="https://youtube.com/watch?v=..."
-                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                  className={`flex-1 ${INPUT_CLASS}`}
                 />
-                <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
+                <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0">
                   <X size={14} />
                 </button>
               </div>
               {embedUrl && (
-                <div className="rounded-lg overflow-hidden border border-slate-200 aspect-video">
+                <div className="rounded-xl overflow-hidden border border-slate-200 aspect-video shadow-sm">
                   <iframe src={embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                 </div>
               )}
@@ -394,91 +419,90 @@ export default function SmartboardHomeworkForm({
                 value={linkInput}
                 onChange={e => setLinkInput(e.target.value)}
                 placeholder="https://..."
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                className={`flex-1 ${INPUT_CLASS}`}
               />
-              <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0">
+              <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0">
                 <X size={14} />
               </button>
             </div>
           ) : /* upload */ attachmentUrl ? (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-              <FileText size={14} className="text-indigo-500 flex-shrink-0" />
-              <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-indigo-600 hover:underline truncate">{attachmentName || 'Attachment'}</a>
-              <button type="button" onClick={clearAttachment} className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+              <FileText size={15} className="text-indigo-500 flex-shrink-0" />
+              <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm font-medium text-indigo-700 hover:underline truncate">{attachmentName || 'Attachment'}</a>
+              <button type="button" onClick={clearAttachment} className="p-1 text-slate-500 hover:text-rose-600 flex-shrink-0">
                 <X size={14} />
               </button>
             </div>
           ) : (
-            <button
-              type="button" onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full"
-            >
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploading ? 'Uploading…' : 'Choose file (max 20 MB)'}
-              <span className="ml-auto">
-                <button type="button" onClick={e => { e.stopPropagation(); clearAttachment() }} className="text-slate-400 hover:text-rose-600">
-                  <X size={14} />
-                </button>
-              </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button" onClick={() => fileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+              >
+                {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                {uploading ? 'Uploading…' : 'Choose file (max 20 MB)'}
+              </button>
+              <button type="button" onClick={clearAttachment} className="p-2 text-slate-500 hover:text-rose-600 flex-shrink-0">
+                <X size={15} />
+              </button>
               <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
-            </button>
+            </div>
           )}
         </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 px-2">Cancel</button>
-          <button
-            type="submit" disabled={!title.trim() || saving || uploading}
-            className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : isEdit ? <Save size={14} /> : <Plus size={14} />}
-            {isEdit ? 'Save changes' : 'Add Homework'}
-          </button>
         </div>
+
+        <FormFooter
+          onCancel={onCancel}
+          disabled={!title.trim() || saving || uploading}
+          submitIcon={saving ? <Loader2 size={15} className="animate-spin" /> : isEdit ? <Save size={15} /> : <Plus size={15} />}
+          submitLabel={isEdit ? 'Save changes' : 'Add Homework'}
+        />
       </form>
 
       {/* Student tracking modal */}
       {showTracking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowTracking(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-xl w-full sm:max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
               <Users size={15} className="text-indigo-500" />
               <p className="text-sm font-semibold text-slate-700 flex-1">Student progress</p>
               {completions.length > 0 && (
-                <span className="text-xs text-slate-400">{doneCount}/{completions.length} done · {submittedCount} submitted</span>
+                <span className="text-xs text-slate-500">{doneCount}/{completions.length} done · {submittedCount} submitted</span>
               )}
               <button type="button" onClick={() => setShowTracking(false)} className="p-1 text-slate-400 hover:text-slate-600">
                 <X size={16} />
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+            <div className="overflow-y-auto flex-1 p-2">
               {loadingMembers ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500 py-6 px-4"><Loader2 size={13} className="animate-spin" /> Loading…</div>
               ) : completions.length === 0 ? (
-                <p className="text-xs text-slate-400 py-6 px-4 text-center">No students.</p>
+                <p className="text-xs text-slate-500 py-6 px-4 text-center">No students.</p>
               ) : (
-                completions.map(c => (
-                  <div key={c.student_id} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={26} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
-                      {c.submission && (
-                        <p className="text-[11px] text-slate-400 truncate flex items-center gap-1">
-                          {/^https?:\/\//.test(c.submission) ? <Link2 size={10} /> : <FileText size={10} />}
-                          {c.submission}
-                        </p>
-                      )}
+                <div className="grid sm:grid-cols-2 sm:gap-x-3">
+                  {completions.map(c => (
+                    <div key={c.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
+                      <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={22} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
+                        {c.submission && (
+                          <p className="text-[10px] text-slate-500 truncate flex items-center gap-0.5">
+                            {/^https?:\/\//.test(c.submission) ? <Link2 size={9} /> : <FileText size={9} />}
+                            {c.submission}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button" onClick={() => cycleStatus(c)}
+                        className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 [&_svg]:w-3 [&_svg]:h-3 ${STATUS_META[c.status].chip}`}
+                        title="Tap to change status"
+                      >
+                        {STATUS_META[c.status].icon}
+                        {STATUS_META[c.status].label}
+                      </button>
                     </div>
-                    <button
-                      type="button" onClick={() => cycleStatus(c)}
-                      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-1 rounded ${STATUS_META[c.status].chip}`}
-                      title="Tap to change status"
-                    >
-                      {STATUS_META[c.status].icon}
-                      {STATUS_META[c.status].label}
-                    </button>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>

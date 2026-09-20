@@ -8,6 +8,7 @@ import { isStaffRole } from '@/lib/supabase'
 import { ListChecks, ClipboardCheck } from 'lucide-react'
 import ExamBuilder from '@/components/exam/ExamBuilder'
 import { EXAM_MAX_W } from '@/components/exam/ExamNav'
+import { EXAM } from '@/components/exam/examUi'
 
 export default function EditExamPage() {
   const { examId } = useParams<{ examId: string }>()
@@ -22,18 +23,12 @@ export default function EditExamPage() {
         <div style={{ minHeight: '100vh' }}>
           <div className={`${EXAM_MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-6`}>
             {/* Navigation */}
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => router.push('/more/exam')}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
-              >
-                <ListChecks size={15} /> All Exams
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <button onClick={() => router.push('/more/exam')} className={EXAM.ghostBtnSm}>
+                <ListChecks size={14} /> All Exams
               </button>
-              <button
-                onClick={() => router.push(`/more/exam/${examId}`)}
-                className="inline-flex items-center gap-1.5 text-sm text-[#71717A] px-3 py-1.5 rounded-lg border border-transparent hover:text-[#27272A] hover:bg-[#F4F4F5] hover:border-[#E4E4E7] transition-colors"
-              >
-                <ClipboardCheck size={15} /> Post-Exam Manager
+              <button onClick={() => router.push(`/more/exam/${examId}`)} className={EXAM.ghostBtnSm}>
+                <ClipboardCheck size={14} /> Post-Exam Manager
               </button>
             </div>
 

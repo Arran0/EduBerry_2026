@@ -29,6 +29,7 @@ import {
   fetchApprovalQueueIds,
   fetchLeaveApplicationsByIdsPage,
   markLeaveApplicationViewed,
+  markLeaveApplicationsViewed,
   LEAVE_TYPE_LABELS,
   type LeaveApplicationWithDetails,
 } from '@/lib/leave'
@@ -188,7 +189,7 @@ export function markNotificationsRead(userId: string, items: NotifItem[]): void 
   const decisions = items.filter(isApplicantDecision)
   if (decisions.length === 0) return
   dismissNotifications(userId, decisions.map(i => i.id))
-  for (const appId of new Set(decisions.map(i => i.appId))) markLeaveApplicationViewed(appId)
+  markLeaveApplicationsViewed([...new Set(decisions.map(i => i.appId))])
   emitLeaveNotificationsChanged()
 }
 
@@ -295,19 +296,6 @@ export function createNotificationFeed(userId: string, mode: NotifMode): Notific
       return { items, hasMore: buffer.length > 0 || sources.some(s => !s.done) }
     },
   }
-}
-
-/**
- * The first page of the feed — what the Home page uses to decide whether the
- * notifications slot renders at all.
- */
-export async function fetchNotificationItems(
-  userId: string,
-  mode: NotifMode,
-  size = NOTIF_PAGE_SIZE,
-): Promise<NotifItem[]> {
-  const { items } = await createNotificationFeed(userId, mode).next(size)
-  return items
 }
 
 /**

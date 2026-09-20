@@ -1,16 +1,24 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { gradeLabel } from '@/lib/grades'
+import { deriveYearCode } from '@/lib/academicYear'
 
 // ── Academic year helpers ────────────────────────────────────
 
 /**
- * Returns the academic year label for a given date based on the calendar year.
- * e.g. any date in 2026 → "2026-27", any date in 2027 → "2027-28"
+ * The academic year label for a date.
+ *
+ * This used to say "any date in 2026 -> 2026-27", i.e. a calendar year, while
+ * the fee module read the same dates as April-March. Between January and March
+ * the two disagreed, so a student edited in February was put in a homeroom for
+ * the *next* session while their fees stayed in the current one.
+ *
+ * It now delegates to the one shared rule in src/lib/academicYear.ts. Kept as a
+ * named export because three call sites and a sync route use it; new code
+ * should read the stored session from `academic_years` (via
+ * useAcademicYear() or fetchActiveAcademicYear()) rather than deriving it.
  */
 export function getAcademicYear(date: Date = new Date()): string {
-  const year = date.getFullYear()
-  const shortNext = String(year + 1).slice(-2)
-  return `${year}-${shortNext}`
+  return deriveYearCode(date)
 }
 
 /**
@@ -47,20 +55,41 @@ export async function createHomeroomSyncCache(adminClient: SupabaseClient): Prom
 }
 
 /**
- * Looks up admin_settings for a custom expiry date for the given academic year.
+ * Reads one academic year out of the homeroom_expiry_dates map.
+ *
+ * The column is jsonb, so PostgREST normally hands back an object — but it
+ * held JSON-as-text until the app_settings_value_to_jsonb migration, so a
+ * string is still parsed rather than silently ignored the way it used to be.
+ */
+export function expiryDateFor(raw: unknown, academicYear: string): string | null {
+  let map = raw
+  if (typeof map === 'string') {
+    try { map = JSON.parse(map) } catch { return null }
+  }
+  if (!map || typeof map !== 'object') return null
+  const custom = (map as Record<string, unknown>)[academicYear]
+  return typeof custom === 'string' && custom ? custom : null
+}
+
+/**
+ * Looks up app_settings for a custom expiry date for the given academic year.
  * Falls back to getDefaultExpiryDate if no custom date is configured.
+ *
+ * The table is `app_settings`; this read named a non-existent `admin_settings`
+ * and swallowed the resulting error, so an admin-configured expiry date was
+ * never honoured and every homeroom silently got the default.
  */
 async function resolveExpiryDate(adminClient: SupabaseClient, academicYear: string): Promise<string> {
-  const { data } = await adminClient
-    .from('admin_settings')
+  const { data, error } = await adminClient
+    .from('app_settings')
     .select('value')
     .eq('key', 'homeroom_expiry_dates')
-    .single()
+    .maybeSingle()
 
-  if (data?.value && typeof data.value === 'object') {
-    const custom = (data.value as Record<string, string>)[academicYear]
-    if (custom) return custom
-  }
+  if (error) console.error('resolveExpiryDate: app_settings lookup failed:', error)
+
+  const custom = expiryDateFor(data?.value, academicYear)
+  if (custom) return custom
 
   return getDefaultExpiryDate(academicYear)
 }

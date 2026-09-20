@@ -8,13 +8,14 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Search, Users, X, Clock, Loader2, CircleSlash,
-  Umbrella, Repeat, Settings, FileText, ShieldAlert,
+  Umbrella, Ban, Repeat, Settings, FileText, ShieldAlert, HardHat,
 } from 'lucide-react'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
   HolidayGroup,
+  NonWorkingDayGroup,
   DayTimingGroup,
   STAFF_ATTENDANCE_STATUS_LABELS,
   describeLocationWarning,
@@ -25,8 +26,10 @@ import {
   adminMarkStaffAttendance,
   fetchStaffAbsenceStreaks,
   fetchHolidaysForDate,
+  fetchNonWorkingDaysForDate,
   fetchAllTrackedStaff,
   fetchDayTimingsForDate,
+  recomputePendingAttendance,
 } from '@/lib/attendance'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
@@ -107,9 +110,29 @@ const HolidayModalDynamic = dynamic(
   { ssr: false }
 )
 
+const NonWorkingDayModalDynamic = dynamic(
+  () => import('@/components/attendance/NonWorkingDayModal'),
+  { ssr: false }
+)
+
 const LateSummaryReportModalDynamic = dynamic(
   () => import('@/components/attendance/reports/LateSummaryReportModal'),
   { ssr: false }
+)
+
+// The Support side of the report — a separate roster, separate records and
+// separate statistics (see src/lib/supportStaff.ts). Loaded only once an admin
+// actually switches to it.
+const SupportStaffAttendanceReportDynamic = dynamic(
+  () => import('@/components/attendance/SupportStaffAttendanceReport'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#A1A1AA]">
+        <Loader2 size={16} className="animate-spin" /> Loading support staff…
+      </div>
+    ),
+  }
 )
 
 function formatTimeShort(t: string) {
@@ -148,7 +171,7 @@ function shortName(name: string, max = 11) {
 
 // ── Single staff row ──────────────────────────────────────────────────────────
 
-function StaffRow({
+const StaffRow = React.memo(function StaffRow({
   staff, record, savingId, canEdit, streak, derivedStatus, onSet, viewerId, viewerRole, onViewLeave,
 }: {
   staff: UserProfile
@@ -176,22 +199,34 @@ function StaffRow({
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  // Stays true through the closing animation, then clears — so the rows nobody
+  // opened never put a portal in the document. With a whole school listed that
+  // was one idle portal per row, re-rendered on every keystroke in the search box.
+  const [portalMounted, setPortalMounted] = useState(false)
   // A punch this staff member was allowed through with the location off
   // campus, unmeasured, or unavailable. Flagged here because "present" on
   // this row would otherwise be indistinguishable from a check-in that was
   // actually verified against the campus.
   const [showWarning, setShowWarning] = useState(false)
-  const warning = describeLocationWarning(record)
+  const warning = useMemo(() => describeLocationWarning(record), [record])
+  const openModal = useCallback(() => { setPortalMounted(true); setShowModal(true) }, [])
 
   return (
     <>
-      <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <motion.div
+        layout="position"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
+        transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
+        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+      >
         <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={openModal}
               title={staff.full_name}
               className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
             >
@@ -285,7 +320,7 @@ function StaffRow({
             })}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {warning && showWarning && record && (
         <LocationWarningModal
@@ -296,8 +331,8 @@ function StaffRow({
         />
       )}
 
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
+      {portalMounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
           {showModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -345,10 +380,14 @@ function StaffRow({
       )}
     </>
   )
-}
+})
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+  return (
+    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </div>
+  )
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
@@ -385,6 +424,10 @@ export default function AllStaffAttendanceReport({
   const [holidayRules, setHolidayRules] = useState<HolidayGroup[] | undefined>(undefined)
   const [showHolidayModal, setShowHolidayModal] = useState(false)
 
+  // Same shape as holidayRules, for the (unpaid, non-worked) Non-working Day rule.
+  const [nonWorkingRules, setNonWorkingRules] = useState<NonWorkingDayGroup[] | undefined>(undefined)
+  const [showNonWorkingModal, setShowNonWorkingModal] = useState(false)
+
   // Custom timing state: undefined = loading, [] = standard timing, else custom rows for the date
   const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
   const [showTimingModal, setShowTimingModal] = useState(false)
@@ -410,6 +453,14 @@ export default function AllStaffAttendanceReport({
   // Inline tab (Absent / Present / Irregular) — 'exception' kept as the internal key
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'exception'>('absent')
 
+  // Which roster the report is showing. 'support' is the ground-level
+  // cleaning / maintenance staff, who have no account and no check-in of
+  // their own — an entirely separate list and set of statistics, offered to
+  // admins from the toggle beside the title.
+  const [section, setSection] = useState<'staff' | 'support'>('staff')
+  const canSeeSupport = viewerRole === 'admin'
+  const showSupport = canSeeSupport && section === 'support'
+
   const teamCacheRef = useRef<Map<string, UserProfile[]>>(new Map())
   const sectionRef = useRef<HTMLElement>(null)
 
@@ -421,16 +472,29 @@ export default function AllStaffAttendanceReport({
   }, [hasFixedRoster])
 
   // Load the day's records, holiday status, and any custom timing together.
-  const loadRecords = useCallback(async () => {
-    setLoading(true)
+  // `silent` skips the loading spinner — used after a quick mark/clear so the
+  // list stays on screen and animates the row out instead of the whole tab
+  // flashing to a spinner and back.
+  const loadRecords = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     setStreakMap(new Map())
-    const [recs, hol, timings] = await Promise.all([
+    // Apply any cutoff / holiday / non-working-day rule that changed since the
+    // last look before reading the day, so the report never shows a status
+    // scored against a rule the same screen no longer displays. A no-op — one
+    // read of an empty queue — unless something actually changed, and a no-op
+    // for viewers who cannot change the rules in the first place.
+    if (viewerRole === 'admin' || viewerRole === 'principal') {
+      await recomputePendingAttendance()
+    }
+    const [recs, hol, nonWorking, timings] = await Promise.all([
       fetchStaffAttendanceReportByDate(date),
       fetchHolidaysForDate(date),
+      fetchNonWorkingDaysForDate(date),
       viewerRole === 'admin' ? fetchDayTimingsForDate(date) : Promise.resolve([]),
     ])
     setRecords(recs)
     setHolidayRules(hol)
+    setNonWorkingRules(nonWorking)
     setDayTimings(timings)
     setLoading(false)
     const absenceIds = [...new Set(
@@ -441,7 +505,18 @@ export default function AllStaffAttendanceReport({
     }
   }, [date, viewerRole])
 
-  useEffect(() => { loadRecords() }, [loadRecords, refreshKey])
+  // Full spinner only when the day (or, for admin, the timing-relevant
+  // viewer role) actually changes. A `refreshKey` bump alone — e.g. from
+  // marking someone here or in the Support Staff tab, both of which bump the
+  // same page-level refreshKey — reloads the same day's data silently
+  // instead of flashing the whole tab back to "Loading…".
+  const lastLoadedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const loadKey = `${date}|${viewerRole}`
+    const silent = lastLoadedKeyRef.current === loadKey
+    lastLoadedKeyRef.current = loadKey
+    loadRecords({ silent })
+  }, [loadRecords, refreshKey, date, viewerRole])
 
   // Resolve the active roster (team for admins, fixed list for coordinators/teachers).
   useEffect(() => {
@@ -606,19 +681,42 @@ export default function AllStaffAttendanceReport({
     return holidayStaffIds?.has(staffId) ?? false
   }, [hasDefaultHoliday, holidayStaffIds])
 
+  // Same suppression, for the (unpaid) Non-working Day rule — nobody is
+  // expected in, so nobody should be auto-derived Absent either.
+  const hasDefaultNonWorking = useMemo(() => nonWorkingRules?.some(r => r.is_default) ?? false, [nonWorkingRules])
+
+  const nonWorkingStaffIds = useMemo(() => {
+    if (!nonWorkingRules || hasDefaultNonWorking) return null
+    const s = new Set<string>()
+    for (const r of nonWorkingRules) {
+      if (!r.is_default) for (const id of r.staff_ids) s.add(id)
+    }
+    return s
+  }, [nonWorkingRules, hasDefaultNonWorking])
+
+  const isStaffNonWorking = useCallback((staffId: string) => {
+    if (hasDefaultNonWorking) return true
+    return nonWorkingStaffIds?.has(staffId) ?? false
+  }, [hasDefaultNonWorking, nonWorkingStaffIds])
+
+  const isStaffExcusedToday = useCallback(
+    (staffId: string) => isStaffOnHoliday(staffId) || isStaffNonWorking(staffId),
+    [isStaffOnHoliday, isStaffNonWorking]
+  )
+
   const shouldDeriveAbsents = useMemo(() => {
-    if (hasDefaultHoliday) return false
-    if (holidayRules === undefined) return false // still loading holiday info
+    if (hasDefaultHoliday || hasDefaultNonWorking) return false
+    if (holidayRules === undefined || nonWorkingRules === undefined) return false // still loading
     if (date > todayStr) return false
     return true // today or a past working day — always derive
-  }, [hasDefaultHoliday, holidayRules, date, todayStr])
+  }, [hasDefaultHoliday, hasDefaultNonWorking, holidayRules, nonWorkingRules, date, todayStr])
 
   // Staff scope for auto-absent: use the active roster if one is set, else all tracked staff.
   const virtualAbsents = useMemo(() => {
     if (!shouldDeriveAbsents) return []
     const scope = roster ?? allTrackedStaff
-    return scope.filter(s => !recordByStaff.has(s.id) && !isStaffOnHoliday(s.id))
-  }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff, isStaffOnHoliday])
+    return scope.filter(s => !recordByStaff.has(s.id) && !isStaffExcusedToday(s.id))
+  }, [shouldDeriveAbsents, roster, allTrackedStaff, recordByStaff, isStaffExcusedToday])
 
   // Pure present (wfh shown separately above present, late shown separately
   // above wfh, unverified hoisted above all of them).
@@ -636,9 +734,9 @@ export default function AllStaffAttendanceReport({
   // Staff in the roster who have no record yet (only computable with a roster).
   // Suppressed when virtual absents already cover them.
   const notMarked = useMemo(() => {
-    if (!roster || shouldDeriveAbsents || hasDefaultHoliday) return []
-    return roster.filter(s => !recordByStaff.has(s.id) && !isStaffOnHoliday(s.id))
-  }, [roster, recordByStaff, shouldDeriveAbsents, hasDefaultHoliday, isStaffOnHoliday])
+    if (!roster || shouldDeriveAbsents || hasDefaultHoliday || hasDefaultNonWorking) return []
+    return roster.filter(s => !recordByStaff.has(s.id) && !isStaffExcusedToday(s.id))
+  }, [roster, recordByStaff, shouldDeriveAbsents, hasDefaultHoliday, hasDefaultNonWorking, isStaffExcusedToday])
 
   const presentTotal = roster
     ? roster.length
@@ -714,16 +812,40 @@ export default function AllStaffAttendanceReport({
     return [...rows].sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
   }, [notMarked, query])
 
-  const handleSet = async (staffId: string, status: StaffAttendanceStatus) => {
+  /**
+   * Quick-set a status.
+   *
+   * The chosen status is known before the write resolves, so a row that
+   * already has a record is repainted immediately and the round trip runs
+   * behind it — marking someone used to block on the write *and* a full reload
+   * of the day (records, holidays, non-working days, timings, streaks) before
+   * anything moved. A row with no record yet still waits, because its id and
+   * marked_by only exist once the server has written it.
+   *
+   * The silent reload afterwards is the reconciliation: it also restores the
+   * true status if the write turns out to have failed.
+   */
+  const handleSet = useCallback(async (staffId: string, status: StaffAttendanceStatus) => {
     setSavingId(staffId)
+    let optimistic = false
+    setRecords(prev => {
+      const i = prev.findIndex(r => r.staff_id === staffId)
+      if (i === -1) return prev
+      optimistic = true
+      const next = [...prev]
+      next[i] = { ...next[i], status }
+      return next
+    })
+    if (optimistic) setSavingId(null)
+
     const ok = await adminMarkStaffAttendance(staffId, date, status, viewerId)
+    await loadRecords({ silent: true })
     if (ok) {
-      await loadRecords()
       if (!hasFixedRoster) fetchTrackedStaffCount().then(setTrackedTotal)
       onChanged?.()
     }
     setSavingId(null)
-  }
+  }, [date, viewerId, loadRecords, hasFixedRoster, onChanged])
 
   const teamOptions: SmartOption[] = useMemo(
     () => teams.map(t => ({ value: t.id, label: t.name })),
@@ -755,12 +877,43 @@ export default function AllStaffAttendanceReport({
           className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
           style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
         >
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
-            <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-            <span className="truncate">Report</span>
-          </h2>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
+              {showSupport
+                ? <HardHat size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
+                : <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />}
+              <span className="truncate">Report</span>
+            </h2>
+
+            {/* Staff ⇄ Support toggle. Support staff never appear in the staff
+                list or its counts, and vice versa — this switches the whole
+                body, not a filter over one roster. */}
+            {canSeeSupport && (
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15 flex-shrink-0" role="tablist" aria-label="Attendance roster">
+                {([
+                  { key: 'staff' as const, label: 'School Staff', icon: <Users size={11} />, title: 'Teaching, office and admin staff' },
+                  { key: 'support' as const, label: 'Support Staff', icon: <HardHat size={11} />, title: 'Support staff and drivers — cleaning, maintenance, grounds and transport' },
+                ]).map(t => (
+                  <button
+                    key={t.key}
+                    role="tab"
+                    aria-selected={section === t.key}
+                    onClick={() => setSection(t.key)}
+                    title={t.title}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      section === t.key ? 'bg-white text-[#18181B]' : 'text-white/70 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {t.icon}
+                    <span className="hidden sm:inline">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {viewerRole === 'admin' && (
+            {viewerRole === 'admin' && !showSupport && (
               <button
                 onClick={() => setShowLateSummaryModal(true)}
                 title="Late Summary Report — preview or download"
@@ -769,7 +922,7 @@ export default function AllStaffAttendanceReport({
                 <FileText size={14} />
               </button>
             )}
-            {viewerRole === 'admin' && (
+            {viewerRole === 'admin' && !showSupport && (
               <button
                 onClick={() => setShowAdminControls(v => !v)}
                 title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
@@ -790,7 +943,7 @@ export default function AllStaffAttendanceReport({
           </div>
         </div>
         {/* Controls strip — holiday + cutoff, admin only, hidden behind the settings toggle */}
-        {viewerRole === 'admin' && showAdminControls && (
+        {viewerRole === 'admin' && showAdminControls && !showSupport && (
         <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
           <div className="flex items-center gap-1.5">
             {holidayRules !== undefined && (
@@ -812,6 +965,29 @@ export default function AllStaffAttendanceReport({
                 >
                   <Umbrella size={12} className="text-violet-500 flex-shrink-0" />
                   <span className="text-[#18181B]">Holiday</span>
+                </button>
+              )
+            )}
+
+            {nonWorkingRules !== undefined && (
+              nonWorkingRules.length > 0 ? (
+                <button
+                  onClick={() => setShowNonWorkingModal(true)}
+                  title={nonWorkingRules.length === 1 ? undefined : nonWorkingRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n')}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-slate-300 bg-white hover:bg-slate-50 rounded-lg transition-colors min-w-0"
+                >
+                  <Ban size={12} className="text-slate-500 flex-shrink-0" />
+                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-[9rem]">
+                    {nonWorkingRules.length === 1 ? nonWorkingRules[0].name : `${nonWorkingRules.length} non-working`}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowNonWorkingModal(true)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
+                >
+                  <Ban size={12} className="text-slate-500 flex-shrink-0" />
+                  <span className="text-[#18181B]">Non-working Day</span>
                 </button>
               )
             )}
@@ -847,6 +1023,26 @@ export default function AllStaffAttendanceReport({
         )}
       </div>
 
+      {showSupport ? (
+        <SupportStaffAttendanceReportDynamic
+          date={date}
+          todayStr={todayStr}
+          viewerId={viewerId}
+          canEdit={canEdit}
+          // The whole-school rules already loaded for the staff side apply to
+          // support staff too — nobody is expected in on a school holiday.
+          dayOff={
+            hasDefaultNonWorking
+              ? { kind: 'non_working', name: nonWorkingRules?.find(r => r.is_default)?.name ?? 'Non-working day' }
+              : hasDefaultHoliday
+                ? { kind: 'holiday', name: holidayRules?.find(r => r.is_default)?.name ?? 'Holiday' }
+                : null
+          }
+          refreshKey={refreshKey}
+          onChanged={onChanged}
+        />
+      ) : (
+      <>
       {/* Summary strip */}
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
         {hasDefaultHoliday ? (
@@ -857,6 +1053,16 @@ export default function AllStaffAttendanceReport({
             <div>
               <p className="text-sm font-bold text-violet-800">{holidayRules?.find(r => r.is_default)?.name}</p>
               <p className="text-[11px] text-violet-500">Holiday · Staff who came in are shown below</p>
+            </div>
+          </div>
+        ) : hasDefaultNonWorking ? (
+          <div className="flex items-center gap-2 w-full">
+            <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <Ban size={16} className="text-slate-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">{nonWorkingRules?.find(r => r.is_default)?.name}</p>
+              <p className="text-[11px] text-slate-500">Non-working day · Staff who came in are shown below</p>
             </div>
           </div>
         ) : (
@@ -1002,7 +1208,7 @@ export default function AllStaffAttendanceReport({
               <>
                 {presentTabTotal === 0 ? (
                   <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
-                    {query ? `No present staff match "${query}".` : hasDefaultHoliday ? 'No staff checked in on this holiday.' : 'No one has checked in yet.'}
+                    {query ? `No present staff match "${query}".` : hasDefaultHoliday ? 'No staff checked in on this holiday.' : hasDefaultNonWorking ? 'No staff checked in on this non-working day.' : 'No one has checked in yet.'}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -1021,9 +1227,11 @@ export default function AllStaffAttendanceReport({
                           <span className="text-xs text-red-500">({filteredUnverified.length})</span>
                         </div>
                         <div className="divide-y divide-red-100">
-                          {filteredUnverified.map(r => (
-                            <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
-                          ))}
+                          <AnimatePresence initial={false}>
+                            {filteredUnverified.map(r => (
+                              <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
+                            ))}
+                          </AnimatePresence>
                         </div>
                       </div>
                     )}
@@ -1104,6 +1312,9 @@ export default function AllStaffAttendanceReport({
         )}
       </div>
 
+      </>
+      )}
+
       {showTimingModal && (
         <DayTimingModalDynamic
           initialDate={date}
@@ -1123,6 +1334,17 @@ export default function AllStaffAttendanceReport({
           allStaff={allTrackedStaff}
           onClose={() => setShowHolidayModal(false)}
           onSaved={() => { fetchHolidaysForDate(date).then(setHolidayRules); onChanged?.() }}
+        />
+      )}
+
+      {showNonWorkingModal && (
+        <NonWorkingDayModalDynamic
+          initialDate={date}
+          viewerId={viewerId}
+          teams={teams}
+          allStaff={allTrackedStaff}
+          onClose={() => setShowNonWorkingModal(false)}
+          onSaved={() => { fetchNonWorkingDaysForDate(date).then(setNonWorkingRules); onChanged?.() }}
         />
       )}
 

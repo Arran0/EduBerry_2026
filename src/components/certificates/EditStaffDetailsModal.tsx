@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { IdCard, X, Save, Loader2 } from 'lucide-react'
+import { IdCard, X, Save, Loader2, HardHat, TriangleAlert } from 'lucide-react'
 import {
   StaffDetails, StaffDetailsPatch, fetchStaffDetails, upsertStaffDetails,
 } from '@/lib/staffDetails'
-import { updateProfile } from '@/lib/admin'
+import { updateProfile, convertToSupportStaff } from '@/lib/admin'
 import type { UserRole } from '@/lib/supabase'
 
 // "Non-Teaching" is a display-only variant of 'teacher' (role stays 'teacher',
@@ -21,6 +21,12 @@ const ROLE_CHOICES: { value: string; role: UserRole; isNonTeaching?: boolean; la
   { value: 'driver', role: 'driver', label: 'Driver' },
   { value: 'smartboard', role: 'smartboard', label: 'Smart Board' },
 ]
+
+// Support Staff is not a UserRole and never a real profile — picking it here
+// converts the account instead of updating it (see convertToSupportStaff /
+// src/app/api/admin/convert-to-support/route.ts). Kept out of ROLE_CHOICES
+// since it has no `role` to map to.
+const SUPPORT_ROLE_VALUE = 'support'
 
 const input = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
 const selectCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
@@ -131,12 +137,13 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 ]
 
 export default function EditStaffDetailsModal({
-  staffId, staffName, staffRole, staffIsNonTeaching, onClose, onSaved,
+  staffId, staffName, staffRole, staffIsNonTeaching, staffDisplayRole, onClose, onSaved,
 }: {
   staffId: string
   staffName: string
   staffRole: UserRole
   staffIsNonTeaching?: boolean
+  staffDisplayRole?: string | null
   onClose: () => void
   onSaved?: () => void
 }) {
@@ -144,9 +151,11 @@ export default function EditStaffDetailsModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fullName, setFullName] = useState(staffName)
   const [roleSelection, setRoleSelection] = useState(
     staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole
   )
+  const [displayRole, setDisplayRole] = useState(staffDisplayRole ?? '')
 
   useEffect(() => {
     let active = true
@@ -161,20 +170,44 @@ export default function EditStaffDetailsModal({
     return () => { active = false }
   }, [staffId])
 
+  const isConvertingToSupport = roleSelection === SUPPORT_ROLE_VALUE
+
   function set(key: keyof StaffDetailsPatch, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  async function handleConvertToSupport() {
+    if (!window.confirm(
+      `Convert "${staffName}" to Support Staff?\n\n` +
+      `Their account and login will be deleted — this cannot be undone. Their name and the fields Support Staff records keep (employment, contact, personal, identity/payout) carry over; everything else here (subjects taught, qualifications, EPF/NPS, etc.) does not, since a support staff record has no room for it.`
+    )) return
+    setSaving(true); setError(null)
+    const res = await convertToSupportStaff(staffId)
+    setSaving(false)
+    if (!res.success) { setError(res.error ?? 'Failed to convert to support staff'); return }
+    onSaved?.()
+    onClose()
+  }
+
   async function handleSave() {
+    if (isConvertingToSupport) return handleConvertToSupport()
+
     setSaving(true); setError(null)
 
+    const trimmedName = fullName.trim()
+    if (!trimmedName) { setSaving(false); setError('Full name is required'); return }
+
     const roleChanged = roleSelection !== (staffRole === 'teacher' && staffIsNonTeaching ? 'non-teaching' : staffRole)
-    if (roleChanged) {
+    const displayRoleChanged = displayRole.trim() !== (staffDisplayRole ?? '').trim()
+    const nameChanged = trimmedName !== staffName.trim()
+    if (roleChanged || displayRoleChanged || nameChanged) {
       const choice = ROLE_CHOICES.find(c => c.value === roleSelection)
-      if (choice) {
-        const roleRes = await updateProfile(staffId, { role: choice.role, is_non_teaching: !!choice.isNonTeaching })
-        if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update role'); return }
-      }
+      const roleRes = await updateProfile(staffId, {
+        ...(choice ? { role: choice.role, is_non_teaching: !!choice.isNonTeaching } : {}),
+        display_role: displayRole.trim() || null,
+        ...(nameChanged ? { full_name: trimmedName } : {}),
+      })
+      if (!roleRes.success) { setSaving(false); setError(roleRes.error ?? 'Failed to update profile'); return }
     }
 
     const patch: StaffDetailsPatch = {}
@@ -233,18 +266,59 @@ export default function EditStaffDetailsModal({
                 )}
 
                 <div>
-                  <p className={sectionHead} style={{ marginTop: 0 }}>Role</p>
+                  <p className={sectionHead} style={{ marginTop: 0 }}>Identity</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Full Name</label>
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={e => setFullName(e.target.value)}
+                        placeholder="Full name"
+                        className={input}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className={sectionHead}>Role</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className={labelCls}>Role</label>
                       <select value={roleSelection} onChange={e => setRoleSelection(e.target.value)} className={selectCls}>
                         {ROLE_CHOICES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        <option value={SUPPORT_ROLE_VALUE}>Support Staff (convert, deletes login)</option>
                       </select>
                     </div>
+                    {!isConvertingToSupport && (
+                      <div>
+                        <label className={labelCls}>Display Role</label>
+                        <input
+                          type="text"
+                          value={displayRole}
+                          onChange={e => setDisplayRole(e.target.value)}
+                          placeholder={ROLE_CHOICES.find(c => c.value === roleSelection)?.label ?? ''}
+                          className={input}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {SECTIONS.map(section => (
+                {isConvertingToSupport && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">
+                    <TriangleAlert size={16} className="flex-shrink-0 mt-0.5" />
+                    <p>
+                      Converting deletes <strong>{staffName}</strong>&apos;s account and login — this cannot be undone.
+                      Their name and the fields a support staff record keeps (employment, contact, personal,
+                      identity/payout) carry over to the Support Staff list. Anything else on their HR record
+                      (subjects taught, qualifications, EPF/NPS, etc.) does not, since that record has no room for it.
+                    </p>
+                  </div>
+                )}
+
+                {!isConvertingToSupport && SECTIONS.map(section => (
                   <div key={section.title}>
                     <p className={sectionHead}>{section.title}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -292,9 +366,17 @@ export default function EditStaffDetailsModal({
               className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium hover:bg-[#F4F4F5] transition-colors">
               Cancel
             </button>
-            <button onClick={handleSave} disabled={saving || loading}
-              className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
-              {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : <><Save size={16} /> Save Details</>}
+            <button
+              onClick={handleSave} disabled={saving || loading}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60 ${
+                isConvertingToSupport ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5]'
+              }`}
+            >
+              {saving
+                ? <><Loader2 size={16} className="animate-spin" /> {isConvertingToSupport ? 'Converting…' : 'Saving…'}</>
+                : isConvertingToSupport
+                  ? <><HardHat size={16} /> Convert to Support Staff</>
+                  : <><Save size={16} /> Save Details</>}
             </button>
           </div>
       </motion.div>

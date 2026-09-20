@@ -2,13 +2,16 @@
 
 import React, { useState, useRef } from 'react'
 import {
-  Loader2, Save, Trash2, Star, ShieldCheck, Send, Paperclip,
+  Loader2, Save, Trash2, ShieldCheck, Send, Paperclip,
   Upload, X, FileText, Users, Link2, Youtube, ExternalLink,
 } from 'lucide-react'
 import {
   ClassroomFile, ClassroomFolder,
   updateFile, deleteFile, uploadClassroomFile,
 } from '@/lib/classrooms'
+import {
+  FormHeader, HeaderAction, FieldLabel, ToggleCard, PointsPicker, FormFooter, INPUT_CLASS,
+} from '@/components/classrooms/WorkFormKit'
 
 type WorkFile = ClassroomFile & { folder: ClassroomFolder }
 type AttachMode = 'none' | 'youtube' | 'link' | 'upload'
@@ -116,99 +119,104 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
   }
 
   return (
-    <form onSubmit={handleSave} className="bg-white rounded-2xl p-4 space-y-3 border border-slate-200 shadow-sm">
-
+    <form
+      onSubmit={handleSave}
+      className="bg-white rounded-t-[1.75rem] sm:rounded-[1.75rem] overflow-hidden shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/[0.06]"
+    >
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <p className="text-xs font-semibold text-slate-600 flex-1">Classwork · {file.folder.title}</p>
-        {onTrack && (
-          <button type="button" onClick={() => onTrack(file.id)}
-            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Student tracking">
-            <Users size={15} />
-          </button>
-        )}
-        <button type="button" onClick={handleDelete} disabled={deleting}
-          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50" title="Delete classwork">
-          {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-        </button>
-        <button type="button" onClick={onCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-          <X size={16} />
-        </button>
+      <FormHeader
+        icon={<FileText size={17} />}
+        title="Classwork"
+        subtitle={file.folder.title}
+        actions={
+          <>
+            {onTrack && (
+              <HeaderAction onClick={() => onTrack(file.id)} title="Student tracking">
+                <Users size={16} />
+              </HeaderAction>
+            )}
+            <HeaderAction onClick={handleDelete} title="Delete classwork" disabled={deleting}>
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            </HeaderAction>
+            <HeaderAction onClick={onCancel} title="Close">
+              <X size={17} />
+            </HeaderAction>
+          </>
+        }
+      />
+
+      <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3 space-y-3 bg-slate-50/60">
+
+      <div>
+        <FieldLabel>Title</FieldLabel>
+        <input
+          type="text" value={title} onChange={e => setTitle(e.target.value)}
+          placeholder="Classwork title" autoFocus
+          className={INPUT_CLASS}
+        />
+      </div>
+      <div>
+        <FieldLabel hint="(optional)">Description</FieldLabel>
+        <textarea
+          value={description} onChange={e => setDescription(e.target.value)}
+          placeholder="Extra instructions for students…" rows={2}
+          className={`${INPUT_CLASS} resize-none`}
+        />
       </div>
 
-      <input
-        type="text" value={title} onChange={e => setTitle(e.target.value)}
-        placeholder="Classwork title" autoFocus
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-      />
-      <textarea
-        value={description} onChange={e => setDescription(e.target.value)}
-        placeholder="Description (optional)" rows={2}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none"
-      />
-
-      <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-        className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-      />
+      <div>
+        <FieldLabel>Due date</FieldLabel>
+        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+          className={INPUT_CLASS}
+        />
+      </div>
 
       {/* Toggles */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={requiresCheck} onChange={e => setRequiresCheck(e.target.checked)} className="rounded" />
-          <ShieldCheck size={14} className={requiresCheck ? 'text-green-600' : 'text-slate-400'} /> Needs staff check
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={requiresSubmission} onChange={e => setRequiresSubmission(e.target.checked)} className="rounded" />
-          <Send size={14} className={requiresSubmission ? 'text-indigo-600' : 'text-slate-400'} /> Needs submission
-        </label>
-      </div>
-
-      {/* Edu Points */}
       <div>
-        <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
-          <Star size={12} className="text-amber-500" /> Edu Points
-          <span className="text-slate-400 font-normal">— awarded on completion</span>
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[1, 2, 3, 4, 5].map(n => (
-            <button key={n} type="button" onClick={() => { setEduPoints(n); setBonusPoints('') }}
-              className={`min-w-[34px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                eduPoints === n && bonusPoints === ''
-                  ? 'bg-amber-500 text-white border-amber-500'
-                  : 'text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-          <input
-            type="number" min={0} step={1} value={bonusPoints}
-            onChange={e => setBonusPoints(e.target.value)} placeholder="Custom"
-            className={`w-20 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400/50 ${
-              bonusPoints !== '' ? 'bg-amber-500 text-white border-amber-500 placeholder-amber-200' : 'text-slate-600 border-slate-200'
-            }`}
+        <FieldLabel>Requirements</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          <ToggleCard
+            checked={requiresCheck}
+            onChange={setRequiresCheck}
+            icon={<ShieldCheck size={16} />}
+            label="Needs staff check"
+            description="Staff confirm before it counts as done"
+            activeClass="border-emerald-400 bg-emerald-50/70"
+          />
+          <ToggleCard
+            checked={requiresSubmission}
+            onChange={setRequiresSubmission}
+            icon={<Send size={16} />}
+            label="Needs submission"
+            description="Students attach a note or file"
           />
         </div>
       </div>
 
+      {/* Edu Points */}
+      <PointsPicker
+        value={eduPoints}
+        custom={bonusPoints}
+        onPreset={n => { setEduPoints(n); setBonusPoints('') }}
+        onCustom={setBonusPoints}
+      />
+
       {/* Attachment */}
       <div>
-        <p className="text-xs font-medium text-slate-500 mb-1.5 flex items-center gap-1">
-          <Paperclip size={12} /> Attachment (optional)
-        </p>
+        <FieldLabel icon={<Paperclip size={12} />} hint="(optional)">Attachment</FieldLabel>
         {attachMode === 'none' ? (
-          <div className="flex gap-2 flex-wrap">
+          <div className="grid grid-cols-3 gap-2">
             <button type="button" onClick={() => setAttachMode('youtube')}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-red-400 hover:text-red-600 transition-colors">
-              <Youtube size={13} /> YouTube
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-red-400 hover:text-red-600 transition-colors">
+              <Youtube size={14} /> YouTube
             </button>
             <button type="button" onClick={() => setAttachMode('link')}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors">
-              <ExternalLink size={13} /> Link
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
+              <ExternalLink size={14} /> Link
             </button>
             <button type="button" onClick={() => setAttachMode('upload')}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
-              <Upload size={13} /> Doc / Image
+              className="flex flex-col items-center justify-center gap-0.5 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-[10px] font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+              <Upload size={14} /> Doc / Image
             </button>
           </div>
         ) : attachMode === 'youtube' ? (
@@ -216,45 +224,44 @@ export default function ClassroomFileEditForm({ file, onCancel, onUpdated, onDel
             <Youtube size={14} className="text-red-500 flex-shrink-0" />
             <input type="url" value={youtubeInput} onChange={e => setYoutubeInput(e.target.value)}
               placeholder="https://youtube.com/watch?v=..."
-              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/50" />
-            <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
+              className={`flex-1 ${INPUT_CLASS}`} />
+            <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
           </div>
         ) : attachMode === 'link' ? (
           <div className="flex items-center gap-2">
             <Link2 size={14} className="text-blue-500 flex-shrink-0" />
             <input type="url" value={linkInput} onChange={e => setLinkInput(e.target.value)}
               placeholder="https://..."
-              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/50" />
-            <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-400 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
+              className={`flex-1 ${INPUT_CLASS}`} />
+            <button type="button" onClick={clearAttachment} className="p-1.5 text-slate-500 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
           </div>
         ) : attachmentUrl ? (
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-            <FileText size={14} className="text-indigo-500 flex-shrink-0" />
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <FileText size={15} className="text-indigo-500 flex-shrink-0" />
             <a href={attachmentUrl} target="_blank" rel="noopener noreferrer"
-              className="flex-1 min-w-0 text-sm text-indigo-600 hover:underline truncate">{attachmentName || 'Attachment'}</a>
-            <button type="button" onClick={clearAttachment} className="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
+              className="flex-1 min-w-0 text-sm font-medium text-indigo-700 hover:underline truncate">{attachmentName || 'Attachment'}</a>
+            <button type="button" onClick={clearAttachment} className="p-1 text-slate-500 hover:text-rose-600 flex-shrink-0"><X size={14} /></button>
           </div>
         ) : (
-          <>
+          <div className="flex items-center gap-2">
             <button type="button" onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors w-full">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-200 bg-white rounded-lg text-xs font-semibold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+              {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
               {uploading ? 'Uploading…' : 'Choose file (max 20 MB)'}
-              <X size={14} className="ml-auto text-slate-300" onClick={e => { e.stopPropagation(); clearAttachment() }} />
             </button>
+            <button type="button" onClick={clearAttachment} className="p-2 text-slate-500 hover:text-rose-600 flex-shrink-0"><X size={15} /></button>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
-          </>
+          </div>
         )}
       </div>
-
-      <div className="flex justify-end gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-700 px-2">Cancel</button>
-        <button type="submit" disabled={!title.trim() || saving || uploading}
-          className="flex items-center gap-1.5 text-sm font-semibold text-white px-3.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          Save changes
-        </button>
       </div>
+
+      <FormFooter
+        onCancel={onCancel}
+        disabled={!title.trim() || saving || uploading}
+        submitIcon={saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+        submitLabel="Save changes"
+      />
     </form>
   )
 }

@@ -30,10 +30,21 @@ const StaffAttendanceCalendar = dynamic(
  * the day it disagrees about can be inspected — and corrected — without
  * leaving payroll. `onClosed` lets the cycle reload afterwards, since any
  * correction changes the figures behind it.
+ *
+ * It opens on the cycle's own month, never on today's: the row's Leave column
+ * counts that month's Absent days, so landing anywhere else would put a
+ * different month's count next to it and read as a disagreement.
  */
-export default function AttendanceCalendarModal({ person, viewerId, onClose, onClosed }: {
+export default function AttendanceCalendarModal({ person, viewerId, year, month, periodLabel, sharp, onClose, onClosed }: {
   person: UserProfile
   viewerId: string
+  /** Cycle period to open on — 1-based month. Defaults to the current month. */
+  year?: number
+  month?: number
+  /** e.g. "June 2026", shown so it's plain which month's figures these are. */
+  periodLabel?: string
+  /** Square the panel, for the sheets drawn with hard edges. */
+  sharp?: boolean
   onClose: () => void
   onClosed?: () => void
 }) {
@@ -46,14 +57,17 @@ export default function AttendanceCalendarModal({ person, viewerId, onClose, onC
     <ModalShell
       onClose={close}
       size="2xl"
+      sharp={sharp}
       title={person.full_name}
-      subtitle="Attendance calendar"
+      subtitle={periodLabel ? `Attendance calendar · ${periodLabel}` : 'Attendance calendar'}
       icon={<CalendarDays size={16} />}
-      iconClassName="bg-slate-800 text-white"
+      iconClassName={sharp ? 'bg-[#27272A] text-white' : 'bg-slate-800 text-white'}
     >
       <StaffAttendanceCalendar
         staffId={person.id}
         staffName={person.full_name}
+        initialYear={year}
+        initialMonth={month}
         mode="admin"
         viewerUserId={viewerId}
         viewerRole="admin"

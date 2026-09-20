@@ -82,17 +82,17 @@ export default function FeeCollectionSummary({
             ? 'bg-[#27272A] border-[#B8983C]'
             : c.tone === 'muted'
             ? 'bg-[#F4F2EC] border-[#E7E2D8]'
-            : 'bg-white border-[#E4E4E7]'
-        const labelCls = c.tone === 'dark' ? 'text-[#A1A1AA]' : 'text-[#71717A]'
+            : 'bg-white border-[#E3DFD3]'
+        const labelCls = c.tone === 'dark' ? 'text-[#8C8878]' : 'text-[#6B675A]'
         const valueCls = c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'
-        const subCls = c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#A1A1AA]'
-        const iconCls = c.tone === 'dark' ? 'text-[#B8983C]' : c.tone === 'muted' ? 'text-[#A8896B]' : 'text-[#A1A1AA]'
+        const subCls = c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#8C8878]'
+        const iconCls = c.tone === 'dark' ? 'text-[#B8983C]' : c.tone === 'muted' ? 'text-[#A8896B]' : 'text-[#8C8878]'
         const Tag = clickable ? 'button' : 'div'
         return (
           <Tag
             key={c.key}
             onClick={c.onClick ?? (c.filterKey && onSelect ? () => onSelect(c.filterKey!) : undefined)}
-            className={`text-left rounded-xl border p-3.5 shadow-sm transition-all flex flex-col justify-between min-h-[88px] ${base} ${
+            className={`text-left border p-3.5 shadow-sm transition-all flex flex-col justify-between min-h-[88px] ${base} ${
               clickable ? 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer' : ''
             } ${active ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
           >

@@ -5,14 +5,17 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 
 const SIZE: Record<ModalSize, string> = {
   sm: 'sm:max-w-md',
   md: 'sm:max-w-2xl',
   lg: 'sm:max-w-4xl',
   xl: 'sm:max-w-6xl',
+  // For editors with their own multi-column layout (the timetable entity hubs).
+  '2xl': 'sm:max-w-[96rem]',
 }
 
 interface ModalProps {
@@ -46,19 +49,18 @@ interface ModalProps {
 export default function Modal({
   open, onClose, title, subtitle, icon: Icon, size = 'lg', fullHeight = false, children, footer,
 }: ModalProps) {
-  // Close on Escape and lock body scroll while open.
+  // Body scroll is frozen by the shared refcounted lock — see the hook for why
+  // the save/restore-per-modal version leaves the page stuck when two stack.
+  useBodyScrollLock(open)
+
+  // Close on Escape while open.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   if (typeof document === 'undefined') return null

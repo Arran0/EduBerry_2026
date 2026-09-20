@@ -2,6 +2,11 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Every profile row fetched here is returned to the browser as `member.user`,
+// and the Team tab renders only these four fields off it. Selecting '*' put all
+// 15 profile columns of every staff member into the response payload.
+const MEMBER_PROFILE_COLUMNS = 'id, full_name, avatar_url, role'
+
 // Supabase enforces a server-side max-rows cap (1000 by default) that a plain
 // `.limit(n)` cannot exceed. A busy month — daily-recurring tasks across every
 // staff member — produces far more than 1000 task/subtask rows, so a single
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest) {
 
   const { data: callerProfile } = await queryClient
     .from('profiles')
-    .select('*')
+    .select(MEMBER_PROFILE_COLUMNS)
     .eq('id', userId)
     .single()
   if (!callerProfile || callerProfile.role === 'student') {
@@ -89,7 +94,7 @@ export async function GET(request: NextRequest) {
       : ['teacher', 'coordinator']
     const { data: staffProfiles } = await queryClient
       .from('profiles')
-      .select('*')
+      .select(MEMBER_PROFILE_COLUMNS)
       .in('role', staffRoles)
     // callerProfile is already a full profile row (fetched above); prepend it
     // so the caller appears in their own leaderboard.
@@ -152,7 +157,7 @@ export async function GET(request: NextRequest) {
   // Deploy supabase-migrations/get_monthly_member_stats.sql to enable it.
   const profilesPromise = prefetchedProfiles !== null
     ? Promise.resolve({ data: prefetchedProfiles, error: null })
-    : queryClient.from('profiles').select('*').in('id', memberIds)
+    : queryClient.from('profiles').select(MEMBER_PROFILE_COLUMNS).in('id', memberIds)
 
   const [
     { data: profiles },

@@ -1,26 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
+import { useProfileCard } from '@/contexts/ProfileCardContext'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   Briefcase,
   Search,
   X,
   Loader2,
-  Users,
-  ChevronDown,
-  ChevronUp,
   Check,
   Trash2,
-  Mail,
-  Shield,
-  Calendar,
   Plus,
   FileSpreadsheet,
   Ban,
@@ -28,12 +22,14 @@ import {
   UserPlus,
   Pencil,
   KeyRound,
-  Copy,
-  CheckCircle,
+  HardHat,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 const EditStaffDetailsModal = dynamic(() => import('@/components/certificates/EditStaffDetailsModal'))
+const EditSupportStaffModal = dynamic(() => import('@/components/staff/EditSupportStaffModal'))
 import {
   ProfileWithTeams,
   fetchAllProfiles,
@@ -43,10 +39,28 @@ import {
   setUserPassword,
   NewUserInput,
 } from '@/lib/admin'
-import { UserRole, getRoleDisplayName } from '@/lib/supabase'
-import { upsertStaffDetails, fetchStaffDetailsMap, StaffDetails } from '@/lib/staffDetails'
+import { UserRole, getDisplayRole } from '@/lib/supabase'
+import { upsertStaffDetails, fetchStaffDirectoryMap, StaffDirectoryEntry } from '@/lib/staffDetails'
+import {
+  SupportStaff,
+  fetchSupportStaff,
+  createSupportStaff,
+  deleteSupportStaff,
+  setSupportStaffActive,
+} from '@/lib/supportStaff'
+import SupportStaffFields, {
+  SupportStaffForm,
+  SupportFieldKey,
+  emptySupportStaffForm,
+  formToSupportPatch,
+} from '@/components/staff/SupportStaffFields'
 
 const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
+
+// Support staff are not profiles and have no login (see src/lib/supportStaff.ts).
+// In this manager they are one more option on the role picker, and one more
+// kind of row in the list — everywhere else in the app they are invisible.
+const SUPPORT_ROLE_VALUE = 'support'
 
 const STAFF_BANNER_DEFAULT = {
   gradFrom: '#92400E',
@@ -62,6 +76,7 @@ const ROLE_BAR: Record<string, string> = {
   'non-teaching': 'bg-cyan-500',
   driver:        'bg-orange-500',
   smartboard:    'bg-indigo-500',
+  support:       'bg-lime-600',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -72,6 +87,7 @@ const ROLE_BADGE: Record<string, string> = {
   'non-teaching': 'bg-cyan-50 text-cyan-700 border-cyan-200',
   driver:        'bg-orange-50 text-orange-700 border-orange-200',
   smartboard:    'bg-indigo-50 text-indigo-700 border-indigo-200',
+  support:       'bg-lime-50 text-lime-700 border-lime-200',
 }
 
 // A "non-teaching" staff member is stored as role='teacher' with is_non_teaching=true
@@ -79,6 +95,58 @@ const ROLE_BADGE: Record<string, string> = {
 // supabase-migrations/add_non_teaching_staff_flag.sql for why.
 const roleStyleKey = (p: { role: string; is_non_teaching?: boolean }): string =>
   p.role === 'teacher' && p.is_non_teaching ? 'non-teaching' : p.role
+
+// ── Filtering & sorting ──────────────────────────────────────────────────────
+
+const ROLE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All Roles' },
+  { value: 'teacher', label: 'Teacher' },
+  { value: 'non-teaching', label: 'Non-Teaching' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'principal', label: 'Principal' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'smartboard', label: 'Smart Board' },
+  { value: SUPPORT_ROLE_VALUE, label: 'Support Staff' },
+]
+
+// Same order the role band colour and badge maps already use, so "sort by
+// role" reads the same top-to-bottom order the rest of the page implies.
+const ROLE_SORT_ORDER = ['admin', 'principal', 'coordinator', 'teacher', 'non-teaching', 'driver', 'smartboard', 'support']
+const roleRank = (key: string): number => {
+  const i = ROLE_SORT_ORDER.indexOf(key)
+  return i === -1 ? ROLE_SORT_ORDER.length : i
+}
+
+type StatusFilter = 'all' | 'active' | 'inactive'
+type SortKey = 'role' | 'name_asc' | 'name_desc' | 'employee_id' | 'designation' | 'recent'
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'role', label: 'Role' },
+  { value: 'name_asc', label: 'Name (A–Z)' },
+  { value: 'name_desc', label: 'Name (Z–A)' },
+  { value: 'employee_id', label: 'Employee ID' },
+  { value: 'designation', label: 'Designation' },
+  { value: 'recent', label: 'Recently Added' },
+]
+
+/** "12 Jan 2026" for a resignation date, or null if there isn't one on file (resigned before this was tracked). */
+function formatResignedDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** Blank values always sort after real ones, whichever direction is asked for. */
+function compareBlanksLast(a: string, b: string, desc = false): number {
+  const av = a?.trim() ?? ''
+  const bv = b?.trim() ?? ''
+  if (!av && !bv) return 0
+  if (!av) return 1
+  if (!bv) return -1
+  return desc ? bv.localeCompare(av) : av.localeCompare(bv)
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -92,17 +160,19 @@ const itemVariants = {
 export default function StaffProfileManagerPage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
-  const router = useRouter()
+  const { openProfileCard } = useProfileCard()
 
   const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
-  const [details, setDetails] = useState<Record<string, StaffDetails>>({})
+  const [supportStaff, setSupportStaff] = useState<SupportStaff[]>([])
+  const [details, setDetails] = useState<Record<string, StaffDirectoryEntry>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [expandedProfile, setExpandedProfile] = useState<string | null>(null)
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('role')
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [editingDetails, setEditingDetails] = useState<ProfileWithTeams | null>(null)
-
-  const [viewingProfile, setViewingProfile] = useState<ProfileWithTeams | null>(null)
+  const [editingSupport, setEditingSupport] = useState<SupportStaff | null>(null)
 
   // Set password modal
   const [setPwTarget, setSetPwTarget] = useState<ProfileWithTeams | null>(null)
@@ -111,7 +181,7 @@ export default function StaffProfileManagerPage() {
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const [pageBannerCfg, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
+  const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STAFF_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -124,12 +194,23 @@ export default function StaffProfileManagerPage() {
   const [createdEmail, setCreatedEmail] = useState('')
 
   const [createForm, setCreateForm] = useState({ email: '', full_name: '', role: 'teacher' as UserRole, is_non_teaching: false })
+  // Support Staff is the one option on this picker that is not a UserRole at
+  // all — it creates a support_staff row instead of an account, so it is
+  // tracked on its own flag rather than squeezed into createForm.role.
+  const [createIsSupport, setCreateIsSupport] = useState(false)
+  const [createSupportForm, setCreateSupportForm] = useState<SupportStaffForm>(emptySupportStaffForm)
   // The role <select> shows "Non-Teaching" as its own option; it maps to role='teacher' + is_non_teaching=true.
-  const createRoleSelection = createForm.role === 'teacher' && createForm.is_non_teaching ? 'non-teaching' : createForm.role
+  const createRoleSelection = createIsSupport
+    ? SUPPORT_ROLE_VALUE
+    : createForm.role === 'teacher' && createForm.is_non_teaching ? 'non-teaching' : createForm.role
   const handleRoleSelect = (value: string) => {
+    setCreateIsSupport(value === SUPPORT_ROLE_VALUE)
+    if (value === SUPPORT_ROLE_VALUE) return
     if (value === 'non-teaching') setCreateForm(f => ({ ...f, role: 'teacher', is_non_teaching: true }))
     else setCreateForm(f => ({ ...f, role: value as UserRole, is_non_teaching: false }))
   }
+  const setSupportField = (key: SupportFieldKey, value: string) =>
+    setCreateSupportForm(f => ({ ...f, [key]: value }))
   const [createStaffFields, setCreateStaffFields] = useState({
     employee_id: '', designation: '', department: '', subjects_taught: '',
     employment_type: '', date_of_joining: '', date_of_retirement: '',
@@ -148,29 +229,106 @@ export default function StaffProfileManagerPage() {
 
   const loadProfiles = useCallback(async () => {
     setLoading(true)
-    const data = await fetchAllProfiles()
-    const staffList = data.filter(p => STAFF_ROLES.includes(p.role))
+    const [staffList, support] = await Promise.all([
+      fetchAllProfiles({ roles: STAFF_ROLES, withTeams: false }),
+      fetchSupportStaff(),
+    ])
     setProfiles(staffList)
-    const map = await fetchStaffDetailsMap(staffList.map(s => s.id))
+    setSupportStaff(support)
+    // The list only ever shows an employee code, a designation and a
+    // department, so it asks for those rather than the whole HR record.
+    const map = await fetchStaffDirectoryMap(staffList.map(s => s.id))
     setDetails(map)
     setLoading(false)
   }, [])
 
   useEffect(() => { loadProfiles() }, [loadProfiles])
 
-  const filteredProfiles = profiles.filter(p => {
+  // Handed to the bulk-import modal; rebuilding the Set on every render made
+  // the modal re-check the whole roster for each keystroke behind it.
+  const existingEmails = useMemo(
+    () => new Set(profiles.map(p => p.email.toLowerCase())),
+    [profiles],
+  )
+
+  // Both rosters are filtered, counted and sorted below. The Add Staff modal
+  // keeps ~35 inputs in this component's state, so without memoisation every
+  // keystroke in any of them re-ran all of it over the whole staff list.
+  const searchedProfiles = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    const d = details[p.id]
-    return (
-      p.full_name?.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) ||
-      p.role?.toLowerCase().includes(q) ||
-      getRoleDisplayName(p.role, p.is_non_teaching).toLowerCase().includes(q) ||
-      d?.employee_id?.toLowerCase().includes(q) ||
-      d?.designation?.toLowerCase().includes(q) ||
-      d?.department?.toLowerCase().includes(q)
-    )
-  })
+    return profiles.filter(p => {
+      const d = details[p.id]
+      return (
+        p.full_name?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.role?.toLowerCase().includes(q) ||
+        getDisplayRole(p).toLowerCase().includes(q) ||
+        d?.employee_id?.toLowerCase().includes(q) ||
+        d?.designation?.toLowerCase().includes(q) ||
+        d?.department?.toLowerCase().includes(q)
+      )
+    })
+  }, [profiles, details, searchQuery])
+
+  const searchedSupport = useMemo(() => {
+    const q = searchQuery.toLowerCase()
+    return supportStaff.filter(s => (
+      s.full_name?.toLowerCase().includes(q) ||
+      // Matches the way the staff rows above match on their role name.
+      'support'.includes(q) ||
+      s.employee_id?.toLowerCase().includes(q) ||
+      s.designation?.toLowerCase().includes(q) ||
+      s.department?.toLowerCase().includes(q)
+    ))
+  }, [supportStaff, searchQuery])
+
+  // Counts for the role filter dropdown — computed off the search-filtered
+  // set (not role/status-filtered) so switching the role filter never moves
+  // the numbers the admin is reading right before they click it.
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of searchedProfiles) {
+      const key = roleStyleKey(p)
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    counts[SUPPORT_ROLE_VALUE] = searchedSupport.length
+    return counts
+  }, [searchedProfiles, searchedSupport])
+
+  const matchesStatus = (isInactive: boolean) =>
+    statusFilter === 'all' || (statusFilter === 'inactive' ? isInactive : !isInactive)
+
+  const filteredProfiles = useMemo(() => searchedProfiles
+    .filter(p => (roleFilter === 'all' || roleFilter === roleStyleKey(p)) && matchesStatus(!!p.is_banned))
+    .sort((a, b) => {
+      if (sortBy === 'role') {
+        return roleRank(roleStyleKey(a)) - roleRank(roleStyleKey(b))
+          || (a.full_name ?? '').localeCompare(b.full_name ?? '')
+      }
+      if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
+      if (sortBy === 'employee_id') return compareBlanksLast(details[a.id]?.employee_id ?? '', details[b.id]?.employee_id ?? '')
+      if (sortBy === 'designation') return compareBlanksLast(details[a.id]?.designation ?? '', details[b.id]?.designation ?? '')
+      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedProfiles, details, roleFilter, statusFilter, sortBy])
+
+  const filteredSupport = useMemo(() => searchedSupport
+    .filter(s => (roleFilter === 'all' || roleFilter === SUPPORT_ROLE_VALUE) && matchesStatus(!s.is_active))
+    .sort((a, b) => {
+      if (sortBy === 'name_desc') return b.full_name.localeCompare(a.full_name)
+      if (sortBy === 'employee_id') return compareBlanksLast(a.employee_id ?? '', b.employee_id ?? '')
+      if (sortBy === 'designation') return compareBlanksLast(a.designation ?? '', b.designation ?? '')
+      if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      return a.full_name.localeCompare(b.full_name) // role and name_asc both fall back to name for support staff
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchedSupport, roleFilter, statusFilter, sortBy])
+
+  const totalRows = filteredProfiles.length + filteredSupport.length
+  const filtersActive = roleFilter !== 'all' || statusFilter !== 'all'
+  const clearFilters = () => { setRoleFilter('all'); setStatusFilter('all') }
 
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
@@ -189,7 +347,48 @@ export default function StaffProfileManagerPage() {
     else alert('Failed: ' + result.error)
   }
 
+  const handleDeleteSupport = async (person: SupportStaff) => {
+    if (!window.confirm(`Delete support staff "${person.full_name}"? Their attendance history goes with them. This cannot be undone.`)) return
+    const result = await deleteSupportStaff(person.id)
+    if (result.success) await loadProfiles()
+    else alert('Failed to delete: ' + result.error)
+  }
+
+  const handleToggleSupportActive = async (person: SupportStaff) => {
+    const msg = person.is_active
+      ? `Resign "${person.full_name}"? They stop appearing in attendance, and their past records are kept.`
+      : `Restore "${person.full_name}" to the support staff roster?`
+    if (!window.confirm(msg)) return
+    const result = await setSupportStaffActive(person.id, !person.is_active)
+    if (result.success) await loadProfiles()
+    else alert('Failed: ' + result.error)
+  }
+
+  const handleCreateSupportStaff = async () => {
+    setCreateError(null)
+    setCreateSuccess(false)
+    if (!createForm.full_name.trim()) { setCreateError('Full name is required'); return }
+    setCreating(true)
+    const result = await createSupportStaff(
+      { ...formToSupportPatch(createSupportForm), full_name: createForm.full_name.trim() },
+      user?.id,
+    )
+    if (result.success) {
+      setCreatedAutoConfirm(false)
+      setCreatedEmail('')
+      setCreateSuccess(true)
+      setCreateForm({ email: '', full_name: '', role: 'teacher', is_non_teaching: false })
+      setCreateSupportForm(emptySupportStaffForm())
+      await loadProfiles()
+      setTimeout(() => { setShowCreateModal(false); setCreateSuccess(false) }, 2500)
+    } else {
+      setCreateError(result.error || 'Failed to add support staff')
+    }
+    setCreating(false)
+  }
+
   const handleCreateProfile = async () => {
+    if (createIsSupport) return handleCreateSupportStaff()
     setCreateError(null)
     setCreateSuccess(false)
     if (!createForm.email || !createForm.full_name) { setCreateError('Email and full name are required'); return }
@@ -255,10 +454,6 @@ export default function StaffProfileManagerPage() {
   const lbl = 'block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5'
   const sHead = 'text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mt-5 mb-3 pb-1 border-b border-[#E4E4E7]'
 
-  const bannerGradient = pageBannerCfg.imageUrl
-    ? undefined
-    : `linear-gradient(140deg, ${pageBannerCfg.gradFrom} 0%, ${pageBannerCfg.gradTo} 100%)`
-
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
@@ -269,13 +464,14 @@ export default function StaffProfileManagerPage() {
           title="Staff Profile Manager"
           subtitle="Manage all non-student staff with full CBSE HR records"
           isAdmin={isAdmin}
-          onBack={() => router.back()}
           maxWidth="max-w-7xl"
           onBannerChange={setPageBannerCfg}
           onEditingChange={setBannerEditing}
           actions={
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white/70 hidden sm:block">{profiles.length} staff</span>
+              <span className="text-sm text-white/70 hidden sm:block">
+                {profiles.length} staff{supportStaff.length > 0 ? ` · ${supportStaff.length} support` : ''}
+              </span>
               <button onClick={() => setShowBulkImport(true)} className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors">
                 <FileSpreadsheet size={15} /> Import CSV
               </button>
@@ -295,11 +491,66 @@ export default function StaffProfileManagerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
-            {/* Search */}
-            <div className="mb-4 relative z-10" style={{ marginTop: '-22px' }}>
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-3 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search by name, email, role, employee ID, designation…" />
-              {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
+            {/* Search + filter & sort — one row on desktop, search then a
+                sleeker filter row underneath on a narrow phone. */}
+            <div className="mb-4 relative z-10 flex flex-col sm:flex-row sm:items-center gap-2" style={{ marginTop: '-22px' }}>
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg" placeholder="Search staff & support staff by name, email, employee ID, designation…" />
+                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded"><X size={13} /></button>}
+              </div>
+
+              {/* Every control shrinks to share the row rather than wrapping
+                  or scrolling — each is flex-1 with its own text truncated,
+                  so all of them stay readable-but-tight on one line even on
+                  a narrow phone. */}
+              <div className="flex items-center gap-1 flex-nowrap w-full sm:w-auto min-w-0">
+                <div className="relative flex-1 min-w-0">
+                  <Filter size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={roleFilter}
+                    onChange={e => setRoleFilter(e.target.value)}
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {ROLE_FILTER_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{roleCounts[o.value] ? ` (${roleCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                  className="flex-1 min-w-0 px-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Resignation Only</option>
+                </select>
+
+                <div className="relative flex-1 min-w-0">
+                  <ArrowUpDown size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value as SortKey)}
+                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    aria-label="Clear filters"
+                    className="flex-shrink-0 flex items-center gap-1 px-1.5 py-1 text-[9px] sm:text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-md sm:rounded-lg transition-colors"
+                  >
+                    <X size={10} /> <span className="hidden sm:inline">Clear</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* List */}
@@ -308,7 +559,7 @@ export default function StaffProfileManagerPage() {
                 <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
                 <p className="text-sm text-[#71717A]">Loading staff…</p>
               </div>
-            ) : filteredProfiles.length === 0 ? (
+            ) : totalRows === 0 ? (
               <div className="border border-[#E4E4E7] bg-white rounded-xl p-12 text-center">
                 <Briefcase size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-sm font-semibold text-[#18181B] mb-1">No Staff Found</p>
@@ -331,7 +582,7 @@ export default function StaffProfileManagerPage() {
                     const d = details[p.id]
                     return (
                       <motion.div key={p.id} variants={itemVariants}>
-                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => setExpandedProfile(expandedProfile === p.id ? null : p.id)}>
+                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => openProfileCard(p.id)}>
                           <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
                           <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
                             <div className="flex-shrink-0">
@@ -341,14 +592,18 @@ export default function StaffProfileManagerPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
-                                {p.is_banned && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1"><Ban size={8} /> Resigned</span>}
+                                {p.is_banned && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                    <Ban size={8} /> Resigned{formatResignedDate(p.banned_at) ? ` · ${formatResignedDate(p.banned_at)}` : ''}
+                                  </span>
+                                )}
                               </div>
                               <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
                             </div>
 
                             {/* Role badge */}
                             <div className="hidden sm:block w-28 flex-shrink-0">
-                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[roleStyleKey(p)] || ''}`}>{getRoleDisplayName(p.role, p.is_non_teaching)}</span>
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE[roleStyleKey(p)] || ''}`}>{getDisplayRole(p)}</span>
                             </div>
 
                             {/* Emp ID */}
@@ -365,158 +620,92 @@ export default function StaffProfileManagerPage() {
                             <div className="flex items-center gap-0.5 w-44 justify-end flex-shrink-0">
                               {isAdmin && (
                                 <>
-                                  <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
-                                  <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit HR details"><Pencil size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex p-1.5 text-[#71717A] hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Set password"><KeyRound size={14} /></button>
                                   {p.id !== user.id && (
-                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`hidden sm:flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Resign'}>
+                                    <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex p-1.5 rounded-lg transition-colors ${p.is_banned ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={p.is_banned ? 'Restore' : 'Resign'}>
                                       {p.is_banned ? <ShieldCheck size={14} /> : <Ban size={14} />}
                                     </button>
                                   )}
-                                  <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="hidden sm:flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
+                                  <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
                                 </>
                               )}
-                              <div className="p-1.5 text-[#71717A]">{expandedProfile === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</div>
                             </div>
                           </div>
                         </div>
-
-                        {/* Expanded */}
-                        <AnimatePresence>
-                          {expandedProfile === p.id && (
-                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                              <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-5 py-4 pl-8 space-y-3">
-                                <div className="flex items-center justify-between gap-3 sm:hidden">
-                                  <p className="text-xs text-[#71717A] truncate flex-1">{p.email}</p>
-                                  <div className="flex items-center gap-1 flex-wrap flex-shrink-0">
-                                    {isAdmin && (
-                                      <>
-                                        <button onClick={e => { e.stopPropagation(); setEditingDetails(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[#B8983C] bg-amber-50 border border-amber-200 rounded-lg transition-colors"><Pencil size={12} /> Edit</button>
-                                        <button onClick={e => { e.stopPropagation(); openSetPw(p) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><KeyRound size={12} /> Set Password</button>
-                                        {p.id !== user.id && (
-                                          <button onClick={e => { e.stopPropagation(); handleToggleBan(p.id, p.full_name || p.email, !!p.is_banned) }} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${p.is_banned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
-                                            {p.is_banned ? <><ShieldCheck size={12} /> Restore</> : <><Ban size={12} /> Resign</>}
-                                          </button>
-                                        )}
-                                        <button onClick={e => { e.stopPropagation(); handleDeleteProfile(p.id, p.full_name || p.email) }} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"><Trash2 size={12} /> Delete</button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Quick staff detail summary */}
-                                {(d?.department || d?.phone || d?.date_of_joining) && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {d?.department && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Department</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{d.department}</p>
-                                      </div>
-                                    )}
-                                    {d?.phone && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Phone</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{d.phone}</p>
-                                      </div>
-                                    )}
-                                    {d?.date_of_joining && (
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Joined</p>
-                                        <p className="text-xs text-[#52525B] mt-0.5">{new Date(d.date_of_joining).toLocaleDateString('en-IN')}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {p.teams.length > 0 && (
-                                  <div>
-                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1"><Users size={11} /> Teams ({p.teams.length})</h5>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {p.teams.map(t => <span key={t.id} className="text-xs px-2.5 py-1 bg-white border border-[#E4E4E7] text-[#71717A] rounded-lg">{t.name}</span>)}
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="text-[11px] text-[#A1A1AA] space-y-0.5">
-                                  <p>Created: {new Date(p.created_at).toLocaleDateString()}</p>
-                                  <p className="font-mono text-[10px]">ID: {p.id}</p>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </motion.div>
                     )
                   })}
+
+                  {/* ── Support staff ──────────────────────────────────────
+                      Ground-level cleaning / maintenance staff. No account,
+                      no login, no email — an admin keeps the names here, and
+                      they are used only in attendance and salary. Kept in
+                      their own band so they never read as app users. */}
+                  {filteredSupport.length > 0 && (
+                    <motion.div variants={itemVariants}>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-[#F7F7F5] border-y border-[#E4E4E7]">
+                        <HardHat size={13} className="text-lime-700 flex-shrink-0" />
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Support Staff</p>
+                        <span className="text-[11px] text-[#A1A1AA]">({filteredSupport.length}) · no login</span>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {filteredSupport.map(s => (
+                    <motion.div key={s.id} variants={itemVariants}>
+                      <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors group">
+                        <div className={`w-1 flex-shrink-0 ${ROLE_BAR.support}`} />
+                        <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                          <div className="flex-shrink-0">
+                            <Avatar name={s.full_name} size={34} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className={`text-sm font-semibold truncate ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
+                              {!s.is_active && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
+                                  <Ban size={8} /> Resigned{formatResignedDate(s.resigned_at) ? ` · ${formatResignedDate(s.resigned_at)}` : ''}
+                                </span>
+                              )}
+                            </div>
+                            <p className="hidden sm:block text-xs text-[#71717A] truncate">
+                              {s.phone || <span className="text-[#C4C4C8]">No phone</span>}
+                            </p>
+                          </div>
+
+                          <div className="hidden sm:block w-28 flex-shrink-0">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${ROLE_BADGE.support}`}>Support</span>
+                          </div>
+
+                          <span className="hidden sm:block text-xs text-[#71717A] w-28 flex-shrink-0 truncate">
+                            {s.employee_id || <span className="text-[#C4C4C8]">—</span>}
+                          </span>
+
+                          <span className="hidden sm:block text-xs text-[#71717A] w-32 flex-shrink-0 truncate">
+                            {s.designation || <span className="text-[#C4C4C8]">—</span>}
+                          </span>
+
+                          <div className="flex items-center gap-0.5 w-44 justify-end flex-shrink-0">
+                            {isAdmin && (
+                              <>
+                                <button onClick={() => setEditingSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-[#B8983C] hover:bg-amber-50 rounded-lg transition-colors" title="Edit details"><Pencil size={14} /></button>
+                                <button onClick={() => handleToggleSupportActive(s)} className={`flex p-1.5 rounded-lg transition-colors ${s.is_active ? 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50' : 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50'}`} title={s.is_active ? 'Resign' : 'Restore'}>
+                                  {s.is_active ? <Ban size={14} /> : <ShieldCheck size={14} />}
+                                </button>
+                                <button onClick={() => handleDeleteSupport(s)} className="flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </motion.div>
               </div>
             )}
           </div>
-
-          {/* View Profile Modal */}
-          <AnimatePresence>
-            {viewingProfile && (
-              <>
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setViewingProfile(null)} className="fixed inset-0 bg-black/60 z-40" />
-                <motion.div initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setViewingProfile(null)}>
-                  <div className="w-full max-w-sm bg-white overflow-y-auto shadow-2xl max-h-[85vh] rounded-2xl" onClick={e => e.stopPropagation()}>
-                    <div className="relative h-32 flex-shrink-0 rounded-t-2xl overflow-hidden" style={pageBannerCfg.imageUrl ? { backgroundImage: `url(${pageBannerCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: bannerGradient ?? 'linear-gradient(140deg, #92400E 0%, #78350F 100%)' }}>
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)]" />
-                      <button onClick={() => setViewingProfile(null)} className="absolute top-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"><X size={16} /></button>
-                    </div>
-                    <div className="relative flex flex-col items-center -mt-12 pb-6 px-6">
-                      <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{ background: bannerGradient ?? 'linear-gradient(135deg, #92400E, #78350F)' }}>
-                        {viewingProfile.avatar_url
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={viewingProfile.avatar_url} alt="Avatar" className="object-cover w-full h-full" />
-                          : <span className="text-white text-3xl font-bold select-none">{(viewingProfile.full_name || viewingProfile.email || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}</span>
-                        }
-                      </div>
-                      <h2 className="mt-3 text-xl font-bold text-[#18181B] text-center leading-tight">{viewingProfile.full_name || 'No Name'}</h2>
-                      <div className="mt-1.5">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded-full ${ROLE_BADGE[roleStyleKey(viewingProfile)] || ''}`}>{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</span>
-                      </div>
-                      {details[viewingProfile.id]?.designation && (
-                        <p className="mt-1 text-xs text-[#71717A]">{details[viewingProfile.id].designation}{details[viewingProfile.id].department ? ` · ${details[viewingProfile.id].department}` : ''}</p>
-                      )}
-                      <div className="w-full mt-4 space-y-2">
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                          <Mail size={14} className="text-[#71717A] flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Email</p>
-                            <p className="font-medium text-[#18181B] text-sm truncate">{viewingProfile.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                          <Shield size={14} className="text-[#71717A] flex-shrink-0" />
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Role</p>
-                            <p className="font-medium text-[#18181B] text-sm">{getRoleDisplayName(viewingProfile.role, viewingProfile.is_non_teaching)}</p>
-                          </div>
-                        </div>
-                        {details[viewingProfile.id]?.employee_id && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                            <Briefcase size={14} className="text-[#71717A] flex-shrink-0" />
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Employee ID</p>
-                              <p className="font-medium text-[#18181B] text-sm">{details[viewingProfile.id].employee_id}</p>
-                            </div>
-                          </div>
-                        )}
-                        {viewingProfile.created_at && (
-                          <div className="flex items-center gap-3 bg-[#F5F5F5] rounded-xl px-4 py-3">
-                            <Calendar size={14} className="text-[#71717A] flex-shrink-0" />
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Member since</p>
-                              <p className="font-medium text-[#18181B] text-sm">{new Date(viewingProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
 
           {/* Create Staff Modal */}
           <AnimatePresence>
@@ -527,8 +716,12 @@ export default function StaffProfileManagerPage() {
                   <div className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/10 rounded-lg"><UserPlus size={18} className="text-[#B8983C]" /></div>
-                        <h2 className="text-lg font-bold text-white">Add Staff Member</h2>
+                        <div className="p-2 bg-white/10 rounded-lg">
+                          {createIsSupport
+                            ? <HardHat size={18} className="text-[#B8983C]" />
+                            : <UserPlus size={18} className="text-[#B8983C]" />}
+                        </div>
+                        <h2 className="text-lg font-bold text-white">{createIsSupport ? 'Add Support Staff' : 'Add Staff Member'}</h2>
                       </div>
                       <button onClick={() => setShowCreateModal(false)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"><X size={18} className="text-white" /></button>
                     </div>
@@ -537,21 +730,25 @@ export default function StaffProfileManagerPage() {
                       {createSuccess ? (
                         <div className="text-center py-8">
                           <div className="w-16 h-16 bg-[#27272A] rounded-2xl flex items-center justify-center mx-auto mb-4"><Check size={32} className="text-white" /></div>
-                          <h3 className="font-bold text-lg text-[#18181B] mb-2">Staff Profile Created!</h3>
-                          {createdAutoConfirm
-                            ? <div className="space-y-1"><p className="text-sm text-[#71717A]">Account confirmed. Staff member can sign in immediately.</p><p className="text-xs text-[#71717A] mt-1">Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span></p></div>
-                            : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>
+                          <h3 className="font-bold text-lg text-[#18181B] mb-2">{createIsSupport ? 'Support Staff Added!' : 'Staff Profile Created!'}</h3>
+                          {createIsSupport
+                            ? <p className="text-sm text-[#71717A]">No account was created. Mark their attendance from the Support tab of the staff attendance report.</p>
+                            : createdAutoConfirm
+                              ? <div className="space-y-1"><p className="text-sm text-[#71717A]">Account confirmed. Staff member can sign in immediately.</p><p className="text-xs text-[#71717A] mt-1">Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span></p></div>
+                              : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>
                           }
                         </div>
                       ) : (
                         <div className="space-y-4">
                           {createError && <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-lg">{createError}</div>}
 
-                          {/* Account info */}
-                          <div>
-                            <label className={lbl}>Email Address *</label>
-                            <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={inp} placeholder="staff@example.com" disabled={creating} />
-                          </div>
+                          {/* Account info — support staff have no account, so no email */}
+                          {!createIsSupport && (
+                            <div>
+                              <label className={lbl}>Email Address *</label>
+                              <input type="email" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} className={inp} placeholder="staff@example.com" disabled={creating} />
+                            </div>
+                          )}
                           <div>
                             <label className={lbl}>Full Name *</label>
                             <input type="text" value={createForm.full_name} onChange={e => setCreateForm({ ...createForm, full_name: e.target.value })} className={inp} placeholder="John Doe" disabled={creating} />
@@ -566,11 +763,22 @@ export default function StaffProfileManagerPage() {
                               <option value="admin">Admin</option>
                               <option value="driver">Driver</option>
                               <option value="smartboard">Smart Board</option>
+                              <option value={SUPPORT_ROLE_VALUE}>Support Staff</option>
                             </select>
-                            {createForm.role === 'smartboard' && <p className="text-[11px] text-indigo-600 mt-1.5">Smart boards are kiosk logins — enable auto-confirm below and link to a homeroom in the Homeroom Manager.</p>}
-                            {createForm.is_non_teaching && <p className="text-[11px] text-cyan-600 mt-1.5">Non-teaching staff get the exact same app access as teachers — only the displayed role label differs.</p>}
+                            {createForm.role === 'smartboard' && !createIsSupport && <p className="text-[11px] text-indigo-600 mt-1.5">Smart boards are kiosk logins — enable auto-confirm below and link to a homeroom in the Homeroom Manager.</p>}
+                            {createForm.is_non_teaching && !createIsSupport && <p className="text-[11px] text-cyan-600 mt-1.5">Non-teaching staff get the exact same app access as teachers — only the displayed role label differs.</p>}
+                            {createIsSupport && (
+                              <p className="text-[11px] text-lime-700 mt-1.5">
+                                Support staff (cleaning, maintenance, grounds) get no account and no login — many have no phone.
+                                The name is used only for attendance, which an admin marks for them, and for salary.
+                              </p>
+                            )}
                           </div>
 
+                          {createIsSupport ? (
+                            <SupportStaffFields form={createSupportForm} onChange={setSupportField} disabled={creating} />
+                          ) : (
+                          <>
                           {/* Employment */}
                           <div className="border border-[#E4E4E7] bg-white p-4 rounded-xl space-y-3">
                             <p className={sHead}>Employment</p>
@@ -676,14 +884,18 @@ export default function StaffProfileManagerPage() {
                                 <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
                               </div>
                             ) : (
-                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member's address.</p>
+                              <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member&rsquo;s address.</p>
                             )}
                           </div>
+                          </>
+                          )}
 
                           <div className="flex gap-3 pt-2">
                             <button onClick={() => setShowCreateModal(false)} className="flex-1 px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F4F4F5] transition-colors" disabled={creating}>Cancel</button>
                             <button onClick={handleCreateProfile} className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2" disabled={creating}>
-                              {creating ? <><Loader2 size={16} className="animate-spin" /> Creating…</> : <><UserPlus size={16} /> Add Staff</>}
+                              {creating
+                                ? <><Loader2 size={16} className="animate-spin" /> {createIsSupport ? 'Adding…' : 'Creating…'}</>
+                                : createIsSupport ? <><HardHat size={16} /> Add Support Staff</> : <><UserPlus size={16} /> Add Staff</>}
                             </button>
                           </div>
                         </div>
@@ -700,7 +912,7 @@ export default function StaffProfileManagerPage() {
       {showBulkImport && (
         <BulkImportModal
           mode="staff"
-          existingEmails={new Set(profiles.map(p => p.email.toLowerCase()))}
+          existingEmails={existingEmails}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles() }}
         />
@@ -712,7 +924,16 @@ export default function StaffProfileManagerPage() {
           staffName={editingDetails.full_name || editingDetails.email}
           staffRole={editingDetails.role}
           staffIsNonTeaching={editingDetails.is_non_teaching}
+          staffDisplayRole={editingDetails.display_role}
           onClose={() => setEditingDetails(null)}
+          onSaved={loadProfiles}
+        />
+      )}
+
+      {editingSupport && (
+        <EditSupportStaffModal
+          person={editingSupport}
+          onClose={() => setEditingSupport(null)}
           onSaved={loadProfiles}
         />
       )}

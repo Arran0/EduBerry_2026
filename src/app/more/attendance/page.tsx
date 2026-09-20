@@ -28,7 +28,6 @@ import Avatar from '@/components/Avatar'
 import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { Homeroom, fetchAllHomerooms, fetchHomeromsForStudent, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
-import type { HomeroomFilterRef } from '@/components/attendance/HomeroomSearchField'
 import { DateToggler, SmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import {
@@ -387,12 +386,20 @@ const STUDENT_STATUS_PILL: Record<string, string> = {
   excused:  'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-// Non-present statuses other than 'absent' — the "irregular" bucket. Absent has
-// its own section so the three summary tiles map 1:1 onto the lists below them.
-const IRREGULAR_ORDER = ['late', 'half_day', 'on_leave', 'on_duty', 'excused'] as const
+// Genuine irregularities only — late counts as present (shown at the top of
+// the Present tab) and on_leave/on_duty count as absent/present respectively,
+// the same split the staff report uses. Half day (and the rarely-used
+// "excused") are what's actually left to review.
+const IRREGULAR_ORDER = ['half_day', 'excused'] as const
 
 const PRESENT_PAGE_SIZE = 30
 const HOMEROOM_PAGE_SIZE = 30
+
+/** The homeroom the report is currently scoped to, as the picker names it. */
+interface HomeroomFilterRef {
+  id: string
+  name: string
+}
 
 type ReportView = 'homeroom' | 'student'
 type ReportSection = 'present' | 'absent' | 'irregular'
@@ -455,17 +462,36 @@ function GroupLabel({ status, count }: { status: string; count: number }) {
   )
 }
 
-function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; streak?: number }) {
+interface StudentEntryRowProps {
+  entry: StudentAttendanceEntry
+  streak?: number
+  /** Viewer identity, read once by the report rather than once per row. */
+  viewerUserId?: string
+  viewerRole?: string
+  /** Stable handler, so the memo below isn't defeated on every parent render. */
+  onAppOpen: (app: LeaveApplicationWithDetails) => void
+}
+
+/**
+ * One student's row in the report.
+ *
+ * Memoised, and deliberately free of context reads: with a few hundred rows on
+ * screen every keystroke in the report's search box re-renders the list, and a
+ * row whose entry and streak haven't changed has nothing new to paint.
+ */
+const StudentEntryRow = React.memo(function StudentEntryRow({
+  entry, streak, viewerUserId, viewerRole, onAppOpen,
+}: StudentEntryRowProps) {
   const { student } = entry
   const subtitle = entry.homeroom_name
     || [student.grade ? `Grade ${student.grade}` : '', student.section ? `Sec ${student.section}` : '']
         .filter(Boolean).join(' · ')
   const showStreak = streak !== undefined && streak >= 1 && (entry.status === 'absent' || entry.status === 'on_leave')
 
-  const router = useRouter()
-  const leaveHost = React.useContext(LeaveHostContext)
-  const { user, profile } = useAuth()
   const [showModal, setShowModal] = useState(false)
+  // Stays true through the closing animation, then clears — so a row nobody
+  // opened never puts a portal in the document at all.
+  const [portalMounted, setPortalMounted] = useState(false)
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [homeroomId, setHomeroomId] = useState<string | null>(null)
   const [year, setYear] = useState(() => new Date().getFullYear())
@@ -473,6 +499,7 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
   const [loadingHomerooms, setLoadingHomerooms] = useState(false)
 
   const handleOpenModal = async () => {
+    setPortalMounted(true)
     setShowModal(true)
     if (homerooms.length === 0) {
       setLoadingHomerooms(true)
@@ -507,8 +534,8 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
         </span>
       </div>
 
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
+      {portalMounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
           {showModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -558,13 +585,9 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
                       year={year}
                       month={month}
                       onMonthChange={(y: number, m: number) => { setYear(y); setMonth(m) }}
-                      viewerUserId={user?.id}
-                      viewerRole={profile?.role}
-                      onAppOpen={app => {
-                        setShowModal(false)
-                        if (leaveHost) leaveHost.openApplication(app)
-                        else router.push(`/more/leave?openApp=${app.id}`)
-                      }}
+                      viewerUserId={viewerUserId}
+                      viewerRole={viewerRole}
+                      onAppOpen={app => { setShowModal(false); onAppOpen(app) }}
                     />
                   ) : (
                     <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
@@ -578,7 +601,7 @@ function StudentEntryRow({ entry, streak }: { entry: StudentAttendanceEntry; str
       )}
     </>
   )
-}
+})
 
 /** Placeholder rows for the student-wise report body while it loads. */
 function ReportBodySkeleton() {
@@ -699,6 +722,15 @@ interface StudentAttendanceReportProps {
 }
 
 function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProps) {
+  const router = useRouter()
+  const leaveHost = React.useContext(LeaveHostContext)
+  const { user, profile } = useAuth()
+  // Read once here and handed down, so the rows stay memoisable.
+  const openLeaveApp = useCallback((app: LeaveApplicationWithDetails) => {
+    if (leaveHost) leaveHost.openApplication(app)
+    else router.push(`/more/leave?openApp=${app.id}`)
+  }, [leaveHost, router])
+
   const todayStr = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(todayStr)
   const [homeroom, setHomeroom] = useState<HomeroomFilterRef | null>(null)
@@ -750,7 +782,12 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     return () => { cancelled = true }
   }, [scoped])
 
-  const pickerHomerooms = scoped ? (scopeHomerooms ?? []) : allHomerooms
+  // `scopeHomerooms ?? []` builds a new array every render, which would make the
+  // homeroomOptions memo below recompute every time. Memoise the choice itself.
+  const pickerHomerooms = useMemo(
+    () => (scoped ? (scopeHomerooms ?? []) : allHomerooms),
+    [scoped, scopeHomerooms, allHomerooms],
+  )
   const homeroomOptions: SmartOption[] = useMemo(() => {
     const opts = pickerHomerooms.map(h => ({
       value: h.id,
@@ -856,19 +893,33 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     setPendingScroll(REPORT_ANCHOR)
   }
 
-  // Whole-school lists can name a student once per homeroom — dedupe to one row.
-  const irregularList = (() => {
-    if (homeroom) return irregulars
-    const seen = new Set<string>()
-    return irregulars.filter(r => { if (seen.has(r.student.id)) return false; seen.add(r.student.id); return true })
-  })()
+  // Whole-school lists can name a student once per homeroom — dedupe to one
+  // row, then split by status. Keyed on the fetched rows and the scope, so
+  // typing in the search box doesn't redo any of it.
+  const { irregularList, grouped } = useMemo(() => {
+    let list = irregulars
+    if (!homeroom) {
+      const seen = new Set<string>()
+      list = irregulars.filter(r => { if (seen.has(r.student.id)) return false; seen.add(r.student.id); return true })
+    }
+    const by: Record<string, StudentAttendanceEntry[]> = {}
+    for (const r of list) (by[r.status] ??= []).push(r)
+    return { irregularList: list, grouped: by }
+  }, [irregulars, homeroom])
 
-  const grouped: Record<string, StudentAttendanceEntry[]> = {}
-  for (const r of irregularList) (grouped[r.status] ??= []).push(r)
-
-  const absentGroup = grouped['absent'] ?? []
+  // On leave counts as absent; late and on duty count as present — shown in
+  // those tabs, not Irregular (matching the staff report's split).
+  const absentGroup = useMemo(
+    () => [...(grouped['absent'] ?? []), ...(grouped['on_leave'] ?? [])],
+    [grouped]
+  )
   const absentCount = absentGroup.length
-  const irregularCount = irregularList.length - absentCount
+  const lateGroup = useMemo(() => grouped['late'] ?? [], [grouped])
+  const onDutyGroup = useMemo(() => grouped['on_duty'] ?? [], [grouped])
+  const irregularCount = (grouped['half_day']?.length ?? 0) + (grouped['excused']?.length ?? 0)
+  // Present total including the late/on-duty rows folded in above (those are
+  // fetched in full, unlike the paged 'present' rows).
+  const presentFullTotal = presentTotal + lateGroup.length + onDutyGroup.length
   const loading = loadingIrregular || loadingPresent
   const isEmpty = !loading && irregularList.length === 0 && presentTotal === 0
 
@@ -883,11 +934,19 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
       || (e.student.email ?? '').toLowerCase().includes(q)
   }, [q])
 
-  const absentRows = absentGroup.filter(matchesStudent)
-  const presentRows = present.filter(matchesStudent)
-  const irregularGroups = IRREGULAR_ORDER
-    .map(status => ({ status, rows: (grouped[status] ?? []).filter(matchesStudent) }))
-    .filter(g => g.rows.length > 0)
+  const absentRows = useMemo(() => absentGroup.filter(matchesStudent), [absentGroup, matchesStudent])
+  // Late, then on duty, at the top of the present list, ahead of the paged
+  // 'present' rows.
+  const presentRows = useMemo(
+    () => [...lateGroup, ...onDutyGroup].filter(matchesStudent).concat(present.filter(matchesStudent)),
+    [lateGroup, onDutyGroup, present, matchesStudent]
+  )
+  const irregularGroups = useMemo(
+    () => IRREGULAR_ORDER
+      .map(status => ({ status, rows: (grouped[status] ?? []).filter(matchesStudent) }))
+      .filter(g => g.rows.length > 0),
+    [grouped, matchesStudent]
+  )
 
   const visibleHomeroomRows = useMemo(() => {
     if (!q) return homeroomRows
@@ -898,8 +957,8 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   }, [homeroomRows, q])
 
   // Everyone with a record for the day — the denominator behind the rate bar.
-  const markedTotal = presentTotal + absentCount + irregularCount
-  const pct = markedTotal > 0 ? Math.round((presentTotal / markedTotal) * 100) : 0
+  const markedTotal = presentFullTotal + absentCount + irregularCount
+  const pct = markedTotal > 0 ? Math.round((presentFullTotal / markedTotal) * 100) : 0
 
   const scopeLabel = homeroom?.name ?? (scoped ? 'my homerooms' : 'whole school')
 
@@ -920,7 +979,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
 
   const tabCounts: Record<ReportSection, number> = {
     absent:    absentCount,
-    present:   presentTotal,
+    present:   presentFullTotal,
     irregular: irregularCount,
   }
 
@@ -980,7 +1039,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
       <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-bold text-[#18181B] leading-none">
-            {loading ? '—' : presentTotal}
+            {loading ? '—' : presentFullTotal}
           </span>
           <span className="text-sm font-medium text-[#A1A1AA]">/ {loading ? '…' : markedTotal}</span>
         </div>
@@ -1114,6 +1173,9 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                         key={`${r.student.id}-${r.homeroom_id}-${i}`}
                         entry={r}
                         streak={streakMap.get(r.student.id)}
+                        viewerUserId={user?.id}
+                        viewerRole={profile?.role}
+                        onAppOpen={openLeaveApp}
                       />
                     ))}
                   </RowList>
@@ -1131,7 +1193,13 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                 ) : (
                   <RowList>
                     {presentRows.map((r, i) => (
-                      <StudentEntryRow key={`${r.student.id}-${r.homeroom_id}-${i}`} entry={r} />
+                      <StudentEntryRow
+                        key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                        entry={r}
+                        viewerUserId={user?.id}
+                        viewerRole={profile?.role}
+                        onAppOpen={openLeaveApp}
+                      />
                     ))}
                   </RowList>
                 )}
@@ -1163,6 +1231,9 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                             key={`${r.student.id}-${r.homeroom_id}-${i}`}
                             entry={r}
                             streak={streakMap.get(r.student.id)}
+                            viewerUserId={user?.id}
+                            viewerRole={profile?.role}
+                            onAppOpen={openLeaveApp}
                           />
                         ))}
                       </RowList>

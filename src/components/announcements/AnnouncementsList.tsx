@@ -1,22 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { markAnnouncementsRead } from '@/lib/announcementReads'
 import { Megaphone, Plus, Pin } from 'lucide-react'
 import AnnouncementCard from './AnnouncementCard'
 import NewAnnouncementForm from './NewAnnouncementForm'
 import {
   AnnouncementWithDetails,
   fetchAnnouncementsForUser,
-  fetchLikesForAnnouncements,
 } from '@/lib/announcements'
 import { UserRole } from '@/lib/supabase'
 
 interface AnnouncementsListProps {
   userId: string
   userRole: UserRole
-  userGrade?: number
-  userSection?: string
   userTeams?: { id: string; name: string }[]
   allTeams?: { id: string; name: string }[]
   teamGradeRanges?: { teamId: string; grades: number[] }[]
@@ -174,8 +172,6 @@ const PAGE_SIZE = 10
 export default function AnnouncementsList({
   userId,
   userRole,
-  userGrade,
-  userSection,
   userTeams = [],
   allTeams  = [],
   teamGradeRanges = [],
@@ -187,8 +183,6 @@ export default function AnnouncementsList({
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore,     setHasMore]     = useState(false)
   const [nextOffset,  setNextOffset]  = useState(0)
-  const [likeCounts,  setLikeCounts]  = useState<Record<string, number>>({})
-  const [likedSet,    setLikedSet]    = useState<Set<string>>(new Set())
   const [localShowNewForm, setLocalShowNewForm] = useState(false)
 
   const showNewForm    = externalShowNewForm ?? localShowNewForm
@@ -205,24 +199,22 @@ export default function AnnouncementsList({
     else setLoading(true)
 
     try {
-      const data = await fetchAnnouncementsForUser(
-        userId, userRole, userGrade, userSection, PAGE_SIZE, currentOffset
-      )
+      // Like counts and the viewer's own like state come back with the page,
+      // so there is no follow-up request here.
+      const data = await fetchAnnouncementsForUser(PAGE_SIZE, currentOffset)
 
       setAnnouncements(prev => append ? [...prev, ...data] : data)
       setHasMore(data.length === PAGE_SIZE)
       setNextOffset(currentOffset + data.length)
 
+      // Reaching this page of the feed is what reading an announcement means —
+      // whether the user came from a headline in the home notifications box or
+      // straight to this page. Marking them here (rather than on the headline
+      // click alone) is what makes the second route work, and it is what drops
+      // them from the box, on this device and every other.
       if (data.length > 0) {
-        const ids = data.map(a => a.id)
-        const { counts, liked } = await fetchLikesForAnnouncements(ids, userId)
-        if (append) {
-          setLikeCounts(prev => ({ ...prev, ...counts }))
-          setLikedSet(prev => new Set([...prev, ...liked]))
-        } else {
-          setLikeCounts(counts)
-          setLikedSet(liked)
-        }
+        markAnnouncementsRead(userId, data.map(a => a.id))
+          .catch(err => console.warn('Could not mark announcements read:', err))
       }
     } catch (err) {
       console.error('Failed to load announcements:', err)
@@ -230,9 +222,31 @@ export default function AnnouncementsList({
       if (append) setLoadingMore(false)
       else setLoading(false)
     }
-  }, [userId, userRole, userGrade, userSection])
+    // Visibility is resolved server-side from the caller's session, so nothing in
+    // this callback reads `userId` — it is listed only so that switching account
+    // reloads the feed rather than showing the previous user's page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   useEffect(() => { loadPage(0, false) }, [loadPage])
+
+  /**
+   * `?a=<id>` — a headline followed from the home notifications box. Once the
+   * first page is in, scroll that announcement into view so the user lands on
+   * the notice they clicked rather than the top of the feed. Read from
+   * window.location rather than useSearchParams so this stays a plain
+   * client-side effect with no Suspense boundary to thread through the page.
+   */
+  const scrolledToTarget = useRef(false)
+  useEffect(() => {
+    if (loading || scrolledToTarget.current) return
+    const targetId = new URLSearchParams(window.location.search).get('a')
+    if (!targetId) return
+    const el = document.getElementById(`announcement-${targetId}`)
+    if (!el) return
+    scrolledToTarget.current = true
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading, announcements])
 
   const handleLoadMore = () => loadPage(nextOffset, true)
   const handleDelete   = (id: string) => setAnnouncements(prev => prev.filter(a => a.id !== id))
@@ -312,7 +326,7 @@ export default function AnnouncementsList({
   const groups      = groupByDate(restItems)
 
   const renderCard = (ann: AnnouncementWithDetails) => (
-    <motion.div key={ann.id} variants={itemVariants} className="relative">
+    <motion.div key={ann.id} id={`announcement-${ann.id}`} variants={itemVariants} className="relative scroll-mt-24">
       <AnnouncementCard
         announcement={ann}
         canDelete={
@@ -326,8 +340,8 @@ export default function AnnouncementsList({
         onDelete={handleDelete}
         onPinChange={handlePinChange}
         userId={userId}
-        initialLikeCount={likeCounts[ann.id] ?? 0}
-        initialUserLiked={likedSet.has(ann.id)}
+        initialLikeCount={ann.like_count}
+        initialUserLiked={ann.liked_by_me}
       />
       <FullBleedRule />
     </motion.div>

@@ -84,9 +84,6 @@ export const QUESTION_KINDS: Record<QuestionKind, QuestionKindMeta> = {
   subjective:       { label: 'Subjective',           type: 'subjective', multiple_select: false, manual: true  },
 }
 
-export function isManualKind(kind: QuestionKind): boolean {
-  return QUESTION_KINDS[kind].manual
-}
 
 /** Recover the teacher-facing kind from the stored DB columns. */
 export function kindFromQuestion(type: QuestionType, multipleSelect: boolean): QuestionKind {

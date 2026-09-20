@@ -6,17 +6,7 @@ import { Loader2 } from 'lucide-react'
 import type { ClassroomWithDetails } from '@/lib/classrooms'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { isDarkLum } from '@/lib/bannerStyle'
-
-// Soft pastel palettes for classrooms without a custom banner. Stored as hex
-// stops so the label colour can be derived from the fill's luminance.
-const PASTEL_PALETTES = [
-  { from: '#a5f3fc', to: '#bae6fd' }, // cyan → sky
-  { from: '#ddd6fe', to: '#e9d5ff' }, // violet → purple
-  { from: '#fecdd3', to: '#fbcfe8' }, // rose → pink
-  { from: '#fde68a', to: '#fed7aa' }, // amber → orange
-  { from: '#a7f3d0', to: '#99f6e4' }, // emerald → teal
-  { from: '#bfdbfe', to: '#c7d2fe' }, // blue → indigo
-]
+import { pickClassroomPalette } from '@/lib/classroomPalette'
 
 // Alpha of the pastel veil laid over banner photos — softens the image and
 // also biases the luminance test toward dark (readable) text.
@@ -47,18 +37,16 @@ const OUTLINE_STYLE = {
 export function ClassroomButtonSkeleton({ heightClass }: { heightClass: string }) {
   return (
     <div
-      className={`relative ${heightClass} rounded-full overflow-hidden snap-start`}
+      className={`keep-round relative ${heightClass} rounded-full overflow-hidden snap-start`}
       style={OUTLINE_STYLE}
     >
-      <div className="absolute inset-0 rounded-full bg-slate-200/70 animate-pulse" />
+      <div className="keep-round absolute inset-0 rounded-full bg-slate-200/70 animate-pulse" />
     </div>
   )
 }
 
 interface ClassroomButtonProps {
   classroom: ClassroomWithDetails
-  /** Stable index into the pastel palette (keeps colours consistent per card). */
-  index: number
   /** Tailwind height class, e.g. `h-[42px]`. */
   heightClass: string
   /** Show the coordinator/creator name on a second line. */
@@ -69,9 +57,12 @@ interface ClassroomButtonProps {
 }
 
 export default function ClassroomButton({
-  classroom, index, heightClass, showTeacher = false, navigating, onNavigate,
+  classroom, heightClass, showTeacher = false, navigating, onNavigate,
 }: ClassroomButtonProps) {
-  const palette = PASTEL_PALETTES[index % PASTEL_PALETTES.length]
+  // Keyed off the classroom itself, not its place in the grid: the tile keeps
+  // its colour however the list is sorted, and the classroom's own banner
+  // opens in the same pastel.
+  const { from: fillFrom, to: fillTo } = pickClassroomPalette(classroom.id)
   const banner = classroom.banner_url
   const teacherName = classroom.coordinator?.full_name ?? classroom.creator?.full_name ?? null
 
@@ -80,7 +71,7 @@ export default function ClassroomButton({
   const [onDark, setOnDark] = useState(false)
   useEffect(() => {
     if (!banner) {
-      setOnDark(isDarkLum((hexToLuminance(palette.from) + hexToLuminance(palette.to)) / 2))
+      setOnDark(isDarkLum((hexToLuminance(fillFrom) + hexToLuminance(fillTo)) / 2))
       return
     }
     let active = true
@@ -90,10 +81,10 @@ export default function ClassroomButton({
       setOnDark(isDarkLum(eff))
     })
     return () => { active = false }
-  }, [banner, palette.from, palette.to])
+  }, [banner, fillFrom, fillTo])
 
   const translucentGrad =
-    `linear-gradient(135deg, ${hexA(palette.from, 0.6)} 0%, ${hexA(palette.to, 0.6)} 100%)`
+    `linear-gradient(135deg, ${hexA(fillFrom, 0.6)} 0%, ${hexA(fillTo, 0.6)} 100%)`
 
   return (
     <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
@@ -104,12 +95,12 @@ export default function ClassroomButton({
           home/page.tsx and academics/page.tsx) instead of resting mid-row
           with a shadow cut off at the viewport edge. */}
       <div
-        className={`relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
+        className={`keep-round relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
         style={banner ? OUTLINE_STYLE : { backgroundImage: translucentGrad, ...OUTLINE_STYLE }}
       >
         {/* Everything that needs clipping to the pill shape (banner image,
             gloss, text) lives in this inner layer instead. */}
-        <div className="absolute inset-0 rounded-full overflow-hidden backdrop-blur-md">
+        <div className="keep-round absolute inset-0 rounded-full overflow-hidden backdrop-blur-md">
           {banner && (
             <>
               <img

@@ -78,7 +78,7 @@ export default function BusCollectionSection() {
       'Amount (₹)': Number(r.amount) || 0,
     }))
     const label = range === 'custom' ? `${fromDate}_to_${toDate}` : range
-    exportRows(out, 'Bus Collection', `bus-collection-${label}`)
+    void exportRows(out, 'Bus Collection', `bus-collection-${label}`)
   }
 
   return (

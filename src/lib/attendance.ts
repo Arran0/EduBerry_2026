@@ -1,5 +1,5 @@
 import { supabase, UserProfile } from './supabase'
-import { fetchStaffDetailsMap } from './staffDetails'
+import { fetchStaffDirectoryMap } from './staffDetails'
 import { DEFAULT_TRUSTED_ACCURACY_M, LatLng, haversineDistance as haversine } from './geofence'
 import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
 
@@ -26,15 +26,30 @@ export interface AttendanceRecord {
   updated_at: string
 }
 
+/**
+ * Every column of a staff attendance row the app actually reads.
+ *
+ * Deliberately not `*`: the table also stores the raw latitude, longitude and
+ * accuracy of each of the four punches, and no screen has ever rendered them —
+ * the UI shows the server's verdict and the distance from the fence. Selecting
+ * `*` handed every viewer of the staff report their colleagues' precise
+ * check-in coordinates for the day, which is both a privacy leak and 12 needless
+ * columns on every row. Keep this list and the interface below in step.
+ */
+const STAFF_ATTENDANCE_COLUMNS =
+  'id, staff_id, date, status, ' +
+  'check_in_time, check_out_time, check_in_time_2, check_out_time_2, ' +
+  'check_in_distance_m, check_out_distance_m, check_in_distance_m_2, check_out_distance_m_2, ' +
+  'check_in_verdict, check_out_verdict, check_in_verdict_2, check_out_verdict_2, ' +
+  'geofence_passed, leave_application_id, marked_by, remarks, ' +
+  'forgotten_checkout_ack_at, created_at, updated_at'
+
 export interface StaffAttendanceRecord {
   id: string
   staff_id: string
   date: string
   status: StaffAttendanceStatus
   check_in_time: string | null
-  check_in_lat: number | null
-  check_in_lng: number | null
-  check_in_accuracy: number | null
   // Unsigned metres from the fence boundary at this punch, when a location
   // check ran (attendance_persist_off_campus_distance.sql) — null on a row
   // written before that migration, or when no check happened at all.
@@ -45,19 +60,10 @@ export interface StaffAttendanceRecord {
   // configured, no position taken, or the staff member is exempt.
   geofence_passed: boolean | null
   check_out_time: string | null
-  check_out_lat: number | null
-  check_out_lng: number | null
-  check_out_accuracy: number | null
   check_out_distance_m: number | null
   check_in_time_2: string | null
-  check_in_lat_2: number | null
-  check_in_lng_2: number | null
-  check_in_accuracy_2: number | null
   check_in_distance_m_2: number | null
   check_out_time_2: string | null
-  check_out_lat_2: number | null
-  check_out_lng_2: number | null
-  check_out_accuracy_2: number | null
   check_out_distance_m_2: number | null
   leave_application_id: string | null
   marked_by: string | null
@@ -100,9 +106,16 @@ export type LocationVerdict =
   | 'inside' | 'outside' | 'uncertain' | 'device_issue' | 'location_off'
   | 'no_fix' | 'exempt' | 'no_fence'
 
+/** The slice of an attendance row the student calendars actually render. */
+export type AttendanceDayRecord = Pick<AttendanceRecord, 'id' | 'date' | 'status'>
+
+/** The slice a mark sheet needs to seed its editor rows. */
+export type AttendanceSheetRecord =
+  Pick<AttendanceRecord, 'status' | 'remarks' | 'leave_application_id'>
+
 export interface AttendanceSheetRow {
   student: UserProfile
-  record: AttendanceRecord | null
+  record: AttendanceSheetRecord | null
 }
 
 export interface AttendanceSummary {
@@ -213,7 +226,7 @@ export interface DayTimingGroupInput {
 }
 
 export interface StaffMonthlyStats {
-  working_days: number   // weekdays in month that are not holidays, up to today
+  working_days: number   // days in month up to today, minus non-working days — NOT reduced by holidays
   present: number
   late: number
   half_day: number
@@ -222,14 +235,8 @@ export interface StaffMonthlyStats {
   absent: number
   e: number
   holidays: number
-  present_pct: number    // (present + late + wfh + 0.5*half_day + e) / working_days
-}
-
-// Statuses that count as the staff member having shown up for work.
-export const PRESENT_STATUSES: StaffAttendanceStatus[] = ['present', 'late', 'wfh', 'half_day']
-
-export function isPresentStatus(status: StaffAttendanceStatus): boolean {
-  return PRESENT_STATUSES.includes(status)
+  non_working: number    // excluded entirely from working_days — unpaid, not worked
+  present_pct: number    // (present + late + wfh + 0.5*half_day + e + holidays) / (working_days - on_leave)
 }
 
 // ============================================
@@ -254,16 +261,6 @@ export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, strin
   wfh: 'Work from Home',
   half_day: 'Half Day',
   e: 'Exception',
-}
-
-export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
-  present: 'bg-green-100 text-green-700 border-green-200',
-  absent: 'bg-red-100 text-red-700 border-red-200',
-  late: 'bg-amber-100 text-amber-700 border-amber-200',
-  on_leave: 'bg-blue-100 text-blue-700 border-blue-200',
-  excused: 'bg-purple-100 text-purple-700 border-purple-200',
-  on_duty: 'bg-teal-100 text-teal-700 border-teal-200',
-  half_day: 'bg-orange-100 text-orange-700 border-orange-200',
 }
 
 export const STAFF_ATTENDANCE_STATUS_COLORS: Record<StaffAttendanceStatus, string> = {
@@ -322,7 +319,6 @@ export type LocationWarningKind = 'off_campus' | 'no_access' | 'device_issue'
 const KIND_SEVERITY: LocationWarningKind[] = ['off_campus', 'no_access', 'device_issue']
 
 /** Verdicts that mean "written, but the location was not confirmed". */
-export const LOCATION_WARNING_VERDICTS: LocationVerdict[] = ['outside', 'location_off', 'device_issue']
 
 const VERDICT_KIND: Partial<Record<LocationVerdict, LocationWarningKind>> = {
   outside: 'off_campus',
@@ -361,7 +357,7 @@ export interface LocationWarning {
   details: string[]
 }
 
-const PUNCH_SLOTS = [
+export const PUNCH_SLOTS = [
   { label: 'Check-in',        verdict: 'check_in_verdict',    time: 'check_in_time',    distance: 'check_in_distance_m' },
   { label: 'Check-out',       verdict: 'check_out_verdict',   time: 'check_out_time',   distance: 'check_out_distance_m' },
   { label: 'Return check-in', verdict: 'check_in_verdict_2',  time: 'check_in_time_2',  distance: 'check_in_distance_m_2' },
@@ -535,14 +531,14 @@ export async function fetchMyAttendanceByMonth(
   year: number,
   month: number, // 1-based
   homeroomId?: string
-): Promise<AttendanceRecord[]> {
+): Promise<AttendanceDayRecord[]> {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
   let query = supabase
     .from('attendance_records')
-    .select('*')
+    .select('id, date, status')
     .eq('student_id', studentId)
     .gte('date', startDate)
     .lte('date', endDate)
@@ -628,7 +624,7 @@ export async function fetchAttendanceSheet(
   // Fetch existing records for this homeroom+date
   const { data: records, error: recError } = await supabase
     .from('attendance_records')
-    .select('*')
+    .select('student_id, status, remarks, leave_application_id')
     .eq('homeroom_id', homeroomId)
     .eq('date', date)
 
@@ -636,7 +632,7 @@ export async function fetchAttendanceSheet(
     console.error('fetchAttendanceSheet records error:', recError)
   }
 
-  const recordByStudent: Record<string, AttendanceRecord> = {}
+  const recordByStudent: Record<string, AttendanceSheetRecord> = {}
   for (const r of records ?? []) {
     recordByStudent[r.student_id] = r
   }
@@ -650,6 +646,12 @@ export async function fetchAttendanceSheet(
   })
 }
 
+/**
+ * Saves a homeroom's marked sheet in one upsert.
+ *
+ * As in adminMarkStaffAttendance, `markedBy` is informational — the
+ * `force_marked_by` trigger stores auth.uid() regardless of what is sent.
+ */
 export async function bulkMarkAttendance(
   homeroomId: string,
   date: string,
@@ -709,9 +711,12 @@ export async function syncLeaveToStudentAttendance(
   if (memError || !memberships?.length) return
 
   // OD leave → Present (student is working, just off-site); half day → half
-  // day; casual/medical → Absent
+  // day; late permit → late; casual/medical → Absent
   const attendanceStatus: AttendanceStatus =
-    leaveType === 'on_duty' ? 'present' : leaveType === 'half_day' ? 'half_day' : 'absent'
+    leaveType === 'on_duty' ? 'present'
+      : leaveType === 'half_day' ? 'half_day'
+        : leaveType === 'late' ? 'late'
+          : 'absent'
 
   const dates = getDatesBetween(startDate, endDate)
   const rows: Record<string, unknown>[] = []
@@ -745,11 +750,14 @@ export async function syncLeaveToStaffAttendance(
   leaveType?: string
 ): Promise<void> {
   const dates = getDatesBetween(startDate, endDate)
-  // On Duty auto-marks Present, Half Day Permit auto-marks Half Day, and any
-  // other approved leave auto-marks Absent — status only ever lands on one of
-  // the five manual options (P/A/Late/½/Exception).
+  // On Duty auto-marks Present, Half Day Permit auto-marks Half Day, Late
+  // Permit auto-marks Late, and any other approved leave auto-marks Absent —
+  // status only ever lands on one of the five manual options (P/A/Late/½/Exception).
   const status: StaffAttendanceStatus =
-    leaveType === 'on_duty' ? 'present' : leaveType === 'half_day' ? 'half_day' : 'absent'
+    leaveType === 'on_duty' ? 'present'
+      : leaveType === 'half_day' ? 'half_day'
+        : leaveType === 'late' ? 'late'
+          : 'absent'
 
   const rows = dates.map(date => ({
     staff_id: staffId,
@@ -841,7 +849,7 @@ function minutesFromCutoff(cutoff: string | null | undefined): number | null {
  * cutoff is actually configured in. Mirrors attendance_minute_of_day() in SQL,
  * which is what the punch itself is scored by.
  */
-export function isPastCutoff(
+function isPastCutoff(
   cutoff: string | null | undefined,
   now: Date,
   timezone?: string | null
@@ -1013,23 +1021,6 @@ export async function checkOutStaff(reading?: PunchReading, failure?: string | n
   return punch('checkout', reading, failure)
 }
 
-/** Staff edits the status of their own attendance entry (any date). */
-export async function staffUpdateOwnStatus(
-  staffId: string,
-  date: string,
-  status: StaffAttendanceStatus
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('staff_attendance_records')
-    .upsert({ staff_id: staffId, date, status }, { onConflict: 'staff_id,date' })
-
-  if (error) {
-    console.error('staffUpdateOwnStatus error:', error)
-    return false
-  }
-  return true
-}
-
 export async function fetchMyStaffAttendance(
   staffId: string,
   year: number,
@@ -1041,7 +1032,7 @@ export async function fetchMyStaffAttendance(
 
   const { data, error } = await supabase
     .from('staff_attendance_records')
-    .select('*')
+    .select(STAFF_ATTENDANCE_COLUMNS)
     .eq('staff_id', staffId)
     .gte('date', startDate)
     .lte('date', endDate)
@@ -1051,7 +1042,7 @@ export async function fetchMyStaffAttendance(
     console.error('fetchMyStaffAttendance error:', error)
     return []
   }
-  return data ?? []
+  return (data ?? []) as unknown as StaffAttendanceRecord[]
 }
 
 /**
@@ -1074,7 +1065,7 @@ export async function fetchOpenPunchRecords(
 
   const { data, error } = await supabase
     .from('staff_attendance_records')
-    .select('*')
+    .select(STAFF_ATTENDANCE_COLUMNS)
     .eq('staff_id', staffId)
     .lt('date', beforeDate)
     .gte('date', sinceDate)
@@ -1086,7 +1077,7 @@ export async function fetchOpenPunchRecords(
     console.error('fetchOpenPunchRecords error:', error)
     return []
   }
-  return data ?? []
+  return (data ?? []) as unknown as StaffAttendanceRecord[]
 }
 
 /**
@@ -1119,25 +1110,6 @@ export async function fetchProfileNameById(id: string): Promise<string | null> {
   return data?.full_name ?? null
 }
 
-export async function fetchAllStaffByDate(date: string): Promise<StaffAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select(`
-      *,
-      staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt
-      )
-    `)
-    .eq('date', date)
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    console.error('fetchAllStaffByDate error:', error)
-    return []
-  }
-  return data ?? []
-}
-
 // Roles that appear in the staff attendance report. Admins are included by
 // default; a specific staff member (any role) can be hidden from attendance
 // lists/counts individually via profiles.attendance_hidden (Settings → Attendance).
@@ -1155,7 +1127,7 @@ export async function fetchStaffAttendanceReportByDate(
   const { data, error } = await supabase
     .from('staff_attendance_records')
     .select(`
-      *,
+      ${STAFF_ATTENDANCE_COLUMNS},
       staff:profiles!staff_attendance_records_staff_id_fkey(
         id, email, full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
       )
@@ -1166,7 +1138,9 @@ export async function fetchStaffAttendanceReportByDate(
     console.error('fetchStaffAttendanceReportByDate error:', error)
     return []
   }
-  return (data ?? []).filter(r => r.staff && !r.staff.attendance_hidden && !r.staff.is_banned)
+  return ((data ?? []) as unknown as StaffAttendanceRecord[]).filter(r =>
+    r.staff && !r.staff.attendance_hidden && !r.staff.is_banned && STAFF_ROLES.includes(r.staff.role)
+  )
 }
 
 /** Student attendance status values for the given homerooms on a date. Used
@@ -1189,6 +1163,44 @@ export async function fetchStudentAttendanceStatusesForHomerooms(
   return (data ?? []) as { status: AttendanceStatus }[]
 }
 
+// Present/absent status sets shared by every screen that tallies student
+// attendance in the browser (the report, the class-teacher card) — late and
+// on-duty count as present, on-leave counts as absent, so results always agree
+// with the categorization the Student Attendance report displays.
+// The same split is encoded in the `student_attendance_tally` and
+// `homeroom_attendance_counts` functions, which do their counting in the
+// database; change both together.
+export const STUDENT_PRESENT_STATUSES = new Set<AttendanceStatus>(['present', 'late', 'on_duty'])
+export const STUDENT_ABSENT_STATUSES  = new Set<AttendanceStatus>(['absent', 'on_leave'])
+
+export interface StudentAttendanceTally { present: number; absent: number; irregular: number }
+
+/**
+ * Whole-school present / absent / irregular tallies for a date.
+ *
+ * Counted in the database (`student_attendance_tally`) rather than by three
+ * separate exact-count round trips from the browser: one query instead of
+ * three on a home-page tile every manager loads, and no dependence on
+ * PostgREST's row cap, since no rows travel at all. The function is
+ * SECURITY INVOKER, so RLS still decides which rows are countable — a student
+ * calling it sees exactly what they could already count for themselves.
+ */
+export async function fetchStudentAttendanceTallyByDate(date: string): Promise<StudentAttendanceTally> {
+  const { data, error } = await supabase
+    .rpc('student_attendance_tally', { p_date: date })
+    .maybeSingle<StudentAttendanceTally>()
+
+  if (error) {
+    console.error('fetchStudentAttendanceTallyByDate error:', error)
+    return { present: 0, absent: 0, irregular: 0 }
+  }
+  return {
+    present: data?.present ?? 0,
+    absent: data?.absent ?? 0,
+    irregular: data?.irregular ?? 0,
+  }
+}
+
 /** Head-count of trackable staff (excludes hidden and resigned staff). Cheap COUNT query. */
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
@@ -1204,6 +1216,13 @@ export async function fetchTrackedStaffCount(): Promise<number> {
   return count ?? 0
 }
 
+/**
+ * Admin / principal / coordinator sets a staff member's status for a day.
+ *
+ * `markedBy` is the caller's own id. It is sent for clarity, not for trust:
+ * a `force_marked_by` trigger overwrites the stored value with auth.uid(), so
+ * the row is always attributed to the session that actually wrote it.
+ */
 export async function adminMarkStaffAttendance(
   staffId: string,
   date: string,
@@ -1226,6 +1245,20 @@ export async function adminMarkStaffAttendance(
 
   if (error) {
     console.error('adminMarkStaffAttendance error:', error)
+    return false
+  }
+  return true
+}
+
+/** Removes a mark, putting the staff member back to "not marked" for that day. */
+export async function clearStaffAttendance(staffId: string, date: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff_attendance_records')
+    .delete()
+    .eq('staff_id', staffId)
+    .eq('date', date)
+  if (error) {
+    console.error('clearStaffAttendance error:', error)
     return false
   }
   return true
@@ -1392,7 +1425,7 @@ export async function saveGeofenceZones(
 }
 
 /** The zone one staff member belongs to, or null when they use the school-wide centre. */
-export async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
+async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
   const { data: member, error: memError } = await supabase
     .from('attendance_geofence_zone_members')
     .select('zone_id')
@@ -1461,121 +1494,6 @@ export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<E
 // question that should have set the original 75m cap and didn't.
 // ============================================
 
-export interface LocationAttempt {
-  id: string
-  staff_id: string
-  date: string
-  action: 'checkin' | 'checkout'
-  accuracy_m: number | null
-  best_accuracy_m: number | null
-  spread_m: number | null
-  sample_count: number | null
-  agreeing_count: number | null
-  acquisition_ms: number | null
-  coarse_lock: boolean
-  verdict: LocationVerdict
-  distance_m: number | null
-  margin_m: number | null
-  accepted: boolean
-  failure: string | null
-  user_agent: string | null
-  created_at: string
-  staff?: UserProfile
-}
-
-export interface LocationAttemptStats {
-  total: number
-  accepted: number
-  refused: number
-  uncertain: number
-  coarse: number
-  /** Accepted with no position at all, because the device could not get one. */
-  deviceIssue: number
-  /** Refused because location access was off — a setting, not a device fault. */
-  locationOff: number
-  /** No position, on rows written before the two cases above were separated. */
-  noFix: number
-  /** Median reported accuracy across attempts that produced a fix. */
-  medianAccuracyM: number | null
-  /** 95th-percentile accuracy — the tail that the threshold has to cope with. */
-  p95AccuracyM: number | null
-  /** Staff with the most refused or uncertain attempts, worst first. */
-  worstAffected: { staffId: string; name: string; problemCount: number; attempts: number }[]
-}
-
-export async function fetchLocationAttempts(
-  startDate: string,
-  endDate: string,
-  staffId?: string,
-): Promise<LocationAttempt[]> {
-  let query = supabase
-    .from('attendance_location_attempts')
-    .select(`
-      *,
-      staff:profiles!attendance_location_attempts_staff_id_fkey(id, full_name, role, avatar_url)
-    `)
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .order('created_at', { ascending: false })
-    .limit(2000)
-
-  if (staffId) query = query.eq('staff_id', staffId)
-
-  const { data, error } = await query
-  if (error) {
-    console.error('fetchLocationAttempts error:', error)
-    return []
-  }
-  return (data ?? []) as unknown as LocationAttempt[]
-}
-
-function percentile(sorted: number[], p: number): number | null {
-  if (sorted.length === 0) return null
-  const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))
-  return Math.round(sorted[idx])
-}
-
-export function summariseLocationAttempts(attempts: LocationAttempt[]): LocationAttemptStats {
-  const accuracies = attempts
-    .map(a => a.accuracy_m)
-    .filter((a): a is number => a != null)
-    .sort((x, y) => x - y)
-
-  const perStaff = new Map<string, { name: string; problemCount: number; attempts: number }>()
-  for (const a of attempts) {
-    const entry = perStaff.get(a.staff_id) ?? {
-      name: a.staff?.full_name ?? 'Unknown', problemCount: 0, attempts: 0,
-    }
-    entry.attempts++
-    // "Problem" is anything that did not resolve cleanly for the staff member:
-    // a refusal, or an acceptance whose location was never actually confirmed.
-    if (!a.accepted || LOCATION_WARNING_VERDICTS.includes(a.verdict)) entry.problemCount++
-    perStaff.set(a.staff_id, entry)
-  }
-
-  return {
-    total: attempts.length,
-    accepted: attempts.filter(a => a.accepted).length,
-    refused: attempts.filter(a => !a.accepted).length,
-    uncertain: attempts.filter(a => a.verdict === 'uncertain').length,
-    coarse: attempts.filter(a => a.coarse_lock).length,
-    deviceIssue: attempts.filter(a => a.verdict === 'device_issue').length,
-    locationOff: attempts.filter(a => a.verdict === 'location_off').length,
-    noFix: attempts.filter(a => a.verdict === 'no_fix').length,
-    medianAccuracyM: percentile(accuracies, 0.5),
-    p95AccuracyM: percentile(accuracies, 0.95),
-    worstAffected: [...perStaff.entries()]
-      .map(([staffId, v]) => ({ staffId, ...v }))
-      .filter(s => s.problemCount > 0)
-      .sort((a, b) => b.problemCount - a.problemCount)
-      .slice(0, 10),
-  }
-}
-
-// ============================================
-// Attendance Config (site_settings key: 'attendance_config')
-// ============================================
-
 export async function fetchAttendanceConfig(): Promise<AttendanceConfig> {
   const { data, error } = await supabase
     .from('site_settings')
@@ -1616,50 +1534,259 @@ export async function saveAttendanceConfig(config: AttendanceConfig): Promise<bo
 }
 
 // ============================================
+// Scope-based day rules — shared engine behind Holidays and Non-working Days.
+// Each is its own table (attendance_holidays / attendance_non_working_days +
+// a *_members side table), but both now support the same date-vs-weekday
+// split attendance_day_timings already uses for cutoffs:
+//   * scope_type = 'date'    → one exact date (the original behaviour)
+//   * scope_type = 'weekday' → repeats every week on that weekday, so a
+//     standing weekly off (Sunday) doesn't need re-entering every week —
+//     see add_attendance_holiday_weekday_scope.sql for why that mattered:
+//     an unmarked Sunday was silently scored as an unpaid absence in payroll.
+// A date rule wins over a matching weekday rule for the same calendar date
+// (mirrors resolveLateCutoff's date-over-weekday priority).
+// ============================================
+
+interface ScopeRuleRow {
+  id: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
+  name: string
+  is_default: boolean
+}
+
+interface ScopeRuleGroup extends ScopeRuleRow {
+  staff_ids: string[]
+}
+
+interface ScopeRuleGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
+
+/** Which table pair a call operates on — the only thing that differs between Holidays and Non-working Days. */
+interface ScopeRuleTables {
+  table: string
+  membersTable: string
+  memberFk: string
+  columns: string
+  defaultLabel: string
+  groupLabel: string
+}
+
+const HOLIDAY_TABLES: ScopeRuleTables = {
+  table: 'attendance_holidays',
+  membersTable: 'attendance_holiday_members',
+  memberFk: 'holiday_id',
+  columns: 'id, scope_type, scope_date, scope_weekday, name, is_default',
+  defaultLabel: 'Holiday',
+  groupLabel: 'Group holiday',
+}
+
+const NON_WORKING_DAY_TABLES: ScopeRuleTables = {
+  table: 'attendance_non_working_days',
+  membersTable: 'attendance_non_working_day_members',
+  memberFk: 'non_working_day_id',
+  columns: 'id, scope_type, scope_date, scope_weekday, name, is_default',
+  defaultLabel: 'Non-working day',
+  groupLabel: 'Group non-working day',
+}
+
+async function attachScopeMembers(rows: ScopeRuleRow[], t: ScopeRuleTables): Promise<ScopeRuleGroup[]> {
+  if (rows.length === 0) return []
+  const { data: members, error } = await supabase
+    .from(t.membersTable)
+    .select(`${t.memberFk}, staff_id`)
+    .in(t.memberFk, rows.map(r => r.id))
+
+  if (error) console.error(`attachScopeMembers(${t.membersTable}) error:`, error)
+
+  const staffByRule = new Map<string, string[]>()
+  for (const m of (members ?? []) as unknown as Record<string, string>[]) {
+    const key = m[t.memberFk]
+    if (!staffByRule.has(key)) staffByRule.set(key, [])
+    staffByRule.get(key)!.push(m.staff_id)
+  }
+  return rows.map(r => ({ ...r, staff_ids: staffByRule.get(r.id) ?? [] }))
+}
+
+/** Rules directly attached to one scope (an exact date, or one weekday number). */
+async function fetchScopeRulesByScope(t: ScopeRuleTables, scope: DayTimingScope): Promise<ScopeRuleGroup[]> {
+  let query = supabase.from(t.table).select(t.columns).eq('scope_type', scope.type)
+  query = scope.type === 'date' ? query.eq('scope_date', scope.date) : query.eq('scope_weekday', scope.weekday)
+
+  const { data, error } = await query
+  if (error) {
+    console.error(`fetchScopeRulesByScope(${t.table}) error:`, error)
+    return []
+  }
+  return attachScopeMembers((data ?? []) as unknown as ScopeRuleRow[], t)
+}
+
+/** Every rule in effect for a calendar date: exact-date rules first, then any weekly-recurring rule for that weekday. */
+async function fetchScopeRulesForDate(t: ScopeRuleTables, date: string): Promise<ScopeRuleGroup[]> {
+  const weekday = new Date(date + 'T12:00:00').getDay()
+  const [dateRules, weekdayRules] = await Promise.all([
+    fetchScopeRulesByScope(t, { type: 'date', date }),
+    fetchScopeRulesByScope(t, { type: 'weekday', weekday }),
+  ])
+  return [...dateRules, ...weekdayRules]
+}
+
+/** Every rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+async function fetchAllScopeRules(t: ScopeRuleTables): Promise<ScopeRuleGroup[]> {
+  const { data: rows, error } = await supabase
+    .from(t.table)
+    .select(t.columns)
+    .order('scope_type', { ascending: true })
+    .order('scope_weekday', { ascending: true })
+    .order('scope_date', { ascending: true })
+
+  if (error) {
+    console.error(`fetchAllScopeRules(${t.table}) error:`, error)
+    return []
+  }
+  return attachScopeMembers((rows ?? []) as unknown as ScopeRuleRow[], t)
+}
+
+/**
+ * Replaces every rule for one scope with the given set (delete-then-insert).
+ * Pass an empty array to clear the rule for that scope entirely.
+ */
+async function saveScopeRules(
+  t: ScopeRuleTables,
+  scope: DayTimingScope,
+  groups: ScopeRuleGroupInput[],
+  createdBy: string,
+): Promise<boolean> {
+  let delQuery = supabase.from(t.table).select('id').eq('scope_type', scope.type)
+  delQuery = scope.type === 'date' ? delQuery.eq('scope_date', scope.date) : delQuery.eq('scope_weekday', scope.weekday)
+
+  const { data: existing, error: fetchError } = await delQuery
+  if (fetchError) {
+    console.error(`saveScopeRules(${t.table}) fetch error:`, fetchError)
+    return false
+  }
+
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase.from(t.table).delete().in('id', existing.map(r => r.id))
+    if (delError) {
+      console.error(`saveScopeRules(${t.table}) delete error:`, delError)
+      return false
+    }
+  }
+
+  if (groups.length === 0) return true
+
+  const rows = groups.map(g => ({
+    id: crypto.randomUUID(),
+    scope_type: scope.type,
+    scope_date: scope.type === 'date' ? scope.date : null,
+    scope_weekday: scope.type === 'weekday' ? scope.weekday : null,
+    name: g.name.trim() || (g.is_default ? t.defaultLabel : t.groupLabel),
+    is_default: g.is_default,
+    created_by: createdBy,
+  }))
+
+  const { error: insError } = await supabase.from(t.table).insert(rows)
+  if (insError) {
+    console.error(`saveScopeRules(${t.table}) insert error:`, insError)
+    return false
+  }
+
+  const memberRows = groups.flatMap((g, i) =>
+    g.staff_ids.map(staff_id => ({ [t.memberFk]: rows[i].id, staff_id }))
+  )
+
+  if (memberRows.length > 0) {
+    const { error: memInsError } = await supabase.from(t.membersTable).insert(memberRows)
+    if (memInsError) {
+      console.error(`saveScopeRules(${t.membersTable}) members insert error:`, memInsError)
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Resolves every is_default rule (date-scoped and weekly-recurring) into
+ * concrete per-date entries for one calendar month — what the mini calendar
+ * and payroll actually consume. A date rule wins over a weekday rule that
+ * would otherwise also cover that date.
+ */
+async function fetchResolvedDatesForMonth(
+  t: ScopeRuleTables, year: number, month: number,
+): Promise<{ id: string; date: string; name: string }[]> {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  const [dateRes, weekdayRes] = await Promise.all([
+    supabase.from(t.table).select('id, scope_date, name').eq('is_default', true).eq('scope_type', 'date')
+      .gte('scope_date', startDate).lte('scope_date', endDate),
+    supabase.from(t.table).select('id, scope_weekday, name').eq('is_default', true).eq('scope_type', 'weekday'),
+  ])
+  if (dateRes.error) console.error(`fetchResolvedDatesForMonth(${t.table}) date error:`, dateRes.error)
+  if (weekdayRes.error) console.error(`fetchResolvedDatesForMonth(${t.table}) weekday error:`, weekdayRes.error)
+
+  const byDate = new Map<string, { id: string; date: string; name: string }>()
+  for (const r of (dateRes.data ?? []) as { id: string; scope_date: string; name: string }[]) {
+    byDate.set(r.scope_date, { id: r.id, date: r.scope_date, name: r.name })
+  }
+
+  const weekdayRules = (weekdayRes.data ?? []) as { id: string; scope_weekday: number; name: string }[]
+  if (weekdayRules.length > 0) {
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      if (byDate.has(dateStr)) continue // an exact-date rule already covers this day
+      const rule = weekdayRules.find(r => r.scope_weekday === new Date(dateStr + 'T12:00:00').getDay())
+      if (rule) byDate.set(dateStr, { id: `${rule.id}:${dateStr}`, date: dateStr, name: rule.name })
+    }
+  }
+
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+// ============================================
 // Holidays (whole-school, is_default rows only — the simple case used by
 // personal calendars and the home dashboard, which aren't staff-aware)
 // ============================================
 
 export async function fetchHolidays(year?: number, month?: number): Promise<Holiday[]> {
-  let query = supabase.from('attendance_holidays').select('id, date, name').eq('is_default', true)
-
-  if (year != null && month != null) {
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const lastDay = new Date(year, month, 0).getDate()
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    query = query.gte('date', startDate).lte('date', endDate)
+  if (year == null || month == null) {
+    // No month bound to expand weekday rules against (unbounded) — not used
+    // by any current caller, so this stays limited to exact-date rules only.
+    const { data, error } = await supabase
+      .from('attendance_holidays')
+      .select('id, scope_date, name')
+      .eq('is_default', true).eq('scope_type', 'date')
+      .order('scope_date', { ascending: true })
+    if (error) { console.error('fetchHolidays error:', error); return [] }
+    return ((data ?? []) as { id: string; scope_date: string; name: string }[])
+      .map(r => ({ id: r.id, date: r.scope_date, name: r.name }))
   }
-
-  const { data, error } = await query.order('date', { ascending: true })
-  if (error) {
-    console.error('fetchHolidays error:', error)
-    return []
-  }
-  return (data ?? []) as Holiday[]
+  return fetchResolvedDatesForMonth(HOLIDAY_TABLES, year, month)
 }
 
 export async function fetchHolidayByDate(date: string): Promise<Holiday | null> {
-  const { data, error } = await supabase
-    .from('attendance_holidays')
-    .select('id, date, name')
-    .eq('date', date)
-    .eq('is_default', true)
-    .maybeSingle()
-  if (error) {
-    console.error('fetchHolidayByDate error:', error)
-    return null
-  }
-  return (data as Holiday) ?? null
+  const rules = await fetchScopeRulesForDate(HOLIDAY_TABLES, date)
+  const rule = rules.find(r => r.is_default)
+  return rule ? { id: rule.id, date, name: rule.name } : null
 }
 
 // ============================================
-// Holiday groups — a date's holiday(s), optionally split so only specific
+// Holiday groups — a scope's holiday(s), optionally split so only specific
 // teachers get the day off instead of the whole school (mirrors DayTimingGroup).
 // ============================================
 
 export interface HolidayGroup {
   id: string
-  date: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
   name: string
   is_default: boolean
   staff_ids: string[]
@@ -1671,126 +1798,101 @@ export interface HolidayGroupInput {
   staff_ids: string[]
 }
 
-const HOLIDAY_COLUMNS = 'id, date, name, is_default'
-
 export async function fetchHolidaysForDate(date: string): Promise<HolidayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_holidays')
-    .select(HOLIDAY_COLUMNS)
-    .eq('date', date)
-    .order('is_default', { ascending: false })
+  return fetchScopeRulesForDate(HOLIDAY_TABLES, date)
+}
 
-  if (error) {
-    console.error('fetchHolidaysForDate error:', error)
-    return []
-  }
-  if (!rows || rows.length === 0) return []
-
-  const { data: members, error: memError } = await supabase
-    .from('attendance_holiday_members')
-    .select('holiday_id, staff_id')
-    .in('holiday_id', rows.map(r => r.id))
-
-  if (memError) console.error('fetchHolidaysForDate members error:', memError)
-
-  const staffByHoliday = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
-    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
-  }
-
-  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+/** Every rule directly attached to one scope — used by the edit modal, which manages one scope's rules as a unit. */
+export async function fetchHolidaysByScope(scope: DayTimingScope): Promise<HolidayGroup[]> {
+  return fetchScopeRulesByScope(HOLIDAY_TABLES, scope)
 }
 
 /**
- * Replaces every holiday row for a date with the given set (delete-then-insert).
- * Pass an empty array to clear the holiday for that date entirely.
+ * Replaces every holiday row for a scope with the given set (delete-then-insert).
+ * Pass an empty array to clear the holiday for that scope entirely.
  */
 export async function saveHolidays(
-  date: string,
+  scope: DayTimingScope,
   groups: HolidayGroupInput[],
   createdBy: string
 ): Promise<boolean> {
-  const { data: existing, error: fetchError } = await supabase
-    .from('attendance_holidays')
-    .select('id')
-    .eq('date', date)
-
-  if (fetchError) {
-    console.error('saveHolidays fetch error:', fetchError)
-    return false
-  }
-
-  if (existing && existing.length > 0) {
-    const { error: delError } = await supabase
-      .from('attendance_holidays')
-      .delete()
-      .in('id', existing.map(r => r.id))
-    if (delError) {
-      console.error('saveHolidays delete error:', delError)
-      return false
-    }
-  }
-
-  if (groups.length === 0) return true
-
-  const rows = groups.map(g => ({
-    id: crypto.randomUUID(),
-    date,
-    name: g.name.trim() || (g.is_default ? 'Holiday' : 'Group holiday'),
-    is_default: g.is_default,
-    created_by: createdBy,
-  }))
-
-  const { error: insError } = await supabase.from('attendance_holidays').insert(rows)
-  if (insError) {
-    console.error('saveHolidays insert error:', insError)
-    return false
-  }
-
-  const memberRows = groups.flatMap((g, i) =>
-    g.staff_ids.map(staff_id => ({ holiday_id: rows[i].id, staff_id }))
-  )
-
-  if (memberRows.length > 0) {
-    const { error: memInsError } = await supabase.from('attendance_holiday_members').insert(memberRows)
-    if (memInsError) {
-      console.error('saveHolidays members insert error:', memInsError)
-      return false
-    }
-  }
-
-  return true
+  return saveScopeRules(HOLIDAY_TABLES, scope, groups, createdBy)
 }
 
-/** Every holiday rule that exists — for a management/overview list (e.g. Settings). */
+/** Every holiday rule that exists, of either scope — for a management/overview list (e.g. Settings). */
 export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
-  const { data: rows, error } = await supabase
-    .from('attendance_holidays')
-    .select(HOLIDAY_COLUMNS)
-    .order('date', { ascending: true })
-    .order('is_default', { ascending: false })
+  return fetchAllScopeRules(HOLIDAY_TABLES)
+}
 
-  if (error) {
-    console.error('fetchAllHolidayRules error:', error)
-    return []
+// ============================================
+// Non-working days — a day that is genuinely not worked and not paid, unlike
+// a Holiday (which is a paid day off and, since upgrade_attendance_holidays_
+// groups.sql / the working-days rework, no longer shrinks working days).
+// Mirrors the Holiday functions above one-for-one — see
+// add_attendance_non_working_days.sql.
+// ============================================
+
+/** Same shape as `Holiday`, backed by its own table (attendance_non_working_days). */
+export interface NonWorkingDay {
+  id: string
+  date: string
+  name: string
+}
+
+export async function fetchNonWorkingDays(year?: number, month?: number): Promise<NonWorkingDay[]> {
+  if (year == null || month == null) {
+    const { data, error } = await supabase
+      .from('attendance_non_working_days')
+      .select('id, scope_date, name')
+      .eq('is_default', true).eq('scope_type', 'date')
+      .order('scope_date', { ascending: true })
+    if (error) { console.error('fetchNonWorkingDays error:', error); return [] }
+    return ((data ?? []) as { id: string; scope_date: string; name: string }[])
+      .map(r => ({ id: r.id, date: r.scope_date, name: r.name }))
   }
-  if (!rows || rows.length === 0) return []
+  return fetchResolvedDatesForMonth(NON_WORKING_DAY_TABLES, year, month)
+}
 
-  const { data: members, error: memError } = await supabase
-    .from('attendance_holiday_members')
-    .select('holiday_id, staff_id')
-    .in('holiday_id', rows.map(r => r.id))
+export interface NonWorkingDayGroup {
+  id: string
+  scope_type: DayTimingScopeType
+  scope_date: string | null
+  scope_weekday: number | null
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
 
-  if (memError) console.error('fetchAllHolidayRules members error:', memError)
+export interface NonWorkingDayGroupInput {
+  name: string
+  is_default: boolean
+  staff_ids: string[]
+}
 
-  const staffByHoliday = new Map<string, string[]>()
-  for (const m of members ?? []) {
-    if (!staffByHoliday.has(m.holiday_id)) staffByHoliday.set(m.holiday_id, [])
-    staffByHoliday.get(m.holiday_id)!.push(m.staff_id)
-  }
+export async function fetchNonWorkingDaysForDate(date: string): Promise<NonWorkingDayGroup[]> {
+  return fetchScopeRulesForDate(NON_WORKING_DAY_TABLES, date)
+}
 
-  return rows.map(r => ({ ...r, staff_ids: staffByHoliday.get(r.id) ?? [] })) as HolidayGroup[]
+/** Every rule directly attached to one scope — used by the edit modal, which manages one scope's rules as a unit. */
+export async function fetchNonWorkingDaysByScope(scope: DayTimingScope): Promise<NonWorkingDayGroup[]> {
+  return fetchScopeRulesByScope(NON_WORKING_DAY_TABLES, scope)
+}
+
+/**
+ * Replaces every non-working-day row for a scope with the given set
+ * (delete-then-insert). Pass an empty array to clear it for that scope entirely.
+ */
+export async function saveNonWorkingDays(
+  scope: DayTimingScope,
+  groups: NonWorkingDayGroupInput[],
+  createdBy: string
+): Promise<boolean> {
+  return saveScopeRules(NON_WORKING_DAY_TABLES, scope, groups, createdBy)
+}
+
+/** Every non-working-day rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+export async function fetchAllNonWorkingDayRules(): Promise<NonWorkingDayGroup[]> {
+  return fetchAllScopeRules(NON_WORKING_DAY_TABLES)
 }
 
 // ============================================
@@ -1952,6 +2054,76 @@ export async function fetchEffectiveCutoffsForStaff(
   return null
 }
 
+// ============================================
+// Retroactive recomputation
+//
+// A day's status is decided at the punch, from the cutoffs in force at that
+// moment — and the rules a day is scored against are editable afterwards. Add a
+// checkout cutoff to a Saturday on Monday morning and every staff member who
+// left early that Saturday is still stamped Half Day, with the LOP rupees under
+// it, against a rule that no longer says what it said. Declaring a past day a
+// holiday or a non-working day has the same effect.
+//
+// attendance_retroactive_recompute.sql re-derives those statuses. It is not run
+// speculatively: every write to a cutoff / holiday / non-working-day rule marks
+// the affected scope dirty in `attendance_recompute_queue`, and this drains it.
+// With nothing queued — the overwhelmingly common case — the call is a single
+// indexed read of an empty table, which is what makes it reasonable for the
+// attendance report and the salary pages to call on every load.
+//
+// Only the punch's own rows move: a status an admin set by hand (`marked_by`)
+// or one written by the leave sync (`leave_application_id`) is left alone. See
+// the migration for the full list of guards, and for why a closed pay cycle is
+// deliberately not touched.
+// ============================================
+
+export interface AttendanceRecomputeResult {
+  /** Dates that were re-derived. 0 when nothing had changed. */
+  datesProcessed: number
+  /** Statuses that actually moved — always 0 on a second run over the same dates. */
+  recordsUpdated: number
+}
+
+const NO_RECOMPUTE: AttendanceRecomputeResult = { datesProcessed: 0, recordsUpdated: 0 }
+
+// A page load can reach this from several places at once (the report, a summary
+// card, a cycle sheet). They all want the same answer, so the first call in
+// flight is the one that runs and the rest wait on it.
+let recomputeInFlight: Promise<AttendanceRecomputeResult> | null = null
+
+/**
+ * Applies any attendance-rule change made since the last run, and reports what
+ * moved. Safe and cheap to call from any screen: callers without permission to
+ * change the rules get a no-op result rather than an error.
+ */
+export async function recomputePendingAttendance(): Promise<AttendanceRecomputeResult> {
+  if (recomputeInFlight) return recomputeInFlight
+
+  const run = (async (): Promise<AttendanceRecomputeResult> => {
+    const { data, error } = await supabase.rpc('attendance_recompute_pending')
+    if (error) {
+      // A deployment that hasn't had the migration applied yet lands here. The
+      // caller carries on with the statuses as stored — stale, but the same
+      // behaviour as before this existed, rather than a broken page.
+      console.error('recomputePendingAttendance error:', error)
+      return NO_RECOMPUTE
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      { dates_processed: number; records_updated: number } | undefined
+    return {
+      datesProcessed: Number(row?.dates_processed ?? 0),
+      recordsUpdated: Number(row?.records_updated ?? 0),
+    }
+  })()
+
+  recomputeInFlight = run
+  try {
+    return await run
+  } finally {
+    if (recomputeInFlight === run) recomputeInFlight = null
+  }
+}
+
 // All non-hidden, non-resigned trackable staff (teachers, coordinators, principals, admins).
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
@@ -1963,6 +2135,29 @@ export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
     .order('full_name', { ascending: true })
   if (error) {
     console.error('fetchAllTrackedStaff error:', error)
+    return []
+  }
+  return (data ?? []) as UserProfile[]
+}
+
+/**
+ * Drivers, trackable the same way school staff are (not resigned, not
+ * hidden). Drivers have a real login but no self check-in of their own — see
+ * ProtectedLayout, which routes role='driver' straight to /driver and away
+ * from this app entirely — so like ground-level support staff, every row is
+ * set by an admin. Folded into the Support Staff section of the attendance
+ * report rather than getting a self-service flow of its own.
+ */
+export async function fetchTrackedDrivers(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .eq('role', 'driver')
+    .eq('is_banned', false)
+    .eq('attendance_hidden', false)
+    .order('full_name', { ascending: true })
+  if (error) {
+    console.error('fetchTrackedDrivers error:', error)
     return []
   }
   return (data ?? []) as UserProfile[]
@@ -2037,48 +2232,6 @@ export async function fetchAllStaff(): Promise<UserProfile[]> {
   return (data ?? []) as UserProfile[]
 }
 
-/**
- * School-wide present/total summary via COUNT queries only — no row data fetched.
- * Safe to call for schools of any size.
- */
-export async function fetchSchoolAttendanceSummary(
-  date: string
-): Promise<{ present: number; total: number }> {
-  const [presentRes, totalRes] = await Promise.all([
-    supabase
-      .from('staff_attendance_records')
-      .select('*', { count: 'exact', head: true })
-      .eq('date', date)
-      .in('status', PRESENT_STATUSES),
-    supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .in('role', STAFF_ROLES)
-      .eq('is_banned', false)
-      .eq('attendance_hidden', false),
-  ])
-  return {
-    present: presentRes.count ?? 0,
-    total: totalRes.count ?? 0,
-  }
-}
-
-/** Lightweight staff name search for calendar view-as picker. Excludes resigned staff. */
-export async function searchStaff(
-  query: string
-): Promise<{ id: string; full_name: string; role: string }[]> {
-  if (query.trim().length < 2) return []
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, full_name, role')
-    .in('role', STAFF_ROLES)
-    .eq('is_banned', false)
-    .ilike('full_name', `%${query.trim()}%`)
-    .order('full_name')
-    .limit(8)
-  return (data ?? []) as { id: string; full_name: string; role: string }[]
-}
-
 /** Attendance records for a set of staff on a given date (used for present/total counts). */
 export async function fetchStaffAttendanceForDate(
   staffIds: string[],
@@ -2098,7 +2251,19 @@ export async function fetchStaffAttendanceForDate(
   return data ?? []
 }
 
-/** All attendance records for a set of staff across a whole month (no status filter) — payroll's raw input. */
+/**
+ * All attendance records for a set of staff across a whole month (no status
+ * filter) — payroll's raw input.
+ *
+ * Paged, and it has to be: a month for a whole payroll cycle is one row per
+ * staff member per marked day, so a school of 95 staff clears PostgREST's
+ * 1000-row response cap before the third week. A truncated reply is not an
+ * error — it arrives as a short list of perfectly valid rows — and the days it
+ * drops read as never marked, which `deriveDayStatus` turns into Absent. That
+ * silently inflates the Leave column, and every LOP rupee under it, for
+ * whichever staff happened to sit past the cut. Ordered so the paging window
+ * is stable between round-trips.
+ */
 export async function fetchMonthlyAttendanceRecords(
   staffIds: string[],
   year: number,
@@ -2108,18 +2273,30 @@ export async function fetchMonthlyAttendanceRecords(
   const start = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select('*')
-    .in('staff_id', staffIds)
-    .gte('date', start)
-    .lte('date', end)
 
-  if (error) {
-    console.error('fetchMonthlyAttendanceRecords error:', error)
-    return []
+  const PAGE = 1000
+  const out: StaffAttendanceRecord[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('staff_attendance_records')
+      .select(STAFF_ATTENDANCE_COLUMNS)
+      .in('staff_id', staffIds)
+      .gte('date', start)
+      .lte('date', end)
+      .order('staff_id', { ascending: true })
+      .order('date', { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) {
+      // Returning what has landed so far would understate attendance exactly
+      // the way the row cap did, so a failed page fails the whole fetch.
+      console.error('fetchMonthlyAttendanceRecords error:', error)
+      return []
+    }
+    out.push(...((data ?? []) as unknown as StaffAttendanceRecord[]))
+    if (!data || data.length < PAGE) break
   }
-  return data ?? []
+  return out
 }
 
 // ============================================
@@ -2129,18 +2306,24 @@ export async function fetchMonthlyAttendanceRecords(
 /**
  * Effective status for a calendar day, deriving Absent for working days with no
  * record. Every day of the week is treated the same — weekends are working days
- * unless explicitly marked a holiday. A day becomes Absent the moment it is
- * "today" or earlier and has no record — the staff member can still check in
- * to flip it to Present/Late. Returns null for non-working days (holiday /
- * future).
+ * unless explicitly marked a holiday or non-working day. A day becomes Absent
+ * the moment it is "today" or earlier and has no record — the staff member can
+ * still check in to flip it to Present/Late. Returns null for future days.
+ *
+ * A Holiday is a *paid* day off — see computeMonthlyStats, it still counts
+ * toward working days. A non-working day is neither worked nor paid, and a
+ * non-working rule wins over a holiday rule on the same date (an edge case
+ * that shouldn't normally arise, but the day can only be one or the other).
  */
 export function deriveDayStatus(
   dateStr: string,
   record: StaffAttendanceRecord | undefined,
   holidaySet: Set<string>,
+  nonWorkingSet: Set<string>,
   today: string,
-): StaffAttendanceStatus | 'holiday' | null {
+): StaffAttendanceStatus | 'holiday' | 'non_working' | null {
   if (record) return record.status
+  if (nonWorkingSet.has(dateStr)) return 'non_working'
   if (holidaySet.has(dateStr)) return 'holiday'
   if (dateStr > today) return null // future days
   return 'absent'
@@ -2152,21 +2335,24 @@ export function computeMonthlyStats(
   records: StaffAttendanceRecord[],
   holidays: Holiday[],
   today: string = new Date().toISOString().split('T')[0],
+  nonWorkingDays: (Holiday | NonWorkingDay)[] = [],
 ): StaffMonthlyStats {
   const holidaySet = new Set(holidays.map(h => h.date))
+  const nonWorkingSet = new Set(nonWorkingDays.map(h => h.date))
   const recordByDate = new Map(records.map(r => [r.date, r]))
   const lastDay = new Date(year, month, 0).getDate()
 
   const stats: StaffMonthlyStats = {
     working_days: 0, present: 0, late: 0, half_day: 0, wfh: 0,
-    on_leave: 0, absent: 0, e: 0, holidays: 0, present_pct: 0,
+    on_leave: 0, absent: 0, e: 0, holidays: 0, non_working: 0, present_pct: 0,
   }
 
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, today)
+    const eff = deriveDayStatus(dateStr, recordByDate.get(dateStr), holidaySet, nonWorkingSet, today)
     if (eff === null) continue
-    if (eff === 'holiday') { stats.holidays++; continue }
+    if (eff === 'non_working') { stats.non_working++; continue } // excluded entirely — unpaid, not worked
+    if (eff === 'holiday') { stats.holidays++; stats.working_days++; continue } // paid — counts toward working days
     // Working day
     stats.working_days++
     if (eff === 'on_leave') stats.on_leave++
@@ -2174,84 +2360,25 @@ export function computeMonthlyStats(
   }
 
   // Present percentage excludes approved leave days from the denominator.
+  // Holidays are credited as full paid days, same weight as Present.
   const denominator = stats.working_days - stats.on_leave
-  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5 + stats.e
+  const credited = stats.present + stats.late + stats.wfh + stats.half_day * 0.5 + stats.e + stats.holidays
   stats.present_pct = denominator > 0 ? Math.round((credited / denominator) * 100) : 0
   return stats
 }
 
 // ============================================
-// Absentee Lists (for manager dashboard)
+// All-student attendance report
+// (present + irregular, optionally per-homeroom)
 // ============================================
 
-export interface StudentAbsenteeRecord {
+/** One student's status for one day, as the report lists it. */
+export interface StudentAttendanceEntry {
   student: UserProfile
   status: AttendanceStatus
   homeroom_id: string
   homeroom_name?: string
 }
-
-export async function fetchStudentAbsenteesByDate(
-  date: string
-): Promise<StudentAbsenteeRecord[]> {
-  // Step 1: fetch raw attendance records for the date
-  const { data: records, error: recError } = await supabase
-    .from('attendance_records')
-    .select('student_id, homeroom_id, status')
-    .eq('date', date)
-    .in('status', ['absent', 'late', 'on_leave'])
-
-  if (recError) {
-    console.error('fetchStudentAbsenteesByDate records error:', recError)
-    return []
-  }
-  if (!records || records.length === 0) return []
-
-  // Step 2: fetch student profiles for the returned IDs
-  const studentIds = [...new Set(records.map(r => r.student_id))]
-  const { data: profiles, error: profError } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, role, avatar_url, grade, section')
-    .in('id', studentIds)
-
-  if (profError) {
-    console.error('fetchStudentAbsenteesByDate profiles error:', profError)
-    return []
-  }
-
-  // Step 3: fetch homeroom names for unique homeroom IDs
-  const homeroomIds = [...new Set(records.map(r => r.homeroom_id))]
-  const { data: homerooms } = await supabase
-    .from('homerooms')
-    .select('id, name')
-    .in('id', homeroomIds)
-
-  const profileById = new Map((profiles ?? []).map(p => [p.id, p as UserProfile]))
-  const homeroomNameById = new Map((homerooms ?? []).map(h => [h.id, h.name as string]))
-
-  const results: StudentAbsenteeRecord[] = []
-  for (const r of records) {
-    const student = profileById.get(r.student_id)
-    if (!student) continue
-    results.push({
-      student,
-      status: r.status as AttendanceStatus,
-      homeroom_id: r.homeroom_id,
-      homeroom_name: homeroomNameById.get(r.homeroom_id),
-    })
-  }
-  return results
-}
-
-// ── All-student attendance report (present + irregular, optionally per-homeroom) ──
-
-export type StudentAttendanceEntry = StudentAbsenteeRecord
-
-// Every status that is NOT a plain "present" — i.e. needs the manager's attention.
-// The report splits these further into "absent" and everything else ("irregular").
-export const STUDENT_NON_PRESENT_STATUSES: AttendanceStatus[] = [
-  'absent', 'late', 'half_day', 'on_leave', 'on_duty', 'excused',
-]
 
 // Attach profile + homeroom name to raw attendance rows (two cheap lookups, RLS-safe).
 async function hydrateStudentEntries(
@@ -2368,32 +2495,36 @@ export interface HomeroomAttendanceCounts {
   marked: number
 }
 
-// PostgREST caps a single response at 1000 rows, so walk the range in pages.
-// Ordered by student_id so the paging window is stable between round-trips.
-async function fetchHomeroomStatusRowsPaged(
+interface HomeroomTallyRow {
+  homeroom_id: string
+  present: number
+  absent: number
+  irregular: number
+}
+
+/**
+ * Per-homeroom tallies for a date, counted in the database.
+ *
+ * This used to pull every attendance row for the homerooms on screen — paged
+ * 1000 at a time past PostgREST's response cap — purely to add three numbers
+ * per homeroom in the browser. `homeroom_attendance_counts` returns one row
+ * per homeroom instead, so a whole-school page moves ~30 rows rather than the
+ * whole day's roster. SECURITY INVOKER, so RLS still applies.
+ */
+async function fetchHomeroomTallies(
   date: string,
   homeroomIds: string[]
-): Promise<{ homeroom_id: string; status: string }[]> {
+): Promise<HomeroomTallyRow[]> {
   if (homeroomIds.length === 0) return []
-  const PAGE = 1000
-  const out: { homeroom_id: string; status: string }[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('attendance_records')
-      .select('homeroom_id, status, student_id')
-      .eq('date', date)
-      .in('homeroom_id', homeroomIds)
-      .order('student_id', { ascending: true })
-      .range(from, from + PAGE - 1)
-
-    if (error) {
-      console.error('fetchHomeroomStatusRowsPaged error:', error)
-      break
-    }
-    out.push(...(data ?? []))
-    if (!data || data.length < PAGE) break
+  const { data, error } = await supabase.rpc('homeroom_attendance_counts', {
+    p_date: date,
+    p_homeroom_ids: homeroomIds,
+  })
+  if (error) {
+    console.error('fetchHomeroomTallies error:', error)
+    return []
   }
-  return out
+  return (data ?? []) as HomeroomTallyRow[]
 }
 
 /**
@@ -2442,16 +2573,11 @@ export async function fetchHomeroomAttendanceCountsByDate(
   }
   if (!homerooms || homerooms.length === 0) return { rows: [], total: count ?? 0 }
 
-  const records = await fetchHomeroomStatusRowsPaged(date, homerooms.map(h => h.id))
-
-  const tallyById = new Map<string, { present: number; absent: number; irregular: number }>()
-  for (const r of records) {
-    let t = tallyById.get(r.homeroom_id)
-    if (!t) { t = { present: 0, absent: 0, irregular: 0 }; tallyById.set(r.homeroom_id, t) }
-    if (r.status === 'present') t.present++
-    else if (r.status === 'absent') t.absent++
-    else t.irregular++
-  }
+  // Late and on-duty count as present, on leave counts as absent — matching
+  // the student-wise report's split. Only half day (and the rarely-used
+  // "excused") remain genuinely irregular. That split lives in the RPC now.
+  const tallies = await fetchHomeroomTallies(date, homerooms.map(h => h.id))
+  const tallyById = new Map(tallies.map(t => [t.homeroom_id, t]))
 
   const rows: HomeroomAttendanceCounts[] = homerooms.map(h => {
     const t = tallyById.get(h.id) ?? { present: 0, absent: 0, irregular: 0 }
@@ -2557,36 +2683,6 @@ export async function fetchStaffAbsenceStreaks(
   return result
 }
 
-export async function fetchStaffAbsenteesByDate(
-  date: string
-): Promise<StaffAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('staff_attendance_records')
-    .select(`
-      *,
-      staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url
-      )
-    `)
-    .eq('date', date)
-    .in('status', ['absent', 'late', 'half_day', 'on_leave'])
-    .order('status')
-
-  if (error) {
-    console.error('fetchStaffAbsenteesByDate error:', error)
-    return []
-  }
-  return data ?? []
-}
-
-// ============================================
-// Late Summary Report (admin) — tabular late-arrival log across a date range,
-// in the spirit of the "Late Daily Attendance Logs" export from biometric
-// face-ID systems: one row per late check-in, with employee code/department
-// (from staff_details) and how late they were against the cutoff in effect
-// that day (day-timing overrides, falling back to the school-wide cutoff).
-// ============================================
-
 export interface LateSummaryRow {
   date: string
   staff_id: string
@@ -2610,7 +2706,7 @@ export function formatMinutesAsHM(mins: number): string {
 // Same override priority as fetchEffectiveCutoffsForStaff, but against an
 // already-fetched timings list so a whole date range can be resolved without
 // re-querying per staff member.
-function resolveLateCutoff(
+export function resolveLateCutoff(
   timings: DayTimingGroup[],
   staffId: string,
   fallback: string | null
@@ -2626,6 +2722,100 @@ function resolveLateCutoff(
     if (everyone) return everyone.late_cutoff
   }
   return fallback
+}
+
+/** Sibling to resolveLateCutoff, resolving checkout_cutoff instead. */
+function resolveCheckoutCutoff(
+  timings: DayTimingGroup[],
+  staffId: string,
+  fallback: string | null
+): string | null {
+  const dateRules = timings.filter(t => t.scope_type === 'date')
+  const weekdayRules = timings.filter(t => t.scope_type === 'weekday')
+  for (const pool of [dateRules, weekdayRules]) {
+    const override = pool.find(t => !t.is_default && t.staff_ids.includes(staffId))
+    if (override) return override.checkout_cutoff
+  }
+  for (const pool of [dateRules, weekdayRules]) {
+    const everyone = pool.find(t => t.is_default)
+    if (everyone) return everyone.checkout_cutoff
+  }
+  return fallback
+}
+
+export interface AttendanceTimingDelta {
+  /** Minutes the check-in landed past the effective late cutoff. 0 if not late / no cutoff. */
+  lateByMinutes: number
+  /** Minutes the checkout landed before the effective checkout cutoff. 0 if not early / no cutoff. */
+  earlyByMinutes: number
+}
+
+/**
+ * For every 'late' or 'half_day' record given, how late the check-in was past
+ * the effective late cutoff, and/or how early the checkout was before the
+ * effective checkout cutoff — reusing the same per-date day-timing resolution
+ * and zone-aware minute math as fetchLateSummaryReport. Keyed
+ * `${staff_id}|${date}`. Used by payroll to apply a late/half-day grace period
+ * against the cutoff that actually applied to that staff member that day.
+ */
+export async function fetchAttendanceTimingDeltas(
+  records: Pick<StaffAttendanceRecord, 'staff_id' | 'date' | 'status' | 'check_in_time' | 'check_out_time'>[]
+): Promise<Map<string, AttendanceTimingDelta>> {
+  const relevant = records.filter(r => r.status === 'late' || r.status === 'half_day')
+  if (relevant.length === 0) return new Map()
+
+  // A month of payroll asks about ~30 distinct dates, and resolving each one
+  // through fetchDayTimingsForDate would re-read the *weekday* rules 30 times
+  // over — there are only ever seven of those. Splitting the two scopes and
+  // reading each weekday once is the same set of rules for the same dates,
+  // for roughly half the round trips; on a screen that already makes over a
+  // hundred, and in a browser that runs six at a time, that is the difference
+  // between slow and timing out.
+  const uniqueDates = [...new Set(relevant.map(r => r.date))]
+  const weekdayOf = (d: string) => new Date(d + 'T12:00:00').getDay()
+  const uniqueWeekdays = [...new Set(uniqueDates.map(weekdayOf))]
+
+  const [globalConfig, dateRuleSets, weekdayRuleSets, timezone] = await Promise.all([
+    fetchAttendanceConfig(),
+    Promise.all(uniqueDates.map(d => fetchDayTimingsByScope({ type: 'date', date: d }))),
+    Promise.all(uniqueWeekdays.map(w => fetchDayTimingsByScope({ type: 'weekday', weekday: w }))),
+    fetchAttendanceTimezone(),
+  ])
+
+  // Date rules first, then the weekday's — the same order fetchDayTimingsForDate
+  // concatenates them in, which is what resolveLateCutoff's precedence expects.
+  const rulesByWeekday = new Map(uniqueWeekdays.map((w, i) => [w, weekdayRuleSets[i]]))
+  const timingsByDate = new Map(uniqueDates.map((d, i) => [
+    d, [...dateRuleSets[i], ...(rulesByWeekday.get(weekdayOf(d)) ?? [])],
+  ]))
+
+  const out = new Map<string, AttendanceTimingDelta>()
+  for (const r of relevant) {
+    const timings = timingsByDate.get(r.date) ?? []
+    let lateByMinutes = 0
+    let earlyByMinutes = 0
+
+    if (r.status === 'late' && r.check_in_time) {
+      const cutoff = resolveLateCutoff(timings, r.staff_id, globalConfig.late_cutoff)
+      const cutoffMinutes = minutesFromCutoff(cutoff)
+      if (cutoffMinutes !== null) {
+        const checkInMinutes = minuteOfDayInZone(new Date(r.check_in_time), timezone)
+        lateByMinutes = Math.max(0, checkInMinutes - cutoffMinutes)
+      }
+    }
+
+    if (r.status === 'half_day' && r.check_out_time) {
+      const cutoff = resolveCheckoutCutoff(timings, r.staff_id, globalConfig.checkout_cutoff)
+      const cutoffMinutes = minutesFromCutoff(cutoff)
+      if (cutoffMinutes !== null) {
+        const checkOutMinutes = minuteOfDayInZone(new Date(r.check_out_time), timezone)
+        earlyByMinutes = Math.max(0, cutoffMinutes - checkOutMinutes)
+      }
+    }
+
+    out.set(`${r.staff_id}|${r.date}`, { lateByMinutes, earlyByMinutes })
+  }
+  return out
 }
 
 /**
@@ -2672,7 +2862,7 @@ export async function fetchLateSummaryReport(
   const [globalConfig, timingsPerDate, detailsMap, timezone] = await Promise.all([
     fetchAttendanceConfig(),
     Promise.all(uniqueDates.map(d => fetchDayTimingsForDate(d))),
-    fetchStaffDetailsMap(uniqueStaffIds),
+    fetchStaffDirectoryMap(uniqueStaffIds),
     fetchAttendanceTimezone(),
   ])
   const timingsByDate = new Map(uniqueDates.map((d, i) => [d, timingsPerDate[i]]))
