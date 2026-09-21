@@ -1,3 +1,4 @@
+import { invalidateFeeConfig } from '@/lib/fees/config'
 import { supabase, UserProfile } from './supabase'
 import { deriveYearCode } from '@/lib/academicYear'
 
@@ -148,12 +149,14 @@ export async function createFeeHead(input: FeeHeadInput): Promise<{ success: boo
     .select('id')
     .single()
   if (error) { console.error('createFeeHead failed:', error); return { success: false, error: error.message } }
+  invalidateFeeConfig()
   return { success: true, id: data.id }
 }
 
 export async function updateFeeHead(headId: string, input: Partial<FeeHeadInput>): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('fee_heads').update(input).eq('id', headId)
   if (error) { console.error('updateFeeHead failed:', error); return { success: false, error: error.message } }
+  invalidateFeeConfig()
   return { success: true }
 }
 
@@ -179,6 +182,7 @@ export async function deleteFeeHead(headId: string): Promise<{ success: boolean;
   }
   const { error } = await supabase.from('fee_heads').delete().eq('id', headId)
   if (error) { console.error('deleteFeeHead failed:', error); return { success: false, error: error.message } }
+  invalidateFeeConfig()
   return { success: true }
 }
 

@@ -23,7 +23,6 @@ import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
 import { gradeLabel } from '@/lib/grades'
@@ -37,12 +36,13 @@ import {
   type ConcessionRow, type DiscountTypeRow, type ScholarshipRow,
 } from '@/lib/fees/charges'
 
-type Tab = 'queue' | 'types' | 'scholarships' | 'granted'
+/** The two reference lists behind a concession, each opened as a popup. */
+type Sheet = 'types' | 'scholarships'
 
 export default function ConcessionsSection() {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
-  const [tab, setTab] = useState<Tab>('queue')
+  const [sheet, setSheet] = useState<Sheet | null>(null)
 
   const [types, setTypes] = useState<DiscountTypeRow[]>([])
   const [scholarships, setScholarships] = useState<ScholarshipRow[]>([])
@@ -101,43 +101,78 @@ export default function ConcessionsSection() {
 
   return (
     <>
-      {canApply && (
-        <div className="flex justify-end mb-2 px-3 sm:px-0">
-          <button onClick={() => setApplying(true)} className="inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] px-2.5 py-[7px]">
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <div className="flex-1" />
+        <button onClick={() => setSheet('types')} className={ADMIN.ghostBtn}>
+          <BadgePercent size={13} /> Discount types
+        </button>
+        {canScholarship && (
+          <button onClick={() => setSheet('scholarships')} className={ADMIN.ghostBtn}>
+            <Award size={13} /> Scholarships
+          </button>
+        )}
+        {canApply && (
+          <button onClick={() => setApplying(true)} className={ADMIN.darkBtn}>
             <Plus size={13} /> Apply one
           </button>
-        </div>
-      )}
-      <TabBar<Tab>
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { key: 'queue', label: 'Waiting', icon: Inbox, badge: pending.length },
-          { key: 'granted', label: 'Granted', icon: Check },
-          { key: 'types', label: 'Discount types', icon: BadgePercent },
-          { key: 'scholarships', label: 'Scholarships', icon: Award },
-        ]}
-      />
+        )}
+      </div>
 
       {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-      ) : tab === 'queue' ? (
-        <Queue rows={pending} names={names} types={types} scholarships={scholarships}
-               showAmounts={showAmounts} canApprove={canApprove} onDecided={load} />
-      ) : tab === 'granted' ? (
-        <Granted rows={granted} names={names} types={types} scholarships={scholarships}
-                 showAmounts={showAmounts} canRemove={canApprove}
-                 onRemove={setRemoving} />
-      ) : tab === 'types' ? (
-        <Types rows={types} showAmounts={showAmounts} canEdit={canScholarship || canApprove}
-               onEdit={setEditingType} />
       ) : (
-        <Scholarships rows={scholarships} showAmounts={showAmounts} canEdit={canScholarship}
-                      onEdit={setEditingScholarship} />
+        <div className="space-y-4">
+          {/* Waiting first, and only when something is: an approval queue that
+              is empty is a heading over nothing, and it used to be the tab the
+              screen always opened on. */}
+          {pending.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Inbox size={14} className="text-[#B8983C]" />
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">
+                  Waiting for a decision · {pending.length}
+                </h2>
+              </div>
+              <Queue rows={pending} names={names} types={types} scholarships={scholarships}
+                     showAmounts={showAmounts} canApprove={canApprove} onDecided={load} />
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Check size={14} className="text-[#B8983C]" />
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">Granted</h2>
+            </div>
+            <Granted rows={granted} names={names} types={types} scholarships={scholarships}
+                     showAmounts={showAmounts} canRemove={canApprove}
+                     onRemove={setRemoving} />
+          </div>
+        </div>
       )}
 
+      {sheet && (
+        <ModalShell
+          onClose={() => setSheet(null)}
+          sharp size="xl"
+          title={sheet === 'types' ? 'Discount types' : 'Scholarships'}
+          subtitle={sheet === 'types'
+            ? 'What may be given, and above what amount it needs approving'
+            : 'Somebody else’s money, against a budget'}
+          icon={sheet === 'types' ? <BadgePercent size={15} /> : <Award size={15} />}
+          iconClassName="bg-[#27272A] text-[#B8983C]"
+          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+        >
+          {sheet === 'types' ? (
+            <Types rows={types} showAmounts={showAmounts} canEdit={canScholarship || canApprove}
+                   onEdit={setEditingType} />
+          ) : (
+            <Scholarships rows={scholarships} showAmounts={showAmounts} canEdit={canScholarship}
+                          onEdit={setEditingScholarship} />
+          )}
+        </ModalShell>
+      )}
 
       {applying && year && (
         <ApplyConcessionSheet

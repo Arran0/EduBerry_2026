@@ -3,12 +3,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Who can do what with money.
 //
-// Two views of the same 28 permissions, because they answer different questions:
+// Three views of the same 28 permissions, because they answer different
+// questions. The grid is the screen; the other two are each a button, because
+// they are asked occasionally and a tab strip over a grid this dense is one
+// row of chrome too many:
 //
-//   By role    the grid an administrator sets up once
+//   By role    the grid an administrator sets up once — this screen
 //   By person  the override that makes "the accountant does everything except
 //              reverse a payment" possible without inventing a new role
-//   Coverage   "who can reverse a payment?" — a question a head teacher asks,
+//   Who can…   "who can reverse a payment?" — a question a head teacher asks,
 //              and one nobody can answer by reading a 28-by-7 grid
 //
 // The database is the authority for all of it; this screen only edits it.
@@ -16,6 +19,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, Loader2, Search, ShieldCheck, User, X } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
 import { supabase } from '@/lib/supabase'
 import { ADMIN, GOLD } from '@/components/fees/ui'
 import { invalidateFeePermissions } from '@/hooks/useFeePermissions'
@@ -35,13 +39,14 @@ const ROLES = ['admin'] as const
 
 interface StaffRow { id: string; full_name: string; role: string }
 
-type Tab = 'roles' | 'people' | 'coverage'
+/** The two occasional views, each opened as a popup over the grid. */
+type Sheet = 'people' | 'coverage'
 
 export default function PermissionMatrix() {
   const [catalogue, setCatalogue] = useState<FeePermission[]>([])
   const [roleGrants, setRoleGrants] = useState<FeeRoleGrant[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('roles')
+  const [sheet, setSheet] = useState<Sheet | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -113,40 +118,45 @@ export default function PermissionMatrix() {
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-[#E4E4E7]">
-        {([['roles', 'By role'], ['people', 'By person'], ['coverage', 'Who can…']] as const)
-          .map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-3.5 py-2 text-xs font-semibold transition-colors border-b-2 -mb-px ${
-                tab === key
-                  ? 'border-[#27272A] text-[#27272A]'
-                  : 'border-transparent text-[#A1A1AA] hover:text-[#71717A]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="flex flex-wrap justify-end gap-1.5">
+        <button onClick={() => setSheet('people')} className={ADMIN.ghostBtn}>
+          <User size={13} /> By person
+        </button>
+        <button onClick={() => setSheet('coverage')} className={ADMIN.ghostBtn}>
+          <Search size={13} /> Who can…
+        </button>
       </div>
 
-      {tab === 'roles' && (
-        <RoleGrid
-          byCategory={byCategory}
-          roleGrants={roleGrants}
-          onChanged={(role, key, granted) => {
-            setRoleGrants(prev => {
-              const next = prev.filter(g => !(g.role === role && g.permission_key === key))
-              next.push({ role, permission_key: key, granted })
-              return next
-            })
-          }}
-          onError={setError}
-        />
-      )}
+      <RoleGrid
+        byCategory={byCategory}
+        roleGrants={roleGrants}
+        onChanged={(role, key, granted) => {
+          setRoleGrants(prev => {
+            const next = prev.filter(g => !(g.role === role && g.permission_key === key))
+            next.push({ role, permission_key: key, granted })
+            return next
+          })
+        }}
+        onError={setError}
+      />
 
-      {tab === 'people' && <PersonOverrides byCategory={byCategory} onError={setError} />}
-      {tab === 'coverage' && <CoverageCheck catalogue={catalogue} />}
+      {sheet && (
+        <ModalShell
+          onClose={() => setSheet(null)}
+          sharp size="2xl"
+          title={sheet === 'people' ? 'Permissions by person' : 'Who can…'}
+          subtitle={sheet === 'people'
+            ? 'An override on top of what the role grants'
+            : 'Everybody who holds one permission, whichever way they got it'}
+          icon={sheet === 'people' ? <User size={15} /> : <Search size={15} />}
+          iconClassName="bg-[#27272A] text-[#B8983C]"
+          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+        >
+          {sheet === 'people'
+            ? <PersonOverrides byCategory={byCategory} onError={setError} />
+            : <CoverageCheck catalogue={catalogue} />}
+        </ModalShell>
+      )}
     </div>
   )
 }

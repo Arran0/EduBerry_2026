@@ -162,18 +162,6 @@ export interface FeeSettingVersion {
 }
 
 /** Every version of one key, newest first — the "what did this used to say" view. */
-export async function fetchSettingHistory(key: FeeSettingKey): Promise<FeeSettingVersion[]> {
-  const { data, error } = await supabase
-    .from('fee_settings')
-    .select('id, key, value, version, status, effective_from, effective_to, published_at')
-    .eq('key', key)
-    .order('version', { ascending: false })
-  if (error) {
-    if (isMissingRelation(error)) return []
-    throw error
-  }
-  return (data ?? []) as FeeSettingVersion[]
-}
 
 /**
  * What the next number in a series will look like.

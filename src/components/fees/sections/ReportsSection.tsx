@@ -1,28 +1,32 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The Collection Center.
+// Reports.
 //
 // One screen that answers "how are we doing, and where is the money stuck?".
-// Four headline figures stay on screen whichever tab is open, because the
-// question a principal asks does not change when the evidence does.
+//
+// It used to answer it across six sub-tabs, which meant the reader had to know
+// that "why is the cheque money not in the bank" lived under Instruments
+// before they could ask it. There is one report now, read top to bottom:
+// the headline figures, then collections, then what is outstanding, then the
+// cheque pipeline, then what was given away, then the operational registers.
 //
 // Everything here reads the Round 4 views, which read the same tables the
 // counter writes to. No figure on this page is computed a second way, so no
-// two tabs can disagree — and a masked reader gets the same charts, the same
+// two panels can disagree — and a masked reader gets the same charts, the same
 // counts and the same classes with dots where the rupees are, because the
 // database withheld the numbers rather than the interface hiding them.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  BarChart3, CalendarDays, Download, FileClock, Loader2,
+  CalendarDays, Download, FileClock, Loader2,
   Landmark, Search, ScrollText, BadgePercent, Send,
 } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip, TabBar, Notice, type TabDef } from '@/components/fees/shell'
+import { StatStrip, Notice } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import FeeSearch from '@/components/fees/reports/FeeSearch'
 import RefundQueue from '@/components/fees/reports/RefundQueue'
@@ -43,21 +47,9 @@ import {
   type StaffCollectionRow, type YearSummaryRow,
 } from '@/lib/fees/reports'
 
-type Tab = 'overview' | 'collections' | 'outstanding' | 'instruments' | 'concessions' | 'operations'
-
-const TABS: TabDef<Tab>[] = [
-  { key: 'overview',    label: 'Overview',    icon: BarChart3 },
-  { key: 'collections', label: 'Collections', icon: CalendarDays },
-  { key: 'outstanding', label: 'Outstanding', icon: FileClock },
-  { key: 'instruments', label: 'Instruments', icon: Landmark },
-  { key: 'concessions', label: 'Concessions', icon: BadgePercent },
-  { key: 'operations',  label: 'Operations',  icon: ScrollText },
-]
-
 export default function ReportsSection() {
   const { year, years } = useAcademicYear()
   const perms = useFeePermissions()
-  const [tab, setTab] = useState<Tab>('overview')
 
   const [summary, setSummary] = useState<YearSummaryRow | null>(null)
   const [daily, setDaily] = useState<CollectionDayRow[]>([])
@@ -81,60 +73,40 @@ export default function ReportsSection() {
   // A boolean rather than `perms` itself — see the note on the hub's loader.
   const canSeeAudit = perms.can('fees.audit.view')
 
-  // What each tab needs, so opening the Collection Center does not pull the
-  // whole module down. This page used to fetch eleven datasets on mount —
-  // every tab's, including up to five thousand invoice rows — for a reader who
-  // in practice looks at Overview and leaves.
-  //
-  // Overview's four headline figures are one view, so they stay eager; the
-  // rest arrive when their tab is first opened and are then kept.
-  // A ref, not state. `load` reads it to decide whether a tab is already in
-  // hand, and writes it when a fetch lands — as state that would put `load` in
-  // its own dependency chain, which is exactly the loop this module had to fix
-  // on the hub. A ref keeps `load` stable and the bookkeeping invisible to
-  // rendering, which is what it is: nothing on screen depends on it.
-  const fetched = useRef<Set<Tab | 'headline'>>(new Set())
-
-  const load = useCallback(async (what: Tab | 'headline' | 'all', force = false) => {
+  // Everything the report shows, in one pass. This used to be fetched a folder
+  // at a time because the folders were tabs; a single scrolling report needs
+  // all of it, and asking for it in one `Promise.all` is one round trip rather
+  // than six. The session's own change throws the lot away, because every
+  // figure on the page is scoped to one.
+  const load = useCallback(async () => {
     if (!year) return
-    if (!force && what !== 'all' && fetched.current.has(what)) return
     setLoading(true)
     try {
-      const want = (t: Tab | 'headline') => what === 'all' || what === t
-
       const [s, d, a, c, cs, p, st, rf, rt, au, un] = await Promise.all([
-        want('headline') || want('overview') ? fetchYearSummary(year.id) : null,
-        want('overview') || want('collections') ? fetchCollectionDaily(year.id) : null,
-        want('outstanding') ? fetchAging(year.id) : null,
-        want('outstanding') ? fetchDefaultersByClass(year.id) : null,
-        want('concessions') ? fetchConcessionSummary(year.id) : null,
-        want('instruments') ? fetchInstrumentPipeline(year.id) : null,
-        want('instruments') ? fetchStaffCollection(year.id) : null,
-        want('instruments') ? fetchRefunds(year.id) : null,
-        want('operations') ? fetchRteRegister(year.id) : null,
-        want('operations') && canSeeAudit ? fetchAudit({ yearId: year.id, limit: 200 }) : null,
-        // Only the two tabs with a Remind button need the bills behind it.
-        want('outstanding') || want('operations') ? fetchUnpaidInvoices(year.id) : null,
+        fetchYearSummary(year.id),
+        fetchCollectionDaily(year.id),
+        fetchAging(year.id),
+        fetchDefaultersByClass(year.id),
+        fetchConcessionSummary(year.id),
+        fetchInstrumentPipeline(year.id),
+        fetchStaffCollection(year.id),
+        fetchRefunds(year.id),
+        fetchRteRegister(year.id),
+        canSeeAudit ? fetchAudit({ yearId: year.id, limit: 200 }) : null,
+        fetchUnpaidInvoices(year.id),
       ])
 
-      if (s) setSummary(s)
-      if (d) setDaily(d)
-      if (a) setAging(a)
-      if (c) setClasses(c)
-      if (cs) setConcessions(cs)
-      if (p) setPipeline(p)
-      if (st) setStaff(st)
-      if (rf) setRefunds(rf)
-      if (rt) setRte(rt)
-      if (au) setAudit(au)
-      if (un) setUnpaid(un)
-
-      if (what === 'all') {
-        fetched.current.add('headline')
-        TABS.forEach(t => fetched.current.add(t.key))
-      } else {
-        fetched.current.add(what)
-      }
+      setSummary(s)
+      setDaily(d)
+      setAging(a)
+      setClasses(c)
+      setConcessions(cs)
+      setPipeline(p)
+      setStaff(st)
+      setRefunds(rf)
+      setRte(rt)
+      setAudit(au ?? [])
+      setUnpaid(un)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the reports.')
     } finally {
@@ -142,17 +114,10 @@ export default function ReportsSection() {
     }
   }, [year, canSeeAudit])
 
-  // The headline strip and whichever tab is open. Changing the session throws
-  // the cache away, because every figure on the page is scoped to one.
-  useEffect(() => { fetched.current = new Set() }, [year])
-  useEffect(() => { void load('headline') }, [load])
-  useEffect(() => { void load(tab) }, [load, tab])
+  useEffect(() => { void load() }, [load])
 
-  /** After a write, re-fetch what is on screen rather than everything. */
-  const reload = useCallback(async () => {
-    await load('headline', true)
-    await load(tab, true)
-  }, [load, tab])
+  /** After a write, read the report again. */
+  const reload = useCallback(async () => { await load() }, [load])
 
   // Names for the refund queue, the RTE register and the audit trail, fetched
   // once for all three rather than per row.
@@ -172,14 +137,6 @@ export default function ReportsSection() {
     void namesFor(nameIds.split(',')).then(m => { if (!cancelled) setNames(m) })
     return () => { cancelled = true }
   }, [nameIds])
-
-  const todayCollected = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    const rows = daily.filter(d => d.day === today)
-    if (rows.length === 0) return 0
-    if (rows.every(r => r.collected === null)) return null
-    return rows.reduce((a, r) => a + Number(r.collected ?? 0), 0)
-  }, [daily])
 
   /** Remind every family in one class, straight from the heatmap. */
   const remindClass = async (row: DefaulterClassRow) => {
@@ -216,20 +173,6 @@ export default function ReportsSection() {
           <Search size={13} /> Search
         </button>
       </div>
-      {/* The four figures that never leave the screen. */}
-      <StatStrip
-        loading={loading}
-        stats={[
-          { label: 'Collected', value: inr(summary?.collected, showAmounts) },
-          { label: 'Outstanding', value: inr(summary?.outstanding, showAmounts),
-            tone: (summary?.outstanding ?? 0) > 0 ? '#7A6220' : undefined },
-          { label: 'Efficiency',
-            value: summary?.efficiency === null || summary?.efficiency === undefined
-              ? '—' : `${summary.efficiency}%` },
-          { label: 'Today', value: inr(todayCollected, showAmounts), strong: true },
-        ]}
-      />
-
       {perms.amountsHidden && (
         <Notice>
           Amounts are hidden for your account — the rupee figures are not sent to this device at
@@ -237,57 +180,58 @@ export default function ReportsSection() {
         </Notice>
       )}
 
-      <TabBar<Tab> active={tab} onChange={setTab} tabs={TABS} />
-
       {error && <Notice tone="error">{error}</Notice>}
       {note && <Notice tone="good">{note}</Notice>}
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-      ) : tab === 'overview' ? (
-        <Overview summary={summary} showAmounts={showAmounts} daily={daily} />
-      ) : tab === 'collections' ? (
-        <div className="space-y-4">
-          {summary && (
-            <CollectionCalendar rows={daily} startsOn={summary.starts_on}
-                                endsOn={summary.ends_on} showAmounts={showAmounts} />
-          )}
-          <ByMethod rows={daily} showAmounts={showAmounts} />
-        </div>
-      ) : tab === 'outstanding' ? (
-        <div className="space-y-4">
-          <AgingCliff rows={aging} showAmounts={showAmounts} />
-          <DefaulterHeatmap rows={classes} showAmounts={showAmounts}
-                            onPick={perms.can('fees.reminder.send')
-                              ? row => void remindClass(row) : undefined} />
-          <ClassTable rows={classes} showAmounts={showAmounts}
-                      canRemind={perms.can('fees.reminder.send')}
-                      reminding={reminding} onRemind={remindClass} />
-        </div>
-      ) : tab === 'instruments' ? (
-        <div className="space-y-4">
-          <Pipeline rows={pipeline} showAmounts={showAmounts} />
-          <StaffTable rows={staff} showAmounts={showAmounts} />
-          <RefundQueue rows={refunds} names={names} showAmounts={showAmounts}
-                       canDecide={perms.can('fees.refund.approve')} onChanged={reload} />
-        </div>
-      ) : tab === 'concessions' ? (
-        <ConcessionTable rows={concessions} showAmounts={showAmounts} />
       ) : (
-        <div className="space-y-4">
-          {year && (
-            <RteRegister rows={rte} names={names} yearId={year.id} showAmounts={showAmounts}
-                         canManage={perms.can('fees.rte.manage')} onChanged={reload} />
-          )}
-          {years.length > 1 && perms.can('fees.config.clone_year') && year && (
-            <CarryForward years={years.map(y => ({ id: y.id, code: y.code }))}
-                          currentId={year.id} showAmounts={showAmounts} onDone={reload} />
-          )}
-          <AuditTrail rows={audit} names={names} showAmounts={showAmounts}
-                      canSee={perms.can('fees.audit.view')} />
+        <div className="space-y-6">
+          <Overview summary={summary} showAmounts={showAmounts} daily={daily} />
+
+          <Block title="Collections" icon={CalendarDays}>
+            {summary && (
+              <CollectionCalendar rows={daily} startsOn={summary.starts_on}
+                                  endsOn={summary.ends_on} showAmounts={showAmounts} />
+            )}
+            <ByMethod rows={daily} showAmounts={showAmounts} />
+          </Block>
+
+          <Block title="Outstanding" icon={FileClock}>
+            <AgingCliff rows={aging} showAmounts={showAmounts} />
+            <DefaulterHeatmap rows={classes} showAmounts={showAmounts}
+                              onPick={perms.can('fees.reminder.send')
+                                ? row => void remindClass(row) : undefined} />
+            <ClassTable rows={classes} showAmounts={showAmounts}
+                        canRemind={perms.can('fees.reminder.send')}
+                        reminding={reminding} onRemind={remindClass} />
+          </Block>
+
+          <Block title="Cheques, staff and refunds" icon={Landmark}>
+            <Pipeline rows={pipeline} showAmounts={showAmounts} />
+            <StaffTable rows={staff} showAmounts={showAmounts} />
+            <RefundQueue rows={refunds} names={names} showAmounts={showAmounts}
+                         canDecide={perms.can('fees.refund.approve')} onChanged={reload} />
+          </Block>
+
+          <Block title="Concessions" icon={BadgePercent}>
+            <ConcessionTable rows={concessions} showAmounts={showAmounts} />
+          </Block>
+
+          <Block title="Registers and the audit trail" icon={ScrollText}>
+            {year && (
+              <RteRegister rows={rte} names={names} yearId={year.id} showAmounts={showAmounts}
+                           canManage={perms.can('fees.rte.manage')} onChanged={reload} />
+            )}
+            {years.length > 1 && perms.can('fees.config.clone_year') && year && (
+              <CarryForward years={years.map(y => ({ id: y.id, code: y.code }))}
+                            currentId={year.id} showAmounts={showAmounts} onDone={reload} />
+            )}
+            <AuditTrail rows={audit} names={names} showAmounts={showAmounts}
+                        canSee={perms.can('fees.audit.view')} />
+          </Block>
         </div>
       )}
-
 
       {searching && year && (
         <FeeSearch yearId={year.id} showAmounts={showAmounts}
@@ -298,6 +242,24 @@ export default function ReportsSection() {
   )
 }
 
+
+/**
+ * A heading over a run of panels. Six tabs became six of these: the reader
+ * scrolls past the ones they did not come for instead of never finding them.
+ */
+function Block({
+  title, icon: Icon, children,
+}: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2 border-b border-[#E3DFD3] pb-1.5">
+        <Icon size={14} className="text-[#B8983C]" />
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">{title}</h2>
+      </div>
+      {children}
+    </section>
+  )
+}
 
 function Overview({
   summary, showAmounts, daily,

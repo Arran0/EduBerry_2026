@@ -4,21 +4,24 @@
 // Fee Settings.
 //
 // A component rather than page markup because it is mounted twice: as
-// /admin/fee-settings, and behind the Fee Manager's own settings button. "The
+// /admin/fee-settings, and behind the Fee Manager's own settings tab. "The
 // same settings in both places" is a claim that only stays true if there is one
 // copy of them — the same reasoning as PayrollSettingsPanel, whose shape this
 // follows.
 //
-// Before Round 1 this page held only the bank collection credentials. That is
-// now one tab of six: the permission matrix, the policies that govern what the
-// counter may accept, receipt numbering, the school's sessions, collection, and
-// WhatsApp.
+// Six tabs became six cards. A tab strip says "these are views of one thing,
+// and you are in one of them"; that is true of a ledger filtered six ways, and
+// false of six unrelated settings screens, where it costs a permanent row of
+// chrome and hides five names behind the sixth. Each card says what it governs
+// and opens it as a popup: one thing at a time, and the way back is the same
+// gesture every time.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState } from 'react'
 import {
-  Banknote, CalendarRange, Hash, MessageCircle, ShieldCheck, SlidersHorizontal,
+  Banknote, CalendarRange, ChevronRight, Hash, MessageCircle, ShieldCheck, SlidersHorizontal,
 } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import PermissionMatrix from '@/components/settings/fees/PermissionMatrix'
 import PolicySettings from '@/components/settings/fees/PolicySettings'
@@ -27,7 +30,7 @@ import AcademicYearSettings from '@/components/settings/fees/AcademicYearSetting
 import WhatsAppSettingsPanel from '@/components/settings/fees/WhatsAppSettings'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 
-const TABS = [
+const PANELS = [
   { key: 'permissions', label: 'Permissions', icon: ShieldCheck,
     blurb: 'Who can take a payment, who can reverse one, who never sees an amount.' },
   { key: 'policies',    label: 'Policies',    icon: SlidersHorizontal,
@@ -42,46 +45,63 @@ const TABS = [
     blurb: 'Bills, receipts and reminders on the channel guardians actually read.' },
 ] as const
 
-type TabKey = typeof TABS[number]['key']
+type PanelKey = typeof PANELS[number]['key']
 
-export default function FeeSettingsPanel({ initialTab }: { initialTab?: TabKey }) {
-  const [tab, setTab] = useState<TabKey>(initialTab ?? 'permissions')
+export default function FeeSettingsPanel({ initialTab }: { initialTab?: PanelKey }) {
+  const [open, setOpen] = useState<PanelKey | null>(initialTab ?? null)
   const { year, refresh } = useAcademicYear()
-  const active = TABS.find(t => t.key === tab)!
+  const active = PANELS.find(p => p.key === open)
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap gap-1.5">
-        {TABS.map(t => {
-          const Icon = t.icon
-          const on = t.key === tab
+    <div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        {PANELS.map(p => {
+          const Icon = p.icon
           return (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                on
-                  ? 'bg-[#27272A] text-white'
-                  : 'bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8]'
-              }`}
+              key={p.key}
+              onClick={() => setOpen(p.key)}
+              className="group text-left bg-white border border-[#E3DFD3] hover:border-[#B8983C]
+                         p-3.5 transition-colors flex items-start gap-3"
             >
-              <Icon size={13} />
-              {t.label}
+              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <Icon size={16} className="text-[#B8983C]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-bold text-[#18181B]">{p.label}</span>
+                  <ChevronRight size={14}
+                                className="text-[#C9C4B4] group-hover:text-[#B8983C] transition-colors" />
+                </div>
+                <p className="text-[11px] text-[#8C8878] leading-snug mt-0.5">{p.blurb}</p>
+              </div>
             </button>
           )
         })}
       </div>
 
-      <p className="text-xs text-[#A1A1AA] -mt-1">{active.blurb}</p>
-
-      {tab === 'permissions' && <PermissionMatrix />}
-      {tab === 'policies'    && <PolicySettings academicYearId={year?.id ?? null} />}
-      {tab === 'numbering'   && (
-        <NumberingSettingsPanel academicYearId={year?.id ?? null} yearCode={year?.code ?? '2026-27'} />
+      {active && (
+        <ModalShell
+          onClose={() => setOpen(null)}
+          sharp
+          size="2xl"
+          title={active.label}
+          subtitle={active.blurb}
+          icon={<active.icon size={15} />}
+          iconClassName="bg-[#27272A] text-[#B8983C]"
+          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+          minHClass="sm:min-h-[32rem]"
+        >
+          {open === 'permissions' && <PermissionMatrix />}
+          {open === 'policies'    && <PolicySettings academicYearId={year?.id ?? null} />}
+          {open === 'numbering'   && (
+            <NumberingSettingsPanel academicYearId={year?.id ?? null} yearCode={year?.code ?? '2026-27'} />
+          )}
+          {open === 'years'       && <AcademicYearSettings onChanged={() => void refresh()} />}
+          {open === 'collection'  && <BankCollectSettings ctx="fees" />}
+          {open === 'whatsapp'    && <WhatsAppSettingsPanel />}
+        </ModalShell>
       )}
-      {tab === 'years'       && <AcademicYearSettings onChanged={() => void refresh()} />}
-      {tab === 'collection'  && <BankCollectSettings ctx="fees" />}
-      {tab === 'whatsapp'    && <WhatsAppSettingsPanel />}
     </div>
   )
 }

@@ -18,6 +18,13 @@ import useBodyScrollLock from '@/hooks/useBodyScrollLock'
  * positioning, animation and sheet behaviour.
  */
 
+/**
+ * Every mounted shell, oldest first. Mutated by the Escape effect below; the
+ * last entry is whichever shell is on top, and it is the only one that answers
+ * the key.
+ */
+const ESCAPE_STACK: object[] = []
+
 const SIZE_CLASS = {
   sm: 'sm:max-w-sm',
   md: 'sm:max-w-md',
@@ -115,10 +122,27 @@ export default function ModalShell({
   // Released as soon as the shell starts leaving — a stuck exit must not be
   // able to strand the page permanently unscrollable.
   useBodyScrollLock(isPresent)
+
+  // Only the topmost shell answers Escape. Every open shell listens on the
+  // same window, so without this one keypress closes the whole stack — press
+  // Escape to dismiss a "why are you waiving this?" prompt and the screen it
+  // was asked from disappears with it. The stack is a module-level array
+  // rather than context because the shells are portals into <body> with no
+  // common provider between them.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const token = {}
+    ESCAPE_STACK.push(token)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (ESCAPE_STACK[ESCAPE_STACK.length - 1] !== token) return
+      onClose()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      const at = ESCAPE_STACK.indexOf(token)
+      if (at !== -1) ESCAPE_STACK.splice(at, 1)
+    }
   }, [onClose])
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {

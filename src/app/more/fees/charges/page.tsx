@@ -4,5 +4,5 @@ import { redirect } from 'next/navigation'
 // The route is kept so existing links and bookmarks still work.
 
 export default function FeeChargesRedirect() {
-  redirect('/more/fees?tab=config&sub=charges')
+  redirect('/more/fees?tab=config&tool=latefees')
 }

@@ -2,13 +2,16 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifyCollectCallback } from '@/lib/collectSetup'
+import { settleSchoolFee } from '@/lib/fees/settleWebhook'
 
 // Incoming-UPI webhook from your bank / PSP (Smart Collect) for SCHOOL fees. On
 // a successful payment it matches the settlement to a fee — by the per-fee
 // virtual VPA (vpa mode) or by the unique SCHFEE- reference carried in the UPI
 // note (reference mode) — and marks the payment verified + the fee paid. No
 // student self-declaration is involved: confirmation comes from the money
-// arriving.
+// arriving — and from how much of it did: a push payment's amount is the
+// payer's choice, so the fee is re-settled from the verified total rather than
+// marked paid on arrival.
 //
 // Point your provider's payment-received webhook at POST /api/fees/upi/webhook
 // and set SMART_COLLECT_WEBHOOK_SECRET to the same HMAC secret (shared with the
@@ -89,6 +92,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: 'no matching fee' })
   }
 
+  // Credit what actually arrived, not what was expected. A UPI push payment's
+  // amount is chosen by the payer, so a short payment must land on the row as
+  // the short amount — otherwise the fee below settles against a figure nobody
+  // paid.
   await admin
     .from('school_fee_payments')
     .update({
@@ -96,12 +103,15 @@ export async function POST(request: NextRequest) {
       utr: ev.utr,
       collect_vpa: ev.vpa,
       verified_at: new Date().toISOString(),
+      ...(ev.amount === null || ev.amount === undefined ? {} : { amount: ev.amount }),
     })
     .eq('id', payment.id)
 
-  await admin.from('school_fees').update({ status: 'paid' }).eq('id', feeId)
+  // 'paid' only once the verified payments cover the fee; a short payment
+  // leaves it 'partial' and still owing. See settleWebhook.ts.
+  const status = await settleSchoolFee(admin, feeId)
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, status })
 }
 
 async function findPendingPayment(

@@ -9,10 +9,11 @@
 
 import { supabase, isMissingRelation } from '@/lib/supabase'
 import { inChunks } from './chunk'
+import { cached, invalidate } from './cache'
 import { tryResolveStructure } from './engine/structure'
 import { toPaise } from './engine/money'
 import type {
-  FeeGroup as EngineGroup, FeeHead as EngineHead, FeeStructure as EngineStructure,
+  FeeGroup as EngineGroup, FeeStructure as EngineStructure,
 } from './engine/types'
 
 // ── Row shapes ──────────────────────────────────────────────────────────
@@ -112,7 +113,18 @@ const EMPTY_BUNDLE: FeeConfigBundle = {
  */
 export async function fetchFeeConfig(academicYearId: string): Promise<FeeConfigBundle> {
   if (!academicYearId) return EMPTY_BUNDLE
+  return cached(`${CONFIG_KEY}${academicYearId}`, () => loadFeeConfig(academicYearId))
+}
 
+/** Invalidated by every write below, and expiring anyway — see `cache.ts`. */
+const CONFIG_KEY = 'fee-config:'
+
+/** Drop the cached price list, so the next read goes to the database. */
+export function invalidateFeeConfig(): void {
+  invalidate(CONFIG_KEY)
+}
+
+async function loadFeeConfig(academicYearId: string): Promise<FeeConfigBundle> {
   const [cats, heads, groups, structures] = await Promise.all([
     supabase.from('fee_categories').select('id, name, code, sort, active').order('sort'),
     supabase.from('fee_heads')
@@ -182,27 +194,14 @@ export async function fetchFeeConfig(academicYearId: string): Promise<FeeConfigB
 // snake_case. Converting in one place keeps `toPaise` out of the engine's
 // callers and stops a rupee figure ever reaching it by accident.
 
-export function toEngineHead(row: FeeHeadRow): EngineHead {
-  return {
-    id: row.id,
-    code: row.code,
-    name: row.name,
-    categoryId: row.category_id,
-    taxRate: Number(row.tax_rate) || 0,
-    taxInclusive: row.tax_inclusive,
-    isTransport: row.is_transport,
-    sort: row.sort,
-  }
-}
-
-export function toEngineGroup(row: FeeGroupRow): EngineGroup {
+function toEngineGroup(row: FeeGroupRow): EngineGroup {
   return {
     id: row.id, code: row.code, name: row.name,
     isDefault: row.is_default, isRte: row.is_rte,
   }
 }
 
-export function toEngineStructures(bundle: FeeConfigBundle): EngineStructure[] {
+function toEngineStructures(bundle: FeeConfigBundle): EngineStructure[] {
   const itemsBy = groupBy(bundle.items, i => i.structure_id)
   const instBy = groupBy(bundle.installments, i => i.structure_id)
   const instItemsBy = groupBy(bundle.installmentItems, i => i.installment_id)
@@ -250,13 +249,6 @@ function groupBy<T, K>(rows: T[], key: (row: T) => K): Map<K, T[]> {
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────
-export async function saveCategory(
-  patch: Partial<FeeCategoryRow> & { name: string; code: string },
-): Promise<void> {
-  const { error } = await supabase.from('fee_categories')
-    .upsert(patch, { onConflict: 'code' })
-  if (error) throw error
-}
 
 export async function saveHead(
   patch: Partial<FeeHeadRow> & { academic_year_id: string; name: string; code: string },
@@ -264,6 +256,7 @@ export async function saveHead(
   const { error } = await supabase.from('fee_heads')
     .upsert(patch, { onConflict: 'academic_year_id,code' })
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function deleteHead(id: string): Promise<void> {
@@ -276,6 +269,7 @@ export async function deleteHead(id: string): Promise<void> {
     }
     throw error
   }
+  invalidateFeeConfig()
 }
 
 export async function saveGroup(
@@ -284,6 +278,7 @@ export async function saveGroup(
   const { error } = await supabase.from('fee_groups')
     .upsert(patch, { onConflict: 'academic_year_id,code' })
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function createStructure(input: {
@@ -300,6 +295,7 @@ export async function createStructure(input: {
     }
     throw error
   }
+  invalidateFeeConfig()
   return data as FeeStructureRow
 }
 
@@ -308,11 +304,13 @@ export async function setStructureStatus(
 ): Promise<void> {
   const { error } = await supabase.from('fee_structures').update({ status }).eq('id', id)
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function deleteStructure(id: string): Promise<void> {
   const { error } = await supabase.from('fee_structures').delete().eq('id', id)
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function setStructureItem(
@@ -322,12 +320,14 @@ export async function setStructureItem(
     .upsert({ structure_id: structureId, fee_head_id: feeHeadId, amount: amountRupees, sort },
             { onConflict: 'structure_id,fee_head_id' })
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function removeStructureItem(structureId: string, feeHeadId: string): Promise<void> {
   const { error } = await supabase.from('fee_structure_items')
     .delete().eq('structure_id', structureId).eq('fee_head_id', feeHeadId)
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function saveInstallment(
@@ -336,20 +336,16 @@ export async function saveInstallment(
   const { error } = await supabase.from('fee_installments')
     .upsert(patch, { onConflict: 'structure_id,seq' })
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export async function deleteInstallment(id: string): Promise<void> {
   const { error } = await supabase.from('fee_installments').delete().eq('id', id)
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 /** Persist a drag reorder in one round trip rather than one update per row. */
-export async function reorderInstallments(ordered: { id: string; sort: number }[]): Promise<void> {
-  if (ordered.length === 0) return
-  const { error } = await supabase.from('fee_installments')
-    .upsert(ordered.map(o => ({ id: o.id, sort: o.sort })), { onConflict: 'id' })
-  if (error) throw error
-}
 
 export async function setAutogen(
   installmentId: string, enabled: boolean, daysBefore: number,
@@ -358,6 +354,7 @@ export async function setAutogen(
     .update({ autogen_enabled: enabled, autogen_days_before: daysBefore })
     .eq('id', installmentId)
   if (error) throw error
+  invalidateFeeConfig()
 }
 
 export interface CloneResult {
@@ -371,11 +368,12 @@ export async function cloneFeeYear(fromYearId: string, toYearId: string): Promis
     p_from: fromYearId, p_to: toYearId,
   })
   if (error) throw error
+  invalidateFeeConfig()
   return data as CloneResult
 }
 
 // ── Student → group ─────────────────────────────────────────────────────
-export async function fetchGroupAssignments(
+async function fetchGroupAssignments(
   academicYearId: string,
 ): Promise<FeeGroupAssignmentRow[]> {
   const { data, error } = await supabase.from('fee_group_assignments')
@@ -388,40 +386,8 @@ export async function fetchGroupAssignments(
   return (data ?? []) as FeeGroupAssignmentRow[]
 }
 
-export async function assignGroup(input: {
-  academic_year_id: string
-  student_id: string
-  fee_group_id: string
-  is_rte?: boolean
-  prorate_from?: string | null
-  note?: string | null
-}): Promise<void> {
-  const { error } = await supabase.from('fee_group_assignments')
-    .upsert({
-      ...input,
-      is_rte: input.is_rte ?? false,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'student_id,academic_year_id' })
-  if (error) throw error
-}
 
 /** Put a whole class in a group in one statement. */
-export async function assignGroupBulk(
-  academicYearId: string, studentIds: string[], feeGroupId: string, isRte = false,
-): Promise<number> {
-  if (studentIds.length === 0) return 0
-  const { error, count } = await supabase.from('fee_group_assignments')
-    .upsert(
-      studentIds.map(student_id => ({
-        academic_year_id: academicYearId,
-        student_id,
-        fee_group_id: feeGroupId,
-        is_rte: isRte,
-      })),
-      { onConflict: 'student_id,academic_year_id', count: 'exact' })
-  if (error) throw error
-  return count ?? studentIds.length
-}
 
 // ── The roster: who is in which group ───────────────────────────────────
 export interface RosterStudent {
@@ -574,6 +540,12 @@ export async function reassignGroup(input: {
   const unpriced: ReassignResult['unpriced'] = []
   let repriced = 0
 
+  // Resolve first, write second. Every student is priced in memory, then the
+  // profiles that landed on the same structure are updated together: moving a
+  // class of forty used to be forty round trips from a browser, and a class
+  // almost always resolves to one structure, so this is one.
+  const batches = new Map<string, { structureId: string; source: unknown; ids: string[] }>()
+
   for (const studentId of studentIds) {
     const person = byId.get(studentId)
     if (!person?.profile_id) continue
@@ -594,16 +566,32 @@ export async function reassignGroup(input: {
       continue
     }
 
-    const { error: uErr } = await supabase.from('fee_profiles').update({
-      fee_group_id: feeGroupId,
-      structure_id: resolved.resolved.structure.id,
-      structure_source: resolved.resolved.source,
-      is_rte: isRte,
-      prorate_from: input.prorateFrom ?? null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', person.profile_id)
-    if (uErr) throw uErr
+    // The stated reason is part of the key: two students on the same structure
+    // for different reasons must keep their own `why`, which is what a parent
+    // asking about their bill is shown.
+    const source = resolved.resolved.source
+    const key = `${resolved.resolved.structure.id}|${JSON.stringify(source)}`
+    const batch = batches.get(key)
+      ?? { structureId: resolved.resolved.structure.id, source, ids: [] }
+    batch.ids.push(person.profile_id)
+    batches.set(key, batch)
     repriced += 1
+  }
+
+  const stamp = new Date().toISOString()
+  for (const batch of batches.values()) {
+    await inChunks(batch.ids, async ids => {
+      const { error: uErr } = await supabase.from('fee_profiles').update({
+        fee_group_id: feeGroupId,
+        structure_id: batch.structureId,
+        structure_source: batch.source,
+        is_rte: isRte,
+        prorate_from: input.prorateFrom ?? null,
+        updated_at: stamp,
+      }).in('id', ids)
+      if (uErr) throw uErr
+      return []
+    })
   }
 
   return { assigned: studentIds.length, repriced, unpriced }

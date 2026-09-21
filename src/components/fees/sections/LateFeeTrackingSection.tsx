@@ -1,55 +1,39 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Charges — late fees and fines.
+// Late fees & fines — what has actually been charged.
 //
-// Two things that add money to a bill after it has been issued, kept on one
-// screen because the office thinks of them together and because both need the
-// same guard rail: you can see exactly what a change will cost before it costs
-// anybody anything.
+// The other half of the old Charges screen. The rules that produce these live
+// with the price list, in Fee Configuration; this is the tracking side, which
+// the office reads when a guardian asks why a bill grew — so it sits in the
+// Collection Center, one button away from the ledger, and not behind a tab.
 //
-// Late fees run on a rule and a nightly sweep. The sweep here always previews
-// first — the same function, with commit off — so the number on screen is the
-// number that will be charged, not an estimate of it.
-//
-// Fines are manual, and the one question that matters is whether the fine
-// raises its own slip or joins a bill the guardian is already about to pay.
+// Both lists are on screen together rather than behind a folder each: a waiver
+// decision is usually taken looking at both.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertTriangle, Ban, CheckCircle2, Gavel, Loader2, Play, Plus,
-  Power, ShieldOff, Timer,
-} from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Ban, Gavel, Loader2, Plus, ShieldOff } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip, TabBar } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
-import LateFeeRuleBuilder, { type ScopeOption } from '@/components/fees/charges/LateFeeRuleBuilder'
 import { gradeLabel } from '@/lib/grades'
-import { fetchFeeConfig, type FeeConfigBundle } from '@/lib/fees/config'
 import {
   fetchUnpaidInvoices, fetchProfileList,
   type InvoiceRow, type ProfileListRow,
 } from '@/lib/fees/invoices'
 import {
-  addFine, fetchFineCategories, fetchFines, fetchLateFeeCharges, fetchLateFeeRules,
-  runLateFeeSweep, setLateFeeExemption, setLateFeeRuleEnabled, waiveFine, waiveLateFee,
-  type FineCategoryRow, type FineRow, type LateFeeChargeRow, type LateFeeRuleRow,
-  type SweepResult,
+  addFine, fetchFineCategories, fetchFines, fetchLateFeeCharges,
+  setLateFeeExemption, waiveFine, waiveLateFee,
+  type FineCategoryRow, type FineRow, type LateFeeChargeRow,
 } from '@/lib/fees/charges'
 
-type Tab = 'rules' | 'charged' | 'fines'
-
-export default function ChargesSection() {
+export default function LateFeeTrackingSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
-  const [tab, setTab] = useState<Tab>('rules')
 
-  const [config, setConfig] = useState<FeeConfigBundle | null>(null)
-  const [rules, setRules] = useState<LateFeeRuleRow[]>([])
   const [charges, setCharges] = useState<LateFeeChargeRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [people, setPeople] = useState<ProfileListRow[]>([])
@@ -57,63 +41,34 @@ export default function ChargesSection() {
   const [categories, setCategories] = useState<FineCategoryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  const [editing, setEditing] = useState<LateFeeRuleRow | null | 'new'>(null)
-  const [sweep, setSweep] = useState<SweepResult | null>(null)
-  const [sweeping, setSweeping] = useState(false)
   const [fining, setFining] = useState(false)
 
   const showAmounts = !perms.amountsHidden
   const canManage = perms.can('fees.latefee.manage')
   const canFine = perms.can('fees.fine.apply')
 
-  // Per tab. The rules tab needs the price list (for a rule's scope) and the
-  // bills (for a realistic sample); the fines tab needs the roster, which is
-  // every student in the school. Fetching all of it on mount meant opening
-  // this screen to switch one rule off pulled ~930 profile rows down first.
-  const fetched = useRef<Set<Tab>>(new Set())
-
-  const load = useCallback(async (which: Tab, force = false) => {
+  const load = useCallback(async () => {
     if (!year) return
-    if (!force && fetched.current.has(which)) return
     setLoading(true)
     try {
-      if (which === 'rules' || which === 'charged') {
-        const [cfg, rs, inv] = await Promise.all([
-          fetchFeeConfig(year.id),
-          fetchLateFeeRules(year.id),
-          fetchUnpaidInvoices(year.id),
-        ])
-        setConfig(cfg); setRules(rs); setInvoices(inv)
-        if (which === 'charged') {
-          const [chg, list] = await Promise.all([
-            fetchLateFeeCharges(inv.map(i => i.id)),
-            fetchProfileList(year.id),
-          ])
-          setCharges(chg); setPeople(list)
-        }
-      } else {
-        const [fs, cats, list, inv] = await Promise.all([
-          fetchFines(year.id),
-          fetchFineCategories(),
-          fetchProfileList(year.id),
-          fetchUnpaidInvoices(year.id),
-        ])
-        setFines(fs); setCategories(cats); setPeople(list); setInvoices(inv)
-      }
-      fetched.current.add(which)
+      const [inv, list, fs, cats] = await Promise.all([
+        fetchUnpaidInvoices(year.id),
+        fetchProfileList(year.id),
+        fetchFines(year.id),
+        fetchFineCategories(),
+      ])
+      setInvoices(inv); setPeople(list); setFines(fs); setCategories(cats)
+      setCharges(await fetchLateFeeCharges(inv.map(i => i.id)))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load charges.')
+      setError(e instanceof Error ? e.message : 'Could not load late fees and fines.')
     } finally {
       setLoading(false)
     }
   }, [year])
 
-  useEffect(() => { fetched.current = new Set() }, [year])
-  useEffect(() => { void load(tab) }, [load, tab])
+  useEffect(() => { void load() }, [load])
 
-  /** After a write, refresh the tab that is open. */
-  const reload = useCallback(() => load(tab, true), [load, tab])
+  const reload = useCallback(async () => { await load(); onChanged?.() }, [load, onChanged])
 
   const names = useMemo(() => {
     const m = new Map<string, ProfileListRow>()
@@ -127,213 +82,30 @@ export default function ChargesSection() {
     return m
   }, [invoices])
 
-  const scopes: ScopeOption[] = useMemo(() => {
-    if (!config) return []
-    const structureName = (id: string) => {
-      const s = config.structures.find(x => x.id === id)
-      return s ? `${s.name}${s.grade !== null ? ` · ${gradeLabel(s.grade)}` : ''}` : 'Structure'
-    }
-    return [
-      ...config.groups.map(g => ({ id: g.id, label: g.name, kind: 'group' as const })),
-      ...config.structures.map(s => ({ id: s.id, label: structureName(s.id), kind: 'structure' as const })),
-      ...config.installments.map(i => ({
-        id: i.id, label: `${structureName(i.structure_id)} — ${i.name}`, kind: 'installment' as const,
-      })),
-    ]
-  }, [config])
-
-  // A real bill, so the builder's sample is this school's own number rather
-  // than a round figure that flatters the rule.
-  const sampleBill = useMemo(() => {
-    const nets = invoices.map(i => Number(i.net ?? 0)).filter(n => n > 0).sort((a, b) => a - b)
-    if (nets.length === 0) return 10000
-    return Math.round(nets[Math.floor(nets.length / 2)])
-  }, [invoices])
-
-  const runSweep = async (commit: boolean) => {
-    if (!year) return
-    setSweeping(true)
-    setError(null)
-    try {
-      const result = await runLateFeeSweep(year.id, commit)
-      setSweep(result)
-      if (commit) await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'The sweep could not run.')
-    } finally {
-      setSweeping(false)
-    }
-  }
-
-  const toggleRule = async (rule: LateFeeRuleRow) => {
-    try {
-      await setLateFeeRuleEnabled(rule.id, !rule.enabled)
-      await reload()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change the rule.')
-    }
-  }
-
   if (perms.loading) {
     return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
   }
-  if (!canManage && !canFine) return <NoAccess what="manage late fees or fines" />
+  if (!canManage && !canFine) return <NoAccess what="see late fees or fines" />
+  if (loading) {
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+  }
 
   return (
     <>
-      <TabBar<Tab>
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { key: 'rules', label: 'Late-fee rules', icon: Timer },
-          { key: 'charged', label: 'Charged', icon: AlertTriangle },
-          { key: 'fines', label: 'Fines', icon: Gavel },
-        ]}
-      />
-
       {error && (
         <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>
       )}
 
-      {loading ? (
-        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-      ) : tab === 'rules' ? (
-        <>
-          <div className={`${ADMIN.card} p-4 flex flex-wrap items-start gap-3`}>
-            <div className="flex-1 min-w-[240px]">
-              <h2 className="text-sm font-bold text-[#18181B]">The nightly sweep</h2>
-              <p className="text-xs text-[#8C8878] mt-1 leading-relaxed">
-                Runs on its own every night. Preview it here first — the preview is the same
-                calculation with committing switched off, so what it shows is what it will charge.
-              </p>
-            </div>
-            {canManage && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => void runSweep(false)} disabled={sweeping}
-                        className={ADMIN.ghostBtn}>
-                  {sweeping ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                  Preview
-                </button>
-                <button onClick={() => void runSweep(true)}
-                        disabled={sweeping || !sweep || sweep.bills === 0}
-                        title={!sweep ? 'Preview it first' : undefined}
-                        className={ADMIN.darkBtn}>
-                  Charge now
-                </button>
-              </div>
-            )}
-          </div>
+      <ChargedList
+        charges={charges} invoices={byInvoice} names={names}
+        showAmounts={showAmounts} canManage={canManage} onChanged={reload}
+      />
 
-          {sweep && (
-            <div className={`${ADMIN.card} p-4`}>
-              <div className="flex items-center gap-2">
-                {sweep.committed
-                  ? <CheckCircle2 size={14} className="text-[#1F6B42]" />
-                  : <Play size={14} className="text-[#8C8878]" />}
-                <span className="text-sm font-semibold text-[#18181B]">
-                  {sweep.committed ? 'Charged' : 'Preview'} as at {fmtDate(sweep.as_of)}
-                </span>
-              </div>
-              <div className="mt-3">
-                <StatStrip stats={[
-                  { label: 'Bills', value: String(sweep.bills) },
-                  { label: 'Total', value: inr(sweep.total, showAmounts), tone: '#7A6220', strong: true },
-                  { label: 'Exempt', value: String(sweep.exempt) },
-                ]} />
-              </div>
-              {Object.keys(sweep.by_class ?? {}).length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[#F0ECE2]">
-                  <span className={ADMIN.label}>By class</span>
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {Object.entries(sweep.by_class).map(([klass, amount]) => (
-                      <span key={klass}
-                            className="text-[11px] px-2 py-1 bg-[#F4F1E7] border border-[#E3DFD3] text-[#52525B]">
-                        {klass} · {inr(amount, showAmounts)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!sweep.committed && sweep.bills > 0 && (
-                <p className="mt-3 text-[11px] text-[#7A6220]">
-                  Nothing has been charged yet. Press Charge now to write these to the bills.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className={ADMIN.card}>
-            <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
-              <h3 className={ADMIN.label}>Rules</h3>
-              {canManage && (
-                <button onClick={() => setEditing('new')} className={ADMIN.ghostBtn}>
-                  <Plus size={13} /> New rule
-                </button>
-              )}
-            </div>
-            {rules.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-[#8C8878]">
-                No late-fee rules. Bills fall overdue but nothing is charged.
-              </p>
-            ) : rules.map(r => (
-              <div key={r.id}
-                   className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
-                <div className="flex-1 min-w-[200px]">
-                  <div className="text-sm font-semibold text-[#18181B]">{r.name}</div>
-                  <p className="text-[11px] text-[#8C8878] mt-0.5">
-                    {describeRule(r)}
-                    {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
-                  </p>
-                </div>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-                  r.enabled
-                    ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                    : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-                  {r.enabled ? 'Live' : 'Off'}
-                </span>
-                {canManage && (
-                  <>
-                    <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Edit</button>
-                    <button onClick={() => void toggleRule(r)}
-                            title={r.enabled ? 'Switch off' : 'Switch on from today'}
-                            className={r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn}>
-                      <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-            <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
-              Switching a rule on always starts it from today. Days before that are never charged,
-              so turning one on in October cannot back-charge a term.
-            </p>
-          </div>
-        </>
-      ) : tab === 'charged' ? (
-        <ChargedList
-          charges={charges} invoices={byInvoice} names={names}
-          showAmounts={showAmounts} canManage={canManage}
-          onChanged={reload}
-        />
-      ) : (
-        <FinesList
-          fines={fines} categories={categories} names={names}
-          showAmounts={showAmounts} canFine={canFine}
-          onAdd={() => setFining(true)} onChanged={reload}
-        />
-      )}
-
-
-      {editing && year && (
-        <LateFeeRuleBuilder
-          yearId={year.id}
-          rule={editing === 'new' ? null : editing}
-          scopes={scopes}
-          sampleBillRupees={sampleBill}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void reload() }}
-        />
-      )}
+      <FinesList
+        fines={fines} categories={categories} names={names}
+        showAmounts={showAmounts} canFine={canFine}
+        onAdd={() => setFining(true)} onChanged={reload}
+      />
 
       {fining && year && (
         <AddFineSheet
@@ -348,16 +120,6 @@ export default function ChargesSection() {
       )}
     </>
   )
-}
-
-
-function describeRule(r: LateFeeRuleRow): string {
-  const amount = r.charge_type === 'flat' ? `₹${r.rate}` : `${r.rate}%`
-  const when = r.frequency === 'once' ? 'once' : `every ${r.frequency.replace('ly', '')}`
-  const cap = r.cap_amount !== null ? `, capped at ₹${r.cap_amount}`
-    : r.cap_percent !== null ? `, capped at ${r.cap_percent}% of the bill` : ''
-  const scope = r.scope === 'all' ? 'every bill' : `one ${r.scope}`
-  return `${amount} ${when} after ${r.grace_days} grace day${r.grace_days === 1 ? '' : 's'}, on ${scope}${cap}`
 }
 
 function ChargedList({
@@ -379,7 +141,7 @@ function ChargedList({
   const exempt = async (invoiceId: string) => {
     setBusy(invoiceId)
     try {
-      await setLateFeeExemption(invoiceId, true, 'Exempted from the charges screen')
+      await setLateFeeExemption(invoiceId, true, 'Exempted from the late fees screen')
       await onChanged()
     } finally { setBusy(null) }
   }
@@ -727,4 +489,3 @@ function ReasonDialog({
     </ModalShell>
   )
 }
-

@@ -53,30 +53,6 @@ export function FeeReceiptDoc({ branding, student, fee, payment }: {
 }
 
 // ── Payment Certificate ───────────────────────────────────────
-export function PaymentCertificateDoc({ branding, student, fee, payment }: {
-  branding: SiteBranding; student?: StudentLike; fee: SchoolFee; payment?: SchoolFeePayment | null
-}) {
-  const amount = Number(payment?.amount ?? fee.amount) || 0
-  const date = payment?.verified_at ?? fee.updated_at
-  const method = payment ? (METHOD_LABELS[payment.method] ?? payment.method) : 'school records'
-  const ref = payment?.upi_txn_ref || payment?.razorpay_payment_id || fee.upi_reference
-  return (
-    <StatementShell branding={branding} title="Payment Certificate" refNo={shortId(payment?.id ?? fee.id)} student={student} year={fee.academic_year ?? undefined} signatory="Authorised Signatory">
-      <Text style={styles.para}>
-        This is to certify that {pdfINR(amount)} has been received from {student?.full_name ?? 'the student'} towards
-        “{feeName(fee)}” for the academic year {fee.academic_year ?? '—'}, paid via {method} on {fmtDate(date)}.
-      </Text>
-      <Text style={styles.para}>Transaction reference: {ref}.</Text>
-      <Text style={[styles.para, { color: '#71717A' }]}>
-        This certificate is issued for record / reimbursement purposes on the request of the payer.
-      </Text>
-      <View style={styles.stampRow}>
-        <Text> </Text>
-        <Text style={styles.sign}>For {branding.schoolName}</Text>
-      </View>
-    </StatementShell>
-  )
-}
 
 // ── Student Fee Transcript / Statement ────────────────────────
 export function FeeTranscriptDoc({ branding, student, year, fees }: {
