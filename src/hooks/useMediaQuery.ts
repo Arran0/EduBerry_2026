@@ -26,8 +26,3 @@ export function useMediaQuery(query: string): boolean {
 export function useIsDesktop(): boolean {
   return useMediaQuery('(min-width: 1024px)')
 }
-
-/** The tablet band, 768–1023px — Tailwind's `md:` up to `lg:`. */
-export function useIsTablet(): boolean {
-  return useMediaQuery('(min-width: 768px) and (max-width: 1023.98px)')
-}

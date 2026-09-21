@@ -683,15 +683,6 @@ export async function upsertDriverBankAccount(input: DriverBankAccountInput): Pr
   return { success: true }
 }
 
-export async function deleteDriverBankAccount(driverId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('driver_bank_accounts').delete().eq('driver_id', driverId)
-  if (error) {
-    console.error('deleteDriverBankAccount failed:', error)
-    return { success: false, error: isMissingRelation(error) ? DRIVER_BANK_MIGRATION_HINT : error.message }
-  }
-  return { success: true }
-}
-
 // ============================================
 // Payroll disbursement (bank payouts)
 // ------------------------------------------------------------

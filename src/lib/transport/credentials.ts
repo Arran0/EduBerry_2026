@@ -37,11 +37,35 @@ export interface StudentCredential {
   student?: { id: string; full_name: string; avatar_url: string | null; grade: string | null; section: string | null } | null
 }
 
-export async function fetchCredentials(studentId?: string): Promise<StudentCredential[]> {
+/**
+ * Issued credentials, newest first.
+ *
+ * Capped, because this list grows with the school rather than with the fleet:
+ * every child issued a card is a row, each carrying a joined profile, so an
+ * uncapped read is the whole student body arriving to fill a panel that shows a
+ * screenful. The cap is a parameter so the one caller that wants a specific
+ * child's cards (`studentId`) is unaffected — that query is already narrow.
+ */
+export async function fetchCredentials(
+  studentId?: string,
+  opts: { limit?: number; search?: string } = {},
+): Promise<StudentCredential[]> {
+  const limit = opts.limit ?? 200
+  const search = opts.search?.trim()
+  // The name filter has to run in the query, not over the returned page: a cap
+  // plus a client-side filter means searching for a child who falls outside the
+  // newest N silently finds nothing, which reads as "no card issued" and is the
+  // one answer this panel must never get wrong. `!inner` makes the embedded
+  // profile a join rather than a left join, which is what lets it be filtered.
+  const embed = search
+    ? 'student:profiles!student_id!inner(id, full_name, avatar_url, grade, section)'
+    : 'student:profiles!student_id(id, full_name, avatar_url, grade, section)'
   let q = supabase
     .from('transport_student_credentials')
-    .select('id, student_id, method, label, active, issued_at, revoked_at, last_used_at, student:profiles!student_id(id, full_name, avatar_url, grade, section)')
+    .select(`id, student_id, method, label, active, issued_at, revoked_at, last_used_at, ${embed}`)
     .order('issued_at', { ascending: false })
+    .limit(limit)
+  if (search) q = q.ilike('student.full_name', `%${search}%`)
   if (studentId) q = q.eq('student_id', studentId)
   const { data, error } = await q
   if (error) { console.error('fetchCredentials failed:', error); return [] }

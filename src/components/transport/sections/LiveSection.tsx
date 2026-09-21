@@ -98,6 +98,35 @@ export default function LiveSection() {
     }
   }, [])
 
+  /**
+   * Acknowledge and resolve, applied to the screen before the write lands.
+   *
+   * Both used to `await` the update and then call `load()`, which refetched the
+   * alert list *and* every active run with its joins — two round trips and a
+   * full reload to change one row's status, with the button sitting dead in
+   * between. Nothing about the outcome is server-computed: an acknowledged
+   * alert is acknowledged, and a resolved one leaves the list, so both are
+   * known here the moment the button is pressed.
+   *
+   * The realtime subscription on transport_alerts reconciles a moment later
+   * regardless, so the optimistic state is never the last word — and if the
+   * write fails, the previous array goes straight back.
+   */
+  const ackAlert = useCallback(async (id: string) => {
+    const before = alerts
+    setAlerts(prev => prev.map(a =>
+      a.id === id ? { ...a, status: 'acknowledged' as const } : a))
+    const res = await acknowledgeAlert(id)
+    if (!res.success) setAlerts(before)
+  }, [alerts])
+
+  const dismissAlert = useCallback(async (id: string) => {
+    const before = alerts
+    setAlerts(prev => prev.filter(a => a.id !== id))
+    const res = await resolveAlert(id)
+    if (!res.success) setAlerts(before)
+  }, [alerts])
+
   const sortedAlerts = useMemo(
     () => [...alerts].sort((a, b) =>
       SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
@@ -105,19 +134,34 @@ export default function LiveSection() {
     [alerts],
   )
 
-  const onRoad = runs.filter(r => r.status === 'in_progress' || r.status === 'boarding')
-  const withPosition = onRoad.filter(r => r.last_lat != null && r.last_lng != null)
+  const onRoad = useMemo(
+    () => runs.filter(r => r.status === 'in_progress' || r.status === 'boarding'),
+    [runs],
+  )
 
-  // Every live bus as a numbered pin. Reusing the stop marker keeps one visual
-  // language across the module rather than inventing a second one for buses.
-  const mapStops = withPosition.map((r, i) => ({
-    id: r.id,
-    seq: i + 1,
-    name: `${r.route?.name ?? 'Route'} · ${vehicleLabel(r.vehicle)}`,
-    lat: r.last_lat as number,
-    lng: r.last_lng as number,
-    radius_m: 0,
-  }))
+  /**
+   * Every live bus as a numbered pin. Reusing the stop marker keeps one visual
+   * language across the module rather than inventing a second one for buses.
+   *
+   * Memoised because this array is a prop to the Leaflet map, and Leaflet is
+   * not React: a fresh array identity on every render is a fresh set of markers
+   * to tear down and rebuild. This component re-renders on every telemetry
+   * UPDATE — several a second across a fleet — so the identity has to be stable
+   * whenever the positions have not actually changed.
+   */
+  const mapStops = useMemo(
+    () => onRoad
+      .filter(r => r.last_lat != null && r.last_lng != null)
+      .map((r, i) => ({
+        id: r.id,
+        seq: i + 1,
+        name: `${r.route?.name ?? 'Route'} · ${vehicleLabel(r.vehicle)}`,
+        lat: r.last_lat as number,
+        lng: r.last_lng as number,
+        radius_m: 0,
+      })),
+    [onRoad],
+  )
 
   const generate = async () => {
     setBusy(true)
@@ -136,7 +180,7 @@ export default function LiveSection() {
           </span>
           {onRoad.length > 0 && (
             <span className="inline-flex items-center gap-1.5 text-[#A1A1AA]">
-              {withPosition.length} reporting
+              {mapStops.length} reporting
             </span>
           )}
         </div>
@@ -250,8 +294,8 @@ export default function LiveSection() {
                   key={a.id}
                   alert={a}
                   onOpenRun={() => a.run_id && setSelectedRunId(a.run_id)}
-                  onAck={async () => { await acknowledgeAlert(a.id); load() }}
-                  onResolve={async () => { await resolveAlert(a.id); load() }}
+                  onAck={() => ackAlert(a.id)}
+                  onResolve={() => dismissAlert(a.id)}
                 />
               ))}
             </div>

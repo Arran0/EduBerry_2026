@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   MessageCircle, Radio, Plus, Trash2, KeyRound, Copy, Check, Loader2, ExternalLink,
   CreditCard, Download, Globe, RefreshCw, Search, Ban,
@@ -414,11 +414,20 @@ function CardsPanel() {
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{ name: string; token: string; dataUrl: string } | null>(null)
 
+  // The name search runs in the query rather than over the loaded page — see
+  // fetchCredentials. Debounced so typing a name is one request, not one per
+  // keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 250)
+    return () => clearTimeout(t)
+  }, [query])
+
   const load = useCallback(async () => {
     setLoading(true)
-    setCreds(await fetchCredentials())
+    setCreds(await fetchCredentials(undefined, { search: debouncedQuery || undefined }))
     setLoading(false)
-  }, [])
+  }, [debouncedQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -455,12 +464,15 @@ function CardsPanel() {
     load()
   }
 
-  const filtered = creds.filter(c => {
-    if (!query.trim()) return true
-    const q = query.trim().toLowerCase()
-    return (c.student?.full_name ?? '').toLowerCase().includes(q)
-      || (c.label ?? '').toLowerCase().includes(q)
-  })
+  // Names are already filtered by the query; this only widens the same search
+  // to the admin's own card labels within what came back.
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.toLowerCase()
+    if (!q) return creds
+    return creds.filter(c =>
+      (c.student?.full_name ?? '').toLowerCase().includes(q)
+      || (c.label ?? '').toLowerCase().includes(q))
+  }, [creds, debouncedQuery])
 
   return (
     <div className="space-y-4">

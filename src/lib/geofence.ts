@@ -9,9 +9,11 @@
  *
  * There is now a third mirror of the same geometry: `transport_point_to_path_m`
  * in supabase-migrations/transport_r2_b_derivation.sql, and its TypeScript
- * counterpart src/lib/transport/path.ts — which imports `projectOnSegment` and
- * `toLocalMetres` from here rather than copying them, precisely so there is one
- * fewer place for the rules to drift.
+ * counterpart src/lib/transport/path.ts — which imports `haversineDistance`
+ * from here rather than copying it, precisely so there is one fewer place for
+ * the rules to drift. (It used to import the projection helpers too; that half
+ * was deleted once the derivation trigger became the only thing computing
+ * progress along a route.)
  *
  * ── Why the old rule was wrong ────────────────────────────────────────────────
  * The previous check was `distance <= radius + min(accuracy, 75)`. It treated a

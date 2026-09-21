@@ -6,13 +6,16 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   Bus, IndianRupee, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
-  ShieldAlert, Plug, History, BarChart3,
+  BarChart3, SlidersHorizontal,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN, HubTabs } from '@/components/bus/adminUI'
+import Modal from '@/components/workspace/Modal'
+import { PANEL_TITLES, type PanelKey } from '@/components/transport/ManageLauncher'
+const ManageLauncher = dynamic(() => import('@/components/transport/ManageLauncher'))
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const LiveSection          = dynamic(() => import('@/components/transport/sections/LiveSection'))
 const SafetySection        = dynamic(() => import('@/components/transport/sections/SafetySection'))
@@ -62,42 +65,100 @@ function BusPageContent() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Admin hub — three sections: Trips / Bus Fees / Driver Payroll
+// Admin hub — four daily tabs, everything else behind "Manage"
+//
+// This used to be nine tabs across. Nine is not a navigation bar, it is a list
+// with a border — it scrolled sideways on a phone, and a tab strip you have to
+// scroll has stopped saying where you are. The cut here is by how often a thing
+// is opened, not by what it is about: Live is opened many times a day and "GPS
+// devices" is opened once, when a bus is fitted. Levelling those two cost the
+// daily screens the prominence they earn.
+//
+// So four tabs stay, and the five occasional surfaces move into the Manage
+// popup. Nothing was rewritten to move: each popup renders the same section
+// component it did as a tab.
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey =
-  | 'live' | 'routes' | 'fleet' | 'history' | 'reports' | 'safety' | 'setup' | 'fees' | 'payroll'
+type SectionKey = 'live' | 'insights' | 'fees' | 'payroll'
 
 const SECTIONS = [
   { key: 'live' as const, label: 'Live', icon: <Radio size={15} /> },
-  { key: 'routes' as const, label: 'Routes', icon: <Route size={15} /> },
-  { key: 'fleet' as const, label: 'Fleet & Crew', icon: <Bus size={15} /> },
-  { key: 'history' as const, label: 'History', icon: <History size={15} /> },
-  { key: 'reports' as const, label: 'Reports', icon: <BarChart3 size={15} /> },
-  { key: 'safety' as const, label: 'Safety', icon: <ShieldAlert size={15} /> },
-  { key: 'setup' as const, label: 'Setup', icon: <Plug size={15} /> },
+  { key: 'insights' as const, label: 'Insights', icon: <BarChart3 size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
   { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
 
 const SECTION_KEYS = SECTIONS.map(s => s.key)
 
+/**
+ * Old `?tab=` values, kept working.
+ *
+ * `/home` links to `?tab=fees&section=issued&filter=outstanding`, the payroll
+ * sub-pages link back to `?tab=payroll`, and `/more/bus/fees` redirects to
+ * `?tab=fees`. Those are live links in the app and in whatever anyone has
+ * bookmarked; a rename that breaks them is a rename that shipped a bug. The
+ * five that became popups now open as popups over the Live tab.
+ */
+const LEGACY_TAB: Record<string, { tab: SectionKey; panel?: PanelKey }> = {
+  reports: { tab: 'insights' },
+  routes:  { tab: 'live', panel: 'routes' },
+  fleet:   { tab: 'live', panel: 'fleet' },
+  history: { tab: 'live', panel: 'history' },
+  safety:  { tab: 'live', panel: 'safety' },
+  setup:   { tab: 'live', panel: 'setup' },
+}
+
+const PANEL_KEYS: PanelKey[] = ['routes', 'fleet', 'setup', 'history', 'safety']
+
 function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
+  const panelParam = searchParams.get('panel')
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
-  const initial: SectionKey =
-    SECTION_KEYS.includes(tabParam as SectionKey) ? (tabParam as SectionKey) : 'live'
-  const [section, setSection] = useState<SectionKey>(initial)
+
+  const legacy = tabParam ? LEGACY_TAB[tabParam] : undefined
+  const initialTab: SectionKey =
+    SECTION_KEYS.includes(tabParam as SectionKey) ? (tabParam as SectionKey)
+    : legacy ? legacy.tab
+    : 'live'
+  const initialPanel: PanelKey | null =
+    PANEL_KEYS.includes(panelParam as PanelKey) ? (panelParam as PanelKey)
+    : legacy?.panel ?? null
+
+  const [section, setSection] = useState<SectionKey>(initialTab)
+  const [panel, setPanel] = useState<PanelKey | null>(initialPanel)
+  const [manageOpen, setManageOpen] = useState(false)
   const [bannerEditing, setBannerEditing] = useState(false)
+
+  // One place that writes the URL, so a tab change and a popup open can never
+  // disagree about what the address bar says.
+  const syncUrl = useCallback((tab: SectionKey, open: PanelKey | null) => {
+    const qs = new URLSearchParams()
+    if (tab !== 'live') qs.set('tab', tab)
+    if (open) qs.set('panel', open)
+    const q = qs.toString()
+    router.replace(q ? `/more/bus?${q}` : '/more/bus', { scroll: false })
+  }, [router])
 
   const selectSection = (key: SectionKey) => {
     setSection(key)
-    // Keep the URL shareable / consistent with the active section.
-    router.replace(key === 'live' ? '/more/bus' : `/more/bus?tab=${key}`, { scroll: false })
+    syncUrl(key, panel)
   }
+
+  const openPanel = (key: PanelKey) => {
+    setManageOpen(false)
+    setPanel(key)
+    syncUrl(section, key)
+  }
+
+  const closePanel = () => {
+    setPanel(null)
+    syncUrl(section, null)
+  }
+
+  const panelMeta = panel ? PANEL_TITLES[panel] : null
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -118,22 +179,54 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Hub toggler — underline card tabs (Style A), overlaps the banner */}
-          <div className="relative z-10 -mt-6 sm:-mt-7 mb-5">
-            <HubTabs tabs={SECTIONS} value={section} onChange={selectSection} />
+          {/* Hub toggler — four tabs plus the Manage button, overlapping the banner */}
+          <div className="relative z-10 -mt-6 sm:-mt-7 mb-5 flex items-stretch gap-2.5">
+            <HubTabs tabs={SECTIONS} value={section} onChange={selectSection} className="flex-1 min-w-0" />
+            <button
+              onClick={() => setManageOpen(true)}
+              className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-[#E4E4E7] bg-white px-4 shadow-sm text-sm font-semibold text-[#52525B] transition-colors hover:border-[#B8983C] hover:text-[#27272A]"
+            >
+              <SlidersHorizontal size={15} />
+              <span className="hidden sm:inline">Manage</span>
+            </button>
           </div>
 
           {section === 'live' && <LiveSection />}
-          {section === 'routes' && <RoutesSection />}
-          {section === 'fleet' && <FleetSection />}
-          {section === 'history' && <HistorySection />}
-          {section === 'reports' && <ReportsSection />}
-          {section === 'safety' && <SafetySection />}
-          {section === 'setup' && <IntegrationsSection />}
+          {section === 'insights' && <ReportsSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
           {section === 'payroll' && <DriverPayrollSection />}
         </div>
       </div>
+
+      <Modal
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        title="Manage transport"
+        subtitle="Setup and records — the things you open occasionally"
+        icon={SlidersHorizontal}
+        size="lg"
+      >
+        <ManageLauncher onPick={openPanel} />
+      </Modal>
+
+      {/* One modal, whichever panel is open. Mounted only while open, so a
+          section's queries fire when it is actually shown rather than on every
+          page load — which is the whole reason these are popups and not tabs. */}
+      <Modal
+        open={panel !== null}
+        onClose={closePanel}
+        title={panelMeta?.title ?? ''}
+        subtitle={panelMeta?.subtitle}
+        icon={panelMeta?.icon}
+        size="xl"
+        fullHeight
+      >
+        {panel === 'routes' && <RoutesSection />}
+        {panel === 'fleet' && <FleetSection />}
+        {panel === 'setup' && <IntegrationsSection />}
+        {panel === 'history' && <HistorySection />}
+        {panel === 'safety' && <SafetySection />}
+      </Modal>
     </div>
   )
 }

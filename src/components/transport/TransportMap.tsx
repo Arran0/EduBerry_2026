@@ -110,6 +110,35 @@ function ClickCatcher({ onMapClick }: { onMapClick: (p: LatLng) => void }) {
 }
 
 /**
+ * Keeps Leaflet's idea of the container size honest.
+ *
+ * Leaflet measures its container once, on mount, and then trusts that number
+ * until something tells it otherwise. That is fine for a map that mounts at its
+ * final size and wrong everywhere else: inside the Manage popup the panel
+ * animates in, so the map mounts mid-transition, measures a box that is still
+ * scaling, and renders a half-width grid of grey tiles that only corrects
+ * itself if the window happens to be resized.
+ *
+ * A ResizeObserver on the container is the general fix — it covers the popup,
+ * a phone rotating, and the desktop split pane being dragged, without any of
+ * them having to know a map is inside them.
+ */
+function KeepSized() {
+  const map = useMap()
+  useEffect(() => {
+    const el = map.getContainer()
+    // Leaflet throws if invalidateSize lands after the map is torn down, which
+    // is reachable here: the observer can fire on the frame the popup closes.
+    const ro = new ResizeObserver(() => {
+      try { map.invalidateSize({ animate: false }) } catch { /* map already gone */ }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [map])
+  return null
+}
+
+/**
  * Fits every stop on screen once, when the set first arrives.
  *
  * Deliberately not on every render: re-fitting as the admin edits would yank
@@ -175,6 +204,7 @@ export default function TransportMap({
         zoomControl
         style={{ height: '100%', width: '100%', cursor: onMapClick ? 'crosshair' : undefined }}
       >
+        <KeepSized />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

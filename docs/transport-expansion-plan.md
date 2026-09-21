@@ -444,6 +444,52 @@ RFID/NFC/QR credentials with a driver-side scan field; and the GTFS static
 > account could drive the school's alerting pass through
 > `/rest/v1/rpc/transport_tick`. See that migration's header.
 
+---
+
+## Round 5 — Fewer tabs, and the engine's internals taken off the API  ✅ APPLIED
+
+**Navigation.** The admin hub went from nine top-level tabs to four —
+Live · Insights · Bus Fees · Driver Payroll — with the five occasional
+surfaces (routes & stops, fleet & crew, devices & integrations, trip history,
+safety & incidents) moved behind a **Manage** popup. The cut is by how often a
+thing is opened rather than by what it is about: Live is opened many times a
+day, "GPS devices" once, when a bus is fitted, and levelling those two cost the
+daily screens the prominence they earn. Nothing was rewritten to move — each
+popup renders the same section component it did as a tab — and every old
+`?tab=` link still resolves, with the five that became popups opening as
+popups. `TransportMap` gained a `ResizeObserver` so Leaflet re-measures when a
+popup animates in, instead of painting a half-width grid of grey tiles.
+
+**Security — four holes, all the same shape.** `transport_r5_a` revokes
+EXECUTE from `PUBLIC`/`anon`/`authenticated` on eight SECURITY DEFINER
+functions that exist to be called by a trigger or the cron tick and check
+nobody, because PostgreSQL grants EXECUTE to PUBLIC by default and PostgREST
+publishes the result. The worst was `transport_student_contact(uuid)`, which
+returned the guardian's phone number for **any** student id — every family's
+number in the school, harvestable one id at a time. Confirmed exploitable
+against the live project (one student's session successfully read another
+student's contact row) before the fix, and denied after. The others let any
+signed-in account send a push or WhatsApp to any family
+(`transport_notify_student`), fabricate an alert (`transport_raise_alert`), or
+**silently resolve any open alert by its formulaic dedupe key**
+(`transport_clear_alert`) — the last being the one that quietly switches the
+safety net off. The six RLS helper predicates are deliberately left callable:
+policies are evaluated as the calling role, and each answers only about the
+caller's own `auth.uid()`.
+
+**A crash that would have stopped tracking on day one.** `transport_r5_b`
+fixes `transport_process_fix`, which assigned its projection RECORD only
+inside `IF path.polyline IS NOT NULL` and then dereferenced it unconditionally.
+PL/pgSQL raises `55000 record "proj" is not assigned yet` rather than yielding
+NULL, and the raise happens inside an AFTER INSERT trigger, so it aborts the
+insert that fired it: **every GPS fix on a route with no drawn path was
+rejected**, leaving the bus invisible, no stop arrivals, and no parent told
+anything. At the time of the fix the live project had one route and zero route
+paths, so the school's first trip would have hit it. Two scalars replace the
+record, so the `COALESCE` that always looked like it handled the missing case
+finally does, and `off_route_m` is NULL — the honest answer when there is no
+path to measure against.
+
 **Goal.** Make the history answerable, the operation measurable, boarding
 faster without making it less supervised, and the school's own timetable
 portable.
