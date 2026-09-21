@@ -192,6 +192,21 @@ export default function AnnouncementsPage() {
             }}
           />
 
+          {/* Admin edit pencil – top-right corner of the banner, matching the
+              home banner's pencil exactly (circular, w-8 h-8, bg-black/25/45,
+              backdrop-blur-sm, size-13 icon, same top-3 right-3 placement).
+              The button row below reserves right-side clearance (mr-11) so
+              it never sits under this. */}
+          {isAdmin && !editingBanner && (
+            <button
+              onClick={openEditor}
+              className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all"
+              title="Customise banner"
+            >
+              <Pencil size={13} className="text-white" />
+            </button>
+          )}
+
           {/* Main header row */}
           {/* Vertical rhythm matches the academics banner (pt-5 pb-6, p-3 icon) */}
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
@@ -204,11 +219,11 @@ export default function AnnouncementsPage() {
                   <h1 className={`font-display text-[1.45rem] sm:text-[2.6rem] font-black leading-[1.04] tracking-tight truncate transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                     Announcements
                   </h1>
-                  <p className={`text-sm mt-1 truncate transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
+                  <p className={`text-sm mt-1 truncate transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className={`flex items-center gap-2 flex-shrink-0 ${isAdmin ? 'mr-11' : ''}`}>
                 <PushToggle onDark={bannerOnDark} />
                 {canCreate && (
                   <button
@@ -234,19 +249,6 @@ export default function AnnouncementsPage() {
                     title="New Announcement"
                   >
                     <Plus size={16} />
-                  </button>
-                )}
-                {/* Admin edit pencil – top-right, in-flow with the other
-                    banner controls so it can never overlap the New
-                    Announcement button. Same circular design as the home
-                    banner's pencil (w-8 h-8, bg-black/25/45, size-13 icon). */}
-                {isAdmin && !editingBanner && (
-                  <button
-                    onClick={openEditor}
-                    className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all flex-shrink-0"
-                    title="Customise banner"
-                  >
-                    <Pencil size={13} className="text-white" />
                   </button>
                 )}
               </div>
