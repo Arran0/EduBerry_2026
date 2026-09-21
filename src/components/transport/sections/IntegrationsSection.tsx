@@ -27,6 +27,14 @@ import { EmptyRow } from './FleetSection'
 
 type Tab = 'whatsapp' | 'devices' | 'cards' | 'gtfs'
 
+/**
+ * The combined setup screen.
+ *
+ * Kept whole because the four panels still belong together conceptually, but
+ * each is now exported on its own: the Manage popup opens WhatsApp, GPS and
+ * Scan as separate destinations, so a school that never touches cards never
+ * has to walk past them.
+ */
 export default function IntegrationsSection() {
   const [tab, setTab] = useState<Tab>('whatsapp')
   return (
@@ -59,7 +67,7 @@ const WA_FIELDS: { key: string; label: string; secret?: boolean; hint?: string }
   { key: 'default_country_code', label: 'Default country code', hint: 'Applied to numbers stored without one. 91 for India.' },
 ]
 
-function WhatsAppPanel() {
+export function WhatsAppPanel() {
   const [values, setValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -153,7 +161,7 @@ function WhatsAppPanel() {
 
 // ── Devices ─────────────────────────────────────────────────────────────────
 
-function DevicesPanel() {
+export function DevicesPanel() {
   const [sources, setSources] = useState<TelemetrySource[]>([])
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [loading, setLoading] = useState(true)
@@ -400,7 +408,7 @@ function SecretRow({ secret }: { secret: string }) {
  */
 type PickableStudent = Awaited<ReturnType<typeof fetchAssignableStudents>>[number]
 
-function CardsPanel() {
+export function CardsPanel() {
   const [students, setStudents] = useState<PickableStudent[]>([])
   const [creds, setCreds] = useState<StudentCredential[]>([])
   const [loading, setLoading] = useState(true)
@@ -651,7 +659,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
  * staying than any lock-in would be, and a transport authority that asks for
  * the feed is not going to wait.
  */
-function GtfsPanel() {
+export function GtfsPanel() {
   const [feed, setFeed] = useState<GtfsStatic | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

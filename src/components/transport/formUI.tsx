@@ -6,38 +6,106 @@
  * Thin wrappers over the existing ADMIN tokens in components/bus/adminUI so the
  * new screens sit in the same design language as the fee and payroll surfaces
  * rather than introducing a third one.
+ *
+ * These are deliberately dense. An admin form here is not a sign-up page with
+ * six fields and room to breathe — it is a vehicle with ten, a route with
+ * twelve, a schedule with a weekday picker — and a layout that gives each field
+ * a full row turns filling one in into scrolling through one. The sheets on
+ * /more/bus are dense for the same reason, and a form that opens over them
+ * should not feel like a different application.
+ *
+ * The density comes from three things, all here rather than repeated per form:
+ * inputs one step tighter than the page default, hints that sit under the field
+ * without adding a line of their own margin, and a grid that goes to three
+ * columns on a wide modal instead of stopping at two.
  */
 
 import React from 'react'
 import { ADMIN } from '@/components/bus/adminUI'
 
+/**
+ * One step tighter than ADMIN.inputPlain, which is sized for a page rather
+ * than for twelve of itself inside a modal.
+ */
+const DENSE_INPUT =
+  'w-full bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 text-sm text-[#27272A] ' +
+  'placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+
 export function Field({
-  label, hint, children, className = '',
+  label, hint, children, className = '', span,
 }: {
   label: string
   hint?: string
   children: React.ReactNode
   className?: string
+  /** Widen a field that genuinely needs the room, inside a FormGrid. */
+  span?: 2 | 3 | 'full'
 }) {
+  const spanClass =
+    span === 'full' ? 'sm:col-span-2 lg:col-span-3'
+    : span === 3 ? 'lg:col-span-3'
+    : span === 2 ? 'sm:col-span-2'
+    : ''
   return (
-    <label className={`block ${className}`}>
+    <label className={`block ${spanClass} ${className}`}>
       <span className={ADMIN.label}>{label}</span>
-      <div className="mt-1.5">{children}</div>
-      {hint && <p className="mt-1 text-[11px] text-[#A1A1AA]">{hint}</p>}
+      <div className="mt-1">{children}</div>
+      {hint && <p className="mt-0.5 text-[10px] leading-snug text-[#A1A1AA]">{hint}</p>}
     </label>
   )
 }
 
+/**
+ * The form's column grid.
+ *
+ * Three columns on a wide modal, two on a tablet, one on a phone. Two was the
+ * old ceiling and it left half of a `size="lg"` modal empty while the fields
+ * ran off the bottom.
+ */
+export function FormGrid({ children, className = '' }: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3 ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * A titled band of related fields, matching the dark column headers the sheets
+ * on /more/bus use — so a form reads as the same object as the list it opened
+ * from, rather than as a dialog that happens to be nearby.
+ */
+export function FormSection({ title, hint, children }: {
+  title: string
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-[#E4E4E7] overflow-hidden">
+      <div className="bg-[#27272A] px-3.5 py-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{title}</p>
+      </div>
+      <div className="p-3.5">
+        {hint && <p className="mb-2.5 text-[11px] leading-snug text-[#71717A]">{hint}</p>}
+        {children}
+      </div>
+    </section>
+  )
+}
+
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${ADMIN.inputPlain} ${props.className ?? ''}`} />
+  return <input {...props} className={`${DENSE_INPUT} ${props.className ?? ''}`} />
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${ADMIN.inputPlain} ${props.className ?? ''}`} />
+  return <select {...props} className={`${DENSE_INPUT} ${props.className ?? ''}`} />
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${ADMIN.inputPlain} resize-none ${props.className ?? ''}`} />
+  return <textarea {...props} className={`${DENSE_INPUT} resize-none ${props.className ?? ''}`} />
 }
 
 export function FormError({ message }: { message: string | null }) {

@@ -6,7 +6,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { createVehicle, updateVehicle } from '@/lib/transport/vehicles'
 import type { TransportVehicle, VehicleInput } from '@/lib/transport/types'
 import { VEHICLE_COMPLIANCE_FIELDS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
-import { Field, FormError, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { Field, FormError, FormGrid, FormSection, ModalFooter, Select, TextArea, TextInput } from './formUI'
 
 export default function VehicleFormModal({
   vehicle, onClose, onSaved,
@@ -66,10 +66,11 @@ export default function VehicleFormModal({
       iconClassName="bg-amber-100 text-amber-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <FormError message={error} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FormSection title="The bus">
+        <FormGrid>
           <Field label="Registration number *" hint="Spacing and case don't matter — they're normalised.">
             <TextInput
               value={form.registration_no}
@@ -107,17 +108,14 @@ export default function VehicleFormModal({
               ))}
             </Select>
           </Field>
-        </div>
+        </FormGrid>
+        </FormSection>
 
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2">
-            Compliance
-          </p>
-          <p className="text-[11px] text-[#A1A1AA] mb-2.5">
-            A lapsed certificate means the bus cannot legally carry children, so these are
-            surfaced as warnings on the fleet list as they approach expiry.
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <FormSection
+          title="Compliance"
+          hint="A lapsed certificate means the bus cannot legally carry children, so these are surfaced as warnings on the fleet list as they approach expiry."
+        >
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-4">
             {VEHICLE_COMPLIANCE_FIELDS.map(({ key, label }) => (
               <Field key={key} label={label}>
                 <TextInput
@@ -128,11 +126,11 @@ export default function VehicleFormModal({
               </Field>
             ))}
           </div>
-        </div>
+        </FormSection>
 
-        <Field label="Notes">
+        <FormSection title="Notes">
           <TextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
-        </Field>
+        </FormSection>
       </div>
     </ModalShell>
   )

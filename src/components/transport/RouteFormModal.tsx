@@ -6,7 +6,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { createRoute, updateRoute } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import type { RouteInput, TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
-import { Field, FormError, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
 
 const COLORS = ['#F97316', '#0EA5E9', '#8B5CF6', '#10B981', '#EF4444', '#EAB308', '#EC4899', '#64748B']
 
@@ -73,10 +73,10 @@ export default function RouteFormModal({
       iconClassName="bg-orange-100 text-orange-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <FormError message={error} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FormGrid>
           <Field label="Route name *">
             <TextInput
               value={form.name}
@@ -88,7 +88,7 @@ export default function RouteFormModal({
           <Field label="Code" hint="Short label used on the fleet map, e.g. R-07.">
             <TextInput value={form.code ?? ''} onChange={e => set('code', e.target.value)} placeholder="R-07" />
           </Field>
-        </div>
+        </FormGrid>
 
         <Field label="Description">
           <TextArea

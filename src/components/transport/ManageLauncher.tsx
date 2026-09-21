@@ -19,10 +19,13 @@
  */
 
 import React from 'react'
-import { Route, Bus, Plug, History, ShieldAlert, ChevronRight } from 'lucide-react'
+import {
+  Route, Bus, Users, MessageCircle, Radio, ScanLine, History, ShieldAlert, ChevronRight,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-export type PanelKey = 'routes' | 'fleet' | 'setup' | 'history' | 'safety'
+export type PanelKey =
+  | 'routes' | 'fleet' | 'crew' | 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents'
 
 interface Entry {
   key: PanelKey
@@ -39,26 +42,37 @@ export const PANEL_GROUPS: { heading: string; entries: Entry[] }[] = [
   {
     heading: 'Set up',
     entries: [
-      { key: 'routes', label: 'Routes & stops', blurb: 'Draw a route, place its stops, assign students', icon: Route },
-      { key: 'fleet', label: 'Fleet & crew', blurb: 'Buses, drivers, attendants and compliance dates', icon: Bus },
-      { key: 'setup', label: 'Devices & integrations', blurb: 'WhatsApp, GPS hardware, cards & QR, open data', icon: Plug },
+      { key: 'routes', label: 'Routes', blurb: 'Draw a route, place its stops, assign students', icon: Route },
+      { key: 'fleet', label: 'Fleet', blurb: 'Buses, capacity and compliance dates', icon: Bus },
+      { key: 'crew', label: 'Crew', blurb: 'Drivers and attendants, and who rides which route', icon: Users },
+    ],
+  },
+  {
+    heading: 'Connect',
+    entries: [
+      { key: 'whatsapp', label: 'WhatsApp', blurb: 'Message templates and the sending account', icon: MessageCircle },
+      { key: 'gps', label: 'GPS', blurb: 'Hardware already fitted to the buses', icon: Radio },
+      { key: 'scan', label: 'Scan', blurb: 'Cards, fobs and QR — only if you want them', icon: ScanLine },
     ],
   },
   {
     heading: 'Look back',
     entries: [
-      { key: 'history', label: 'Trip history & replay', blurb: 'Scrub a finished trip stop by stop', icon: History },
-      { key: 'safety', label: 'Safety & incidents', blurb: 'SOS events, incident records and their snapshots', icon: ShieldAlert },
+      { key: 'replay', label: 'Replay', blurb: 'Scrub a finished trip, and export the open data feed', icon: History },
+      { key: 'incidents', label: 'Incidents', blurb: 'SOS events and their frozen snapshots', icon: ShieldAlert },
     ],
   },
 ]
 
 export const PANEL_TITLES: Record<PanelKey, { title: string; subtitle: string; icon: LucideIcon }> = {
-  routes: { title: 'Routes & stops', subtitle: 'Draw a route, place its stops, assign students', icon: Route },
-  fleet: { title: 'Fleet & crew', subtitle: 'Buses, drivers, attendants and compliance dates', icon: Bus },
-  setup: { title: 'Devices & integrations', subtitle: 'WhatsApp, GPS hardware, cards & QR, open data', icon: Plug },
-  history: { title: 'Trip history & replay', subtitle: 'Scrub a finished trip stop by stop', icon: History },
-  safety: { title: 'Safety & incidents', subtitle: 'SOS events and incident records', icon: ShieldAlert },
+  routes: { title: 'Routes', subtitle: 'Draw a route, place its stops, assign students', icon: Route },
+  fleet: { title: 'Fleet', subtitle: 'Buses, capacity and compliance dates', icon: Bus },
+  crew: { title: 'Crew', subtitle: 'Drivers and attendants, and who rides which route', icon: Users },
+  whatsapp: { title: 'WhatsApp', subtitle: 'Message templates and the sending account', icon: MessageCircle },
+  gps: { title: 'GPS', subtitle: 'Hardware already fitted to the buses', icon: Radio },
+  scan: { title: 'Scan', subtitle: 'Cards, fobs and QR — only if you want them', icon: ScanLine },
+  replay: { title: 'Replay', subtitle: 'Scrub a finished trip, and export the open data feed', icon: History },
+  incidents: { title: 'Incidents', subtitle: 'SOS events and their frozen snapshots', icon: ShieldAlert },
 }
 
 export default function ManageLauncher({ onPick }: { onPick: (key: PanelKey) => void }) {

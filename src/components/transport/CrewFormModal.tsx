@@ -6,7 +6,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { upsertTransportStaff, updateTransportStaff } from '@/lib/transport/staff'
 import type { StaffInput, TransportStaff } from '@/lib/transport/types'
 import { STAFF_KIND_LABELS } from '@/lib/transport/types'
-import { Field, FormError, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
 
 interface Candidate { id: string; full_name: string; avatar_url?: string | null }
 
@@ -74,10 +74,10 @@ export default function CrewFormModal({
       iconClassName="bg-sky-100 text-sky-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <FormError message={error} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FormGrid>
           <Field
             label="Person *"
             hint="Attendants use a driver account too — the role below is what distinguishes them."
@@ -119,7 +119,7 @@ export default function CrewFormModal({
           <Field label="Emergency contact">
             <TextInput value={form.emergency_contact ?? ''} onChange={e => set('emergency_contact', e.target.value)} />
           </Field>
-        </div>
+        </FormGrid>
 
         <Field label="Address">
           <TextArea rows={2} value={form.address ?? ''} onChange={e => set('address', e.target.value)} />

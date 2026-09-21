@@ -419,3 +419,38 @@ export async function resolveIncident(
   })
   return { success: true }
 }
+
+/**
+ * Per-run rider tallies for the operations list.
+ *
+ * One query for the whole board rather than one per bus: the live screen shows
+ * every active run at once, so a per-run count would be an N+1 that grows with
+ * the fleet. Returns a map keyed by run id.
+ */
+export interface RunRiderCounts {
+  expected: number
+  boarded: number
+  dropped: number
+  excused: number
+}
+
+export async function fetchRunRiderCounts(
+  runIds: string[],
+): Promise<Record<string, RunRiderCounts>> {
+  if (runIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('transport_run_passengers')
+    .select('run_id, state')
+    .in('run_id', runIds)
+  if (error) { console.error('fetchRunRiderCounts failed:', error); return {} }
+
+  const out: Record<string, RunRiderCounts> = {}
+  for (const row of (data ?? []) as { run_id: string; state: string }[]) {
+    const c = out[row.run_id] ??= { expected: 0, boarded: 0, dropped: 0, excused: 0 }
+    c.expected++
+    if (row.state === 'boarded') c.boarded++
+    else if (row.state === 'dropped') { c.boarded++; c.dropped++ }
+    else if (row.state === 'excused') c.excused++
+  }
+  return out
+}

@@ -571,3 +571,56 @@ monotonically, the parent screen updates live without a reload, the sixth
 student raises a not-boarded alert unless first marked on leave, cutting
 telemetry opens and closes a `bus_offline` alert, and a run refuses to close
 with a child still onboard.
+
+---
+
+## Round 5b — Two tabs, a simulation, and three bugs it found  ✅ APPLIED
+
+**Navigation, again.** Nine tabs became four last round and are now **two**:
+Operations and Bus Fees. Live and Insights were answering one question between
+them — an admin watching a bus had to leave the map to learn whether the fleet
+is punctual, and leave the numbers to find the bus — so they are one screen:
+full-width map, then today in numbers, then the buses worst-first, then what to
+chase. **Driver payroll left the transport hub entirely**; paying drivers is a
+monthly finance job that shares a word with transport and nothing else, and it
+still lives at `/more/bus/payroll`.
+
+The Manage popup is now eight named destinations rather than five bundles:
+Routes · Fleet · Crew · WhatsApp · GPS · Scan · Replay · Incidents. **Scan**
+(was "Cards & QR") stays folded shut behind a yes/no question, because most
+schools tap a name and for them card issuing is three screens of machinery for
+a decision they never made. **Replay** absorbed the open-data export — both
+answer "what actually happened", one for a trip and one in a format somebody
+else's software reads.
+
+**"Generate today's trips" is gone.** The question it raised was the right one:
+stops describe *where a bus goes*, a trip run is the *instance* for one day and
+direction, and the nightly job makes them. The button existed only to cover the
+morning after someone first sets up schedules — a race the system already knows
+about — so the screen now materialises silently when it finds no runs.
+
+**Three bugs, found by building a simulation.** `transport_simulate_day()`
+seeds three buses (one punctual, one 14 minutes late, one whose GPS dies after
+stop two) and drives them by **inserting real telemetry**, so the derivation
+trigger does the work and the results can actually be wrong. It derived 12
+arrivals, 12 departures and the delays without being told any of them. What it
+caught:
+
+- **Every popup in the app rendered underneath any Leaflet map.** leaflet.css
+  puts panes at z-index 400 and controls at 1000; `.leaflet-container` is
+  `position: relative; z-index: auto`, so it creates no stacking context and
+  those values escape into the root one, outranking all 41 of this app's z-50
+  overlays. One line in globals.css (`isolation: isolate`) fixes the cause for
+  every map and every overlay at once.
+- **A closed popup left the page blurred and unclickable.** `workspace/Modal`
+  put a plain `<div>` backdrop as the direct child of `AnimatePresence`, which
+  tracks only keyed motion children — so there was nothing it could animate
+  out, the subtree stayed mounted, and a `fixed inset-0` blurred backdrop sat
+  there swallowing clicks. The backdrop is now the keyed motion element.
+- The spring on the panel overshot, which read as the page twitching; it is a
+  short ease now.
+
+**Parent-facing bus and fees are gated** behind an under-construction notice
+for non-admins. Both screens are written and working and are deliberately left
+in the codebase — turning them back on is deleting one branch, not rebuilding a
+screen.

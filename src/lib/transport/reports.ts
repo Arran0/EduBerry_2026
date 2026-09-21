@@ -69,6 +69,14 @@ export interface MismatchRow {
   route_name: string | null
   boarding_state: string
   class_status: string
+  /**
+   * The guardian's number, resolved server-side exactly as the notification
+   * path resolves it (assignment override -> guardian -> student). The report
+   * exists to cause a phone call, and a name with no number leaves the one
+   * person who can answer the question a search away.
+   */
+  guardian_phone: string | null
+  whatsapp_opted_in: boolean
 }
 
 async function report<T>(fn: string, from: string, to: string): Promise<T[]> {

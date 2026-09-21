@@ -68,15 +68,36 @@ export default function Modal({
   const modal = (
     <AnimatePresence>
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
+        /*
+         * The backdrop is the direct child of AnimatePresence and is itself a
+         * motion element with a key. It used to be a plain <div> wrapping a
+         * motion panel, which looks equivalent and is not: AnimatePresence only
+         * tracks its *direct* children, and only keyed motion components. With
+         * a plain div there it had nothing it could animate out, so the subtree
+         * was left mounted waiting for an exit that never completed — and since
+         * the backdrop is `fixed inset-0` with a blur and an onClick, what the
+         * user got was a permanently blurred page that swallowed every click.
+         *
+         * z-index has to clear Leaflet, whose own stylesheet puts map panes at
+         * 400 and controls at 1000. globals.css isolates the map's stacking
+         * context so those stay inside it; this stays above regardless.
+         */
+        <motion.div
+          key="modal-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
           onClick={onClose}
         >
           <motion.div
-            initial={{ y: 40, opacity: 0 }}
+            initial={{ y: 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 40, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            exit={{ y: 24, opacity: 0 }}
+            // A spring overshoots, and an overshoot on a panel this size reads
+            // as the page twitching. A short ease does not.
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()}
             className={`bg-white w-full ${SIZE[size]} ${
               fullHeight ? 'h-[92dvh] sm:h-[88vh]' : 'max-h-[92dvh] sm:max-h-[88vh]'
@@ -117,7 +138,7 @@ export default function Modal({
               </div>
             )}
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   )

@@ -28,6 +28,8 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Landmark, Layers, Settings, Timer } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
+import { IndianRupee } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
@@ -169,10 +171,19 @@ function FeesInner() {
 
 function FeesGate() {
   const { profile } = useAuth()
-  // Fees are an admin-only module on the staff side. Other staff roles fall
-  // through to the student card, which shows only the viewer's own bills.
   const isAdmin = profile?.role === 'admin'
-  if (!isAdmin) return <StudentFeeCard />
+  // Held back from everyone but admins while the module is finished. The
+  // parent-facing bill view (StudentFeeCard) is written and works; it is gated
+  // here rather than deleted, so turning it back on is deleting this branch.
+  if (!isAdmin) {
+    return (
+      <UnderConstruction
+        title="Fees"
+        description="Online fee bills and payments are almost ready. Until then, the school office has your statement."
+        icon={<IndianRupee size={30} className="text-white" />}
+      />
+    )
+  }
   return <FeesInner />
 }
 

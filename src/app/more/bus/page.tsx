@@ -5,10 +5,11 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Bus, IndianRupee, CreditCard, Banknote, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
-  BarChart3, SlidersHorizontal,
+  Bus, IndianRupee, CreditCard, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
+  SlidersHorizontal,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -17,15 +18,17 @@ import Modal from '@/components/workspace/Modal'
 import { PANEL_TITLES, type PanelKey } from '@/components/transport/ManageLauncher'
 const ManageLauncher = dynamic(() => import('@/components/transport/ManageLauncher'))
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
-const LiveSection          = dynamic(() => import('@/components/transport/sections/LiveSection'))
-const SafetySection        = dynamic(() => import('@/components/transport/sections/SafetySection'))
-const IntegrationsSection  = dynamic(() => import('@/components/transport/sections/IntegrationsSection'))
-const RoutesSection        = dynamic(() => import('@/components/transport/sections/RoutesSection'))
-const HistorySection       = dynamic(() => import('@/components/transport/sections/HistorySection'))
-const ReportsSection       = dynamic(() => import('@/components/transport/sections/ReportsSection'))
-const FleetSection         = dynamic(() => import('@/components/transport/sections/FleetSection'))
-const BusFeesSection       = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
-const DriverPayrollSection = dynamic(() => import('@/components/bus/sections/DriverPayrollSection'))
+const OperationsSection = dynamic(() => import('@/components/transport/sections/OperationsSection'))
+const SafetySection     = dynamic(() => import('@/components/transport/sections/SafetySection'))
+const RoutesSection     = dynamic(() => import('@/components/transport/sections/RoutesSection'))
+const FleetSection      = dynamic(() => import('@/components/transport/sections/FleetSection'))
+const BusFeesSection    = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
+const WhatsAppPanel = dynamic(() =>
+  import('@/components/transport/sections/IntegrationsSection').then(m => m.WhatsAppPanel))
+const DevicesPanel = dynamic(() =>
+  import('@/components/transport/sections/IntegrationsSection').then(m => m.DevicesPanel))
+const ScanPanel = dynamic(() => import('@/components/transport/panels').then(m => m.ScanPanel))
+const ReplayPanel = dynamic(() => import('@/components/transport/panels').then(m => m.ReplayPanel))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
 import { BUS_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -58,34 +61,48 @@ function BusPageContent() {
       <div data-page-theme="bus">
         {isAdmin
           ? <AdminBusHub onBack={() => router.push('/')} />
-          : <PassengerBusView onBack={() => router.push('/')} />}
+          : (
+            /*
+             * Parents and students see an under-construction notice for now.
+             * PassengerBusView below is complete and working — the child-centric
+             * "where is my child" screen, the live map, the ETA to their own
+             * stop and the fee tab — and is deliberately left in the file
+             * rather than deleted: switching it back on is deleting this
+             * branch, not rebuilding a screen.
+             */
+            <UnderConstruction
+              title="Bus tracking"
+              description="Live bus tracking for families is nearly ready. The school office can tell you about today's trip in the meantime."
+              icon={<Bus size={30} className="text-white" />}
+            />
+          )}
       </div>
     </ProtectedLayout>
   )
 }
 
 // ──────────────────────────────────────────────────────────────
-// Admin hub — four daily tabs, everything else behind "Manage"
+// Admin hub — two tabs, everything else behind "Manage"
 //
-// This used to be nine tabs across. Nine is not a navigation bar, it is a list
-// with a border — it scrolled sideways on a phone, and a tab strip you have to
-// scroll has stopped saying where you are. The cut here is by how often a thing
-// is opened, not by what it is about: Live is opened many times a day and "GPS
-// devices" is opened once, when a bus is fitted. Levelling those two cost the
-// daily screens the prominence they earn.
+// This was nine tabs across, then four. It is now two, because Live and
+// Insights were answering one question between them: an admin watching a bus
+// had to leave the map to learn whether the fleet is generally punctual, and
+// leave the numbers to find out where the bus is. They are one screen.
 //
-// So four tabs stay, and the five occasional surfaces move into the Manage
-// popup. Nothing was rewritten to move: each popup renders the same section
-// component it did as a tab.
+// Driver payroll is gone from here entirely. Paying drivers is a finance job
+// that happens monthly; it shares a word with transport and nothing else. It
+// still lives at /more/bus/payroll for whoever runs it.
+//
+// What remains is split by how often it is opened: Operations many times a
+// day, fees weekly, and everything else — routes, fleet, crew, WhatsApp, GPS,
+// scanning, replay, incidents — behind one Manage button.
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'live' | 'insights' | 'fees' | 'payroll'
+type SectionKey = 'live' | 'fees'
 
 const SECTIONS = [
-  { key: 'live' as const, label: 'Live', icon: <Radio size={15} /> },
-  { key: 'insights' as const, label: 'Insights', icon: <BarChart3 size={15} /> },
+  { key: 'live' as const, label: 'Operations', icon: <Radio size={15} /> },
   { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
-  { key: 'payroll' as const, label: 'Driver Payroll', icon: <Banknote size={15} /> },
 ]
 
 const SECTION_KEYS = SECTIONS.map(s => s.key)
@@ -100,15 +117,22 @@ const SECTION_KEYS = SECTIONS.map(s => s.key)
  * five that became popups now open as popups over the Live tab.
  */
 const LEGACY_TAB: Record<string, { tab: SectionKey; panel?: PanelKey }> = {
-  reports: { tab: 'insights' },
-  routes:  { tab: 'live', panel: 'routes' },
-  fleet:   { tab: 'live', panel: 'fleet' },
-  history: { tab: 'live', panel: 'history' },
-  safety:  { tab: 'live', panel: 'safety' },
-  setup:   { tab: 'live', panel: 'setup' },
+  // Insights merged into Operations.
+  insights: { tab: 'live' },
+  reports:  { tab: 'live' },
+  routes:   { tab: 'live', panel: 'routes' },
+  fleet:    { tab: 'live', panel: 'fleet' },
+  crew:     { tab: 'live', panel: 'crew' },
+  history:  { tab: 'live', panel: 'replay' },
+  replay:   { tab: 'live', panel: 'replay' },
+  safety:   { tab: 'live', panel: 'incidents' },
+  setup:    { tab: 'live', panel: 'whatsapp' },
+  // Payroll left this page; send its old links to the page that still has it.
+  payroll:  { tab: 'live' },
 }
 
-const PANEL_KEYS: PanelKey[] = ['routes', 'fleet', 'setup', 'history', 'safety']
+const PANEL_KEYS: PanelKey[] =
+  ['routes', 'fleet', 'crew', 'whatsapp', 'gps', 'scan', 'replay', 'incidents']
 
 function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
@@ -117,6 +141,13 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const panelParam = searchParams.get('panel')
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
+
+  // ?tab=payroll used to open a tab that no longer exists here. Redirect
+  // rather than silently showing Operations: someone following that link wants
+  // payroll, and /more/bus/payroll is where it lives now.
+  useEffect(() => {
+    if (tabParam === 'payroll') router.replace('/more/bus/payroll')
+  }, [tabParam, router])
 
   const legacy = tabParam ? LEGACY_TAB[tabParam] : undefined
   const initialTab: SectionKey =
@@ -167,7 +198,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         defaultBanner={BUS_BANNER_DEFAULT}
         icon={<Bus size={26} className="text-white" />}
         title="Transport"
-        subtitle="Routes, fleet, fees & driver payroll"
+        subtitle="Live fleet, boarding, exceptions & bus fees"
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
@@ -191,10 +222,8 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
             </button>
           </div>
 
-          {section === 'live' && <LiveSection />}
-          {section === 'insights' && <ReportsSection />}
+          {section === 'live' && <OperationsSection />}
           {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
-          {section === 'payroll' && <DriverPayrollSection />}
         </div>
       </div>
 
@@ -222,10 +251,13 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         fullHeight
       >
         {panel === 'routes' && <RoutesSection />}
-        {panel === 'fleet' && <FleetSection />}
-        {panel === 'setup' && <IntegrationsSection />}
-        {panel === 'history' && <HistorySection />}
-        {panel === 'safety' && <SafetySection />}
+        {panel === 'fleet' && <FleetSection only="vehicles" />}
+        {panel === 'crew' && <FleetSection only="crew" />}
+        {panel === 'whatsapp' && <WhatsAppPanel />}
+        {panel === 'gps' && <DevicesPanel />}
+        {panel === 'scan' && <ScanPanel />}
+        {panel === 'replay' && <ReplayPanel />}
+        {panel === 'incidents' && <SafetySection />}
       </Modal>
     </div>
   )
@@ -237,6 +269,16 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 
 type PassengerTab = 'trips' | 'fees'
 
+/**
+ * The family-facing screen: "where is my child", the live map, the ETA to
+ * their own stop, boarding history and the fee tab.
+ *
+ * Finished and working, and currently unreachable on purpose — non-admins get
+ * an under-construction notice above while the module is completed. It is kept
+ * rather than deleted because switching it back on is deleting one branch in
+ * BusPageContent, whereas deleting it would mean rebuilding the screen.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function PassengerBusView({ onBack }: { onBack: () => void }) {
   const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)

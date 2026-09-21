@@ -9,7 +9,7 @@ import type {
   ScheduleInput, TransportRoute, TransportSchedule, TransportStaff, TransportVehicle,
 } from '@/lib/transport/types'
 import { DIRECTION_LABELS, WEEKDAYS } from '@/lib/transport/types'
-import { Field, FormError, ModalFooter, Select, TextInput } from './formUI'
+import { Field, FormError, FormGrid, ModalFooter, Select, TextInput } from './formUI'
 
 export default function ScheduleFormModal({
   schedule, route, vehicles, crew, onClose, onSaved,
@@ -79,10 +79,10 @@ export default function ScheduleFormModal({
       iconClassName="bg-sky-100 text-sky-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <FormError message={error} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FormGrid>
           <Field label="Direction *">
             <Select
               value={form.direction}
@@ -105,7 +105,7 @@ export default function ScheduleFormModal({
           <Field label="Scheduled arrival">
             <TextInput type="time" value={form.end_time ?? ''} onChange={e => set('end_time', e.target.value)} />
           </Field>
-        </div>
+        </FormGrid>
 
         <Field label="Runs on *">
           <div className="flex flex-wrap gap-1.5">

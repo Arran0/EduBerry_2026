@@ -23,8 +23,15 @@ const STATUS_BAR: Record<TransportVehicle['status'], string> = {
   retired: 'bg-[#D4D4D8]',
 }
 
-export default function FleetSection() {
-  const [tab, setTab] = useState<Tab>('vehicles')
+/**
+ * Vehicles and crew.
+ *
+ * `only` lets the Manage popup open one half as its own destination — Fleet and
+ * Crew are separate errands (buying a bus vs. hiring a driver) and were only
+ * ever paired because they shared a loader.
+ */
+export default function FleetSection({ only }: { only?: 'vehicles' | 'crew' } = {}) {
+  const [tab, setTab] = useState<Tab>(only ?? 'vehicles')
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [crew, setCrew] = useState<TransportStaff[]>([])
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof fetchCrewCandidates>>>([])
@@ -52,7 +59,7 @@ export default function FleetSection() {
 
   return (
     <div className="space-y-4">
-      <SegTabs tabs={tabs} value={tab} onChange={setTab} />
+      {!only && <SegTabs tabs={tabs} value={tab} onChange={setTab} />}
 
       {tab === 'vehicles' ? (
         <>

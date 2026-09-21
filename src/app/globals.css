@@ -1005,3 +1005,23 @@ body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Leaflet stacking containment
+
+   leaflet.css puts map panes at z-index 400 and map controls at 1000. A
+   .leaflet-container is `position: relative` with `z-index: auto`, so it does
+   NOT create a stacking context — those 400s and 1000s escape into the root
+   one and outrank every overlay in this app, 41 of which sit at z-50. The
+   symptom is that any modal, sheet or dropdown opened on a page with a map
+   renders *underneath* the map.
+
+   `isolation: isolate` forces the container to be its own stacking context, so
+   Leaflet's internal ordering stays internal and a z-50 overlay wins again.
+   Chosen over raising every overlay because it fixes the cause once, and over
+   setting `z-index: 0` because leaflet.css never sets `isolation` at all —
+   there is no specificity or import-order race to lose.
+   ────────────────────────────────────────────────────────────── */
+.leaflet-container {
+  isolation: isolate;
+}
