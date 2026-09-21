@@ -192,30 +192,35 @@ export default function AnnouncementsPage() {
             }}
           />
 
-          {/* Admin edit pencil – bottom-right of banner */}
+          {/* Admin edit pencil – bottom-right of banner. Design matches the
+              home banner's pencil (circular, w-8 h-8, bg-black/25/45,
+              backdrop-blur-sm, size-13 icon); placement stays bottom-right
+              here instead of top-right since the top-right corner is already
+              occupied by the push-notification toggle and New Announcement
+              button. */}
           {isAdmin && !editingBanner && (
             <button
               onClick={openEditor}
-              className="absolute bottom-3 right-3 p-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors z-10"
+              className="absolute bottom-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all"
               title="Customise banner"
             >
-              <Pencil size={12} />
+              <Pencil size={13} className="text-white" />
             </button>
           )}
 
           {/* Main header row */}
           {/* Vertical rhythm matches the academics banner (pt-5 pb-6, p-3 icon) */}
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                 <div className={`p-3 backdrop-blur-sm rounded-2xl flex-shrink-0 border transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border-white/20' : 'bg-white/75 border-white/55'}`}>
                   <Megaphone size={26} className={`transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-700'}`} />
                 </div>
-                <div>
-                  <h1 className={`font-display text-[2rem] sm:text-[2.6rem] font-black leading-[1.04] tracking-tight transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
+                <div className="min-w-0">
+                  <h1 className={`font-display text-[1.45rem] sm:text-[2.6rem] font-black leading-[1.04] tracking-tight truncate transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}>
                     Announcements
                   </h1>
-                  <p className={`text-sm mt-1 transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
+                  <p className={`text-sm mt-1 truncate transition-colors duration-300 ${bannerOnDark ? 'text-white/70' : 'text-slate-600'}`}>Stay updated with the latest news</p>
                 </div>
               </div>
 
