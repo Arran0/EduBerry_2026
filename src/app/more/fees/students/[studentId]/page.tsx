@@ -4,21 +4,26 @@
 // One student's money story.
 //
 // The summary strip answers the question a parent actually asks at the counter
-// — what do I owe — and the tabs below hold the evidence for it. The Ledger tab
-// is the authoritative one: every debit and credit in order with a running
-// balance, which is what the reports are computed from.
+// — what do I owe — and the bills and receipts below hold the evidence for it.
+// Those two are the page, because they are what the counter is looking at while
+// somebody stands in front of it.
 //
-// The Concessions and Charges tabs show what has come off a bill and what has
-// been added to it after issue. Both are also lines on the invoice itself —
-// this is the same story told per-student rather than per-bill.
+// Four more views exist and are each a button: the ledger (the authoritative
+// one — every debit and credit in order with a running balance, which is what
+// the reports are computed from), the cheques being held, the concessions that
+// came off a bill and the fines and late fees added to one. They were six tabs,
+// which meant the answer to "what do I owe" arrived with five folders stacked
+// on top of it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
-  BadgePercent, Clock, Download, FileText, Loader2, Printer, Scale, Undo2, User,
+  BadgePercent, Clock, Download, FileText, Landmark, Loader2, Printer, Receipt,
+  Scale, ScrollText, Undo2, User,
 } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
@@ -45,15 +50,18 @@ import {
   type LateFeeChargeRow, type ScholarshipRow,
 } from '@/lib/fees/charges'
 
-type Tab = 'invoices' | 'payments' | 'cheques' | 'ledger' | 'concessions' | 'charges'
+/** The four views kept behind a button rather than a tab. */
+type Sheet = 'cheques' | 'ledger' | 'concessions' | 'charges'
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'invoices',    label: 'Bills' },
-  { key: 'payments',    label: 'Payments' },
-  { key: 'cheques',     label: 'Cheques' },
-  { key: 'ledger',      label: 'Ledger' },
-  { key: 'concessions', label: 'Concessions' },
-  { key: 'charges',     label: 'Fines & late fees' },
+const SHEETS: { key: Sheet; label: string; icon: React.ElementType; blurb: string }[] = [
+  { key: 'ledger',      label: 'Ledger',            icon: ScrollText,
+    blurb: 'Every debit and credit in order, with a running balance' },
+  { key: 'cheques',     label: 'Cheques',           icon: Landmark,
+    blurb: 'What the school is holding for this student' },
+  { key: 'concessions', label: 'Concessions',       icon: BadgePercent,
+    blurb: 'What has come off a bill, and who approved it' },
+  { key: 'charges',     label: 'Fines & late fees', icon: Receipt,
+    blurb: 'What has been added to a bill since it was issued' },
 ]
 
 interface Student {
@@ -81,7 +89,7 @@ function ProfileInner() {
   const [fines, setFines] = useState<FineRow[]>([])
   const [fineCategories, setFineCategories] = useState<FineCategoryRow[]>([])
   const [lateFees, setLateFees] = useState<LateFeeChargeRow[]>([])
-  const [tab, setTab] = useState<Tab>('invoices')
+  const [sheet, setSheet] = useState<Sheet | null>(null)
   const [applying, setApplying] = useState(false)
   const [refunding, setRefunding] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -122,9 +130,15 @@ function ProfileInner() {
       setProfile(prof); setInvoices(inv); setPayments(pay); setInstruments(instr); setLedger(led)
       setConcessions(conc); setDiscountTypes(types); setScholarships(schols)
       setFines(fs); setFineCategories(cats)
-      setLines(await fetchInvoiceLines(inv.map(i => i.id)))
-      setAllocations(await fetchAllocations(pay.map(p2 => p2.id)))
-      setLateFees(await fetchLateFeeCharges(inv.map(i => i.id)))
+      // Three round trips that each need the bills or the payments, and none
+      // of which needs another's answer — so they go together rather than one
+      // after the next.
+      const [ln, alloc, lf] = await Promise.all([
+        fetchInvoiceLines(inv.map(i => i.id)),
+        fetchAllocations(pay.map(p2 => p2.id)),
+        fetchLateFeeCharges(inv.map(i => i.id)),
+      ])
+      setLines(ln); setAllocations(alloc); setLateFees(lf)
     } finally {
       setLoading(false)
     }
@@ -228,19 +242,20 @@ function ProfileInner() {
             </div>
           )}
 
-          <div className="flex gap-1 border-b border-[#E3DFD3] overflow-x-auto">
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                      className={`px-3.5 py-2 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                        tab === t.key
-                          ? 'border-[#27272A] text-[#18181B]'
-                          : 'border-transparent text-[#8C8878] hover:text-[#6B675A]'}`}>
-                {t.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-1.5">
+            {SHEETS.map(sh => {
+              const Icon = sh.icon
+              return (
+                <button key={sh.key} onClick={() => setSheet(sh.key)} title={sh.blurb}
+                        className={ADMIN.ghostBtn}>
+                  <Icon size={13} /> {sh.label}
+                </button>
+              )
+            })}
           </div>
 
-          {tab === 'invoices' && (
+          <Heading icon={FileText}>Bills</Heading>
+          {(
             <Panel empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
               {invoices.map(i => (
                 <div key={i.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
@@ -278,7 +293,8 @@ function ProfileInner() {
             </Panel>
           )}
 
-          {tab === 'payments' && (
+          <Heading icon={Printer}>Receipts</Heading>
+          {(
             <Panel empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
               {payments.map(p => (
                 <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
@@ -314,7 +330,17 @@ function ProfileInner() {
             </Panel>
           )}
 
-          {tab === 'cheques' && (
+          {sheet && (
+            <ModalShell
+              onClose={() => setSheet(null)}
+              sharp size="2xl"
+              title={SHEETS.find(x => x.key === sheet)!.label}
+              subtitle={SHEETS.find(x => x.key === sheet)!.blurb}
+              icon={React.createElement(SHEETS.find(x => x.key === sheet)!.icon, { size: 15 })}
+              iconClassName="bg-[#27272A] text-[#B8983C]"
+              bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+            >
+          {sheet === 'cheques' && (
             <Panel empty={instruments.length === 0 ? 'No cheques or drafts from this student.' : null}>
               {instruments.map(r => (
                 <div key={r.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
@@ -349,7 +375,7 @@ function ProfileInner() {
             </Panel>
           )}
 
-          {tab === 'ledger' && (
+          {sheet === 'ledger' && (
             <Panel empty={ledger.length === 0 ? 'Nothing on the ledger yet.' : null}>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -384,7 +410,7 @@ function ProfileInner() {
             </Panel>
           )}
 
-          {tab === 'concessions' && (
+          {sheet === 'concessions' && (
             <>
               {perms.can('fees.discount.apply') && (
                 <div className="flex justify-end mb-3">
@@ -440,7 +466,7 @@ function ProfileInner() {
             </>
           )}
 
-          {tab === 'charges' && (
+          {sheet === 'charges' && (
             <Panel empty={fines.length === 0 && lateFees.length === 0
               ? 'Nothing has been added to this student’s bills since they were issued.'
               : null}>
@@ -492,6 +518,8 @@ function ProfileInner() {
               </table>
             </Panel>
           )}
+            </ModalShell>
+          )}
         </>
       )}
 
@@ -532,6 +560,16 @@ function ProfileInner() {
         />
       )}
     </FeeScreen>
+  )
+}
+
+/** A hairline heading over one of the two lists the page always shows. */
+function Heading({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-[#E3DFD3] pb-1.5 pt-1">
+      <Icon size={14} className="text-[#B8983C]" />
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">{children}</h2>
+    </div>
   )
 }
 

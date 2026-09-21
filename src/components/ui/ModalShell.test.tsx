@@ -201,6 +201,42 @@ describe('Download Centre → EPF/ESI → close', () => {
   })
 })
 
+describe('Escape with popups stacked', () => {
+  /**
+   * Every open shell listens for Escape on the same window. Without a stack,
+   * one keypress closes all of them — dismiss a "why are you waiving this?"
+   * prompt and the screen it was asked from goes with it. Now that the fee
+   * module opens its tools as popups that open their own dialogs, that is the
+   * normal shape rather than an edge case.
+   */
+  function press() {
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+  }
+
+  it('closes only the topmost, one press at a time', async () => {
+    render(<Page />)
+    await settle()
+
+    click('page-button')
+    await settle()
+    click('epf-tile')
+    await settle()
+    click('summary-tile')
+    await settle()
+    expect(overlays()).toHaveLength(2)
+
+    press()                // the preview only
+    await settle()
+    expect(overlays()).toHaveLength(1)
+
+    press()                // now the panel underneath it
+    await settle()
+    expect(overlays()).toHaveLength(0)
+  })
+})
+
 describe('a crash inside a popup', () => {
   function Boom(): React.ReactElement {
     throw new Error('PDF preview exploded')

@@ -15,6 +15,7 @@
 
 import { supabase, isMissingRelation, authHeader } from '@/lib/supabase'
 import { inChunks } from './chunk'
+import { admissionCache, personCache } from './cache'
 
 export type InvoiceStatus =
   | 'draft' | 'pending' | 'partly_paid' | 'paid' | 'overdue' | 'cancelled'
@@ -197,17 +198,6 @@ export async function fetchUnpaidInvoices(academicYearId: string): Promise<Invoi
 }
 
 /** The bills a payment can be put against, oldest first. */
-export async function fetchOutstandingInvoices(
-  studentId: string, academicYearId: string,
-): Promise<InvoiceRow[]> {
-  const { data, error } = await supabase.from('fee_invoices_v').select(INVOICE_COLS)
-    .eq('student_id', studentId)
-    .eq('academic_year_id', academicYearId)
-    .in('status', ['pending', 'partly_paid', 'overdue'])
-    .order('due_date')
-  if (error) return emptyOnMissing(error, [])
-  return (data ?? []) as unknown as InvoiceRow[]
-}
 
 export async function fetchInvoiceLines(invoiceIds: string[]): Promise<InvoiceLineRow[]> {
   return inChunks(invoiceIds, async batch => {
@@ -330,29 +320,42 @@ export async function fetchProfileList(academicYearId: string): Promise<ProfileL
   const ids = (profiles ?? []).map(p => (p as FeeProfileRow).student_id)
   if (ids.length === 0) return []
 
-  // Chunked: PostgREST builds the .in() list into the URL, and 930 uuids is
-  // past what a proxy will accept in one request line.
-  const people = new Map<string, { full_name: string; grade: number | null; section: string | null }>()
-  for (let i = 0; i < ids.length; i += 300) {
-    const { data } = await supabase.from('profiles')
-      .select('id, full_name, grade, section').in('id', ids.slice(i, i + 300))
-    for (const row of data ?? []) {
-      people.set(row.id as string, {
-        full_name: row.full_name as string,
-        grade: row.grade as number | null,
-        section: row.section as string | null,
-      })
-    }
-  }
+  // Names and admission numbers are looked up only for students this session
+  // has not already seen. Both lists are chunked — PostgREST builds the .in()
+  // list into the URL, and 930 uuids is past what a proxy will accept in one
+  // request line — and the two run together rather than one after the other,
+  // because neither needs the other's answer.
+  const missingPeople = ids.filter(id => !personCache.has(id))
+  const missingAdmission = ids.filter(id => !admissionCache.has(id))
 
-  const admission = new Map<string, string | null>()
-  for (let i = 0; i < ids.length; i += 300) {
-    const { data } = await supabase.from('student_details')
-      .select('student_id, admission_no').in('student_id', ids.slice(i, i + 300))
-    for (const row of data ?? []) {
-      admission.set(row.student_id as string, row.admission_no as string | null)
-    }
-  }
+  await Promise.all([
+    inChunks(missingPeople, async batch => {
+      const { data } = await supabase.from('profiles')
+        .select('id, full_name, grade, section').in('id', batch)
+      for (const row of data ?? []) {
+        personCache.set(row.id as string, {
+          full_name: row.full_name as string,
+          grade: row.grade as number | null,
+          section: row.section as string | null,
+        })
+      }
+      return []
+    }),
+    inChunks(missingAdmission, async batch => {
+      const { data } = await supabase.from('student_details')
+        .select('student_id, admission_no').in('student_id', batch)
+      for (const row of data ?? []) {
+        admissionCache.set(row.student_id as string, row.admission_no as string | null)
+      }
+      // A student with no student_details row has no admission number, and
+      // recording that is what stops the next call asking again.
+      for (const id of batch) if (!admissionCache.has(id)) admissionCache.set(id, null)
+      return []
+    }),
+  ])
+
+  const people = personCache
+  const admission = admissionCache
 
   const totals = new Map<string, { billed: number; paid: number; outstanding: number }>()
   let anyAmountVisible = false

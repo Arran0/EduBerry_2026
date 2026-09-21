@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, Session } from '@supabase/supabase-js'
+import { clearFeeCaches } from '@/lib/fees/cache'
 import { supabase, AUTH_STORAGE_KEY, UserProfile, UserRole } from '@/lib/supabase'
 import { recordAppOpen } from '@/lib/gamification'
 
@@ -459,6 +460,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userIdRef.current = null
     setSessionExpired(false)
     sessionStorage.removeItem('session_expired')
+    // The fee module keeps student names and the price list in memory for the
+    // length of a session. Another person signing in on this tab must not
+    // inherit them.
+    clearFeeCaches()
 
     // scope: 'local' revokes only THIS browser's refresh token.  GoTrue's
     // default ('global') revokes every refresh token the user has anywhere, so

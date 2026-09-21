@@ -49,7 +49,7 @@ const ConcessionsSection = dynamic(() => import('@/components/fees/sections/Conc
 export type CenterSection = 'collection' | 'students' | 'reports'
 export type CenterTool = 'reminders' | 'latefees' | 'concessions'
 
-export const CENTER_SECTIONS: {
+const CENTER_SECTIONS: {
   key: CenterSection; label: string; icon: React.ElementType; needs: FeePermissionKey[]
 }[] = [
   { key: 'collection', label: 'Collection', icon: Wallet,        needs: ['fees.collect', 'fees.profile.view'] },

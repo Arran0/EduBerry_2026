@@ -13,13 +13,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Check, Copy, FolderTree, Loader2, Plus,
-  Receipt, Settings2, Trash2, Users,
+  Settings2, Trash2, Users,
 } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, STRUCTURE_CHIP, fmtDate, inr } from '@/components/fees/ui'
 import GroupRoster from '@/components/fees/config/GroupRoster'
-import { TabBar } from '@/components/fees/shell'
+import ModalShell from '@/components/ui/ModalShell'
 import { gradeLabel } from '@/lib/grades'
 import {
   cloneFeeYear, createStructure, deleteHead, deleteInstallment, deleteStructure,
@@ -28,7 +28,8 @@ import {
   type CloneResult, type FeeConfigBundle,
 } from '@/lib/fees/config'
 
-type Section = 'heads' | 'groups' | 'structures'
+/** The two lists the price list is built from, each opened as a popup. */
+type Sheet = 'heads' | 'groups'
 
 const EMPTY: FeeConfigBundle = {
   categories: [], heads: [], groups: [], structures: [],
@@ -40,7 +41,7 @@ export default function ConfigSection() {
   const perms = useFeePermissions()
   const [bundle, setBundle] = useState<FeeConfigBundle>(EMPTY)
   const [loading, setLoading] = useState(true)
-  const [section, setSection] = useState<Section>('structures')
+  const [sheet, setSheet] = useState<Sheet | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const canEdit = perms.can('fees.config.manage')
@@ -93,15 +94,17 @@ export default function ConfigSection() {
         <CloneCard currentYearId={year.id} onDone={() => void load()} />
       )}
 
-      <TabBar
-        active={section}
-        onChange={setSection}
-        tabs={[
-          { key: 'structures', label: 'Structures', icon: Receipt },
-          { key: 'heads', label: 'Fee heads', icon: FolderTree },
-          { key: 'groups', label: 'Groups', icon: Users },
-        ]}
-      />
+      {/* The price list is the structures. Fee heads and groups are the two
+          lists it is built from — reference data, edited now and then, and
+          each one used to cost this screen a permanent tab. */}
+      <div className="flex flex-wrap justify-end gap-1.5">
+        <button onClick={() => setSheet('heads')} className={ADMIN.ghostBtn}>
+          <FolderTree size={13} /> Fee heads
+        </button>
+        <button onClick={() => setSheet('groups')} className={ADMIN.ghostBtn}>
+          <Users size={13} /> Groups
+        </button>
+      </div>
 
       {loading ? (
         <div className={`${ADMIN.card} p-10 flex items-center justify-center gap-2 text-sm text-[#6B675A]`}>
@@ -112,26 +115,37 @@ export default function ConfigSection() {
           No academic sessions exist yet. Add one in Admin Space → Fee Settings → Sessions.
         </div>
       ) : (
-        <>
-          {section === 'heads' && (
+        <StructuresSection bundle={bundle} yearId={year.id} canEdit={canEdit}
+                           canAutogen={perms.can('fees.invoice.autogen')}
+                           showAmounts={!perms.amountsHidden}
+                           onChanged={() => void load()} onError={setError} />
+      )}
+
+      {sheet && year && (
+        <ModalShell
+          onClose={() => setSheet(null)}
+          sharp size="2xl"
+          title={sheet === 'heads' ? 'Fee heads' : 'Groups'}
+          subtitle={sheet === 'heads'
+            ? 'Every line a bill can carry'
+            : 'Who a structure prices, and who is in each group'}
+          icon={sheet === 'heads' ? <FolderTree size={15} /> : <Users size={15} />}
+          iconClassName="bg-[#27272A] text-[#B8983C]"
+          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3 space-y-4"
+          minHClass="sm:min-h-[32rem]"
+        >
+          {sheet === 'heads' ? (
             <HeadsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
                           onChanged={() => void load()} onError={setError} />
-          )}
-          {section === 'groups' && (
-            <div className="space-y-4">
+          ) : (
+            <>
               <GroupsSection bundle={bundle} yearId={year.id} canEdit={canEdit}
                              onChanged={() => void load()} onError={setError} />
               <GroupRoster bundle={bundle} yearId={year.id} canEdit={canEdit}
                            onError={setError} />
-            </div>
+            </>
           )}
-          {section === 'structures' && (
-            <StructuresSection bundle={bundle} yearId={year.id} canEdit={canEdit}
-                               canAutogen={perms.can('fees.invoice.autogen')}
-                               showAmounts={!perms.amountsHidden}
-                               onChanged={() => void load()} onError={setError} />
-          )}
-        </>
+        </ModalShell>
       )}
     </>
   )

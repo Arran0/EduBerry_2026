@@ -241,7 +241,7 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
   )
 }
 
-export function describeRule(r: LateFeeRuleRow): string {
+function describeRule(r: LateFeeRuleRow): string {
   const amount = r.charge_type === 'flat' ? `₹${r.rate}` : `${r.rate}%`
   const when = r.frequency === 'once' ? 'once' : `every ${r.frequency.replace('ly', '')}`
   const cap = r.cap_amount !== null ? `, capped at ₹${r.cap_amount}`

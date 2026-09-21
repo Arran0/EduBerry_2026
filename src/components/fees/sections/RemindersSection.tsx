@@ -17,21 +17,23 @@
 // and anyone already reminded today. The result of a send says how many were
 // skipped and why, in words, rather than reporting a silent success.
 //
-// This is a popup now, opened from the Collection Center's toolbar, so the
-// three folders below are the whole of it rather than three tabs inside a tab.
+// This is a popup now, opened from the Collection Center's toolbar, and the
+// list is the whole of it: the reminder log and the automatic schedule are
+// each a button rather than a tab, because neither is read on the way to
+// sending anything.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Bell, CalendarClock, Check, CheckCheck, History, Loader2,
-  MessageSquare, PhoneOff, Send, Users,
+  MessageSquare, PhoneOff, Send,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip, TabBar } from '@/components/fees/shell'
+import { StatStrip } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { daysBetween, todayIn } from '@/lib/fees/engine/dates'
@@ -45,7 +47,8 @@ import {
   type ReminderLogRow, type ReminderScheduleRow, type SendRemindersResult,
 } from '@/lib/fees/charges'
 
-type Tab = 'who' | 'log' | 'schedule'
+/** The two things kept beside the list, each opened as a popup. */
+type Sheet = 'log' | 'schedule'
 
 interface Family {
   student: ProfileListRow
@@ -60,7 +63,7 @@ interface Family {
 export default function RemindersSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
-  const [tab, setTab] = useState<Tab>('who')
+  const [sheet, setSheet] = useState<Sheet | null>(null)
 
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [people, setPeople] = useState<ProfileListRow[]>([])
@@ -195,21 +198,22 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
         ]}
       />
 
-      <TabBar<Tab>
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { key: 'who', label: 'Who to remind', icon: Users },
-          { key: 'log', label: 'Reminder log', icon: History },
-          { key: 'schedule', label: 'Automatic', icon: CalendarClock },
-        ]}
-      />
+      {/* The list is the screen. What has already been sent, and what goes out
+          on its own, are each looked at now and then — a button, not a tab. */}
+      <div className="flex flex-wrap justify-end gap-1.5 mb-2">
+        <button onClick={() => setSheet('log')} className={ADMIN.ghostBtn}>
+          <History size={13} /> Reminder log
+        </button>
+        <button onClick={() => setSheet('schedule')} className={ADMIN.ghostBtn}>
+          <CalendarClock size={13} /> Automatic
+        </button>
+      </div>
 
       {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-      ) : tab === 'who' ? (
+      ) : (
         <div className={ADMIN.card}>
           <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
             <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
@@ -293,15 +297,31 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
             </div>
           ))}
         </div>
-      ) : tab === 'log' ? (
-        <ReminderLog rows={log} people={people} showAmounts={showAmounts} />
-      ) : (
-        <Schedules
-          rows={schedules}
-          yearId={year?.id ?? ''}
-          canEdit={perms.can('fees.settings.manage')}
-          onChanged={load}
-        />
+      )}
+
+      {sheet && (
+        <ModalShell
+          onClose={() => setSheet(null)}
+          sharp size="xl"
+          title={sheet === 'log' ? 'Reminder log' : 'Automatic reminders'}
+          subtitle={sheet === 'log'
+            ? 'Every reminder sent, and what WhatsApp did with it'
+            : 'What goes out without anybody pressing Remind'}
+          icon={sheet === 'log' ? <History size={15} /> : <CalendarClock size={15} />}
+          iconClassName="bg-[#27272A] text-[#B8983C]"
+          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+        >
+          {sheet === 'log' ? (
+            <ReminderLog rows={log} people={people} showAmounts={showAmounts} />
+          ) : (
+            <Schedules
+              rows={schedules}
+              yearId={year?.id ?? ''}
+              canEdit={perms.can('fees.settings.manage')}
+              onChanged={load}
+            />
+          )}
+        </ModalShell>
       )}
 
 
