@@ -72,13 +72,18 @@
 --     distinguish a client that stayed quiet from a person who denied a
 --     permission, and where it cannot tell, it must not pick the accusation.
 --
+-- search_path is pinned on both functions below. It was not on the original
+-- attendance_failure_class, which the security advisor flags
+-- (function_search_path_mutable); since this migration rewrites the function
+-- anyway, it is closed here rather than left for later.
+--
 -- What does NOT change: an unrecognised, *non-null* code is still access_off.
 -- The reasoning from the original migration holds exactly where it was aimed —
 -- a client that can invent a code must not be able to pick its own severity by
 -- inventing one. Silence is not an invented code.
 CREATE OR REPLACE FUNCTION public.attendance_failure_class(p_failure TEXT)
 RETURNS TEXT
-LANGUAGE sql IMMUTABLE AS $$
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$
   SELECT CASE
     WHEN p_failure IS NULL OR p_failure = '' THEN 'no_code'
     WHEN p_failure = 'timeout'           THEN 'device_problem'
@@ -98,7 +103,7 @@ $$;
 -- a client that did not say — is a device problem, flagged plainly.
 CREATE OR REPLACE FUNCTION public.attendance_no_position_verdict(p_failure TEXT)
 RETURNS TEXT
-LANGUAGE sql IMMUTABLE AS $$
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$
   SELECT CASE
     WHEN public.attendance_failure_class(p_failure) IN ('access_off', 'unknown')
       THEN 'location_off'
@@ -370,50 +375,60 @@ $$;
 
 -- 3a. The attendance rows. Done BEFORE the telemetry below, because the
 -- telemetry is what identifies them — rewriting it first would erase the very
--- marker this statement selects on. The column guard from
--- gps_attendance_rebuild.sql §8 gates writes to the verdict columns, so this
--- transaction announces itself the same way the punch does.
-SELECT set_config('app.attendance_write', 'on', true);
+-- marker this statement selects on.
+--
+-- Wrapped in a DO block for one reason: the column guard from
+-- gps_attendance_rebuild.sql §8 refuses writes to the verdict columns unless
+-- `app.attendance_write` is set, and set_config(..., true) is transaction-local.
+-- A bare SELECT set_config() followed by a bare UPDATE only works if the runner
+-- keeps both in one transaction — true of the SQL editor, not guaranteed of
+-- anything that sends statements one at a time. The DO block is one statement,
+-- so it holds either way.
+DO $repair$
+BEGIN
+  PERFORM set_config('app.attendance_write', 'on', true);
 
-WITH unexplained AS (
-  -- (staff, date, action) whose single attempt was a location_off carrying no
-  -- failure code — a punch where nothing was measured and nothing was claimed.
-  SELECT a.staff_id, a.date, a.action
-  FROM public.attendance_location_attempts a
-  WHERE a.failure IS NULL
-    AND a.verdict = 'location_off'
-  GROUP BY a.staff_id, a.date, a.action
-  HAVING count(*) = 1
-)
-UPDATE public.staff_attendance_records r
-SET
-  check_in_verdict = CASE
-    WHEN r.check_in_verdict = 'location_off'
-     AND EXISTS (SELECT 1 FROM unexplained u
-                 WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkin')
-     AND r.check_in_verdict_2 IS DISTINCT FROM 'location_off'
-    THEN 'device_issue' ELSE r.check_in_verdict END,
-  check_out_verdict = CASE
-    WHEN r.check_out_verdict = 'location_off'
-     AND EXISTS (SELECT 1 FROM unexplained u
-                 WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkout')
-     AND r.check_out_verdict_2 IS DISTINCT FROM 'location_off'
-    THEN 'device_issue' ELSE r.check_out_verdict END,
-  check_in_verdict_2 = CASE
-    WHEN r.check_in_verdict_2 = 'location_off'
-     AND EXISTS (SELECT 1 FROM unexplained u
-                 WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkin')
-     AND r.check_in_verdict IS DISTINCT FROM 'location_off'
-    THEN 'device_issue' ELSE r.check_in_verdict_2 END,
-  check_out_verdict_2 = CASE
-    WHEN r.check_out_verdict_2 = 'location_off'
-     AND EXISTS (SELECT 1 FROM unexplained u
-                 WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkout')
-     AND r.check_out_verdict IS DISTINCT FROM 'location_off'
-    THEN 'device_issue' ELSE r.check_out_verdict_2 END
-WHERE 'location_off' IN (
-  r.check_in_verdict, r.check_out_verdict, r.check_in_verdict_2, r.check_out_verdict_2
-);
+  WITH unexplained AS (
+    -- (staff, date, action) whose single attempt was a location_off carrying no
+    -- failure code — a punch where nothing was measured and nothing was claimed.
+    SELECT a.staff_id, a.date, a.action
+    FROM public.attendance_location_attempts a
+    WHERE a.failure IS NULL
+      AND a.verdict = 'location_off'
+    GROUP BY a.staff_id, a.date, a.action
+    HAVING count(*) = 1
+  )
+  UPDATE public.staff_attendance_records r
+  SET
+    check_in_verdict = CASE
+      WHEN r.check_in_verdict = 'location_off'
+       AND EXISTS (SELECT 1 FROM unexplained u
+                   WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkin')
+       AND r.check_in_verdict_2 IS DISTINCT FROM 'location_off'
+      THEN 'device_issue' ELSE r.check_in_verdict END,
+    check_out_verdict = CASE
+      WHEN r.check_out_verdict = 'location_off'
+       AND EXISTS (SELECT 1 FROM unexplained u
+                   WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkout')
+       AND r.check_out_verdict_2 IS DISTINCT FROM 'location_off'
+      THEN 'device_issue' ELSE r.check_out_verdict END,
+    check_in_verdict_2 = CASE
+      WHEN r.check_in_verdict_2 = 'location_off'
+       AND EXISTS (SELECT 1 FROM unexplained u
+                   WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkin')
+       AND r.check_in_verdict IS DISTINCT FROM 'location_off'
+      THEN 'device_issue' ELSE r.check_in_verdict_2 END,
+    check_out_verdict_2 = CASE
+      WHEN r.check_out_verdict_2 = 'location_off'
+       AND EXISTS (SELECT 1 FROM unexplained u
+                   WHERE u.staff_id = r.staff_id AND u.date = r.date AND u.action = 'checkout')
+       AND r.check_out_verdict IS DISTINCT FROM 'location_off'
+      THEN 'device_issue' ELSE r.check_out_verdict_2 END
+  WHERE 'location_off' IN (
+    r.check_in_verdict, r.check_out_verdict, r.check_in_verdict_2, r.check_out_verdict_2
+  );
+END
+$repair$;
 
 -- 3b. Telemetry, now that 3a has read what it needed from it.
 UPDATE public.attendance_location_attempts
