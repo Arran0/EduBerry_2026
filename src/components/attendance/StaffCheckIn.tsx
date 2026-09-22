@@ -9,6 +9,7 @@ import {
 import {
   checkInStaff,
   checkOutStaff,
+  fetchEffectiveGeofenceForStaff,
   fetchMyStaffAttendance,
   fetchProfileNameById,
   deriveCheckInStatus,
@@ -31,6 +32,7 @@ import {
   ACQUISITION_FAILURE_COPY,
   COARSE_LOCK_COPY,
   DEVICE_PROBLEM_COPY,
+  FENCE_UNREADABLE,
   NO_ACCESS_COPY,
   REPORTED_TO_ADMIN_COPY,
   isDeviceProblem,
@@ -71,12 +73,18 @@ type CheckInState = 'loading' | 'not_checked_in' | 'checked_in' | 'saving'
  *                   "not verified" framing as no_access, for everyone —
  *                   exemption waives the fence, not the record, so it no
  *                   longer softens this one either.
+ *   fence_unreadable
+ *                   the fence itself could not be read, so no location was
+ *                   ever asked for. The app's fault, stated as such, and the
+ *                   retry is offered before the punch — this case used to be
+ *                   indistinguishable from "geofencing is off" and silently
+ *                   produced a location_off record instead.
  */
 interface PendingAction {
   reading?: PunchReading
   failure?: string | null
   distanceM: number
-  reason: 'outside_zone' | 'device_problem' | 'no_access'
+  reason: 'outside_zone' | 'device_problem' | 'no_access' | 'fence_unreadable'
   action: 'checkin' | 'checkout'
 }
 
@@ -151,6 +159,10 @@ export default function StaffCheckIn({
   // statement made at the moment of the act, not a standing reprimand, and the
   // durable record is the flag on the report.
   const [showReportedNotice, setShowReportedNotice] = useState(false)
+  // A fence re-read done here, after the parent's load failed. Held locally so
+  // the retry in the panel below is a real retry and not the same stale prop
+  // coming round again — the parent loads the fence once, on mount.
+  const [fenceRetry, setFenceRetry] = useState<EffectiveGeofence | null>(null)
 
   // Time and timezone both come from the DB server clock, never the device's —
   // a device clock (or zone) can be set to whatever the user likes, which would
@@ -161,10 +173,13 @@ export default function StaffCheckIn({
   // Nothing loads against a device-derived date: until the server clock lands
   // there is no "today" to load, and the widget stays in its loading state.
   const [todayYear, todayMonth] = today ? today.split('-').map(Number) : [0, 0]
-  const geofenceActive = !!(geofenceConfig?.enabled && geofenceConfig.lat != null && geofenceConfig.lng != null)
+  // A successful re-read wins over the prop it replaces; otherwise the prop.
+  // Whether it describes a live fence is decided inside handlePunch, against
+  // the fence that punch is actually using, rather than once per render.
+  const effectiveFence = fenceRetry ?? geofenceConfig
   // Named group zone if this staff member is in one, so an out-of-range message
   // points at the campus they're actually expected at.
-  const zoneName = geofenceConfig?.zone_label ?? 'school'
+  const zoneName = effectiveFence?.zone_label ?? 'school'
 
   const loadTodayRecord = useCallback(async () => {
     if (!today) return // still waiting on the server clock
@@ -242,12 +257,6 @@ export default function StaffCheckIn({
   }, [flash])
 
   // ── Location acquisition ──────────────────────────────────────────────────────
-  // The fence the reading is judged against. Built here for the *live readout*
-  // and for deciding whether an off-campus reading gets a confirmation prompt —
-  // the binding verdict is the server's, recomputed from the raw coordinates it
-  // receives. Nothing the client concludes here is trusted downstream.
-  const fence = geofenceActive ? fenceFromConfig(geofenceConfig!) : null
-
   const [progress, setProgress] = useState<AcquisitionProgress | null>(null)
   const [coarseHint, setCoarseHint] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -335,14 +344,36 @@ export default function StaffCheckIn({
     }
   }
 
-  const handlePunch = async (action: 'checkin' | 'checkout') => {
+  /**
+   * `against` is the fence to decide with. It is passed explicitly rather than
+   * read from state so a punch that follows a fence re-read uses the fence that
+   * was just read — `setFenceRetry` does not reach this closure.
+   */
+  const handlePunch = async (
+    action: 'checkin' | 'checkout',
+    against: EffectiveGeofence | null = effectiveFence,
+  ) => {
     setFlash(null)
     setPending(null)
     setCoarseHint(false)
 
+    // The fence could not be read, so whether there is one is not known here.
+    // This must not fall through to the branch below: that branch means
+    // "geofencing is off", and saying so to a server that can see a live fence
+    // gets the punch recorded as location_off — the staff member accused of
+    // switching off access they never touched. Say what actually happened
+    // instead, and offer a retry first.
+    if (against?.load_failed) {
+      setGpsState('error')
+      setPending({ failure: FENCE_UNREADABLE, distanceM: 0, reason: 'fence_unreadable', action })
+      return
+    }
+
+    const activeFence = !!(against?.enabled && against.lat != null && against.lng != null)
+
     // Geofencing off school-wide — no reading to take, the server records it as
     // 'no_fence' rather than pretending a location was checked.
-    if (!geofenceActive) { submit(action); return }
+    if (!activeFence) { submit(action); return }
 
     setGpsState('getting')
     abortRef.current?.abort()
@@ -352,8 +383,12 @@ export default function StaffCheckIn({
     let result: AcquisitionResult
     try {
       result = await acquirePosition({
-        fence,
-        trustedAccuracyM: geofenceConfig?.trusted_accuracy_m,
+        // The fence the reading is judged against. Used for the *live readout*
+        // and for deciding whether an off-campus reading gets a confirmation
+        // prompt — the binding verdict is the server's, recomputed from the raw
+        // coordinates it receives. Nothing concluded here is trusted downstream.
+        fence: fenceFromConfig(against!),
+        trustedAccuracyM: against?.trusted_accuracy_m,
         onProgress: setProgress,
         signal: controller.signal,
       })
@@ -415,6 +450,26 @@ export default function StaffCheckIn({
     }
 
     submit(action, reading)
+  }
+
+  /**
+   * Re-read the fence, then punch again with whatever came back. Used only by
+   * the fence_unreadable retry — the parent reads the fence once on mount, so
+   * without this the "Try Again" button would re-run the same failed decision
+   * against the same stale prop for as long as the staff member kept tapping it.
+   */
+  const retryFence = async (action: 'checkin' | 'checkout') => {
+    setGpsState('getting')
+    const reloaded = await fetchEffectiveGeofenceForStaff(staffId)
+    setFenceRetry(reloaded)
+    if (reloaded.load_failed) {
+      // Still down. Say so again rather than falling through to a punch that
+      // would be recorded as though no fence existed.
+      setGpsState('error')
+      setPending({ failure: FENCE_UNREADABLE, distanceM: 0, reason: 'fence_unreadable', action })
+      return
+    }
+    await handlePunch(action, reloaded)
   }
 
   const handleCheckIn = () => handlePunch('checkin')
@@ -503,7 +558,7 @@ export default function StaffCheckIn({
 
   // The accuracy at which a reading is good enough to stand on its own. Used
   // only to scale the progress bar, so "full" means "this will be accepted".
-  const trustedAccuracy = geofenceConfig?.trusted_accuracy_m ?? 100
+  const trustedAccuracy = effectiveFence?.trusted_accuracy_m ?? 100
 
   const smoothWrap = 'overflow-hidden'
   const smoothProps = {
@@ -525,6 +580,16 @@ export default function StaffCheckIn({
     confirm: string
     strict: boolean
   } | null = !pending ? null
+    // The app could not read the fence. Not strict, and pointedly not phrased
+    // as anything the staff member did: the retry below is the real remedy, and
+    // punching anyway is recorded as an unchecked location, not as access off.
+    : pending.reason === 'fence_unreadable'
+      ? {
+        title: failureCopy?.title ?? 'Could not reach the school server',
+        detail: failureCopy?.detail ?? 'Your location could not be checked.',
+        confirm: pending.action === 'checkin' ? DEVICE_PROBLEM_COPY.confirmIn : DEVICE_PROBLEM_COPY.confirmOut,
+        strict: false,
+      }
     : pending.reason === 'device_problem'
       ? {
         title: DEVICE_PROBLEM_COPY.title,
@@ -600,6 +665,11 @@ export default function StaffCheckIn({
           onClick={() => {
             setPending(null)
             if (pending.reason === 'outside_zone') setGpsState('idle')
+            // Re-read the fence before retrying: the parent loaded it once on
+            // mount, so punching again against the same prop would fail the
+            // same way for the same reason. Whatever comes back (fence, no
+            // fence, or another failure) is what handlePunch then acts on.
+            else if (pending.reason === 'fence_unreadable') retryFence(pending.action)
             else handlePunch(pending.action)
           }}
           className="flex-1 py-2.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl"

@@ -182,6 +182,23 @@ export interface GeofenceZoneInput {
 export interface EffectiveGeofence extends GeofenceConfig {
   zone_id: string | null
   zone_label: string | null
+  /**
+   * True when the fence could not be read at all — the request failed, rather
+   * than coming back saying there is no fence.
+   *
+   * These two used to be the same value (`null` from fetchGeofenceConfig, then
+   * `enabled: false`), and a failed read therefore presented as "geofencing is
+   * off school-wide". The punch then went in with no reading and no failure
+   * code, and the server — which could see the fence perfectly well — had
+   * nothing to attribute the missing position to and recorded `location_off`
+   * against the staff member. On the morning of 2026-09-21 the REST API was
+   * shedding requests and ten staff were marked that way inside nine minutes,
+   * none of whom had touched a location setting.
+   *
+   * A fence that cannot be read is not a fence that is switched off, so it is
+   * no longer allowed to look like one.
+   */
+  load_failed: boolean
 }
 
 export interface AttendanceConfig {
@@ -1268,7 +1285,16 @@ export async function clearStaffAttendance(staffId: string, date: string): Promi
 // Geofence Config (site_settings key: 'geofence')
 // ============================================
 
-export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
+/**
+ * The fence as stored, separating "there is no fence" from "the fence could not
+ * be read". Callers that only configure the fence can use fetchGeofenceConfig
+ * below and ignore the difference; anything that decides whether to *check* a
+ * location has to know which of the two it is. See EffectiveGeofence.load_failed.
+ */
+async function fetchGeofenceConfigResult(): Promise<{
+  config: GeofenceConfig | null
+  failed: boolean
+}> {
   const { data, error } = await supabase
     .from('site_settings')
     .select('value')
@@ -1277,13 +1303,13 @@ export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
 
   if (error) {
     console.error('fetchGeofenceConfig error:', error)
-    return null
+    return { config: null, failed: true }
   }
 
-  if (!data?.value) return null
+  if (!data?.value) return { config: null, failed: false }
 
   const v = data.value as Partial<GeofenceConfig>
-  return {
+  const config: GeofenceConfig = {
     enabled: v.enabled ?? false,
     lat: v.lat ?? null,
     lng: v.lng ?? null,
@@ -1293,6 +1319,11 @@ export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
     polygon: v.polygon ?? null,
     trusted_accuracy_m: v.trusted_accuracy_m ?? DEFAULT_TRUSTED_ACCURACY_M,
   }
+  return { config, failed: false }
+}
+
+export async function fetchGeofenceConfig(): Promise<GeofenceConfig | null> {
+  return (await fetchGeofenceConfigResult()).config
 }
 
 export async function saveGeofenceConfig(config: GeofenceConfig): Promise<boolean> {
@@ -1424,8 +1455,16 @@ export async function saveGeofenceZones(
   return true
 }
 
-/** The zone one staff member belongs to, or null when they use the school-wide centre. */
-async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone | null> {
+/**
+ * The zone one staff member belongs to, or null when they use the school-wide
+ * centre. `failed` separates that null from a read that did not complete — a
+ * zone member whose lookup fails would otherwise be judged against the
+ * school-wide centre, which is a different place from the one they were told to
+ * stand in.
+ */
+async function fetchGeofenceZoneForStaff(
+  staffId: string
+): Promise<{ zone: GeofenceZone | null; failed: boolean }> {
   const { data: member, error: memError } = await supabase
     .from('attendance_geofence_zone_members')
     .select('zone_id')
@@ -1435,9 +1474,9 @@ async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone 
 
   if (memError) {
     console.error('fetchGeofenceZoneForStaff member error:', memError)
-    return null
+    return { zone: null, failed: true }
   }
-  if (!member) return null
+  if (!member) return { zone: null, failed: false }
 
   const { data: zone, error: zoneError } = await supabase
     .from('attendance_geofence_zones')
@@ -1447,9 +1486,12 @@ async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone 
 
   if (zoneError) {
     console.error('fetchGeofenceZoneForStaff zone error:', zoneError)
-    return null
+    return { zone: null, failed: true }
   }
-  return zone ? { ...(zone as Omit<GeofenceZone, 'staff_ids'>), staff_ids: [staffId] } : null
+  return {
+    failed: false,
+    zone: zone ? { ...(zone as Omit<GeofenceZone, 'staff_ids'>), staff_ids: [staffId] } : null,
+  }
 }
 
 /**
@@ -1458,19 +1500,24 @@ async function fetchGeofenceZoneForStaff(staffId: string): Promise<GeofenceZone 
  * the school-wide config so the master switch keeps working for everyone.
  */
 export async function fetchEffectiveGeofenceForStaff(staffId: string): Promise<EffectiveGeofence> {
-  const [config, zone] = await Promise.all([
-    fetchGeofenceConfig(),
+  const [configResult, zoneResult] = await Promise.all([
+    fetchGeofenceConfigResult(),
     fetchGeofenceZoneForStaff(staffId),
   ])
+
+  const { config } = configResult
+  const { zone } = zoneResult
+  const load_failed = configResult.failed || zoneResult.failed
 
   const base: GeofenceConfig = config ?? {
     enabled: false, lat: null, lng: null, radius_m: 200,
     shape: 'circle', polygon: null,
     trusted_accuracy_m: DEFAULT_TRUSTED_ACCURACY_M,
   }
-  if (!zone) return { ...base, zone_id: null, zone_label: null }
+  if (!zone) return { ...base, zone_id: null, zone_label: null, load_failed }
 
   return {
+    load_failed,
     // The master switch always comes from the school-wide config: a zone moves
     // where a staff member has to stand, never whether GPS is checked at all.
     enabled: base.enabled,

@@ -69,7 +69,16 @@ export interface FusedFix {
 export type AcquisitionFailure =
   /** The user (or a policy) refused the location permission. */
   | 'permission_denied'
-  /** Location services are off, or the platform could not produce any fix. */
+  /**
+   * The platform was asked and could not determine a position —
+   * `POSITION_UNAVAILABLE`. Per the Geolocation spec this is the *positioning*
+   * failing (no GNSS lock, no network fix, receiver error), not the permission
+   * being refused; a permission refusal is `PERMISSION_DENIED` and arrives as
+   * `permission_denied` above. This used to be documented as "location services
+   * are off, or the platform could not produce any fix" and classed with the
+   * permission failures, which put "location access is switched off" on the
+   * record of anyone whose phone was merely indoors with a cold receiver.
+   */
   | 'unavailable'
   /** Samples never arrived within the time budget. */
   | 'timeout'
@@ -269,7 +278,17 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
     const onAbort = () => finish('timeout')
     signal?.addEventListener('abort', onAbort, { once: true })
 
-    const deadline = setTimeout(() => finish('timeout'), MAX_WAIT_MS)
+    /**
+     * What to call it when the budget runs out with nothing to show. A run of
+     * POSITION_UNAVAILABLE errors and a receiver that simply stayed silent are
+     * both device problems, but they are different device problems, and the
+     * telemetry is what makes the accuracy work tunable — so the distinction is
+     * kept rather than flattened into `timeout`.
+     */
+    const timeoutFailure = (): AcquisitionFailure =>
+      lastError && lastError.code === lastError.POSITION_UNAVAILABLE ? 'unavailable' : 'timeout'
+
+    const deadline = setTimeout(() => finish(timeoutFailure()), MAX_WAIT_MS)
 
     watchId = navigator.geolocation.watchPosition(
       pos => {
@@ -339,22 +358,24 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
       },
       err => {
         lastError = err
-        // Transient errors are expected while a lock is being acquired, so they
-        // only end the attempt when they are terminal or nothing has arrived yet.
+        // Transient errors are expected while a lock is being acquired, so only
+        // a terminal one ends the attempt. PERMISSION_DENIED is the only
+        // terminal one: the answer cannot change inside this attempt.
+        //
+        // POSITION_UNAVAILABLE used to end it too, whenever it arrived before
+        // the first sample. That threw away the rest of a 20s budget on the
+        // strength of one error at second zero — which is exactly when a cold
+        // receiver emits it, and exactly the case the budget exists for. It now
+        // runs to the deadline, where `timeoutFailure()` still records that this
+        // is what was coming back.
         if (err.code === err.PERMISSION_DENIED) {
           finish('permission_denied')
-        } else if (samples.length === 0 && err.code === err.POSITION_UNAVAILABLE) {
-          finish('unavailable')
         }
       },
       // maximumAge:0 asks for a live fix. It is not honoured everywhere, which is
       // exactly why staleness is also checked explicitly above rather than trusted.
       { enableHighAccuracy: true, maximumAge: 0, timeout: MAX_WAIT_MS },
     )
-
-    // Keeps the lint-visible reference meaningful: the last error only matters if
-    // nothing ever arrived, which the deadline path handles.
-    void lastError
   })
 }
 
@@ -370,23 +391,46 @@ export async function acquirePosition(options: AcquireOptions): Promise<Acquisit
  *                   crowded sky are not user error — so this is flagged
  *                   plainly, and no one is accused of anything.
  *   access_off      location was never asked, because the site permission is
- *                   blocked, OS location services are off, or the browser has
- *                   no geolocation at all. Somebody chose that, and it can be
- *                   undone in seconds, so this one is flagged strictly: the
- *                   staff member is told at the moment they use it that it is
- *                   reported, and the row sorts to the top of the day.
+ *                   blocked or the browser has no geolocation at all. Somebody
+ *                   chose that, and it can be undone in seconds, so this one is
+ *                   flagged strictly: the staff member is told at the moment
+ *                   they use it that it is reported, and the row sorts to the
+ *                   top of the day.
+ *
+ * `unavailable` (POSITION_UNAVAILABLE) used to sit under access_off, on the
+ * reading that it covered "location services off". It does not: the spec gives
+ * it when the *positioning* fails, which is the textbook device problem — a
+ * phone indoors with a cold receiver emits it and then often recovers seconds
+ * later. Classing it strictly put "location access is switched off, and this is
+ * reported" in red at the top of the day's report against staff who had done
+ * nothing but stand in a building. It is a device problem, and is flagged as one.
  *
  * Mirrored by attendance_failure_class() in
- * supabase-migrations/attendance_device_problem_warning.sql — the server makes
- * the binding call, this copy only decides what the UI offers. Change one,
- * change the other.
+ * supabase-migrations/attendance_device_problem_warning.sql, as amended by
+ * fix_gps_location_off_misclassification.sql — the server makes the binding
+ * call, this copy only decides what the UI offers. Change one, change the other.
  */
 export type FailureClass = 'device_problem' | 'access_off'
 
-export const FAILURE_CLASS: Record<AcquisitionFailure, FailureClass> = {
+/**
+ * The app could not read the fence, so it never asked for a position.
+ *
+ * Not an acquisition failure — acquisition never started — but it travels the
+ * same field on the punch, because the server's question is the same one either
+ * way: there is no position here, why not? Answering "the fence read failed" is
+ * the whole point. Silence on that field is what the server used to receive,
+ * and silence is what it turned into `location_off`.
+ */
+export const FENCE_UNREADABLE = 'fence_unreadable'
+
+/** Every code the punch's `failure` field can legitimately carry. */
+export type PunchFailure = AcquisitionFailure | typeof FENCE_UNREADABLE
+
+export const FAILURE_CLASS: Record<PunchFailure, FailureClass> = {
   timeout: 'device_problem',
+  unavailable: 'device_problem',
+  [FENCE_UNREADABLE]: 'device_problem',
   permission_denied: 'access_off',
-  unavailable: 'access_off',
   unsupported: 'access_off',
 }
 
@@ -397,7 +441,7 @@ export const FAILURE_CLASS: Record<AcquisitionFailure, FailureClass> = {
  * how a soft path becomes the default one.
  */
 export function classifyFailure(failure: string | null | undefined): FailureClass {
-  return FAILURE_CLASS[failure as AcquisitionFailure] ?? 'access_off'
+  return FAILURE_CLASS[failure as PunchFailure] ?? 'access_off'
 }
 
 /** True when this failure is the device's fault rather than a setting. */
@@ -407,16 +451,26 @@ export function isDeviceProblem(failure: string | null | undefined): boolean {
 
 /** Human-facing copy for each failure mode, so the UI never says "enable GPS" to
  *  someone whose GPS is already on. */
-export const ACQUISITION_FAILURE_COPY: Record<AcquisitionFailure, { title: string; detail: string }> = {
+export const ACQUISITION_FAILURE_COPY: Record<PunchFailure, { title: string; detail: string }> = {
   permission_denied: {
     title: 'Location permission blocked',
     detail:
       'This site is blocked from seeing your location. Open your browser’s site settings for this page, set Location to Allow, then try again.',
   },
   unavailable: {
-    title: 'Location services are off',
+    // Was "Location services are off", which read as an accusation and was
+    // usually wrong: POSITION_UNAVAILABLE is overwhelmingly a receiver that has
+    // not locked on yet. The remedy that actually works is named first, and
+    // Location Services is mentioned as the other possibility rather than the
+    // diagnosis.
+    title: 'Your device could not find its position',
     detail:
-      'Your device could not produce a position at all. Turn on Location Services in your device settings, then try again.',
+      'Your device was asked for a position and could not produce one. Step near a window or outside for a moment, then try again — if it keeps happening, check that Location Services are on in your device settings.',
+  },
+  [FENCE_UNREADABLE]: {
+    title: 'Could not reach the school server',
+    detail:
+      'Your campus location settings could not be loaded, so your location could not be checked. This is the app, not your device or your phone’s settings. Try again in a moment.',
   },
   timeout: {
     title: 'Could not get a fix in time',
