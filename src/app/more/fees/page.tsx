@@ -57,14 +57,22 @@ const MAIN_TABS: TabDef<Main>[] = [
 ]
 
 const SECTIONS: CenterSection[] = ['collection', 'students', 'reports']
-const TOOLS: CenterTool[] = ['reminders', 'latefees', 'concessions']
 
 /**
- * The old `sub=` values, which were the nine routes before them. Bookmarks and
- * printed slips from either generation still land where the thing they name
- * now lives — the two that became popups open as popups.
+ * Late-fee policy is the one popup that belongs to Fee Configuration rather
+ * than to the Collection Center, so the URL's `tool=` carries one more value
+ * than the Center knows about.
  */
-const LEGACY_SUB: Record<string, { section?: CenterSection; tool?: CenterTool; tab?: Main }> = {
+type Tool = CenterTool | 'latefees'
+const TOOLS: Tool[] = ['reminders', 'fines', 'concessions', 'latefees']
+
+/**
+ * The old `sub=` values, which were the nine routes before them, and the old
+ * `tool=latefees` on the Collection Center, which is now Fines. Bookmarks and
+ * printed slips from either generation still land where the thing they name
+ * now lives.
+ */
+const LEGACY_SUB: Record<string, { section?: CenterSection; tool?: Tool; tab?: Main }> = {
   counter:     { section: 'collection' },
   bills:       { section: 'collection' },
   invoices:    { section: 'collection' },
@@ -92,13 +100,21 @@ function FeesInner() {
     ? params.get('section') as CenterSection
     : legacy.section ?? 'collection'
 
-  const tool = (TOOLS as string[]).includes(params.get('tool') ?? '')
-    ? params.get('tool') as CenterTool
+  const asked = params.get('tool') ?? ''
+  const tool: Tool | null = (TOOLS as string[]).includes(asked)
+    ? asked as Tool
     : legacy.tool ?? null
+
+  // `latefees` means two different popups depending on the tab it is asked on:
+  // the policy on Fee Configuration, and — until this release — a tracking list
+  // on the Collection Center. That list is gone, so a link to it opens Fines,
+  // which is what replaced it.
+  const centerTool: CenterTool | null =
+    tool === 'latefees' ? 'fines' : tool
 
   // Tab state lives in the URL so the old routes can redirect straight to a
   // section, and so a clerk can bookmark the one tab they live in.
-  const go = useCallback((next: { tab?: Main; section?: CenterSection; tool?: CenterTool | null }) => {
+  const go = useCallback((next: { tab?: Main; section?: CenterSection; tool?: Tool | null }) => {
     const q = new URLSearchParams()
     q.set('tab', next.tab ?? main)
     const nextSection = next.section ?? section
@@ -129,7 +145,7 @@ function FeesInner() {
           <CollectionCenter
             section={section}
             onSectionChange={s => go({ section: s })}
-            tool={tool}
+            tool={centerTool}
             onToolChange={t => go({ tool: t })}
           />
         ) : main === 'config' ? (
@@ -148,7 +164,7 @@ function FeesInner() {
             )}
           </div>
         ) : perms.can('fees.settings.manage') ? (
-          <FeeSettingsPanel />
+          <div className="px-3 sm:px-0"><FeeSettingsPanel /></div>
         ) : (
           <p className="px-3 py-10 text-[12.5px] text-[#8C8878] text-center">
             You do not have permission to change fee settings.
@@ -158,7 +174,7 @@ function FeesInner() {
       {lateFeesOpen && (
         <FeeToolModal
           title="Late fee settings"
-          subtitle="The rules, and the nightly sweep that applies them"
+          subtitle="What an overdue bill costs, and when the charge starts"
           icon={<Timer size={15} />}
           onClose={() => go({ tool: null })}
         >

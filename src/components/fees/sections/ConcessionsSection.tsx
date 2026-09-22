@@ -17,7 +17,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Award, BadgePercent, Check, Inbox, Loader2, Plus, X,
+  Award, BadgePercent, Check, Inbox, Loader2, Plus, Users, X,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -25,6 +25,7 @@ import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
+import BulkConcessionSheet from '@/components/fees/concessions/BulkConcessionSheet'
 import { gradeLabel } from '@/lib/grades'
 import {
   fetchUnpaidInvoices, fetchProfileList,
@@ -55,6 +56,7 @@ export default function ConcessionsSection() {
   const [editingType, setEditingType] = useState<DiscountTypeRow | null | 'new'>(null)
   const [editingScholarship, setEditingScholarship] = useState<ScholarshipRow | null | 'new'>(null)
   const [applying, setApplying] = useState(false)
+  const [applyingMany, setApplyingMany] = useState(false)
   const [removing, setRemoving] = useState<ConcessionRow | null>(null)
 
   const showAmounts = !perms.amountsHidden
@@ -112,9 +114,14 @@ export default function ConcessionsSection() {
           </button>
         )}
         {canApply && (
-          <button onClick={() => setApplying(true)} className={ADMIN.darkBtn}>
-            <Plus size={13} /> Apply one
-          </button>
+          <>
+            <button onClick={() => setApplyingMany(true)} className={ADMIN.ghostBtn}>
+              <Users size={13} /> Apply to many
+            </button>
+            <button onClick={() => setApplying(true)} className={ADMIN.darkBtn}>
+              <Plus size={13} /> Apply one
+            </button>
+          </>
         )}
       </div>
 
@@ -185,6 +192,18 @@ export default function ConcessionsSection() {
           canApprove={canApprove}
           onClose={() => setApplying(false)}
           onDone={() => { setApplying(false); void load() }}
+        />
+      )}
+
+      {applyingMany && (
+        <BulkConcessionSheet
+          people={people}
+          invoices={invoices}
+          types={types}
+          scholarships={scholarships}
+          showAmounts={showAmounts}
+          onClose={() => setApplyingMany(false)}
+          onDone={() => { setApplyingMany(false); void load() }}
         />
       )}
 
@@ -374,8 +393,11 @@ function Types({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
-          No discount types. Staff can still grant a one-off waiver, which always needs approval.
+        <p className="px-4 py-8 text-sm text-[#8C8878] leading-relaxed">
+          No discount types yet. This is where a staff ward, a second sibling or an early-payment
+          rebate is set up — once each, with how much comes off and above what amount somebody has
+          to approve it. They belong here rather than in a fee group: a discount stacks, says what
+          it is on the family&rsquo;s bill, and leaves the price list in one place.
         </p>
       ) : rows.map(t => (
         <div key={t.id}

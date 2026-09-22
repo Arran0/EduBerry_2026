@@ -189,6 +189,53 @@ export async function fetchCollectionDaily(yearId: string): Promise<CollectionDa
   return (data ?? []) as CollectionDayRow[]
 }
 
+/**
+ * What came in on one day, across every method.
+ *
+ * `fee_collection_daily` is already grouped by day and method, so this is one
+ * row per method rather than one per receipt — the headline card needs a
+ * figure, not a ledger. Null (the caller may not see amounts) stays null
+ * rather than summing to a confident zero.
+ */
+export async function fetchDayCollection(
+  yearId: string, day: string,
+): Promise<{ collected: number | null; receipts: number }> {
+  const { data, error } = await supabase.from('fee_collection_daily')
+    .select('receipts, collected').eq('academic_year_id', yearId).eq('day', day)
+  if (error) return empty(error, { collected: null, receipts: 0 })
+  const rows = (data ?? []) as { receipts: number; collected: number | null }[]
+  const visible = rows.some(r => r.collected !== null)
+  return {
+    collected: rows.length === 0 ? 0 : visible ? rows.reduce((a, r) => a + (r.collected ?? 0), 0) : null,
+    receipts: rows.reduce((a, r) => a + Number(r.receipts ?? 0), 0),
+  }
+}
+
+/**
+ * How many students have a bill that is past its due date and still owed.
+ *
+ * Counted over students rather than bills, because "forty-one families are
+ * behind" is the number somebody acts on; "sixty-three overdue bills" is the
+ * same fact with the families double-counted.
+ *
+ * The filter is on status and due date, never on `balance > 0`: balance is
+ * NULL for a caller without `fees.view_amounts`, and a NULL comparison would
+ * quietly return zero rather than a count.
+ */
+export async function fetchOverdueStudentCount(
+  yearId: string, asOf: string,
+): Promise<{ students: number; bills: number }> {
+  const { data, error } = await supabase.from('fee_invoices_v')
+    .select('student_id')
+    .eq('academic_year_id', yearId)
+    .in('status', ['pending', 'partly_paid', 'overdue'])
+    .lt('due_date', asOf)
+    .limit(5000)
+  if (error) return empty(error, { students: 0, bills: 0 })
+  const rows = (data ?? []) as { student_id: string }[]
+  return { students: new Set(rows.map(r => r.student_id)).size, bills: rows.length }
+}
+
 export async function fetchAging(yearId: string): Promise<AgingRow[]> {
   const { data, error } = await supabase.from('fee_outstanding_aging')
     .select('*').eq('academic_year_id', yearId)

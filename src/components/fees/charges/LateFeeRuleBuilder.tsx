@@ -9,6 +9,14 @@
 // approximation of it, `computeLateFee` itself — against a sample bill, and
 // shows what it would cost at a week, a month and three months late.
 //
+// The form was ten fields in three unlabelled grids: a name, then a 2-up, then
+// another 2-up, then a 3-up, then another 2-up. Everything was on screen and
+// nothing was grouped, so reading it meant reading all of it. It is now four
+// numbered steps in the order the decision is actually made — who it applies
+// to, when it starts, how much, and where it stops — with the whole rule
+// written out as one English sentence at the top, which is the thing a reader
+// is really trying to assemble in their head.
+//
 // `validateRule` supplies the red boxes. Errors block Save; warnings do not,
 // because a school may genuinely want an aggressive rule, but it should see the
 // number first.
@@ -46,6 +54,20 @@ function blank(yearId: string): Partial<LateFeeRuleRow> & { academic_year_id: st
     cap_percent: null,
     notes: null,
   }
+}
+
+const SCOPE_LABEL: Record<NonNullable<LateFeeRuleRow['scope']>, string> = {
+  all: 'Every bill',
+  group: 'One fee group',
+  structure: 'One structure',
+  installment: 'One installment',
+}
+
+const FREQUENCY_LABEL: Record<LateFeeRuleRow['frequency'], string> = {
+  once: 'Once only',
+  daily: 'Every day',
+  weekly: 'Every week',
+  monthly: 'Every month',
 }
 
 export default function LateFeeRuleBuilder({
@@ -94,9 +116,38 @@ export default function LateFeeRuleBuilder({
     }))
   }, [engineRule, sampleBill, today])
 
+  /** The whole rule as one sentence, which is what the reader is assembling. */
+  const sentence = useMemo(() => {
+    const amount = form.charge_type === 'percent'
+      ? `${Number(form.rate) || 0}% of ${form.basis === 'whole' ? 'the whole bill' : 'what is still unpaid'}`
+      : `₹${Number(form.rate) || 0}`
+    const when = form.frequency === 'once'
+      ? 'once'
+      : `every ${String(form.frequency ?? 'weekly').replace('ly', '')}`
+    const grace = Number(form.grace_days) || 0
+    const after = grace === 0
+      ? 'from the day after it is due'
+      : `once it is ${grace} day${grace === 1 ? '' : 's'} past due`
+    const where = form.scope === 'all'
+      ? 'every bill'
+      : scopes.find(s => s.id === form.scope_id)?.label
+        ?? `one ${form.scope}`
+    const caps: string[] = []
+    if (form.cap_amount !== null && form.cap_amount !== undefined) caps.push(`₹${form.cap_amount}`)
+    if (form.cap_percent !== null && form.cap_percent !== undefined) caps.push(`${form.cap_percent}% of the bill`)
+    const cap = caps.length === 0
+      ? ', and it never stops growing'
+      : `, never more than ${caps.join(' or ')}`
+    return `${amount}, ${when}, ${after}, on ${where}${cap}.`
+  }, [form, scopes])
+
   const submit = async () => {
     if (blocking.length > 0) return
     if (!form.name?.trim()) { setError('Give the rule a name staff will recognise.'); return }
+    if (form.scope !== 'all' && !form.scope_id) {
+      setError(`Choose which ${form.scope} this applies to.`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -124,12 +175,13 @@ export default function LateFeeRuleBuilder({
     <ModalShell
       onClose={onClose}
       sharp
-      size="lg"
+      size="2xl"
       minHClass="sm:min-h-[34rem]"
       title={rule ? 'Edit late-fee rule' : 'New late-fee rule'}
       subtitle="Nothing is charged until you switch the rule on, and never for days before that."
       icon={<AlertTriangle size={15} />}
       iconClassName="bg-[#FAF3DF] text-[#7A6220]"
+      bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] text-[#8C8878]">
@@ -151,93 +203,129 @@ export default function LateFeeRuleBuilder({
         </div>
       }
     >
-      <div className="grid md:grid-cols-2 gap-5">
-        {/* ── The form ─────────────────────────────────────────────── */}
-        <div className="space-y-3">
-          <Field label="Name">
-            <input value={form.name ?? ''} onChange={e => set('name', e.target.value)}
-                   placeholder="Weekly late fee, term bills"
-                   className={ADMIN.inputPlain} />
-          </Field>
+      {/* ── The rule, in one sentence ──────────────────────────────────── */}
+      <div className="bg-[#27272A] px-3 py-2.5 mb-3">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]">
+          This rule charges
+        </span>
+        <p className="text-[13px] text-white leading-snug mt-1">{sentence}</p>
+      </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Applies to">
-              <select value={form.scope ?? 'all'}
-                      onChange={e => { set('scope', e.target.value as LateFeeRuleRow['scope']); set('scope_id', null) }}
-                      className={ADMIN.inputPlain}>
-                <option value="all">Every bill</option>
-                <option value="group">One fee group</option>
-                <option value="structure">One structure</option>
-                <option value="installment">One installment</option>
-              </select>
-            </Field>
-            <Field label="Which one">
-              <select value={form.scope_id ?? ''}
-                      disabled={form.scope === 'all'}
-                      onChange={e => set('scope_id', e.target.value || null)}
-                      className={`${ADMIN.inputPlain} disabled:bg-[#FAF8F2] disabled:text-[#8C8878]`}>
-                <option value="">{form.scope === 'all' ? '—' : 'Choose…'}</option>
-                {scopes.filter(s => s.kind === form.scope).map(s => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
+      <div className="grid lg:grid-cols-[1fr_20rem] gap-3 items-start">
+        {/* ── The four steps ───────────────────────────────────────────── */}
+        <div className="space-y-2.5">
+          <Step n={1} title="What it is, and what it covers">
+            <div className="space-y-2.5">
+              <Field label="Name" hint="What staff will see in the list and on the bill line.">
+                <input value={form.name ?? ''} onChange={e => set('name', e.target.value)}
+                       placeholder="Weekly late fee, term bills"
+                       className={ADMIN.inputPlain} autoFocus />
+              </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Grace days" hint="Days after the due date before anything is charged.">
-              <input type="number" min={0} value={form.grace_days ?? 0}
-                     onChange={e => set('grace_days', Number(e.target.value))}
-                     className={ADMIN.inputPlain} />
-            </Field>
-            <Field label="Charged on">
-              <select value={form.basis ?? 'unpaid'}
-                      onChange={e => set('basis', e.target.value as LateFeeRuleRow['basis'])}
-                      className={ADMIN.inputPlain}>
-                <option value="unpaid">What is still unpaid</option>
-                <option value="whole">The whole bill</option>
-              </select>
-            </Field>
-          </div>
+              <div>
+                <span className={ADMIN.label}>Applies to</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mt-1">
+                  {(Object.keys(SCOPE_LABEL) as (keyof typeof SCOPE_LABEL)[]).map(k => (
+                    <Segment key={k}
+                             on={(form.scope ?? 'all') === k}
+                             onClick={() => { set('scope', k); set('scope_id', null) }}>
+                      {SCOPE_LABEL[k]}
+                    </Segment>
+                  ))}
+                </div>
+                {form.scope && form.scope !== 'all' && (
+                  <select value={form.scope_id ?? ''}
+                          onChange={e => set('scope_id', e.target.value || null)}
+                          className={`${ADMIN.inputPlain} mt-1.5`}>
+                    <option value="">Choose which one…</option>
+                    {scopes.filter(s => s.kind === form.scope).map(s => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                )}
+                {form.scope && form.scope !== 'all'
+                  && scopes.filter(s => s.kind === form.scope).length === 0 && (
+                  <p className="mt-1 text-[11px] text-[#7A6220]">
+                    Nothing of that kind exists in this session yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Step>
 
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Type">
-              <select value={form.charge_type ?? 'flat'}
-                      onChange={e => set('charge_type', e.target.value as LateFeeRuleRow['charge_type'])}
-                      className={ADMIN.inputPlain}>
-                <option value="flat">Flat ₹</option>
-                <option value="percent">Percent</option>
-              </select>
-            </Field>
-            <Field label={form.charge_type === 'percent' ? 'Rate %' : 'Amount ₹'}>
-              <input type="number" min={0} step="0.01" value={form.rate ?? 0}
-                     onChange={e => set('rate', Number(e.target.value))}
-                     className={ADMIN.inputPlain} />
-            </Field>
-            <Field label="How often">
-              <select value={form.frequency ?? 'once'}
-                      onChange={e => set('frequency', e.target.value as LateFeeRuleRow['frequency'])}
-                      className={ADMIN.inputPlain}>
-                <option value="once">Once</option>
-                <option value="daily">Every day</option>
-                <option value="weekly">Every week</option>
-                <option value="monthly">Every month</option>
-              </select>
-            </Field>
-          </div>
+          <Step n={2} title="When the charging starts">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Grace days" hint="Days after the due date before anything is charged.">
+                <input type="number" min={0} value={form.grace_days ?? 0}
+                       onChange={e => set('grace_days', Number(e.target.value))}
+                       className={ADMIN.inputPlain} />
+              </Field>
+              <div>
+                <span className={ADMIN.label}>Charged on</span>
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                  <Segment on={(form.basis ?? 'unpaid') === 'unpaid'}
+                           onClick={() => set('basis', 'unpaid')}>
+                    Still unpaid
+                  </Segment>
+                  <Segment on={form.basis === 'whole'} onClick={() => set('basis', 'whole')}>
+                    The whole bill
+                  </Segment>
+                </div>
+                <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">
+                  {form.basis === 'whole'
+                    ? 'A part payment does not shrink the late fee.'
+                    : 'Paying part of the bill shrinks the late fee with it.'}
+                </p>
+              </div>
+            </div>
+          </Step>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Cap ₹" hint="Leave blank for no rupee cap.">
-              <input type="number" min={0} value={form.cap_amount ?? ''}
-                     onChange={e => set('cap_amount', e.target.value === '' ? null : Number(e.target.value))}
-                     placeholder="—" className={ADMIN.inputPlain} />
-            </Field>
-            <Field label="Cap % of bill" hint="Whichever cap bites first wins.">
-              <input type="number" min={0} step="0.01" value={form.cap_percent ?? ''}
-                     onChange={e => set('cap_percent', e.target.value === '' ? null : Number(e.target.value))}
-                     placeholder="—" className={ADMIN.inputPlain} />
-            </Field>
-          </div>
+          <Step n={3} title="How much, and how often">
+            <div className="space-y-2.5">
+              <div className="grid sm:grid-cols-[9rem_1fr] gap-3">
+                <div>
+                  <span className={ADMIN.label}>Charge</span>
+                  <div className="grid grid-cols-2 gap-1 mt-1">
+                    <Segment on={(form.charge_type ?? 'flat') === 'flat'}
+                             onClick={() => set('charge_type', 'flat')}>Flat ₹</Segment>
+                    <Segment on={form.charge_type === 'percent'}
+                             onClick={() => set('charge_type', 'percent')}>Percent</Segment>
+                  </div>
+                </div>
+                <Field label={form.charge_type === 'percent' ? 'Rate %' : 'Amount ₹'}>
+                  <input type="number" min={0} step="0.01" value={form.rate ?? 0}
+                         onChange={e => set('rate', Number(e.target.value))}
+                         className={ADMIN.inputPlain} />
+                </Field>
+              </div>
+              <div>
+                <span className={ADMIN.label}>How often</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mt-1">
+                  {(Object.keys(FREQUENCY_LABEL) as (keyof typeof FREQUENCY_LABEL)[]).map(k => (
+                    <Segment key={k} on={(form.frequency ?? 'weekly') === k}
+                             onClick={() => set('frequency', k)}>
+                      {FREQUENCY_LABEL[k]}
+                    </Segment>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Step>
+
+          <Step n={4} title="Where it stops">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Never more than ₹" hint="Blank for no rupee ceiling.">
+                <input type="number" min={0} value={form.cap_amount ?? ''}
+                       onChange={e => set('cap_amount', e.target.value === '' ? null : Number(e.target.value))}
+                       placeholder="No ceiling" className={ADMIN.inputPlain} />
+              </Field>
+              <Field label="Never more than % of bill" hint="Whichever ceiling bites first wins.">
+                <input type="number" min={0} step="0.01" value={form.cap_percent ?? ''}
+                       onChange={e => set('cap_percent', e.target.value === '' ? null : Number(e.target.value))}
+                       placeholder="No ceiling" className={ADMIN.inputPlain} />
+              </Field>
+            </div>
+          </Step>
 
           <Field label="Note" hint="Shown to whoever reads the rule later, not to parents.">
             <input value={form.notes ?? ''} onChange={e => set('notes', e.target.value || null)}
@@ -245,24 +333,24 @@ export default function LateFeeRuleBuilder({
           </Field>
         </div>
 
-        {/* ── The live sample ──────────────────────────────────────── */}
-        <div className="space-y-3">
-          <div className="bg-[#FAF8F2] border border-[#E3DFD3] p-3">
+        {/* ── The live sample ──────────────────────────────────────────── */}
+        <div className="space-y-2.5 lg:sticky lg:top-0">
+          <div className="bg-white border border-[#E3DFD3] p-3">
             <div className="flex items-center justify-between gap-2">
               <span className={ADMIN.label}>On a sample bill of</span>
               <div className="flex items-center gap-1">
                 <span className="text-sm text-[#6B675A]">₹</span>
                 <input type="number" min={0} value={sample}
                        onChange={e => setSample(Number(e.target.value))}
-                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-sm text-right
+                       className="w-24 bg-white border border-[#E3DFD3] px-2 py-1 text-sm text-right
                                   text-[#18181B] focus:outline-none focus:border-[#27272A]" />
               </div>
             </div>
-            <table className="w-full mt-3 text-sm">
+            <table className="w-full mt-2.5 text-sm">
               <tbody>
                 {horizons.map(h => (
-                  <tr key={h.days} className="border-t border-[#E3DFD3] first:border-0">
-                    <td className="py-1.5 text-[#6B675A]">
+                  <tr key={h.days} className="border-t border-[#F0ECE2] first:border-0">
+                    <td className="py-1.5 text-[#6B675A] text-[12px]">
                       {h.days === 365 ? 'A year late' : `${h.days} days late`}
                     </td>
                     <td className="py-1.5 text-right font-semibold text-[#18181B]">
@@ -272,8 +360,8 @@ export default function LateFeeRuleBuilder({
                                          text-[#7A6220]">capped</span>
                       )}
                     </td>
-                    <td className="py-1.5 pl-3 text-right text-[11px] text-[#8C8878] w-24">
-                      {sample > 0 ? `${Math.round((h.result.amount / toPaise(sample)) * 100)}% of bill` : ''}
+                    <td className="py-1.5 pl-2 text-right text-[10.5px] text-[#8C8878] w-20">
+                      {sample > 0 ? `${Math.round((h.result.amount / toPaise(sample)) * 100)}%` : ''}
                     </td>
                   </tr>
                 ))}
@@ -314,6 +402,40 @@ export default function LateFeeRuleBuilder({
         </div>
       </div>
     </ModalShell>
+  )
+}
+
+/** One numbered step of the form, on its own card so the groups are visible. */
+function Step({
+  n, title, children,
+}: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-white border border-[#E3DFD3]">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#F0ECE2] bg-[#FAF8F2]">
+        <span className="w-[18px] h-[18px] bg-[#27272A] text-white text-[10px] font-bold
+                         flex items-center justify-center flex-shrink-0">{n}</span>
+        <h3 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#3F3F46]">{title}</h3>
+      </div>
+      <div className="p-3">{children}</div>
+    </section>
+  )
+}
+
+function Segment({
+  on, onClick, children,
+}: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2 py-[7px] text-[10.5px] font-bold uppercase tracking-[0.06em] leading-none
+                  border transition-colors truncate ${
+        on ? 'bg-[#27272A] text-white border-[#27272A]'
+           : 'bg-white text-[#6B675A] border-[#E3DFD3] hover:border-[#C9C4B4] hover:text-[#18181B]'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

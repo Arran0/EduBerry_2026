@@ -22,9 +22,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, Loader2, RotateCcw, Users } from 'lucide-react'
+import { AlertTriangle, Check, Loader2, RotateCcw, UserPlus, Users } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN } from '@/components/fees/ui'
+import { StudentPicker } from '@/components/fees/controls'
 import { SearchField, Btn, Empty, Notice, StatStrip } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
@@ -115,6 +116,43 @@ export default function GroupRoster({
     }
   }
 
+  /**
+   * One student, straight into the group being looked at.
+   *
+   * Filtering to a group and then hunting for a name in a nine-hundred-row
+   * table, ticking it, and opening a sheet to confirm the group you are already
+   * looking at is four steps to say one thing. Typing the name is one.
+   */
+  const focusedGroup = groupFilter && groupFilter !== '__none__'
+    ? groupsById.get(groupFilter) ?? null
+    : null
+
+  const [justAdded, setJustAdded] = useState<string | null>(null)
+
+  const addOne = async (studentId: string, name: string) => {
+    if (!focusedGroup) return
+    setBusy(true)
+    onError(null)
+    try {
+      const result = await reassignGroup({
+        academicYearId: yearId,
+        studentIds: [studentId],
+        feeGroupId: focusedGroup.id,
+        isRte: focusedGroup.is_rte,
+        bundle,
+        roster,
+      })
+      await load()
+      setJustAdded(result.unpriced.length > 0
+        ? `${name} is in ${focusedGroup.name}, but nothing can price them: ${result.unpriced[0].reason}`
+        : `${name} added to ${focusedGroup.name}.`)
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Could not add that student.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-2.5">
       <StatStrip
@@ -153,7 +191,8 @@ export default function GroupRoster({
           <option value="">Every class</option>
           {classes.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+        <select value={groupFilter}
+                onChange={e => { setGroupFilter(e.target.value); setJustAdded(null) }}
                 className="bg-white border border-[#E3DFD3] px-2 py-[7px] text-[11px] font-bold
                            uppercase tracking-[0.06em] text-[#18181B] focus:outline-none
                            focus:border-[#27272A]">
@@ -182,6 +221,27 @@ export default function GroupRoster({
           </>
         )}
       </div>
+
+      {canEdit && focusedGroup && (
+        <div className={`${ADMIN.card} p-2.5`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`${ADMIN.label} flex items-center gap-1.5 flex-shrink-0`}>
+              <UserPlus size={12} /> Add to {focusedGroup.name}
+            </span>
+            <div className="flex-1 min-w-[220px] max-w-md">
+              <StudentPicker
+                people={roster.filter(r => r.assigned_group_id !== focusedGroup.id)}
+                onPick={p => void addOne(p.student_id, p.full_name)}
+                placeholder="Type a name or admission number…"
+              />
+            </div>
+            {busy && <Loader2 size={13} className="animate-spin text-[#8C8878]" />}
+          </div>
+          {justAdded && (
+            <p className="text-[11px] text-[#1F6B42] mt-1.5">{justAdded}</p>
+          )}
+        </div>
+      )}
 
       <div className={`${ADMIN.card} overflow-hidden`}>
         {loading ? (

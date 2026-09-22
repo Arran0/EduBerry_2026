@@ -29,6 +29,7 @@ import FeeToolModal from '@/components/fees/FeeToolModal'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
+import { DateRangeBar, MultiSelect } from '@/components/fees/controls'
 import NoAccess from '@/components/fees/NoAccess'
 import CollectSheet, { CollectedReceipt } from '@/components/fees/counter/CollectSheet'
 import PostDatedCheques from '@/components/fees/counter/PostDatedCheques'
@@ -39,32 +40,25 @@ import { buildReceipt, printSpec } from '@/components/fees/statements/invoiceGen
 import { downloadStatement } from '@/components/fees/statements/generate'
 import { fetchFeeConfig, setAutogen, type FeeConfigBundle } from '@/lib/fees/config'
 import {
-  cancelInvoice, fetchAllocations, fetchInvoices, fetchPayments, fetchProfileList,
-  generateInvoices, reversePayment,
-  type CollectResult, type GenerateResult, type InvoiceRow, type InvoiceStatus,
+  cancelInvoice, createProfiles, fetchAllocations, fetchInvoices, fetchPayments,
+  fetchProfileList, generateInvoices, reversePayment,
+  type CollectResult, type CreateProfilesResult, type GenerateResult, type InvoiceRow,
   type PaymentRow, type ProfileListRow,
 } from '@/lib/fees/invoices'
-
-export type LedgerFilter = InvoiceStatus | 'all'
-
-const FILTERS: { key: LedgerFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'overdue', label: 'Overdue' },
-  { key: 'partly_paid', label: 'Partly paid' },
-  { key: 'paid', label: 'Paid' },
-  { key: 'cancelled', label: 'Cancelled' },
-]
+import {
+  inRange, matchesStatus, payModeOf, todayISO, PAY_MODES, STATUS_FACETS,
+  type LedgerFilters, type PayMode, type StatusFacet,
+} from '@/lib/fees/ledger'
 
 interface Props {
   /** Driven by the summary cards above, so a card click narrows the ledger. */
-  filter: LedgerFilter
-  onFilterChange: (f: LedgerFilter) => void
+  filters: LedgerFilters
+  onFiltersChange: (f: LedgerFilters) => void
   /** Told when money moved, so the summary strip can re-read itself. */
   onChanged?: () => void
 }
 
-export default function CollectionSection({ filter, onFilterChange, onChanged }: Props) {
+export default function CollectionSection({ filters, onFiltersChange, onChanged }: Props) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
 
@@ -91,6 +85,17 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
   // The two popups this screen owns.
   const [generating, setGenerating] = useState(false)
   const [cheques, setCheques] = useState(false)
+
+  /**
+   * bill id → the modes it has been paid by.
+   *
+   * Loaded only once somebody actually filters by mode. Working it out needs
+   * every payment in the session plus its allocations, which is several
+   * requests; making the screen pay for them on every open, so that a filter
+   * most people never touch is instant, is the wrong trade.
+   */
+  const [modeMap, setModeMap] = useState<Map<string, Set<PayMode>> | null>(null)
+  const [loadingModes, setLoadingModes] = useState(false)
 
   const showAmounts = !perms.amountsHidden
   const canCollect = perms.can('fees.collect')
@@ -135,6 +140,41 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
 
   useEffect(() => { void load() }, [load])
 
+  // Built the first time a mode is ticked, and kept for the rest of the visit.
+  // A reversed payment is deliberately left out: that money came back, so the
+  // bill it was against was not, in the end, paid that way.
+  useEffect(() => {
+    if (filters.modes.size === 0 || modeMap || loadingModes || !year) return
+    let cancelled = false
+    setLoadingModes(true)
+    void (async () => {
+      try {
+        const pays = await fetchPayments({ academicYearId: year.id, limit: 5000 })
+        const live = pays.filter(p => p.status !== 'reversed')
+        const byPayment = new Map(live.map(p => [p.id, p.method]))
+        const allocs = await fetchAllocations(live.map(p => p.id))
+        const map = new Map<string, Set<PayMode>>()
+        for (const a of allocs) {
+          const method = byPayment.get(a.payment_id)
+          const mode = method ? payModeOf(method) : null
+          if (!mode) continue
+          const set = map.get(a.invoice_id) ?? new Set<PayMode>()
+          set.add(mode)
+          map.set(a.invoice_id, set)
+        }
+        if (!cancelled) setModeMap(map)
+      } catch {
+        // A ledger that cannot answer "how was it paid" should still show the
+        // bills. An empty map means the mode filter matches nothing, which the
+        // toolbar says out loud rather than pretending to have filtered.
+        if (!cancelled) setModeMap(new Map())
+      } finally {
+        if (!cancelled) setLoadingModes(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [filters.modes.size, modeMap, loadingModes, year])
+
   const nameOf = useCallback((studentId: string) =>
     people.find(p => p.student_id === studentId)?.full_name
     ?? extraNames.get(studentId)
@@ -174,10 +214,23 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       (p.admission_no ?? '').toLowerCase().includes(q)).slice(0, 8)
   }, [people, q])
 
-  const filtered = useMemo(() => invoices.filter(i =>
-    (filter === 'all' || i.status === filter) &&
-    (!q || i.number.toLowerCase().includes(q) || nameOf(i.student_id).toLowerCase().includes(q))
-  ), [invoices, filter, q, nameOf])
+  // Four independent narrowings, all of them widening within themselves: any
+  // ticked status matches, any ticked mode matches. See src/lib/fees/ledger.ts
+  // for why a bill's status is a set rather than a word.
+  const today = todayISO()
+  const filtered = useMemo(() => invoices.filter(i => {
+    if (!matchesStatus(i, filters.statuses, today)) return false
+    if (!inRange(i.issue_date, filters.range)) return false
+    if (filters.modes.size > 0) {
+      const modes = modeMap?.get(i.id)
+      if (!modes) return false
+      let hit = false
+      for (const m of modes) if (filters.modes.has(m)) { hit = true; break }
+      if (!hit) return false
+    }
+    return !q || i.number.toLowerCase().includes(q)
+      || nameOf(i.student_id).toLowerCase().includes(q)
+  }), [invoices, filters, modeMap, today, q, nameOf])
 
   const outstanding = useMemo(
     () => studentInvoices.filter(i => (i.balance ?? 0) > 0), [studentInvoices])
@@ -229,30 +282,40 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       )}
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 items-center mb-3">
+      <div className="flex flex-wrap gap-2 items-start mb-3">
         <div className="relative flex-1 min-w-[220px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
+          <Search size={14} className="absolute left-3 top-[13px] -translate-y-1/2 text-[#8C8878]" />
           <input value={query} onChange={e => setQuery(e.target.value)}
                  placeholder="Student, admission number or bill number"
                  className={ADMIN.input} />
           {query && (
             <button onClick={() => setQuery('')} aria-label="Clear the search"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A8A395] hover:text-[#18181B]">
+                    className="absolute right-3 top-[13px] -translate-y-1/2 text-[#A8A395] hover:text-[#18181B]">
               <X size={14} />
             </button>
           )}
         </div>
         {!selected && (
-          <div className="flex gap-1 flex-wrap">
-            {FILTERS.map(f => (
-              <button key={f.key} onClick={() => onFilterChange(f.key)}
-                      className={filter === f.key
-                        ? 'px-2.5 py-1.5 text-xs font-semibold bg-[#27272A] text-white'
-                        : 'px-2.5 py-1.5 text-xs font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <DateRangeBar
+              label="Issued"
+              value={filters.range}
+              onChange={range => onFiltersChange({ ...filters, range })}
+            />
+            <MultiSelect<StatusFacet>
+              label="Status"
+              options={STATUS_FACETS}
+              selected={filters.statuses}
+              onChange={statuses => onFiltersChange({ ...filters, statuses })}
+            />
+            <MultiSelect<PayMode>
+              label="Paid by"
+              options={PAY_MODES}
+              selected={filters.modes}
+              onChange={modes => onFiltersChange({ ...filters, modes })}
+              allLabel="Any"
+            />
+          </>
         )}
         {perms.can('fees.invoice.generate') && (
           <button onClick={() => setGenerating(true)} className={ADMIN.ghostBtn}>
@@ -263,6 +326,12 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
           <Clock size={13} /> Cheques
         </button>
       </div>
+
+      {!selected && filters.modes.size > 0 && loadingModes && (
+        <p className="mb-3 text-[11.5px] text-[#8C8878] flex items-center gap-1.5">
+          <Loader2 size={12} className="animate-spin" /> Reading how each bill was paid…
+        </p>
+      )}
 
       {/* People the search found — the way into the counter. */}
       {!selected && peopleMatches.length > 0 && (
@@ -488,10 +557,12 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       {generating && (
         <FeeToolModal title="Generate bills" subtitle="Preview first — it writes nothing"
                       icon={<Sparkles size={15} />} onClose={() => setGenerating(false)}>
-          {config ? (
+          {config && year ? (
             <GenerationPanel
               config={config}
+              academicYearId={year.id}
               canAutogen={perms.can('fees.invoice.autogen')}
+              canCreateProfiles={perms.can('fees.profile.create')}
               showAmounts={showAmounts}
               onDone={() => void afterWrite()}
             />
@@ -578,15 +649,25 @@ function Panel({
 }
 
 // ── Generating bills ────────────────────────────────────────────────────────
+//
+// There used to be a "Create profiles" button on the Students screen, and a
+// run here would quietly skip anybody who had not been through it — a class
+// admitted in July got no bill and nothing said so. A fee account is not a
+// decision anybody makes; it is bookkeeping the structure already implies. So
+// this run opens the accounts it needs and then bills them, and the preview
+// says how many of each before anything is written.
 function GenerationPanel({
-  config, canAutogen, showAmounts, onDone,
+  config, academicYearId, canAutogen, canCreateProfiles, showAmounts, onDone,
 }: {
   config: FeeConfigBundle
+  academicYearId: string
   canAutogen: boolean
+  canCreateProfiles: boolean
   showAmounts: boolean
   onDone: () => void
 }) {
   const [preview, setPreview] = useState<Record<string, GenerateResult>>({})
+  const [missing, setMissing] = useState<CreateProfilesResult | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -600,13 +681,28 @@ function GenerationPanel({
   const run = async (installmentId: string, commit: boolean) => {
     setGenerating(installmentId); setError(null)
     try {
-      const result = await generateInvoices(installmentId, commit)
       if (commit) {
+        // Accounts first, then the bills — in that order, so students who only
+        // just got an account are in the same run rather than the next one.
+        if (canCreateProfiles && (missing?.created ?? 0) > 0) {
+          await createProfiles({ academic_year_id: academicYearId, commit: true })
+        }
+        await generateInvoices(installmentId, true)
         setPreview(p => { const next = { ...p }; delete next[installmentId]; return next })
+        setMissing(null)
         onDone()
-      } else {
-        setPreview(p => ({ ...p, [installmentId]: result }))
+        return
       }
+
+      // Both previews write nothing, and they do not depend on each other.
+      const [result, profiles] = await Promise.all([
+        generateInvoices(installmentId, false),
+        canCreateProfiles
+          ? createProfiles({ academic_year_id: academicYearId, commit: false })
+          : Promise.resolve(null),
+      ])
+      setPreview(p => ({ ...p, [installmentId]: result }))
+      setMissing(profiles)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not generate those bills.')
     } finally {
@@ -670,10 +766,12 @@ function GenerationPanel({
               )}
 
               {p ? (
-                <button onClick={() => void run(i.id, true)} disabled={busy || p.will_create === 0}
-                        className={ADMIN.darkBtn}>
+                <button
+                  onClick={() => void run(i.id, true)}
+                  disabled={busy || (p.will_create === 0 && (missing?.created ?? 0) === 0)}
+                  className={ADMIN.darkBtn}>
                   {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                  Generate {p.will_create}
+                  Generate {p.will_create}{(missing?.created ?? 0) > 0 ? '+' : ''}
                 </button>
               ) : (
                 <button onClick={() => void run(i.id, false)} disabled={busy} className={ADMIN.ghostBtn}>
@@ -693,12 +791,23 @@ function GenerationPanel({
                 {Object.keys(p.by_group).length > 0 && (
                   <p>By group: {Object.entries(p.by_group).map(([g, n]) => `${g} ${n}`).join(' · ')}</p>
                 )}
+                {(missing?.created ?? 0) > 0 && (
+                  <p className="text-[#7A6220]">
+                    <strong>{missing?.created}</strong> student
+                    {missing?.created === 1 ? ' has' : 's have'} no fee account for this session
+                    yet. {missing?.created === 1 ? 'It' : 'They'} will be opened from the price
+                    list and billed in the same run.
+                    {(missing?.without_structure ?? 0) > 0
+                      ? ` ${missing?.without_structure} of them have no published structure covering their class, so nothing can be billed to them until one exists.`
+                      : ''}
+                  </p>
+                )}
                 {p.already_billed > 0 && <p>Skipping {p.already_billed} already billed.</p>}
                 {p.skipped_rte > 0 && <p>Skipping {p.skipped_rte} RTE.</p>}
                 {p.skipped_joined_late > 0 && (
                   <p>Skipping {p.skipped_joined_late} who joined after this term ended.</p>
                 )}
-                {p.will_create === 0 && (
+                {p.will_create === 0 && (missing?.created ?? 0) === 0 && (
                   <p className="text-[#8C8878]">Nothing to do — everyone eligible already has this bill.</p>
                 )}
               </div>

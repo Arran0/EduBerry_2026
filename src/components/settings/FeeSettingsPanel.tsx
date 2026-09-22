@@ -9,19 +9,19 @@
 // copy of them — the same reasoning as PayrollSettingsPanel, whose shape this
 // follows.
 //
-// Six tabs became six cards. A tab strip says "these are views of one thing,
-// and you are in one of them"; that is true of a ledger filtered six ways, and
-// false of six unrelated settings screens, where it costs a permanent row of
-// chrome and hides five names behind the sixth. Each card says what it governs
-// and opens it as a popup: one thing at a time, and the way back is the same
-// gesture every time.
+// Six panels, six tabs, and the panel on the page under them. This was six
+// cards that each opened a popup, on the theory that unrelated settings screens
+// should not share a tab strip. In use that costs two clicks and a modal to
+// reach anything, a third to leave it, and the whole lot again to compare a
+// policy with the permission that guards it — which is exactly what somebody
+// setting this up is doing. A tab strip is the cheaper trade: one click in, one
+// click across, and nothing covering the screen.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState } from 'react'
 import {
-  Banknote, CalendarRange, ChevronRight, Hash, MessageCircle, ShieldCheck, SlidersHorizontal,
+  Banknote, CalendarRange, Hash, MessageCircle, ShieldCheck, SlidersHorizontal,
 } from 'lucide-react'
-import ModalShell from '@/components/ui/ModalShell'
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 import PermissionMatrix from '@/components/settings/fees/PermissionMatrix'
 import PolicySettings from '@/components/settings/fees/PolicySettings'
@@ -48,60 +48,48 @@ const PANELS = [
 type PanelKey = typeof PANELS[number]['key']
 
 export default function FeeSettingsPanel({ initialTab }: { initialTab?: PanelKey }) {
-  const [open, setOpen] = useState<PanelKey | null>(initialTab ?? null)
+  const [open, setOpen] = useState<PanelKey>(initialTab ?? 'permissions')
   const { year, refresh } = useAcademicYear()
-  const active = PANELS.find(p => p.key === open)
+  const active = PANELS.find(p => p.key === open) ?? PANELS[0]
 
   return (
     <div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      {/* Six tabs on one line, scrolling sideways rather than wrapping: a strip
+          that reflows to two rows moves the panel down every time the window
+          is narrowed. */}
+      <div className="flex border-b border-[#E3DFD3] overflow-x-auto no-scrollbar">
         {PANELS.map(p => {
+          const on = p.key === open
           const Icon = p.icon
           return (
             <button
               key={p.key}
               onClick={() => setOpen(p.key)}
-              className="group text-left bg-white border border-[#E3DFD3] hover:border-[#B8983C]
-                         p-3.5 transition-colors flex items-start gap-3"
+              aria-current={on ? 'page' : undefined}
+              className={`flex-1 min-w-max flex items-center justify-center gap-1.5 px-3 pb-1.5
+                          text-[11px] sm:text-[12px] font-bold uppercase tracking-[0.06em]
+                          border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                on ? 'border-[#B8983C] text-[#18181B]'
+                   : 'border-transparent text-[#A8A395] hover:text-[#6B675A]'
+              }`}
             >
-              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <Icon size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-bold text-[#18181B]">{p.label}</span>
-                  <ChevronRight size={14}
-                                className="text-[#C9C4B4] group-hover:text-[#B8983C] transition-colors" />
-                </div>
-                <p className="text-[11px] text-[#8C8878] leading-snug mt-0.5">{p.blurb}</p>
-              </div>
+              <Icon size={13} />
+              <span>{p.label}</span>
             </button>
           )
         })}
       </div>
 
-      {active && (
-        <ModalShell
-          onClose={() => setOpen(null)}
-          sharp
-          size="2xl"
-          title={active.label}
-          subtitle={active.blurb}
-          icon={<active.icon size={15} />}
-          iconClassName="bg-[#27272A] text-[#B8983C]"
-          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
-          minHClass="sm:min-h-[32rem]"
-        >
-          {open === 'permissions' && <PermissionMatrix />}
-          {open === 'policies'    && <PolicySettings academicYearId={year?.id ?? null} />}
-          {open === 'numbering'   && (
-            <NumberingSettingsPanel academicYearId={year?.id ?? null} yearCode={year?.code ?? '2026-27'} />
-          )}
-          {open === 'years'       && <AcademicYearSettings onChanged={() => void refresh()} />}
-          {open === 'collection'  && <BankCollectSettings ctx="fees" />}
-          {open === 'whatsapp'    && <WhatsAppSettingsPanel />}
-        </ModalShell>
+      <p className="text-[11px] text-[#8C8878] leading-snug mt-2 mb-3">{active.blurb}</p>
+
+      {open === 'permissions' && <PermissionMatrix />}
+      {open === 'policies'    && <PolicySettings academicYearId={year?.id ?? null} />}
+      {open === 'numbering'   && (
+        <NumberingSettingsPanel academicYearId={year?.id ?? null} yearCode={year?.code ?? '2026-27'} />
       )}
+      {open === 'years'       && <AcademicYearSettings onChanged={() => void refresh()} />}
+      {open === 'collection'  && <BankCollectSettings ctx="fees" />}
+      {open === 'whatsapp'    && <WhatsAppSettingsPanel />}
     </div>
   )
 }
