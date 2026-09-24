@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X, User } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X, User, SplitSquareHorizontal } from 'lucide-react'
 import {
-  ClassroomAssessment, AssessmentMark,
+  ClassroomAssessment, AssessmentMark, AssessmentComponent, AssessmentComponentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
   upsertAssessmentMarks, fetchAssessmentMarks, fetchStudentAssessmentMarks, fetchStudentMembers, fetchProfilesByIds,
+  fetchAssessmentComponents, fetchAssessmentComponentMarks, fetchStudentComponentMarks,
+  saveAssessmentComponents, upsertAssessmentComponentMarks,
   ClassroomMember, ClassroomWithDetails,
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
@@ -21,6 +23,45 @@ interface AssessmentsTabProps {
   classroom: ClassroomWithDetails
 }
 
+/** A row in the component editor. `id` is present for a component that already
+ *  exists, so editing its name or weight keeps the marks already entered
+ *  against it; the strings are what the two inputs hold mid-edit. */
+interface ComponentDraftRow {
+  id?: string
+  name: string
+  maxMarks: string
+}
+
+/** Sums the marks typed across an assessment's components. Returns null when
+ *  every cell is blank, which is not the same as a total of zero. */
+function componentRowTotal(
+  cells: Record<string, string> | undefined,
+  components: AssessmentComponent[],
+): number | null {
+  let total = 0
+  let entered = false
+  for (const c of components) {
+    const raw = cells?.[c.id] ?? ''
+    if (raw.trim() === '') continue
+    const n = parseFloat(raw)
+    if (isNaN(n)) continue
+    total += n
+    entered = true
+  }
+  return entered ? total : null
+}
+
+/** A mark cell is invalid if it is not a number, is negative, or overshoots the
+ *  maximum it is being marked out of. A blank cell is simply not entered yet. */
+function markError(value: string, max: number): string | null {
+  if (value.trim() === '') return null
+  const n = parseFloat(value)
+  if (isNaN(n)) return 'Invalid number'
+  if (n < 0) return 'Cannot be negative'
+  if (n > max) return `Cannot exceed ${max}`
+  return null
+}
+
 export default function AssessmentsTab({ classroomId, userId, userRole, classroom }: AssessmentsTabProps) {
   const [assessments, setAssessments] = useState<ClassroomAssessment[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,6 +73,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   // Assessment creators, keyed by id — shown on the assessment's card and in
   // the marksheet header so staff can see who set it up.
   const [creators, setCreators] = useState<Record<string, UserProfile>>({})
+  // Components of every assessment on the tab, keyed by assessment id.
+  const [componentsByAssessment, setComponentsByAssessment] = useState<Record<string, AssessmentComponent[]>>({})
   const [marksheetSort, setMarksheetSort] = useState<'name' | 'marks'>('name')
   const [marksheetSortDir, setMarksheetSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -41,6 +84,16 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [editingMaxMarks, setEditingMaxMarks] = useState(false)
   const [maxMarksDraft, setMaxMarksDraft] = useState('')
   const [savingMaxMarks, setSavingMaxMarks] = useState(false)
+
+  // Components of the open marksheet — "Lab" out of 20, "Examination" out of
+  // 80. Empty means the assessment is scored as a single mark, the way every
+  // assessment was before components existed.
+  const [components, setComponents] = useState<AssessmentComponent[]>([])
+  /** componentMarks[studentId][componentId] = what is typed in that cell. */
+  const [componentMarks, setComponentMarks] = useState<Record<string, Record<string, string>>>({})
+  const [showComponentEditor, setShowComponentEditor] = useState(false)
+  const [componentDrafts, setComponentDrafts] = useState<ComponentDraftRow[]>([])
+  const [savingComponents, setSavingComponents] = useState(false)
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -61,8 +114,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const isStudent = userRole === 'student'
   const isStaff = ['teacher', 'coordinator', 'principal', 'admin'].includes(userRole)
 
-  // Refs to every mark <input>, in display order, so Tab/Enter can jump
-  // straight to the next student's field for fast, spreadsheet-like entry.
+  // Refs to every mark <input>, so Tab/Enter can jump straight to the next
+  // field for fast, spreadsheet-like entry. Keyed by student id on a plain
+  // sheet, and by "studentId:componentId" once the assessment is split.
   const markInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const loadAssessments = useCallback(async () => {
@@ -71,6 +125,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setAssessments(data)
     setLoading(false)
     fetchProfilesByIds(data.map(a => a.created_by)).then(setCreators)
+    // Every card shows how its assessment is split, staff and student alike —
+    // the marks behind the split are fetched per viewer further down.
+    fetchAssessmentComponents(data.map(a => a.id)).then(setComponentsByAssessment)
   }, [classroomId])
 
   useEffect(() => { loadAssessments() }, [loadAssessments])
@@ -157,37 +214,78 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const handleOpenMarksheet = async (assessmentId: string) => {
     setShowMarksheet(assessmentId)
     setEditingMaxMarks(false)
+    setShowComponentEditor(false)
     const assessment = assessments.find(a => a.id === assessmentId)
     setAssessmentMaxMarks(assessment?.max_marks ?? 100)
+    // Clear the previous sheet's split before its replacement arrives, so the
+    // columns on screen never belong to a different assessment than the marks
+    // under them. What is already known locally goes straight in.
+    const known = componentsByAssessment[assessmentId] ?? []
+    setComponents(known)
+    setComponentMarks({})
 
-    const [existingMarks, studentList] = await Promise.all([
+    const [existingMarks, studentList, fetchedComponents, existingComponentMarks] = await Promise.all([
       fetchAssessmentMarks(assessmentId),
       fetchStudentMembers(classroomId),
+      fetchAssessmentComponents([assessmentId]),
+      fetchAssessmentComponentMarks(assessmentId),
     ])
     setStudents(studentList)
 
+    const comps = fetchedComponents[assessmentId] ?? []
+    setComponents(comps)
+    setComponentsByAssessment(prev => ({ ...prev, [assessmentId]: comps }))
+    setComponentDrafts(comps.map(c => ({ id: c.id, name: c.name, maxMarks: String(c.max_marks) })))
+    if (comps.length > 0) {
+      setAssessmentMaxMarks(comps.reduce((s, c) => s + Number(c.max_marks), 0))
+    }
+
+    // Absence is recorded per component but toggled for the whole row, so the
+    // total row (which the database derives) is the honest source for it.
     const marksMap: Record<string, { marks: string; isAbsent: boolean }> = {}
+    const componentMap: Record<string, Record<string, string>> = {}
+    const byKey = new Map<string, AssessmentComponentMark>(
+      existingComponentMarks.map(m => [`${m.component_id}:${m.student_id}`, m])
+    )
     for (const student of studentList) {
       const existing = existingMarks.find((m) => m.student_id === student.user_id)
       marksMap[student.user_id] = {
         marks: existing?.marks != null ? String(existing.marks) : '',
         isAbsent: existing?.is_absent ?? false,
       }
+      const cells: Record<string, string> = {}
+      for (const c of comps) {
+        const cm = byKey.get(`${c.id}:${student.user_id}`)
+        cells[c.id] = cm && !cm.is_absent && cm.marks != null ? String(cm.marks) : ''
+      }
+      componentMap[student.user_id] = cells
     }
     setMarks(marksMap)
+    setComponentMarks(componentMap)
   }
 
   const handleDownload = () => {
     const assessment = assessments.find(a => a.id === showMarksheet)
     if (!assessment || students.length === 0) return
-    const rows: string[][] = [['Student', 'Marks', 'Out of', 'Percentage']]
+    // A split assessment exports one column per component before the total, so
+    // the spreadsheet carries the same breakdown the marksheet shows.
+    const rows: string[][] = [[
+      'Student',
+      ...components.map(c => `${c.name} (out of ${c.max_marks})`),
+      'Marks',
+      'Out of',
+      'Percentage',
+    ]]
     for (const student of students) {
       const mark = marks[student.user_id] || { marks: '', isAbsent: false }
-      const num = mark.marks !== '' ? parseFloat(mark.marks) : null
+      const num = components.length > 0
+        ? componentRowTotal(componentMarks[student.user_id], components)
+        : (mark.marks !== '' ? parseFloat(mark.marks) : null)
       const pct = !mark.isAbsent && num != null && !isNaN(num) ? `${Math.round((num / assessmentMaxMarks) * 100)}%` : ''
       rows.push([
         student.user.full_name,
-        mark.isAbsent ? 'AB' : mark.marks,
+        ...components.map(c => mark.isAbsent ? 'AB' : (componentMarks[student.user_id]?.[c.id] ?? '')),
+        mark.isAbsent ? 'AB' : (num != null ? String(num) : ''),
         String(assessmentMaxMarks),
         pct,
       ])
@@ -204,30 +302,111 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
   // A mark is invalid if it's negative or exceeds the assessment's max —
   // absent students have no numeric mark to validate.
-  const getMarkError = useCallback((value: string): string | null => {
-    if (value.trim() === '') return null
-    const n = parseFloat(value)
-    if (isNaN(n)) return 'Invalid number'
-    if (n < 0) return 'Cannot be negative'
-    if (n > assessmentMaxMarks) return `Cannot exceed ${assessmentMaxMarks}`
-    return null
-  }, [assessmentMaxMarks])
-
-  const hasInvalidMarks = Object.values(marks).some(
-    (m) => !m.isAbsent && getMarkError(m.marks) != null
+  const getMarkError = useCallback(
+    (value: string): string | null => markError(value, assessmentMaxMarks),
+    [assessmentMaxMarks],
   )
+
+  const hasInvalidMarks = components.length > 0
+    ? students.some(s => {
+        if (marks[s.user_id]?.isAbsent) return false
+        return components.some(c =>
+          markError(componentMarks[s.user_id]?.[c.id] ?? '', Number(c.max_marks)) != null
+        )
+      })
+    : Object.values(marks).some((m) => !m.isAbsent && getMarkError(m.marks) != null)
 
   const handleSaveMarks = async (assessmentId: string) => {
     if (hasInvalidMarks) return
     setSaving(true)
-    await upsertAssessmentMarks(assessmentId, Object.entries(marks).map(([studentId, mark]) => ({
-      studentId,
-      marks: mark.isAbsent || mark.marks.trim() === '' ? null : parseFloat(mark.marks),
-      maxMarks: assessmentMaxMarks,
-      isAbsent: mark.isAbsent,
-    })))
+
+    if (components.length > 0) {
+      // Only the parts are written: the database adds them into the
+      // assessment total, so no client can leave the two disagreeing.
+      const entries = students.flatMap(student => {
+        const isAbsent = marks[student.user_id]?.isAbsent ?? false
+        return components.map(c => {
+          const raw = componentMarks[student.user_id]?.[c.id] ?? ''
+          return {
+            componentId: c.id,
+            studentId: student.user_id,
+            marks: isAbsent || raw.trim() === '' ? null : parseFloat(raw),
+            isAbsent,
+          }
+        })
+      })
+      await upsertAssessmentComponentMarks(entries)
+    } else {
+      await upsertAssessmentMarks(assessmentId, Object.entries(marks).map(([studentId, mark]) => ({
+        studentId,
+        marks: mark.isAbsent || mark.marks.trim() === '' ? null : parseFloat(mark.marks),
+        maxMarks: assessmentMaxMarks,
+        isAbsent: mark.isAbsent,
+      })))
+    }
+
     setSaving(false)
     setShowMarksheet(null)
+  }
+
+  // ── Component editor ──
+
+  const componentDraftMax = componentDrafts.reduce((sum, d) => {
+    const n = parseFloat(d.maxMarks)
+    return sum + (isFinite(n) && n > 0 ? n : 0)
+  }, 0)
+
+  const componentDraftError = (() => {
+    const named = componentDrafts.filter(d => d.name.trim() !== '')
+    if (componentDrafts.some(d => d.name.trim() === '')) return 'Every component needs a name.'
+    if (componentDrafts.some(d => !(parseFloat(d.maxMarks) > 0))) return 'Every component needs a maximum above zero.'
+    const lowered = named.map(d => d.name.trim().toLowerCase())
+    if (new Set(lowered).size !== lowered.length) return 'Component names must be different.'
+    return null
+  })()
+
+  const handleSaveComponents = async () => {
+    if (!showMarksheet || componentDraftError) return
+
+    // Dropping a component takes its marks with it, so say so before it
+    // happens rather than after.
+    const removed = components.filter(c => !componentDrafts.some(d => d.id === c.id))
+    if (removed.length > 0 && !confirm(
+      `Removing ${removed.map(c => `"${c.name}"`).join(', ')} will delete the marks entered for `
+      + `${removed.length === 1 ? 'it' : 'them'}. Continue?`
+    )) return
+
+    setSavingComponents(true)
+    const saved = await saveAssessmentComponents(
+      showMarksheet,
+      componentDrafts.map(d => ({ id: d.id, name: d.name, max_marks: parseFloat(d.maxMarks) })),
+    )
+    setSavingComponents(false)
+    if (!saved) return
+
+    setComponents(saved)
+    setComponentDrafts(saved.map(c => ({ id: c.id, name: c.name, maxMarks: String(c.max_marks) })))
+    setComponentsByAssessment(prev => ({ ...prev, [showMarksheet]: saved }))
+    setShowComponentEditor(false)
+
+    // Keep the cells that survived, and give any new component a blank column.
+    setComponentMarks(prev => {
+      const next: Record<string, Record<string, string>> = {}
+      for (const student of students) {
+        const cells: Record<string, string> = {}
+        for (const c of saved) cells[c.id] = prev[student.user_id]?.[c.id] ?? ''
+        next[student.user_id] = cells
+      }
+      return next
+    })
+
+    // The assessment's max is now the sum of its parts (or, once the last
+    // component goes, whatever it was before the split).
+    const newMax = saved.length > 0
+      ? saved.reduce((s, c) => s + Number(c.max_marks), 0)
+      : assessmentMaxMarks
+    setAssessmentMaxMarks(newMax)
+    setAssessments(prev => prev.map(a => a.id === showMarksheet ? { ...a, max_marks: newMax } : a))
   }
 
   const handleStartEditMaxMarks = () => {
@@ -249,33 +428,40 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setSavingMaxMarks(false)
   }
 
-  // Student view: fetch own marks
+  // Student view: their own total per assessment, plus their mark for each
+  // component behind it, so the card can explain how the total was made up.
   const [studentMarks, setStudentMarks] = useState<Record<string, AssessmentMark>>({})
+  const [studentComponentMarks, setStudentComponentMarks] = useState<Record<string, AssessmentComponentMark>>({})
   useEffect(() => {
-    if (isStudent && assessments.length > 0) {
-      const loadMarks = async () => {
-        const byAssessment = await fetchStudentAssessmentMarks(userId, assessments.map(a => a.id))
-        setStudentMarks(byAssessment)
-      }
-      loadMarks()
-    }
+    if (!isStudent || assessments.length === 0) return
+    const ids = assessments.map(a => a.id)
+    let cancelled = false
+    Promise.all([
+      fetchStudentAssessmentMarks(userId, ids),
+      fetchStudentComponentMarks(userId, ids),
+    ]).then(([byAssessment, byComponent]) => {
+      if (cancelled) return
+      setStudentMarks(byAssessment)
+      setStudentComponentMarks(byComponent)
+    })
+    return () => { cancelled = true }
   }, [isStudent, assessments, userId])
 
-  const focusMarkInput = (studentId: string) => {
-    const el = markInputRefs.current[studentId]
+  const focusMarkInput = (key: string) => {
+    const el = markInputRefs.current[key]
     if (el) { el.focus(); el.select() }
   }
 
-  // Tab/Enter jump straight to the next student's mark field (in whatever
-  // order the sheet is currently sorted) instead of the browser's default
-  // tab order, which would otherwise land on the AB toggle button first.
+  // Tab/Enter jump straight to the next mark field (in whatever order the
+  // sheet is currently sorted) instead of the browser's default tab order,
+  // which would otherwise land on the AB toggle button first.
   const handleMarkKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
-    currentStudentId: string,
+    currentKey: string,
     order: string[],
   ) => {
     if (e.key !== 'Tab' && e.key !== 'Enter') return
-    const idx = order.indexOf(currentStudentId)
+    const idx = order.indexOf(currentKey)
     if (e.key === 'Enter') {
       e.preventDefault()
       if (idx < order.length - 1) focusMarkInput(order[idx + 1])
@@ -413,6 +599,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               userId={userId}
               creatorName={creators[assessment.created_by]?.full_name ?? null}
               myMark={studentMarks[assessment.id]}
+              components={componentsByAssessment[assessment.id] ?? []}
+              myComponentMarks={studentComponentMarks}
               editingId={editingId}
               editTitle={editTitle}
               editDesc={editDesc}
@@ -498,10 +686,29 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     Name
                   </button>
 
+                  {/* Components — splits the assessment into named parts that
+                      are marked separately and added into one total. */}
+                  <button
+                    onClick={() => setShowComponentEditor(v => !v)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                      showComponentEditor || components.length > 0
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                    title="Split this assessment into components"
+                  >
+                    <SplitSquareHorizontal size={12} />
+                    {components.length > 0 ? `${components.length} Components` : 'Components'}
+                  </button>
+
                   {/* Max marks — one value for the whole assessment, editable
-                      inline; never overridable per student. */}
+                      inline; never overridable per student. Once the
+                      assessment is split it is the sum of its parts, so it is
+                      changed by re-weighting a component, not typed here. */}
                   <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-700">
-                    {editingMaxMarks ? (
+                    {components.length > 0 ? (
+                      <span title="Set by the component weights">Max {assessmentMaxMarks}</span>
+                    ) : editingMaxMarks ? (
                       <>
                         <span className="whitespace-nowrap">Max</span>
                         <input
@@ -555,24 +762,146 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   </button>
                 </div>
               )}
+
+              {/* Component editor — the split itself, kept out of the way until
+                  asked for. Saving it reshapes the marksheet below. */}
+              <AnimatePresence initial={false}>
+                {showComponentEditor && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden border-b border-indigo-100 bg-indigo-50/40"
+                  >
+                    <div className="px-5 py-3.5 space-y-2.5">
+                      <div className="flex items-start gap-2">
+                        <SplitSquareHorizontal size={14} className="text-indigo-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">Components</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            Split this assessment into parts marked separately — e.g. Lab out of 20 and
+                            Examination out of 80. The assessment is then scored out of their combined total.
+                          </p>
+                        </div>
+                      </div>
+
+                      {componentDrafts.length === 0 ? (
+                        <p className="text-[11px] text-slate-500 italic">
+                          No components — the assessment is marked as a single score.
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {componentDrafts.map((draft, idx) => (
+                            <div key={draft.id ?? `new-${idx}`} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={draft.name}
+                                onChange={(e) => setComponentDrafts(prev =>
+                                  prev.map((d, i) => i === idx ? { ...d, name: e.target.value } : d))}
+                                placeholder="Component name"
+                                className="flex-1 min-w-0 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                              />
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className="text-[11px] text-slate-500">out of</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={draft.maxMarks}
+                                  onChange={(e) => setComponentDrafts(prev =>
+                                    prev.map((d, i) => i === idx ? { ...d, maxMarks: e.target.value } : d))}
+                                  className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setComponentDrafts(prev => prev.filter((_, i) => i !== idx))}
+                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                                title={`Remove ${draft.name.trim() || 'this component'}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {componentDraftError && (
+                        <p className="flex items-center gap-1.5 text-[11px] text-red-600 font-medium">
+                          <AlertTriangle size={12} className="flex-shrink-0" /> {componentDraftError}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setComponentDrafts(prev => [...prev, { name: '', maxMarks: '' }])}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors"
+                        >
+                          <Plus size={12} /> Add component
+                        </button>
+                        {componentDrafts.length > 0 && (
+                          <span className="text-[11px] font-semibold text-slate-600 tabular-nums">
+                            Total out of {componentDraftMax}
+                          </span>
+                        )}
+                        <div className="flex-1" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowComponentEditor(false)
+                            setComponentDrafts(components.map(c => ({ id: c.id, name: c.name, maxMarks: String(c.max_marks) })))
+                          }}
+                          className="text-xs text-slate-600 hover:text-slate-900 px-2"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveComponents}
+                          disabled={savingComponents || componentDraftError != null}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                          <Save size={12} /> {savingComponents ? 'Saving…' : 'Save components'}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
                 {students.length === 0 ? (
                   <p className="text-sm text-slate-500 text-center py-6">No students in this classroom</p>
                 ) : (
                   (() => {
+                    const split = components.length > 0
+                    // What a student currently scores overall, for sorting and
+                    // for the row's own total cell.
+                    const scoreOf = (studentId: string): number | null => {
+                      const m = marks[studentId]
+                      if (m?.isAbsent) return null
+                      if (split) return componentRowTotal(componentMarks[studentId], components)
+                      if (!m || m.marks.trim() === '') return null
+                      const n = parseFloat(m.marks)
+                      return isNaN(n) ? null : n
+                    }
+
                     const sortedStudents = [...students].sort((a, b) => {
                       if (marksheetSort === 'name') {
                         const cmp = a.user.full_name.localeCompare(b.user.full_name)
                         return marksheetSortDir === 'asc' ? cmp : -cmp
                       }
-                      const aM = marks[a.user_id]
-                      const bM = marks[b.user_id]
-                      const aPct = !aM?.isAbsent && aM?.marks !== '' && aM?.marks != null
-                        ? parseFloat(aM.marks) / assessmentMaxMarks : -1
-                      const bPct = !bM?.isAbsent && bM?.marks !== '' && bM?.marks != null
-                        ? parseFloat(bM.marks) / assessmentMaxMarks : -1
+                      const aScore = scoreOf(a.user_id)
+                      const bScore = scoreOf(b.user_id)
+                      const aPct = aScore != null ? aScore / assessmentMaxMarks : -1
+                      const bPct = bScore != null ? bScore / assessmentMaxMarks : -1
                       return marksheetSortDir === 'asc' ? aPct - bPct : bPct - aPct
                     })
-                    const order = sortedStudents.map(s => s.user_id)
+                    // Tab and Enter run down a column before moving across:
+                    // a split sheet is marked one component at a time, not one
+                    // student at a time.
+                    const order = split
+                      ? components.flatMap(c => sortedStudents.map(s => `${s.user_id}:${c.id}`))
+                      : sortedStudents.map(s => s.user_id)
                     return (
                   <>
                     {hasInvalidMarks && (
@@ -589,7 +918,17 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                           <tr className="text-left text-[10px] uppercase tracking-wide text-slate-600 font-bold">
                             <th className="py-1.5 pr-2 w-7 font-bold">#</th>
                             <th className="py-1.5 pr-2 font-bold">Student</th>
-                            <th className="py-1.5 px-2 text-center w-28 font-bold">Marks</th>
+                            {components.map(c => (
+                              <th key={c.id} className="py-1.5 px-2 text-center w-24 font-bold">
+                                <span className="block truncate" title={c.name}>{c.name}</span>
+                                <span className="block text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
+                                  out of {Number(c.max_marks)}
+                                </span>
+                              </th>
+                            ))}
+                            <th className={`py-1.5 px-2 text-center font-bold ${split ? 'w-20 border-l border-slate-200' : 'w-28'}`}>
+                              {split ? 'Total' : 'Marks'}
+                            </th>
                             <th className="py-1.5 px-2 text-center w-14 font-bold">%</th>
                             <th className="py-1.5 pl-2 text-center w-12 font-bold">AB</th>
                           </tr>
@@ -597,10 +936,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         <tbody>
                           {sortedStudents.map((student, idx) => {
                             const mark = marks[student.user_id] || { marks: '', isAbsent: false }
-                            const num = mark.marks !== '' ? parseFloat(mark.marks) : null
-                            const pct = !mark.isAbsent && num != null && !isNaN(num)
+                            const num = scoreOf(student.user_id)
+                            const pct = !mark.isAbsent && num != null
                               ? Math.round((num / assessmentMaxMarks) * 100) : null
-                            const error = !mark.isAbsent ? getMarkError(mark.marks) : null
+                            const error = !mark.isAbsent && !split ? getMarkError(mark.marks) : null
                             return (
                               <tr
                                 key={student.user_id}
@@ -613,30 +952,84 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                     <span className="truncate font-medium text-slate-700">{student.user.full_name}</span>
                                   </div>
                                 </td>
-                                <td className="py-1 px-2 align-middle">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <input
-                                      ref={(el) => { markInputRefs.current[student.user_id] = el }}
-                                      type="number"
-                                      min={0}
-                                      max={assessmentMaxMarks}
-                                      value={mark.isAbsent ? '' : mark.marks}
-                                      disabled={mark.isAbsent}
-                                      onChange={(e) => setMarks((prev) => ({
-                                        ...prev,
-                                        [student.user_id]: { ...mark, marks: e.target.value },
-                                      }))}
-                                      onKeyDown={(e) => handleMarkKeyDown(e, student.user_id, order)}
-                                      placeholder={mark.isAbsent ? 'AB' : '—'}
-                                      title={error ?? undefined}
-                                      className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
-                                        error
-                                          ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
-                                          : 'border-slate-200 focus:ring-amber-400/50'
-                                      }`}
-                                    />
-                                    <span className="text-slate-500">/{assessmentMaxMarks}</span>
-                                  </div>
+
+                                {/* One cell per component; each is marked out of
+                                    its own maximum. */}
+                                {components.map(c => {
+                                  const cellKey = `${student.user_id}:${c.id}`
+                                  const raw = componentMarks[student.user_id]?.[c.id] ?? ''
+                                  const cellError = mark.isAbsent ? null : markError(raw, Number(c.max_marks))
+                                  return (
+                                    <td key={c.id} className="py-1 px-2 align-middle">
+                                      <div className="flex items-center justify-center">
+                                        <input
+                                          ref={(el) => { markInputRefs.current[cellKey] = el }}
+                                          type="number"
+                                          min={0}
+                                          max={Number(c.max_marks)}
+                                          value={mark.isAbsent ? '' : raw}
+                                          disabled={mark.isAbsent}
+                                          onChange={(e) => setComponentMarks(prev => ({
+                                            ...prev,
+                                            [student.user_id]: {
+                                              ...(prev[student.user_id] ?? {}),
+                                              [c.id]: e.target.value,
+                                            },
+                                          }))}
+                                          onKeyDown={(e) => handleMarkKeyDown(e, cellKey, order)}
+                                          placeholder={mark.isAbsent ? 'AB' : '—'}
+                                          title={cellError ?? `${c.name} — out of ${Number(c.max_marks)}`}
+                                          className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
+                                            cellError
+                                              ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
+                                              : 'border-slate-200 focus:ring-amber-400/50'
+                                          }`}
+                                        />
+                                      </div>
+                                    </td>
+                                  )
+                                })}
+
+                                <td className={`py-1 px-2 align-middle ${split ? 'border-l border-slate-200' : ''}`}>
+                                  {split ? (
+                                    // Derived, never typed: the total is the sum
+                                    // of the components above it.
+                                    <div className="text-center tabular-nums">
+                                      {mark.isAbsent ? (
+                                        <span className="text-slate-400">AB</span>
+                                      ) : num != null ? (
+                                        <span className="font-bold text-slate-800">
+                                          {num}<span className="font-normal text-slate-400">/{assessmentMaxMarks}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">—/{assessmentMaxMarks}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <input
+                                        ref={(el) => { markInputRefs.current[student.user_id] = el }}
+                                        type="number"
+                                        min={0}
+                                        max={assessmentMaxMarks}
+                                        value={mark.isAbsent ? '' : mark.marks}
+                                        disabled={mark.isAbsent}
+                                        onChange={(e) => setMarks((prev) => ({
+                                          ...prev,
+                                          [student.user_id]: { ...mark, marks: e.target.value },
+                                        }))}
+                                        onKeyDown={(e) => handleMarkKeyDown(e, student.user_id, order)}
+                                        placeholder={mark.isAbsent ? 'AB' : '—'}
+                                        title={error ?? undefined}
+                                        className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
+                                          error
+                                            ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
+                                            : 'border-slate-200 focus:ring-amber-400/50'
+                                        }`}
+                                      />
+                                      <span className="text-slate-500">/{assessmentMaxMarks}</span>
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="py-1 px-2 text-center align-middle">
                                   {mark.isAbsent ? (
@@ -653,10 +1046,21 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                   <button
                                     type="button"
                                     tabIndex={-1}
-                                    onClick={() => setMarks((prev) => ({
-                                      ...prev,
-                                      [student.user_id]: { marks: '', isAbsent: !mark.isAbsent },
-                                    }))}
+                                    onClick={() => {
+                                      // Absent is a fact about the assessment,
+                                      // not about one component, so it clears
+                                      // every cell in the row.
+                                      setMarks((prev) => ({
+                                        ...prev,
+                                        [student.user_id]: { marks: '', isAbsent: !mark.isAbsent },
+                                      }))
+                                      if (split) {
+                                        setComponentMarks(prev => ({
+                                          ...prev,
+                                          [student.user_id]: Object.fromEntries(components.map(c => [c.id, ''])),
+                                        }))
+                                      }
+                                    }}
                                     className={`p-1 rounded-lg transition-colors ${
                                       mark.isAbsent
                                         ? 'bg-red-100 text-red-600 hover:bg-red-200'
@@ -703,6 +1107,10 @@ interface AssessmentCardProps {
   userId: string
   creatorName: string | null
   myMark?: AssessmentMark
+  /** The assessment's components, empty when it is marked as a single score. */
+  components: AssessmentComponent[]
+  /** This student's component marks, keyed by component id. */
+  myComponentMarks: Record<string, AssessmentComponentMark>
   editingId: string | null
   editTitle: string
   editDesc: string
@@ -723,7 +1131,7 @@ interface AssessmentCardProps {
 }
 
 function AssessmentCard({
-  assessment, isStudent, isStaff, userId, creatorName, myMark,
+  assessment, isStudent, isStaff, userId, creatorName, myMark, components, myComponentMarks,
   editingId, editTitle, editDesc, editDate, editReportCardTitle, editMaxMarks, editSaving,
   onEdit, onDelete, onMarksheet,
   onEditTitleChange, onEditDescChange, onEditDateChange,
@@ -762,6 +1170,15 @@ function AssessmentCard({
               <span className="inline-flex items-center text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-semibold">
                 Max {assessment.max_marks}
               </span>
+              {components.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-semibold"
+                  title={components.map(c => `${c.name} ${Number(c.max_marks)}`).join(' · ')}
+                >
+                  <SplitSquareHorizontal size={9} />
+                  {components.map(c => `${c.name} ${Number(c.max_marks)}`).join(' + ')}
+                </span>
+              )}
               {creatorName && (
                 <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
                   <User size={9} /> {creatorName}
@@ -778,21 +1195,63 @@ function AssessmentCard({
               </p>
             )}
 
-            {/* Student: marks display */}
+            {/* Student: marks display. A split assessment shows the parts it
+                was made of alongside the total, so the score is explained
+                rather than just stated. */}
             {isStudent && myMark && (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex items-baseline gap-1 px-3 py-1.5 bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-lg font-bold text-slate-800">{myMark.is_absent ? 'AB' : myMark.marks ?? '—'}</span>
-                  {!myMark.is_absent && <span className="text-xs text-slate-500">/ {myMark.max_marks}</span>}
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-baseline gap-1 px-3 py-1.5 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <span className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mr-1">
+                      {components.length > 0 ? 'Total' : 'Score'}
+                    </span>
+                    <span className="text-lg font-bold text-slate-800">{myMark.is_absent ? 'AB' : myMark.marks ?? '—'}</span>
+                    {!myMark.is_absent && <span className="text-xs text-slate-500">/ {myMark.max_marks}</span>}
+                  </div>
+                  {pct != null && (
+                    <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
+                      pct >= 80 ? 'bg-green-100 text-green-700' :
+                      pct >= 60 ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {pct}%
+                    </span>
+                  )}
                 </div>
-                {pct != null && (
-                  <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
-                    pct >= 80 ? 'bg-green-100 text-green-700' :
-                    pct >= 60 ? 'bg-amber-100 text-amber-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {pct}%
-                  </span>
+
+                {components.length > 0 && (
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-1">
+                      Breakdown
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {components.map(c => {
+                        const cm = myComponentMarks[c.id]
+                        const cMax = Number(c.max_marks)
+                        const cPct = cm && !cm.is_absent && cm.marks != null && cMax > 0
+                          ? Math.round((Number(cm.marks) / cMax) * 100)
+                          : null
+                        return (
+                          <div
+                            key={c.id}
+                            className="flex items-baseline gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg"
+                          >
+                            <span className="text-[11px] font-semibold text-slate-600">{c.name}</span>
+                            <span className="text-xs font-bold text-slate-800 tabular-nums">
+                              {cm?.is_absent
+                                ? <span className="text-red-500">AB</span>
+                                : cm && cm.marks != null
+                                  ? <>{Number(cm.marks)}<span className="font-normal text-slate-400">/{cMax}</span></>
+                                  : <span className="font-normal text-slate-400">—/{cMax}</span>}
+                            </span>
+                            {cPct != null && (
+                              <span className="text-[10px] font-semibold text-slate-400 tabular-nums">{cPct}%</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -870,7 +1329,11 @@ function AssessmentCard({
                     min={1}
                     value={editMaxMarks}
                     onChange={(e) => onEditMaxMarksChange(e.target.value)}
-                    className="w-20 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                    // A split assessment is marked out of the sum of its
+                    // components, so the total is re-weighted there, not here.
+                    disabled={components.length > 0}
+                    title={components.length > 0 ? 'Set by the component weights — edit them in the marksheet' : undefined}
+                    className="w-20 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50 disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
                 <div className="flex-1" />

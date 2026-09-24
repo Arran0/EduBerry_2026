@@ -119,6 +119,30 @@ export interface AssessmentMark {
   student?: UserProfile
 }
 
+/** A named part of an assessment — "Lab" out of 20, "Examination" out of 80.
+ *  An assessment either has none of these (one mark per student, as before) or
+ *  has a set of them whose maximums add up to the assessment's own max. */
+export interface AssessmentComponent {
+  id: string
+  assessment_id: string
+  name: string
+  max_marks: number
+  /** Display order in the marksheet and on the report card. */
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AssessmentComponentMark {
+  id: string
+  component_id: string
+  student_id: string
+  marks: number | null
+  is_absent: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface DiscussionPost {
   id: string
   classroom_id: string
@@ -1028,6 +1052,205 @@ export async function fetchMarksForStudent(studentId: string): Promise<StudentMa
   }))
 }
 
+// --- Assessment components ---
+//
+// A component splits one assessment into named parts that are marked
+// separately ("Lab" /20, "Examination" /80) but reported as one score.
+// `classroom_assessment_marks` stays the student's total for the assessment and
+// is recomputed by the database from the component marks, so none of the
+// readers above (report cards, the class-wide matrix, the academic record) had
+// to learn about components to keep adding up correctly.
+
+/** Components of the given assessments, keyed by assessment id and already in
+ *  display order. An assessment scored as a single total is simply absent from
+ *  the map. */
+export async function fetchAssessmentComponents(
+  assessmentIds: string[],
+): Promise<Record<string, AssessmentComponent[]>> {
+  if (assessmentIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('classroom_assessment_components')
+    .select('*')
+    .in('assessment_id', assessmentIds)
+    .order('position', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch assessment components:', error.message)
+    return {}
+  }
+  const byAssessment: Record<string, AssessmentComponent[]> = {}
+  for (const c of (data ?? []) as AssessmentComponent[]) {
+    const list = byAssessment[c.assessment_id] ?? []
+    list.push(c)
+    byAssessment[c.assessment_id] = list
+  }
+  return byAssessment
+}
+
+export interface AssessmentComponentDraft {
+  /** Set when editing an existing component, absent when adding one. */
+  id?: string
+  name: string
+  max_marks: number
+}
+
+/** Replaces an assessment's component set in one go: drafts carrying an id are
+ *  updated in place (so marks already entered survive a rename or a
+ *  re-weighting), drafts without one are created, and components no longer in
+ *  the list are deleted along with their marks. An empty list turns the
+ *  assessment back into a single total typed by hand.
+ *
+ *  Totals are deliberately not written here — the database recomputes them
+ *  from the components on every change. */
+export async function saveAssessmentComponents(
+  assessmentId: string,
+  drafts: AssessmentComponentDraft[],
+): Promise<AssessmentComponent[] | null> {
+  const cleaned = drafts
+    .map((d, i) => ({ id: d.id, name: d.name.trim(), max_marks: d.max_marks, position: i }))
+    .filter(d => d.name !== '' && isFinite(d.max_marks) && d.max_marks > 0)
+
+  const keptIds = cleaned.map(d => d.id).filter((id): id is string => !!id)
+
+  // Removals go first: a component renamed to a name one of the removed ones
+  // was holding would otherwise collide on the (assessment_id, name) unique
+  // constraint.
+  const removals = supabase
+    .from('classroom_assessment_components')
+    .delete()
+    .eq('assessment_id', assessmentId)
+  const { error: deleteError } = keptIds.length > 0
+    ? await removals.not('id', 'in', `(${keptIds.map(id => `"${id}"`).join(',')})`)
+    : await removals
+
+  if (deleteError) {
+    console.error('Failed to remove assessment components:', deleteError.message)
+    return null
+  }
+
+  if (cleaned.length === 0) return []
+
+  // Every row carries an id — new ones included — so the batch is a single
+  // upsert rather than an insert and an update with different column sets.
+  const rows = cleaned.map(d => ({
+    id: d.id ?? crypto.randomUUID(),
+    assessment_id: assessmentId,
+    name: d.name,
+    max_marks: d.max_marks,
+    position: d.position,
+    updated_at: new Date().toISOString(),
+  }))
+
+  const { data, error } = await supabase
+    .from('classroom_assessment_components')
+    .upsert(rows, { onConflict: 'id' })
+    .select()
+
+  if (error) {
+    console.error('Failed to save assessment components:', error.message)
+    return null
+  }
+  return ((data ?? []) as AssessmentComponent[])
+    .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+}
+
+/** Every student's component marks for one assessment — the marksheet grid. */
+export async function fetchAssessmentComponentMarks(
+  assessmentId: string,
+): Promise<AssessmentComponentMark[]> {
+  const { data, error } = await supabase
+    .from('classroom_assessment_component_marks')
+    .select('*, classroom_assessment_components!inner(assessment_id)')
+    .eq('classroom_assessment_components.assessment_id', assessmentId)
+
+  if (error) {
+    console.error('Failed to fetch component marks:', error.message)
+    return []
+  }
+  // Drop the join-only column so callers see a plain component mark.
+  return (data ?? []).map(
+    ({ classroom_assessment_components: _joined, ...m }) => m as AssessmentComponentMark
+  )
+}
+
+/** One student's component marks across a set of assessments, keyed by
+ *  component id. Keys off the assessment rather than a component id list, so it
+ *  can run alongside (rather than after) the components query itself. */
+export async function fetchStudentComponentMarks(
+  studentId: string,
+  assessmentIds: string[],
+): Promise<Record<string, AssessmentComponentMark>> {
+  if (assessmentIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('classroom_assessment_component_marks')
+    .select('*, classroom_assessment_components!inner(assessment_id)')
+    .eq('student_id', studentId)
+    .in('classroom_assessment_components.assessment_id', assessmentIds)
+
+  if (error) {
+    console.error('Failed to fetch student component marks:', error.message)
+    return {}
+  }
+  const byComponent: Record<string, AssessmentComponentMark> = {}
+  for (const row of data ?? []) {
+    const { classroom_assessment_components: _joined, ...m } = row
+    byComponent[(m as AssessmentComponentMark).component_id] = m as AssessmentComponentMark
+  }
+  return byComponent
+}
+
+/** Saves a whole component marksheet. A cell left blank is deleted rather than
+ *  stored as a null mark, so "never entered" and "entered as nothing" stay the
+ *  same thing and a student with an empty sheet keeps no total at all. */
+export async function upsertAssessmentComponentMarks(
+  entries: { componentId: string; studentId: string; marks: number | null; isAbsent: boolean }[],
+): Promise<boolean> {
+  const now = new Date().toISOString()
+
+  const rows = entries
+    .filter(e => e.isAbsent || e.marks != null)
+    .map(e => ({
+      component_id: e.componentId,
+      student_id: e.studentId,
+      marks: e.isAbsent ? null : e.marks,
+      is_absent: e.isAbsent,
+      updated_at: now,
+    }))
+
+  // Blanks, grouped by component: PostgREST cannot filter on a composite
+  // (component, student) list, and there are only ever a handful of components.
+  const blanksByComponent = new Map<string, string[]>()
+  for (const e of entries) {
+    if (e.isAbsent || e.marks != null) continue
+    const list = blanksByComponent.get(e.componentId) ?? []
+    list.push(e.studentId)
+    blanksByComponent.set(e.componentId, list)
+  }
+
+  const [upsertResult, ...deleteResults] = await Promise.all([
+    rows.length > 0
+      ? supabase
+          .from('classroom_assessment_component_marks')
+          .upsert(rows, { onConflict: 'component_id,student_id' })
+      : Promise.resolve({ error: null }),
+    ...Array.from(blanksByComponent.entries()).map(([componentId, studentIds]) =>
+      supabase
+        .from('classroom_assessment_component_marks')
+        .delete()
+        .eq('component_id', componentId)
+        .in('student_id', studentIds)
+    ),
+  ])
+
+  const failure = [upsertResult, ...deleteResults].find(r => r.error)
+  if (failure?.error) {
+    console.error('Failed to save component marks:', failure.error.message)
+    return false
+  }
+  return true
+}
+
 // --- Discussion ---
 
 export async function uploadDiscussionFile(
@@ -1477,6 +1700,11 @@ export interface StudentReportCardEntry {
   classroom_title: string
   assessment: ClassroomAssessment
   mark: AssessmentMark | null
+  /** The assessment's components in display order — empty when it is scored as
+   *  a single total. */
+  components: AssessmentComponent[]
+  /** This student's mark for each of those components, keyed by component id. */
+  componentMarks: Record<string, AssessmentComponentMark>
 }
 
 /** PostgREST returns a to-one embed as a single object, but supabase-js types
@@ -1651,7 +1879,15 @@ async function loadReportCardsForStudent(
     (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
   )
 
-  // 3. Group.
+  // 3. The component breakdown behind those totals. Both queries key off the
+  //    assessment ids, so they go out together.
+  const assessmentIds = (assessments as ClassroomAssessment[]).map(a => a.id)
+  const [componentsByAssessment, componentMarks] = await Promise.all([
+    fetchAssessmentComponents(assessmentIds),
+    fetchStudentComponentMarks(studentId, assessmentIds),
+  ])
+
+  // 4. Group.
   const grouped = new Map<string, StudentReportCardEntry[]>()
   for (const a of assessments as ClassroomAssessment[]) {
     if (!a.report_card_title) continue
@@ -1662,6 +1898,8 @@ async function loadReportCardsForStudent(
       classroom_title: cls.title,
       assessment: a,
       mark: markMap.get(a.id) ?? null,
+      components: componentsByAssessment[a.id] ?? [],
+      componentMarks,
     }
     const list = grouped.get(a.report_card_title) ?? []
     list.push(entry)
@@ -1726,6 +1964,12 @@ export async function fetchReportCardsForStudentAsViewer(
     (marks ?? []).map((m: AssessmentMark) => [m.assessment_id, m])
   )
 
+  const assessmentIds = (assessments as ClassroomAssessment[]).map(a => a.id)
+  const [componentsByAssessment, componentMarks] = await Promise.all([
+    fetchAssessmentComponents(assessmentIds),
+    fetchStudentComponentMarks(studentId, assessmentIds),
+  ])
+
   const grouped = new Map<string, StudentReportCardEntry[]>()
   for (const a of assessments as ClassroomAssessment[]) {
     if (!a.report_card_title) continue
@@ -1737,6 +1981,8 @@ export async function fetchReportCardsForStudentAsViewer(
       classroom_title: cls.title,
       assessment: a,
       mark: markMap.get(a.id) ?? null,
+      components: componentsByAssessment[a.id] ?? [],
+      componentMarks,
     })
     grouped.set(a.report_card_title, list)
   }

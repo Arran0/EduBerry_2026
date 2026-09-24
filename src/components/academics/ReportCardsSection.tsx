@@ -31,7 +31,8 @@ import Avatar from '@/components/Avatar'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/reportCardVisits'
 import { gradeLabel } from '@/lib/grades'
-import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
+import { gradeLetter, formatShortDate, componentTotals } from '@/lib/reportCardGrading'
+import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
 const CONGRATS_MESSAGES = [
@@ -1116,6 +1117,11 @@ function ReportCard({
   const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
   const overallGrade = gradeLetter(overallPct)
 
+  // Components rolled up by name across every subject, so a card split into
+  // "Lab" and "Examination" reports how the student did on each overall — not
+  // just assessment by assessment.
+  const componentRollup = useMemo(() => componentTotals(entries), [entries])
+
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
   const periodStart = dates[0]
   const periodEnd = dates[dates.length - 1]
@@ -1210,27 +1216,7 @@ function ReportCard({
                     <p className="font-semibold text-slate-800">{row.classroomTitle}</p>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <ul className="space-y-1">
-                      {row.assessments.map(a => {
-                        const m = a.mark
-                        const aPct = m && m.marks != null
-                          ? Math.round((Number(m.marks) / Number(m.max_marks)) * 100)
-                          : null
-                        return (
-                          <li key={a.assessment.id} className="text-xs text-slate-600 flex items-center gap-1.5">
-                            <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" />
-                            <span className="truncate flex-1">{a.assessment.title}</span>
-                            <span className={`font-medium tabular-nums ${m?.is_absent ? 'text-red-500' : 'text-slate-400'}`}>
-                              {m?.is_absent
-                                ? 'AB'
-                                : m && m.marks != null
-                                  ? `${m.marks}/${m.max_marks}${aPct != null ? ` (${aPct}%)` : ''}`
-                                  : '—'}
-                            </span>
-                          </li>
-                        )
-                      })}
-                    </ul>
+                    <AssessmentBreakdown entries={row.assessments} />
                   </td>
                   <td className="px-4 py-3 text-center align-top font-bold text-slate-800 tabular-nums">
                     {row.hasAnyMark ? row.obtained : '—'}
@@ -1275,6 +1261,35 @@ function ReportCard({
           </tfoot>
         </table>
       </div>
+
+      {/* ── Component roll-up ── */}
+      {componentRollup.length > 0 && (
+        <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-200">
+          <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-2">
+            Component Totals
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {componentRollup.map(c => {
+              const pct = c.max > 0 ? (c.obtained / c.max) * 100 : 0
+              const g = gradeLetter(pct)
+              return (
+                <div
+                  key={c.name}
+                  className="flex items-baseline gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5"
+                >
+                  <span className="text-xs font-semibold text-slate-700">{c.name}</span>
+                  <span className="text-sm font-bold text-slate-800 tabular-nums">
+                    {c.obtained}<span className="text-slate-400 font-medium">/{c.max}</span>
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${g.bg} ${g.fg}`}>
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Result summary strip ── */}
       {totalMax > 0 && (
