@@ -270,10 +270,10 @@ function ReportCardBlock({
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+    <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm">
 
       {/* Header */}
-      <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-6 py-5 text-white">
+      <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-3 py-3 sm:px-6 sm:py-5 text-white">
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -285,18 +285,18 @@ function ReportCardBlock({
           </svg>
         </div>
         <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-        <div className="relative flex items-start gap-4">
-          <div className="p-2.5 bg-white/10 rounded-2xl border border-white/15 flex-shrink-0">
+        <div className="relative flex items-start gap-2.5 sm:gap-4">
+          <div className="p-1.5 sm:p-2.5 bg-white/10 rounded-xl sm:rounded-2xl border border-white/15 flex-shrink-0">
             <GraduationCap size={22} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/50 font-semibold">
               {branding.tagline || 'Report Card'}
             </p>
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
+            <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
               {branding.schoolName || 'Report Card'}
             </h3>
-            <p className="text-sm text-white/70 mt-1.5 font-medium flex items-center gap-1.5">
+            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5">
               <Bookmark size={12} className="opacity-70" /> {title}
             </p>
           </div>
@@ -310,7 +310,7 @@ function ReportCardBlock({
       </div>
 
       {/* Student info strip */}
-      <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+      <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 sm:gap-4 text-xs">
         <InfoField label="Student">{student.full_name}</InfoField>
         <InfoField label="Email"><span className="truncate block">{student.email}</span></InfoField>
         <InfoField label="Class">
@@ -326,15 +326,15 @@ function ReportCardBlock({
 
       {/* Subjects table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[11px] sm:text-sm">
           <thead>
             <tr className="bg-slate-50 border-b-2 border-slate-200">
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Subject</th>
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Assessments</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Marks</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Out of</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">%</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Grade</th>
+              <th className="text-left px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Subject</th>
+              <th className="text-left px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Assessments</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px] whitespace-nowrap">Marks</th>
+              <th className="hidden sm:table-cell text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px] whitespace-nowrap">Out of</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">%</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Grade</th>
             </tr>
           </thead>
           <tbody>
@@ -343,22 +343,25 @@ function ReportCardBlock({
               const grade = pct != null ? gradeLetter(pct) : null
               return (
                 <tr key={row.classroomId} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50 transition-colors`}>
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 align-top">
                     <p className="font-semibold text-slate-800">{row.classroomTitle}</p>
                   </td>
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 align-top">
                     <AssessmentBreakdown entries={row.assessments} />
                   </td>
-                  <td className="px-4 py-3 text-center align-top font-bold text-slate-800 tabular-nums">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top font-bold text-slate-800 tabular-nums">
                     {row.hasAnyMark ? row.obtained : '—'}
+                    {row.hasAnyMark && (
+                      <span className="sm:hidden font-normal text-slate-400">/{row.max}</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-center align-top text-slate-500 tabular-nums">
+                  <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center align-top text-slate-500 tabular-nums">
                     {row.hasAnyMark ? row.max : '—'}
                   </td>
-                  <td className="px-4 py-3 text-center align-top tabular-nums font-semibold text-slate-700">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top tabular-nums font-semibold text-slate-700">
                     {pct != null ? `${pct.toFixed(1)}%` : '—'}
                   </td>
-                  <td className="px-4 py-3 text-center align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top">
                     {grade ? (
                       <span className={`inline-block min-w-[34px] px-2 py-0.5 rounded-md text-xs font-bold ${grade.bg} ${grade.fg}`}>
                         {grade.letter}
@@ -371,11 +374,14 @@ function ReportCardBlock({
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 border-t-2 border-slate-200">
-              <td className="px-4 py-3 font-bold text-slate-700 text-sm uppercase tracking-wide" colSpan={2}>Total</td>
-              <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">{totalMax > 0 ? totalObtained : '—'}</td>
-              <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">{totalMax > 0 ? totalMax : '—'}</td>
-              <td className="px-4 py-3 text-center font-bold text-slate-700 tabular-nums">{totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}</td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-slate-700 text-[11px] sm:text-sm uppercase tracking-wide" colSpan={2}>Total</td>
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
+                {totalMax > 0 ? totalObtained : '—'}
+                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{totalMax}</span>}
+              </td>
+              <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">{totalMax > 0 ? totalMax : '—'}</td>
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-700 tabular-nums">{totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}</td>
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center">
                 {totalMax > 0 ? (
                   <span className={`inline-block min-w-[34px] px-2 py-0.5 rounded-md text-xs font-bold ${overallGrade.bg} ${overallGrade.fg}`}>
                     {overallGrade.letter}
@@ -389,7 +395,7 @@ function ReportCardBlock({
 
       {/* Component roll-up */}
       {componentRollup.length > 0 && (
-        <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-200">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-slate-50/70 border-t border-slate-200">
           <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-2">
             Component Totals
           </p>
@@ -418,7 +424,7 @@ function ReportCardBlock({
 
       {/* Overall strip */}
       {totalMax > 0 && (
-        <div className="px-6 py-3 bg-white border-t border-slate-100 flex items-center gap-4 flex-wrap">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-white border-t border-slate-100 flex items-center gap-x-3 gap-y-1.5 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Award size={12} className="text-slate-400" /> Overall:
             <span className="font-bold text-slate-800">{overallPct.toFixed(2)}%</span>
@@ -490,7 +496,7 @@ function RemarksBlock({
   }
 
   return (
-    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
+    <div className="px-3 py-3 sm:px-5 sm:py-4 bg-slate-50 border-t border-slate-200">
       <div className="flex items-center gap-2 mb-3">
         <MessageSquare size={13} className="text-slate-500" />
         <h4 className="text-xs font-bold uppercase tracking-widest text-slate-600">Remarks</h4>

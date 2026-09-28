@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronRight, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
   LayoutGrid, Download, Table2, ArrowUpDown, CalendarRange,
+  SplitSquareHorizontal, CheckSquare, Square,
 } from 'lucide-react'
 import {
   StudentReportCardEntry,
@@ -24,6 +25,7 @@ import {
   fetchProfilesByIds,
   ClasswiseSubject,
   ClasswiseCellData,
+  ClasswiseComponentTotal,
 } from '@/lib/classrooms'
 import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
@@ -33,6 +35,11 @@ import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/repo
 import { gradeLabel } from '@/lib/grades'
 import { gradeLetter, formatShortDate, componentTotals } from '@/lib/reportCardGrading'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
+import ModalShell from '@/components/ui/ModalShell'
+import {
+  ClasswiseSort, SortDir, num, overallOf, sortStudents, averageOf,
+  buildExportTable, downloadClasswiseWorkbook,
+} from '@/lib/classwiseMarks'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
 const CONGRATS_MESSAGES = [
@@ -183,7 +190,10 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="glass-card rounded-[1.5rem] p-4 sm:p-5">
+            {/* Barely any padding on a phone: the cards and the marks matrix
+                inside bleed to the panel's edge, so every pixel of width that
+                is not the page's own gutter goes to the data. */}
+            <div className="glass-card rounded-[1.5rem] p-2 sm:p-5">
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
@@ -535,67 +545,184 @@ function StaffReportCardSearch({
     </div>
   )
 }
-
 // ─── Class-wide Marks View ────────────────────────────────────────────────────
+//
+// The ordering, the mark format, the averages and the workbook live in
+// @/lib/classwiseMarks — pure, shared by the matrix and its export preview,
+// and tested there.
 
-function downloadCSV(
-  students: UserProfile[],
-  subjects: ClasswiseSubject[],
-  cellData: Record<string, Record<string, ClasswiseCellData>>,
-  grade: number,
-  section: string,
-  reportCardTitle: string,
-) {
-  const headers = [
-    'Student Name',
-    'Email',
-    'Grade',
-    'Section',
-    ...subjects.flatMap(s => [`${s.subject} (Obtained)`, `${s.subject} (Max)`, `${s.subject} (%)`]),
-    'Overall Obtained',
-    'Overall Max',
-    'Overall %',
-    'Overall Grade',
-  ]
+// ─── Export preview ───────────────────────────────────────────────────────────
 
-  const rows = students.map(student => {
-    let totalObtained = 0
-    let totalMax = 0
-    const subjectCells = subjects.map(s => {
-      const cell = cellData[student.id]?.[s.classroomId]
-      if (cell?.hasAnyMark) {
-        totalObtained += cell.obtained
-        totalMax += cell.max
-        const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
-        return [String(cell.obtained), String(cell.max), pct.toFixed(1)]
-      }
-      return ['—', '—', '—']
-    })
-    const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : null
-    const grade_ = overallPct != null ? gradeLetter(overallPct).letter : '—'
-    return [
-      student.full_name,
-      student.email,
-      String(grade),
-      section,
-      ...subjectCells.flat(),
-      totalMax > 0 ? String(totalObtained) : '—',
-      totalMax > 0 ? String(totalMax) : '—',
-      overallPct != null ? `${overallPct.toFixed(1)}` : '—',
-      grade_,
-    ]
-  })
+function ClasswiseExportModal({
+  students, subjects, cellData, grade, section, reportCardTitle, initialSort, onClose,
+}: {
+  students: UserProfile[]
+  subjects: ClasswiseSubject[]
+  cellData: Record<string, Record<string, ClasswiseCellData>>
+  grade: number
+  section: string
+  reportCardTitle: string
+  initialSort: ClasswiseSort
+  onClose: () => void
+}) {
+  const hasComponents = subjects.some(s => s.componentNames.length > 0)
+  const [includeComponents, setIncludeComponents] = useState(hasComponents)
+  const [sort, setSort] = useState<ClasswiseSort>(initialSort)
+  const [writing, setWriting] = useState(false)
 
-  const csvLines = [headers, ...rows].map(row =>
-    row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+  const table = useMemo(
+    () => buildExportTable(students, subjects, cellData, { includeComponents, sort }),
+    [students, subjects, cellData, includeComponents, sort],
   )
-  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Class_Marks_Grade${grade}${section}_${reportCardTitle.replace(/\s+/g, '_')}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+
+  const handleExport = async () => {
+    setWriting(true)
+    try {
+      await downloadClasswiseWorkbook(table, grade, section, reportCardTitle)
+      onClose()
+    } catch (err) {
+      console.error('Failed to write the class marks workbook:', err)
+    } finally {
+      setWriting(false)
+    }
+  }
+
+  const sortOptions: { label: string; value: ClasswiseSort }[] = [
+    { label: 'Name A–Z', value: { by: 'name', dir: 'asc' } },
+    { label: 'Name Z–A', value: { by: 'name', dir: 'desc' } },
+    { label: 'Marks high–low', value: { by: 'overall', dir: 'desc' } },
+    { label: 'Marks low–high', value: { by: 'overall', dir: 'asc' } },
+  ]
+  // The presets are never a subject sort, so comparing the axis and direction
+  // is enough — a subject sort carried in from the matrix matches none of them
+  // and gets the chip of its own below.
+  const sortMatches = (current: ClasswiseSort, option: ClasswiseSort) =>
+    current.by === option.by && current.dir === option.dir
+
+  return (
+    <ModalShell
+      onClose={onClose}
+      size="2xl"
+      title="Export class marks"
+      subtitle={`Grade ${grade} · Section ${section} — ${reportCardTitle}`}
+      icon={<Download size={16} />}
+      iconClassName="bg-slate-100 text-slate-600"
+      bodyClassName="!px-0 !pt-0"
+    >
+      {/* Options */}
+      <div className="sticky top-0 z-10 px-4 sm:px-5 py-3 bg-white/95 backdrop-blur-xl border-b border-slate-100 space-y-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order</span>
+          {sortOptions.map(option => (
+            <button
+              key={option.label}
+              onClick={() => setSort(option.value)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                sortMatches(sort, option.value)
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+          {sort.by === 'subject' && (
+            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-700 text-white">
+              {subjects.find(s => s.classroomId === sort.classroomId)?.subject ?? 'Subject'}
+              {sort.dir === 'desc' ? ' high–low' : ' low–high'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Columns</span>
+          <button
+            onClick={() => setIncludeComponents(v => !v)}
+            disabled={!hasComponents}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              includeComponents ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            title={hasComponents
+              ? 'Add a column per component alongside each subject total'
+              : 'No assessment under this report card is split into components'}
+          >
+            {includeComponents ? <CheckSquare size={12} /> : <Square size={12} />}
+            Component-wise split
+          </button>
+          <span className="text-[11px] text-slate-400">
+            {table.headers.length} columns · {table.rows.length} students
+          </span>
+        </div>
+      </div>
+
+      {/* Preview — the table the workbook is written from, not a lookalike. */}
+      <div className="overflow-auto max-h-[52vh]">
+        <table className="w-full text-[11px] border-collapse">
+          <thead className="sticky top-0 bg-slate-50 z-[1]">
+            <tr>
+              {table.headers.map((h, i) => (
+                <th
+                  key={h}
+                  className={`text-left px-2.5 py-2 font-bold text-slate-600 whitespace-nowrap border-b border-slate-200 ${
+                    i === 0 ? 'sticky left-0 bg-slate-50 z-[2]' : ''
+                  }`}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, idx) => (
+              <tr key={row[0] + idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                {row.map((cell, i) => (
+                  <td
+                    key={i}
+                    className={`px-2.5 py-1.5 whitespace-nowrap tabular-nums ${
+                      i === 0
+                        ? 'sticky left-0 bg-inherit font-semibold text-slate-700 z-[1]'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-4 sm:px-5 py-3 border-t border-slate-100 flex items-center gap-2">
+        <p className="text-[11px] text-slate-400 flex-1 min-w-0">
+          Marks read <span className="font-semibold text-slate-600">obtained (percentage)</span>; the total is in
+          each heading.
+        </p>
+        <button onClick={onClose} className="text-xs text-slate-600 hover:text-slate-900 px-2 font-medium">
+          Cancel
+        </button>
+        <button
+          onClick={handleExport}
+          disabled={writing || table.rows.length === 0}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+        >
+          {writing ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+          {writing ? 'Writing…' : 'Download Excel'}
+        </button>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ─── The matrix ───────────────────────────────────────────────────────────────
+
+/** A sort control in a column heading — the arrow says which way, and a column
+ *  that is not the active one shows the neutral glyph. */
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ArrowUpDown size={9} className="opacity-40 flex-shrink-0" />
+  return dir === 'asc'
+    ? <ChevronUp size={10} className="flex-shrink-0" />
+    : <ChevronDown size={10} className="flex-shrink-0" />
 }
 
 function ClasswiseMarksView() {
@@ -610,8 +737,9 @@ function ClasswiseMarksView() {
   const [subjects, setSubjects] = useState<ClasswiseSubject[]>([])
   const [cellData, setCellData] = useState<Record<string, Record<string, ClasswiseCellData>>>({})
   const [loaded, setLoaded] = useState(false)
-  const [sortBy, setSortBy] = useState<'name' | 'marks'>('name')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sort, setSort] = useState<ClasswiseSort>({ by: 'name', dir: 'asc' })
+  const [showSplit, setShowSplit] = useState(true)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetchGradeSectionsWithStudents().then(setGradeSections)
@@ -653,62 +781,66 @@ function ClasswiseMarksView() {
     setLoading(false)
   }, [canLoad, selectedGrade, selectedSection, selectedTitle])
 
-  const columnStats = useMemo(() => {
-    return subjects.map(s => {
-      let sumObtained = 0; let sumMax = 0; let count = 0
-      for (const student of students) {
-        const cell = cellData[student.id]?.[s.classroomId]
-        if (cell?.hasAnyMark && cell.max > 0) {
-          sumObtained += cell.obtained; sumMax += cell.max; count++
-        }
-      }
-      const avgPct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
-      return { sumObtained, sumMax, avgPct, count }
+  const anyComponents = useMemo(() => subjects.some(s => s.componentNames.length > 0), [subjects])
+  const splitVisible = showSplit && anyComponents
+
+  /** Per-subject class averages, and the same figure for the row total. */
+  const columnAverages = useMemo(
+    () => subjects.map(s => averageOf(
+      students
+        .map(st => cellData[st.id]?.[s.classroomId])
+        .filter((c): c is ClasswiseCellData => !!c?.hasAnyMark)
+        .map(c => ({ obtained: c.obtained, max: c.max }))
+    )),
+    [subjects, students, cellData]
+  )
+
+  /** Per-component averages, keyed by subject index then component name. */
+  const componentAverages = useMemo(
+    () => subjects.map(s => Object.fromEntries(s.componentNames.map(name => [
+      name,
+      averageOf(students
+        .map(st => cellData[st.id]?.[s.classroomId]?.components.find(c => c.name === name))
+        .filter((c): c is ClasswiseComponentTotal => !!c)
+        .map(c => ({ obtained: c.obtained, max: c.max }))),
+    ]))),
+    [subjects, students, cellData]
+  )
+
+  const overallAverage = useMemo(
+    () => averageOf(students.map(st => overallOf(st.id, subjects, cellData)).filter(t => t.max > 0)),
+    [students, subjects, cellData]
+  )
+
+  const sortedStudents = useMemo(
+    () => sortStudents(students, sort, subjects, cellData),
+    [students, sort, subjects, cellData]
+  )
+
+  const overallColumnMax = useMemo(
+    () => subjects.reduce((sum, s) => sum + s.maxMarks, 0),
+    [subjects]
+  )
+
+  /** Clicking a heading sorts by it; clicking the active one flips direction.
+   *  Marks start high-to-low, names A-to-Z — the order each is usually wanted in. */
+  const toggleSort = (next: ClasswiseSort) => {
+    setSort(current => {
+      const same = current.by === next.by
+        && (next.by !== 'subject' || (current.by === 'subject' && current.classroomId === next.classroomId))
+      if (!same) return next
+      return { ...current, dir: current.dir === 'asc' ? 'desc' : 'asc' } as ClasswiseSort
     })
-  }, [subjects, students, cellData])
-
-  const overallStat = useMemo(() => {
-    let sumObtained = 0; let sumMax = 0
-    for (const student of students) {
-      for (const s of subjects) {
-        const cell = cellData[student.id]?.[s.classroomId]
-        if (cell?.hasAnyMark) { sumObtained += cell.obtained; sumMax += cell.max }
-      }
-    }
-    const pct = sumMax > 0 ? (sumObtained / sumMax) * 100 : null
-    return { sumObtained, sumMax, pct }
-  }, [subjects, students, cellData])
-
-  const sortedStudents = useMemo(() => {
-    return [...students].sort((a, b) => {
-      if (sortBy === 'name') {
-        const cmp = a.full_name.localeCompare(b.full_name)
-        return sortDir === 'asc' ? cmp : -cmp
-      }
-      let aObt = 0, aMax = 0, bObt = 0, bMax = 0
-      subjects.forEach(s => {
-        const ca = cellData[a.id]?.[s.classroomId]
-        const cb = cellData[b.id]?.[s.classroomId]
-        if (ca?.hasAnyMark) { aObt += ca.obtained; aMax += ca.max }
-        if (cb?.hasAnyMark) { bObt += cb.obtained; bMax += cb.max }
-      })
-      const aPct = aMax > 0 ? aObt / aMax : -1
-      const bPct = bMax > 0 ? bObt / bMax : -1
-      return sortDir === 'asc' ? aPct - bPct : bPct - aPct
-    })
-  }, [students, cellData, subjects, sortBy, sortDir])
-
-  const toggleSort = (field: 'name' | 'marks') => {
-    if (sortBy === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortBy(field); setSortDir('asc') }
   }
+
+  const isSubjectSort = (classroomId: string) => sort.by === 'subject' && sort.classroomId === classroomId
 
   return (
     <div className="space-y-4">
       {/* Cascade selectors */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Grade</label>
+          <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Grade</label>
           <select
             value={selectedGrade ?? ''}
             onChange={e => handleGradeChange(e.target.value !== '' ? Number(e.target.value) : null)}
@@ -722,7 +854,7 @@ function ClasswiseMarksView() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Section</label>
+          <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Section</label>
           <select
             value={selectedSection}
             onChange={e => handleSectionChange(e.target.value)}
@@ -737,7 +869,7 @@ function ClasswiseMarksView() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Report Card</label>
+          <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Report Card</label>
           <select
             value={selectedTitle}
             onChange={e => handleTitleChange(e.target.value)}
@@ -752,7 +884,7 @@ function ClasswiseMarksView() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={handleLoad}
           disabled={!canLoad || loading}
@@ -762,12 +894,24 @@ function ClasswiseMarksView() {
           {loading ? 'Loading…' : 'Load Marks'}
         </button>
 
+        {loaded && anyComponents && (
+          <button
+            onClick={() => setShowSplit(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+              splitVisible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            title="Show each subject's component-wise split inside its cell"
+          >
+            <SplitSquareHorizontal size={13} /> Split
+          </button>
+        )}
+
         {loaded && subjects.length > 0 && (
           <button
-            onClick={() => downloadCSV(students, subjects, cellData, selectedGrade!, selectedSection, selectedTitle)}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-medium transition-colors"
+            onClick={() => setExporting(true)}
+            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold transition-colors"
           >
-            <Download size={14} /> Download CSV
+            <Download size={13} /> Export
           </button>
         )}
       </div>
@@ -787,138 +931,208 @@ function ClasswiseMarksView() {
               <p className="text-xs text-slate-400 mt-1">Set a subject on classrooms in Classroom Management to see them here.</p>
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            // Full-bleed on a phone: this table wants every pixel of width, so
+            // it escapes the card's padding rather than being squeezed by it.
+            <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 overflow-hidden sm:shadow-sm">
               {/* Summary strip */}
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-4 flex-wrap text-xs">
-                <span className="font-bold text-slate-800">Grade {selectedGrade} · Section {selectedSection}</span>
-                <span className="text-slate-500">{selectedTitle}</span>
-                <span className="text-slate-400">{students.length} student{students.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</span>
-                {overallStat.pct != null && (
+              <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] sm:text-xs">
+                <span className="font-bold text-slate-800">G{selectedGrade}·{selectedSection}</span>
+                <span className="text-slate-500 truncate max-w-[40%]">{selectedTitle}</span>
+                <span className="text-slate-400">{students.length}s · {subjects.length}sub</span>
+                {overallAverage.pct != null && (
                   <span className="ml-auto flex items-center gap-1.5 font-semibold text-slate-700">
-                    <Award size={12} />
-                    Class avg {overallStat.pct.toFixed(1)}%
-                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
-                      {gradeLetter(overallStat.pct).letter}
+                    <Award size={11} />
+                    Avg {overallAverage.pct.toFixed(1)}%
+                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${gradeLetter(overallAverage.pct).bg} ${gradeLetter(overallAverage.pct).fg}`}>
+                      {gradeLetter(overallAverage.pct).letter}
                     </span>
                   </span>
                 )}
               </div>
 
-              {/* Matrix table */}
+              {/* Matrix */}
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-[11px] sm:text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="sticky left-0 bg-slate-50 text-left px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap z-10 border-r border-slate-200 min-w-[160px]">
-                        <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                      <th className="sticky left-0 bg-slate-50 text-left px-2 sm:px-3 py-1.5 font-bold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[10px] whitespace-nowrap z-10 border-r border-slate-200 min-w-[104px] sm:min-w-[160px]">
+                        <button onClick={() => toggleSort({ by: 'name', dir: 'asc' })} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
                           Student
-                          {sortBy === 'name'
-                            ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
-                            : <ArrowUpDown size={10} className="opacity-40" />}
+                          <SortArrow active={sort.by === 'name'} dir={sort.dir} />
                         </button>
                       </th>
                       {subjects.map(s => (
-                        <th key={s.classroomId} className="text-center px-3 py-2.5 font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px]">
-                          {s.subject}
+                        <th
+                          key={s.classroomId}
+                          className="px-1.5 sm:px-3 py-1.5 font-bold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[10px] min-w-[72px] sm:min-w-[104px] align-bottom"
+                        >
+                          {/* The whole heading sorts — on a phone there is no
+                              room for a separate control. */}
+                          <button
+                            onClick={() => toggleSort({ by: 'subject', classroomId: s.classroomId, dir: 'desc' })}
+                            className={`flex flex-col items-center gap-0.5 mx-auto transition-colors ${
+                              isSubjectSort(s.classroomId) ? 'text-slate-900' : 'hover:text-slate-800'
+                            }`}
+                            title={`Sort by ${s.subject}`}
+                          >
+                            <span className="flex items-center gap-1 leading-tight">
+                              <span className="truncate max-w-[84px] sm:max-w-none">{s.subject}</span>
+                              <SortArrow active={isSubjectSort(s.classroomId)} dir={sort.dir} />
+                            </span>
+                            <span className="text-[8px] sm:text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
+                              /{num(s.maxMarks)}
+                            </span>
+                          </button>
                         </th>
                       ))}
-                      <th className="text-center px-3 py-2.5 font-bold text-slate-700 uppercase tracking-wide text-[10px] whitespace-nowrap min-w-[110px] border-l border-slate-200">
-                        <button onClick={() => toggleSort('marks')} className="flex items-center gap-1 mx-auto hover:text-slate-900 transition-colors">
-                          Overall
-                          {sortBy === 'marks'
-                            ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
-                            : <ArrowUpDown size={10} className="opacity-40" />}
+                      <th className="px-1.5 sm:px-3 py-1.5 font-bold text-slate-700 uppercase tracking-wide text-[9px] sm:text-[10px] min-w-[76px] sm:min-w-[104px] border-l border-slate-200 align-bottom">
+                        <button
+                          onClick={() => toggleSort({ by: 'overall', dir: 'desc' })}
+                          className={`flex flex-col items-center gap-0.5 mx-auto transition-colors ${
+                            sort.by === 'overall' ? 'text-slate-900' : 'hover:text-slate-900'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1 leading-tight">
+                            Overall
+                            <SortArrow active={sort.by === 'overall'} dir={sort.dir} />
+                          </span>
+                          <span className="text-[8px] sm:text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
+                            /{num(overallColumnMax)}
+                          </span>
                         </button>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedStudents.map((student, idx) => {
-                      let studentObtained = 0; let studentMax = 0
-                      subjects.forEach(s => {
-                        const cell = cellData[student.id]?.[s.classroomId]
-                        if (cell?.hasAnyMark) { studentObtained += cell.obtained; studentMax += cell.max }
-                      })
-                      const overallPct = studentMax > 0 ? (studentObtained / studentMax) * 100 : null
+                      const total = overallOf(student.id, subjects, cellData)
+                      const overallPct = total.max > 0 ? (total.obtained / total.max) * 100 : null
                       const overallGrade = overallPct != null ? gradeLetter(overallPct) : null
 
                       return (
                         <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50 transition-colors`}>
-                          <td className="sticky left-0 bg-inherit px-4 py-2 border-r border-slate-200 z-10">
-                            <div className="flex items-center gap-2">
-                              <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={24} userId={student.id} />
-                              <div className="min-w-0">
-                                <p className="font-semibold text-slate-700 truncate text-[11px]">{student.full_name}</p>
-                              </div>
+                          <td className="sticky left-0 bg-inherit px-2 sm:px-3 py-1.5 border-r border-slate-200 z-10">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              {/* The avatar is the first thing to go when
+                                  width is scarce — the name identifies. */}
+                              <span className="hidden sm:inline-flex">
+                                <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={22} userId={student.id} />
+                              </span>
+                              <span className="text-slate-400 tabular-nums text-[9px] sm:hidden w-4">{idx + 1}</span>
+                              <p className="font-semibold text-slate-700 truncate text-[10px] sm:text-[11px] leading-tight">{student.full_name}</p>
                             </div>
                           </td>
 
                           {subjects.map(s => {
                             const cell = cellData[student.id]?.[s.classroomId]
                             if (!cell?.hasAnyMark) {
-                              return <td key={s.classroomId} className="px-3 py-2 text-center text-slate-400">—</td>
+                              return <td key={s.classroomId} className={`px-1.5 sm:px-3 py-1.5 text-center text-slate-300 ${isSubjectSort(s.classroomId) ? 'bg-slate-50/80' : ''}`}>—</td>
                             }
                             const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
                             const g = gradeLetter(pct)
+                            const short = Math.abs(cell.max - s.maxMarks) > 0.005
                             return (
-                              <td key={s.classroomId} className="px-3 py-2 text-center">
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <span className="font-bold text-slate-800 tabular-nums">{cell.obtained}/{cell.max}</span>
-                                  <span className="text-slate-500 tabular-nums">{pct.toFixed(1)}%</span>
-                                  <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
+                              <td key={s.classroomId} className={`px-1.5 sm:px-3 py-1.5 text-center align-top ${isSubjectSort(s.classroomId) ? 'bg-slate-50/80' : ''}`}>
+                                <div className="flex flex-col items-center leading-tight">
+                                  <span className="font-bold text-slate-800 tabular-nums">
+                                    {num(cell.obtained)}
+                                    {short && <span className="font-normal text-slate-400">/{num(cell.max)}</span>}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-slate-500 tabular-nums text-[9px] sm:text-[10px]">
+                                    {pct.toFixed(1)}%
+                                    <span className={`px-1 rounded font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
+                                  </span>
+                                  {/* Component-wise split, read exactly as the
+                                      student's own report card reads it. */}
+                                  {splitVisible && cell.components.length > 0 && (
+                                    <span className="mt-0.5 pt-0.5 border-t border-slate-200/80 w-full flex flex-col items-center gap-px">
+                                      {cell.components.map(part => (
+                                        <span key={part.name} className="flex items-baseline justify-center gap-1 text-[8px] sm:text-[9px] text-slate-400 leading-tight">
+                                          <span className="truncate max-w-[52px] sm:max-w-[70px]">{part.name}</span>
+                                          <span className="tabular-nums font-semibold text-slate-500">
+                                            {num(part.obtained)}/{num(part.max)}
+                                          </span>
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                             )
                           })}
 
-                          <td className="px-3 py-2 text-center border-l border-slate-200">
+                          <td className={`px-1.5 sm:px-3 py-1.5 text-center align-top border-l border-slate-200 ${sort.by === 'overall' ? 'bg-slate-50/80' : ''}`}>
                             {overallPct != null ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className="font-bold text-slate-800 tabular-nums">{studentObtained}/{studentMax}</span>
-                                <span className="font-semibold text-slate-700 tabular-nums">{overallPct.toFixed(1)}%</span>
-                                <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${overallGrade!.bg} ${overallGrade!.fg}`}>{overallGrade!.letter}</span>
+                              <div className="flex flex-col items-center leading-tight">
+                                <span className="font-bold text-slate-800 tabular-nums">
+                                  {num(total.obtained)}
+                                  {Math.abs(total.max - overallColumnMax) > 0.005 && (
+                                    <span className="font-normal text-slate-400">/{num(total.max)}</span>
+                                  )}
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-600 font-semibold tabular-nums text-[9px] sm:text-[10px]">
+                                  {overallPct.toFixed(1)}%
+                                  <span className={`px-1 rounded font-bold ${overallGrade!.bg} ${overallGrade!.fg}`}>{overallGrade!.letter}</span>
+                                </span>
                               </div>
-                            ) : <span className="text-slate-400">—</span>}
+                            ) : <span className="text-slate-300">—</span>}
                           </td>
                         </tr>
                       )
                     })}
                   </tbody>
 
-                  {/* Footer: class averages */}
+                  {/* Class averages — per subject, per component, and overall */}
                   <tfoot>
                     <tr className="bg-slate-50 border-t-2 border-slate-200">
-                      <td className="sticky left-0 bg-slate-50 px-4 py-2.5 font-bold text-slate-600 text-[11px] uppercase tracking-wide border-r border-slate-200 z-10">
+                      <td className="sticky left-0 bg-slate-50 px-2 sm:px-3 py-1.5 font-bold text-slate-600 text-[9px] sm:text-[10px] uppercase tracking-wide border-r border-slate-200 z-10">
                         Class Avg
                       </td>
-                      {columnStats.map((stat, i) => {
+                      {columnAverages.map((stat, i) => {
                         const s = subjects[i]
-                        if (stat.avgPct == null) {
-                          return <td key={s.classroomId} className="px-3 py-2.5 text-center text-slate-400">—</td>
+                        if (stat.pct == null) {
+                          return <td key={s.classroomId} className="px-1.5 sm:px-3 py-1.5 text-center text-slate-300">—</td>
                         }
-                        const g = gradeLetter(stat.avgPct)
+                        const g = gradeLetter(stat.pct)
                         return (
-                          <td key={s.classroomId} className="px-3 py-2.5 text-center">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="font-bold text-slate-700 tabular-nums">
-                                {stat.sumObtained.toFixed(0)}/{stat.sumMax.toFixed(0)}
+                          <td key={s.classroomId} className={`px-1.5 sm:px-3 py-1.5 text-center align-top ${isSubjectSort(s.classroomId) ? 'bg-slate-100' : ''}`}>
+                            <div className="flex flex-col items-center leading-tight">
+                              <span className="font-bold text-slate-700 tabular-nums">{num(stat.mean)}</span>
+                              <span className="flex items-center gap-1 text-slate-500 font-semibold tabular-nums text-[9px] sm:text-[10px]">
+                                {stat.pct.toFixed(1)}%
+                                <span className={`px-1 rounded font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
                               </span>
-                              <span className="text-slate-600 font-semibold tabular-nums">{stat.avgPct.toFixed(1)}%</span>
-                              <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${g.bg} ${g.fg}`}>{g.letter}</span>
+                              {splitVisible && s.componentNames.length > 0 && (
+                                <span className="mt-0.5 pt-0.5 border-t border-slate-200 w-full flex flex-col items-center gap-px">
+                                  {s.componentNames.map(name => {
+                                    const avg = componentAverages[i][name]
+                                    return (
+                                      <span key={name} className="flex items-baseline justify-center gap-1 text-[8px] sm:text-[9px] text-slate-400 leading-tight">
+                                        <span className="truncate max-w-[52px] sm:max-w-[70px]">{name}</span>
+                                        <span className="tabular-nums font-semibold text-slate-500">
+                                          {avg && avg.pct != null ? `${num(avg.mean)}/${num(avg.meanMax)}` : '—'}
+                                        </span>
+                                      </span>
+                                    )
+                                  })}
+                                </span>
+                              )}
                             </div>
                           </td>
                         )
                       })}
-                      <td className="px-3 py-2.5 text-center border-l border-slate-200">
-                        {overallStat.pct != null ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className="font-bold text-slate-700 tabular-nums">{overallStat.sumObtained}/{overallStat.sumMax}</span>
-                            <span className="font-bold text-slate-700 tabular-nums">{overallStat.pct.toFixed(1)}%</span>
-                            <span className={`px-1.5 py-0 rounded text-[9px] font-bold ${gradeLetter(overallStat.pct).bg} ${gradeLetter(overallStat.pct).fg}`}>
-                              {gradeLetter(overallStat.pct).letter}
+                      <td className={`px-1.5 sm:px-3 py-1.5 text-center align-top border-l border-slate-200 ${sort.by === 'overall' ? 'bg-slate-100' : ''}`}>
+                        {overallAverage.pct != null ? (
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="font-bold text-slate-700 tabular-nums">{num(overallAverage.mean)}</span>
+                            <span className="flex items-center gap-1 text-slate-700 font-bold tabular-nums text-[9px] sm:text-[10px]">
+                              {overallAverage.pct.toFixed(1)}%
+                              <span className={`px-1 rounded font-bold ${gradeLetter(overallAverage.pct).bg} ${gradeLetter(overallAverage.pct).fg}`}>
+                                {gradeLetter(overallAverage.pct).letter}
+                              </span>
                             </span>
                           </div>
-                        ) : <span className="text-slate-400">—</span>}
+                        ) : <span className="text-slate-300">—</span>}
                       </td>
                     </tr>
                   </tfoot>
@@ -928,6 +1142,21 @@ function ClasswiseMarksView() {
           )}
         </>
       )}
+
+      <AnimatePresence>
+        {exporting && (
+          <ClasswiseExportModal
+            students={students}
+            subjects={subjects}
+            cellData={cellData}
+            grade={selectedGrade!}
+            section={selectedSection}
+            reportCardTitle={selectedTitle}
+            initialSort={sort}
+            onClose={() => setExporting(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1133,10 +1362,10 @@ function ReportCard({
   const showCongrats = totalMax > 0 && overallPct >= 81
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm print:shadow-none">
+    <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm print:shadow-none">
 
       {/* ── Header ── */}
-      <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-6 py-5 text-white">
+      <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-3 py-3 sm:px-6 sm:py-5 text-white">
         {/* Subtle dot texture */}
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -1151,18 +1380,18 @@ function ReportCard({
         {/* Faint corner glow */}
         <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/5 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative flex items-start gap-4">
-          <div className="p-2.5 bg-white/10 rounded-2xl border border-white/15 flex-shrink-0">
+        <div className="relative flex items-start gap-2.5 sm:gap-4">
+          <div className="p-1.5 sm:p-2.5 bg-white/10 rounded-xl sm:rounded-2xl border border-white/15 flex-shrink-0">
             <GraduationCap size={22} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/50 font-semibold">
               {branding.tagline || 'Report Card'}
             </p>
-            <h3 className="text-lg sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
+            <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
               {branding.schoolName || 'Report Card'}
             </h3>
-            <p className="text-sm text-white/70 mt-1.5 font-medium flex items-center gap-1.5">
+            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5">
               <Bookmark size={12} className="opacity-70" /> {title}
             </p>
           </div>
@@ -1177,7 +1406,7 @@ function ReportCard({
       </div>
 
       {/* ── Student info strip ── */}
-      <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+      <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 sm:gap-4 text-xs">
         <Field label="Student">{studentProfile.full_name}</Field>
         <Field label="Email">
           <span className="truncate block">{studentProfile.email}</span>
@@ -1195,15 +1424,15 @@ function ReportCard({
 
       {/* ── Subjects table ── */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[11px] sm:text-sm">
           <thead>
             <tr className="bg-slate-50 border-b-2 border-slate-200">
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Subject</th>
-              <th className="text-left px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Assessments</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Marks</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px] whitespace-nowrap">Out of</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">%</th>
-              <th className="text-center px-4 py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[11px]">Grade</th>
+              <th className="text-left px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Subject</th>
+              <th className="text-left px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Assessments</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px] whitespace-nowrap">Marks</th>
+              <th className="hidden sm:table-cell text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px] whitespace-nowrap">Out of</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">%</th>
+              <th className="text-center px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[11px]">Grade</th>
             </tr>
           </thead>
           <tbody>
@@ -1212,22 +1441,25 @@ function ReportCard({
               const grade = pct != null ? gradeLetter(pct) : null
               return (
                 <tr key={row.classroomId} className={`border-b border-slate-100 transition-colors ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50`}>
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 align-top">
                     <p className="font-semibold text-slate-800">{row.classroomTitle}</p>
                   </td>
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 align-top">
                     <AssessmentBreakdown entries={row.assessments} />
                   </td>
-                  <td className="px-4 py-3 text-center align-top font-bold text-slate-800 tabular-nums">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top font-bold text-slate-800 tabular-nums">
                     {row.hasAnyMark ? row.obtained : '—'}
+                    {row.hasAnyMark && (
+                      <span className="sm:hidden font-normal text-slate-400">/{row.max}</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-center align-top text-slate-500 tabular-nums">
+                  <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center align-top text-slate-500 tabular-nums">
                     {row.hasAnyMark ? row.max : '—'}
                   </td>
-                  <td className="px-4 py-3 text-center align-top tabular-nums font-semibold text-slate-700">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top tabular-nums font-semibold text-slate-700">
                     {pct != null ? `${pct.toFixed(1)}%` : '—'}
                   </td>
-                  <td className="px-4 py-3 text-center align-top">
+                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top">
                     {grade ? (
                       <span className={`inline-block min-w-[34px] px-2 py-0.5 rounded-md text-xs font-bold ${grade.bg} ${grade.fg}`}>
                         {grade.letter}
@@ -1240,17 +1472,18 @@ function ReportCard({
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 border-t-2 border-slate-200">
-              <td className="px-4 py-3 font-bold text-slate-700 text-sm uppercase tracking-wide" colSpan={2}>Total</td>
-              <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">
+              <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-slate-700 text-[11px] sm:text-sm uppercase tracking-wide" colSpan={2}>Total</td>
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
                 {totalMax > 0 ? totalObtained : '—'}
+                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{totalMax}</span>}
               </td>
-              <td className="px-4 py-3 text-center font-bold text-slate-800 tabular-nums">
+              <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
                 {totalMax > 0 ? totalMax : '—'}
               </td>
-              <td className="px-4 py-3 text-center font-bold text-slate-700 tabular-nums">
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-700 tabular-nums">
                 {totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-2 py-2 sm:px-4 sm:py-3 text-center">
                 {totalMax > 0 ? (
                   <span className={`inline-block min-w-[34px] px-2 py-0.5 rounded-md text-xs font-bold ${overallGrade.bg} ${overallGrade.fg}`}>
                     {overallGrade.letter}
@@ -1264,7 +1497,7 @@ function ReportCard({
 
       {/* ── Component roll-up ── */}
       {componentRollup.length > 0 && (
-        <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-200">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-slate-50/70 border-t border-slate-200">
           <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-2">
             Component Totals
           </p>
@@ -1293,7 +1526,7 @@ function ReportCard({
 
       {/* ── Result summary strip ── */}
       {totalMax > 0 && (
-        <div className="px-6 py-3 bg-white border-t border-slate-100 flex items-center gap-4 flex-wrap">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-white border-t border-slate-100 flex items-center gap-x-3 gap-y-1.5 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Award size={12} className="text-slate-400" /> Overall:
             <span className="font-bold text-slate-800">{overallPct.toFixed(2)}%</span>
@@ -1318,7 +1551,7 @@ function ReportCard({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.3 }}
-            className="mx-5 mb-5"
+            className="mx-3 mb-3 sm:mx-5 sm:mb-5"
           >
             <div className="relative rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden shadow-sm">
               {/* Decorative star cluster — top-right */}
@@ -1335,7 +1568,7 @@ function ReportCard({
                 <path d="M42 50l1.8 5.5h5.8l-4.7 3.4 1.8 5.5L42 60.9l-4.7 3.5 1.8-5.5-4.7-3.4h5.8z" className="text-slate-900" />
               </svg>
 
-              <div className="relative flex items-center gap-4 px-5 py-4">
+              <div className="relative flex items-center gap-3 sm:gap-4 px-3 py-3 sm:px-5 sm:py-4">
                 {/* Icon */}
                 <div className="w-11 h-11 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0">
                   <Award size={20} className="text-slate-700" />
@@ -1437,7 +1670,7 @@ function RemarksPanel({
   }
 
   return (
-    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
+    <div className="px-3 py-3 sm:px-5 sm:py-4 bg-slate-50 border-t border-slate-200">
       <div className="flex items-center gap-2 mb-3">
         <MessageSquare size={13} className="text-slate-500" />
         <h4 className="text-xs font-bold uppercase tracking-widest text-slate-600">Remarks</h4>

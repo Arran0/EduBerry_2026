@@ -2145,12 +2145,31 @@ export interface ClasswiseSubject {
   classroomId: string
   classroomTitle: string
   subject: string
+  /** What the subject is marked out of in full — every assessment under this
+   *  report card, whether or not a given student sat it. This is the column's
+   *  own denominator; a student who missed one is reported against the smaller
+   *  total they actually attempted. */
+  maxMarks: number
+  /** Distinct component names used across this subject's assessments, in the
+   *  order they are marked in. Empty when none of them are split. */
+  componentNames: string[]
+  /** Full max per component name, on the same basis as `maxMarks`. */
+  componentMax: Record<string, number>
+}
+
+/** One component name's marks within a subject, rolled up across that
+ *  subject's assessments — the same shape the student's card shows. */
+export interface ClasswiseComponentTotal {
+  name: string
+  obtained: number
+  max: number
 }
 
 export interface ClasswiseCellData {
   obtained: number
   max: number
   hasAnyMark: boolean
+  components: ClasswiseComponentTotal[]
 }
 
 export interface ClasswiseMarksResult {
@@ -2258,40 +2277,147 @@ export async function fetchClasswiseMarks(
 
   // Only keep classrooms that have at least one assessment under this report card title
   const classroomsWithAssessments = new Set(assessments.map(a => a.classroom_id))
-  const subjects: ClasswiseSubject[] = (classroomData as Array<{ id: string; title: string; subject: string }>)
+  const classroomsInScope = (classroomData as Array<{ id: string; title: string; subject: string }>)
     .filter(c => classroomsWithAssessments.has(c.id))
-    .map(c => ({ classroomId: c.id, classroomTitle: c.title, subject: c.subject }))
     .sort((a, b) => a.subject.localeCompare(b.subject))
 
-  if (subjects.length === 0) return { ...empty, students }
+  if (classroomsInScope.length === 0) return { ...empty, students }
 
   // Map assessmentId → classroomId for fast lookup
   const assessmentToClassroom = new Map<string, string>(
     assessments.map(a => [a.id, a.classroom_id])
   )
 
-  // 4. All marks for these assessments, restricted to students in this grade/section
-  const { data: markData } = await supabase
-    .from('classroom_assessment_marks')
-    .select('*')
-    .in('assessment_id', assessmentIds)
-    .in('student_id', studentIds)
+  // 4. The marks themselves, plus the component breakdown behind them. All
+  //    three key off the assessment ids, so they go out together.
+  const [{ data: markData }, componentsByAssessment, { data: componentMarkData }] = await Promise.all([
+    supabase
+      .from('classroom_assessment_marks')
+      .select('*')
+      .in('assessment_id', assessmentIds)
+      .in('student_id', studentIds),
+    fetchAssessmentComponents(assessmentIds),
+    supabase
+      .from('classroom_assessment_component_marks')
+      .select('*, classroom_assessment_components!inner(assessment_id)')
+      .in('classroom_assessment_components.assessment_id', assessmentIds)
+      .in('student_id', studentIds),
+  ])
 
-  // 5. Build the cell data matrix
+  /** An assessment reported at a conversion total contributes at that scale,
+   *  not the one it was marked at — and so do its components, by the same
+   *  factor, so the parts still add up to the whole. */
+  const scaleOf = (assessment: ClassroomAssessment): number => {
+    const conversion = assessment.conversion_total
+    const rawMax = Number(assessment.max_marks)
+    if (conversion == null || rawMax <= 0) return 1
+    return Number(conversion) / rawMax
+  }
+  const assessmentById = new Map(assessments.map(a => [a.id, a]))
+
+  const blankCell = (): ClasswiseCellData => ({ obtained: 0, max: 0, hasAnyMark: false, components: [] })
   const cellData: Record<string, Record<string, ClasswiseCellData>> = {}
+  const cellFor = (studentId: string, classroomId: string): ClasswiseCellData => {
+    const forStudent = cellData[studentId] ?? (cellData[studentId] = {})
+    return forStudent[classroomId] ?? (forStudent[classroomId] = blankCell())
+  }
+
+  // 5a. Totals.
   for (const mark of markData ?? []) {
+    const assessment = assessmentById.get(mark.assessment_id)
     const classroomId = assessmentToClassroom.get(mark.assessment_id)
-    if (!classroomId) continue
+    if (!assessment || !classroomId || mark.marks == null) continue
 
-    if (!cellData[mark.student_id]) cellData[mark.student_id] = {}
-    if (!cellData[mark.student_id][classroomId]) {
-      cellData[mark.student_id][classroomId] = { obtained: 0, max: 0, hasAnyMark: false }
+    const scale = scaleOf(assessment)
+    const cell = cellFor(mark.student_id, classroomId)
+    cell.obtained += Number(mark.marks) * scale
+    cell.max += Number(mark.max_marks) * scale
+    cell.hasAnyMark = true
+  }
+
+  // 5b. The component roll-up, by name, within each subject. Components are
+  //     matched by name so "Lab" across three unit tests reads as one figure,
+  //     exactly as it does on the student's own report card.
+  const componentById = new Map<string, AssessmentComponent>()
+  const componentNamesBySubject = new Map<string, string[]>()
+  const componentMaxBySubject = new Map<string, Record<string, number>>()
+  for (const [assessmentId, list] of Object.entries(componentsByAssessment)) {
+    const classroomId = assessmentToClassroom.get(assessmentId)
+    const assessment = assessmentById.get(assessmentId)
+    for (const c of list) {
+      componentById.set(c.id, c)
+      if (!classroomId || !assessment) continue
+      const names = componentNamesBySubject.get(classroomId) ?? []
+      if (!names.includes(c.name)) names.push(c.name)
+      componentNamesBySubject.set(classroomId, names)
+      const maxes = componentMaxBySubject.get(classroomId) ?? {}
+      maxes[c.name] = (maxes[c.name] ?? 0) + Number(c.max_marks) * scaleOf(assessment)
+      componentMaxBySubject.set(classroomId, maxes)
     }
+  }
 
-    if (mark.marks != null) {
-      cellData[mark.student_id][classroomId].obtained += Number(mark.marks)
-      cellData[mark.student_id][classroomId].max += Number(mark.max_marks)
-      cellData[mark.student_id][classroomId].hasAnyMark = true
+  // Each subject's full denominator, from the assessments themselves rather
+  // than from anybody's marks.
+  const subjectMax = new Map<string, number>()
+  for (const a of assessments) {
+    const effective = Number(a.conversion_total ?? a.max_marks)
+    subjectMax.set(a.classroom_id, (subjectMax.get(a.classroom_id) ?? 0) + effective)
+  }
+
+  for (const row of componentMarkData ?? []) {
+    const component = componentById.get(row.component_id)
+    if (!component || row.is_absent || row.marks == null) continue
+    const assessment = assessmentById.get(component.assessment_id)
+    const classroomId = assessmentToClassroom.get(component.assessment_id)
+    if (!assessment || !classroomId) continue
+
+    const scale = scaleOf(assessment)
+    const cell = cellFor(row.student_id, classroomId)
+    const existing = cell.components.find(c => c.name === component.name)
+    const target = existing ?? { name: component.name, obtained: 0, max: 0 }
+    target.obtained += Number(row.marks) * scale
+    target.max += Number(component.max_marks) * scale
+    if (!existing) cell.components.push(target)
+  }
+
+  // Scaling can leave long tails behind (a /100 test reported out of 30 puts
+  // thirds into every figure), so each is rounded once, here, rather than at
+  // each of the places that renders it.
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  for (const byClassroom of Object.values(cellData)) {
+    for (const cell of Object.values(byClassroom)) {
+      cell.obtained = round2(cell.obtained)
+      cell.max = round2(cell.max)
+      for (const c of cell.components) {
+        c.obtained = round2(c.obtained)
+        c.max = round2(c.max)
+      }
+    }
+  }
+
+  const subjects: ClasswiseSubject[] = classroomsInScope.map(c => {
+    const maxes = componentMaxBySubject.get(c.id) ?? {}
+    for (const name of Object.keys(maxes)) maxes[name] = round2(maxes[name])
+    return {
+      classroomId: c.id,
+      classroomTitle: c.title,
+      subject: c.subject,
+      maxMarks: round2(subjectMax.get(c.id) ?? 0),
+      componentNames: componentNamesBySubject.get(c.id) ?? [],
+      componentMax: maxes,
+    }
+  })
+
+  // Keep every cell's components in the subject's own order, so a column reads
+  // down consistently even where a student is missing one of them.
+  for (const subject of subjects) {
+    if (subject.componentNames.length === 0) continue
+    for (const byClassroom of Object.values(cellData)) {
+      const cell = byClassroom[subject.classroomId]
+      if (!cell) continue
+      cell.components.sort(
+        (a, b) => subject.componentNames.indexOf(a.name) - subject.componentNames.indexOf(b.name)
+      )
     }
   }
 
