@@ -1,12 +1,9 @@
 /**
  * Report-card grade presentation — the CBSE-style letter band for a percentage,
- * the date format the cards print, and the component roll-up behind the
- * breakdown they show. Shared by the academics Report Cards section and the
- * full-page academic record, which carried byte-identical copies of the first
- * two and render the third identically.
+ * the date format the cards print, and the rescaling both the total-conversion
+ * column and an imported marksheet need. Shared by the academics Report Cards
+ * section, the full-page academic record and the classroom marksheet.
  */
-
-import type { StudentReportCardEntry } from './classrooms'
 
 export interface GradeBand {
   letter: string
@@ -56,35 +53,4 @@ export function rescaleMark(
   if (marks == null || !isFinite(marks)) return null
   if (!isFinite(fromMax) || fromMax <= 0 || !isFinite(toMax) || toMax < 0) return null
   return Math.round((marks / fromMax) * toMax * 100) / 100
-}
-
-/** One component name's marks rolled up across a whole report card. */
-export interface ComponentTotal {
-  name: string
-  obtained: number
-  max: number
-}
-
-/**
- * Rolls a report card's assessment components up by name, so a card whose
- * assessments were each split into "Lab" and "Examination" reports how the
- * student did on each across every subject, not just test by test.
- *
- * Only components the student actually sat count: an ungraded or absent part
- * contributes to neither side of the fraction, so a term still half-marked
- * reads as the percentage earned so far rather than a collapsing one.
- */
-export function componentTotals(entries: StudentReportCardEntry[]): ComponentTotal[] {
-  const byName = new Map<string, ComponentTotal>()
-  for (const entry of entries) {
-    for (const c of entry.components) {
-      const cm = entry.componentMarks[c.id]
-      if (!cm || cm.is_absent || cm.marks == null) continue
-      const row = byName.get(c.name) ?? { name: c.name, obtained: 0, max: 0 }
-      row.obtained += Number(cm.marks)
-      row.max += Number(c.max_marks)
-      byName.set(c.name, row)
-    }
-  }
-  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
 }

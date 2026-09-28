@@ -14,6 +14,7 @@ import { fetchStaffDirectory } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { currentAcademicYear } from '@/lib/fees'
 import Avatar from '@/components/Avatar'
+import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 import { useRouter } from 'next/navigation'
 
 // Loaded on demand — the read-only "self" view of the same calendar the
@@ -82,6 +83,13 @@ function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
 function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+  // Freeze the page underneath. Without this the card floats over a document
+  // that is still free to scroll — and over a horizontally scrolled table, such
+  // as the class-marks matrix, the page visibly lurches as the card opens and
+  // again as it closes. The lock is refcounted, so the statement modals this
+  // card can open on top of it nest safely.
+  useBodyScrollLock()
+
   const { profile: viewerProfile } = useAuth()
   const router = useRouter()
 

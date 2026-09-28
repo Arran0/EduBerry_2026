@@ -65,6 +65,26 @@ function componentRowTotal(
   return entered ? total : null
 }
 
+/**
+ * A stable fingerprint of everything the marksheet edits, so leaving it can
+ * tell whether anything actually changed. Built by walking students and
+ * components in order rather than serialising the state objects, whose key
+ * order is an implementation detail.
+ */
+export function marksheetSnapshot(
+  studentList: (ClassroomMember & { user: UserProfile })[],
+  comps: AssessmentComponent[],
+  marks: Record<string, { marks: string; isAbsent: boolean }>,
+  componentMarks: Record<string, Record<string, string>>,
+): string {
+  return studentList.map(s => {
+    const m = marks[s.user_id]
+    const total = m?.isAbsent ? 'AB' : (m?.marks ?? '').trim()
+    const cells = comps.map(c => (componentMarks[s.user_id]?.[c.id] ?? '').trim()).join(',')
+    return `${s.user_id}:${total}|${cells}`
+  }).join(';')
+}
+
 /** A mark cell is invalid if it is not a number, is negative, or overshoots the
  *  maximum it is being marked out of. A blank cell is simply not entered yet. */
 function markError(value: string, max: number): string | null {
@@ -119,6 +139,11 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [editingConversion, setEditingConversion] = useState(false)
   const [conversionDraft, setConversionDraft] = useState('')
   const [savingConversion, setSavingConversion] = useState(false)
+
+  // The sheet as it was last read from (or written to) the database. Anything
+  // that differs from this is unsaved work, and closing asks about it.
+  const savedSnapshot = useRef('')
+  const [confirmingClose, setConfirmingClose] = useState(false)
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -304,6 +329,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     }
     setMarks(marksMap)
     setComponentMarks(componentMap)
+    savedSnapshot.current = marksheetSnapshot(studentList, comps, marksMap, componentMap)
   }
 
   const handleDownload = () => {
@@ -394,7 +420,25 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       })))
     }
 
+    savedSnapshot.current = marksheetSnapshot(students, components, marks, componentMarks)
     setSaving(false)
+    setShowMarksheet(null)
+    setConfirmingClose(false)
+  }
+
+  /** True when the sheet on screen differs from what is stored. */
+  const hasUnsavedMarks = showMarksheet != null
+    && marksheetSnapshot(students, components, marks, componentMarks) !== savedSnapshot.current
+
+  /** Closing a marksheet with marks typed into it and never saved is the one
+   *  mistake here that silently loses a teacher's work, so it asks first. */
+  const requestCloseMarksheet = () => {
+    if (hasUnsavedMarks) { setConfirmingClose(true); return }
+    setShowMarksheet(null)
+  }
+
+  const discardAndClose = () => {
+    setConfirmingClose(false)
     setShowMarksheet(null)
   }
 
@@ -794,7 +838,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       <AnimatePresence>
         {showMarksheet && (
           <ModalShell
-            onClose={() => setShowMarksheet(null)}
+            onClose={requestCloseMarksheet}
             size="2xl"
             title="Marksheet"
             subtitle={(() => {
@@ -809,7 +853,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
           >
               {/* Toolbar — its own wrapping row so phones aren't cramped */}
               {students.length > 0 && (
-                <div className="sticky top-0 z-20 px-5 py-2.5 bg-white/90 backdrop-blur-xl flex items-center gap-1.5 flex-wrap border-b border-slate-100">
+                <div className="sticky top-0 z-20 px-2 sm:px-5 py-2 bg-white/90 backdrop-blur-xl flex items-center gap-1 sm:gap-1.5 flex-wrap border-b border-slate-100">
                   <button
                     onClick={() => {
                       if (marksheetSort === 'marks') {
@@ -819,7 +863,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         setMarksheetSortDir('desc')
                       }
                     }}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
                       marksheetSort === 'marks'
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -840,7 +884,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         setMarksheetSortDir('asc')
                       }
                     }}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
                       marksheetSort === 'name'
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -857,7 +901,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       are marked separately and added into one total. */}
                   <button
                     onClick={() => setShowComponentEditor(v => !v)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
                       showComponentEditor || components.length > 0
                         ? 'bg-indigo-100 text-indigo-700'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -872,7 +916,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       inline; never overridable per student. Once the
                       assessment is split it is the sum of its parts, so it is
                       changed by re-weighting a component, not typed here. */}
-                  <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-700">
+                  <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 rounded-full text-[11px] font-semibold text-slate-700">
                     {components.length > 0 ? (
                       <span title="Set by the component weights">Max {assessmentMaxMarks}</span>
                     ) : editingMaxMarks ? (
@@ -911,7 +955,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
                   {/* Total conversion — an optional second maximum the marks
                       are reported at. Blank it out to drop the column. */}
-                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
                     conversionTotal != null ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
                   }`}>
                     {editingConversion ? (
@@ -959,7 +1003,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
                   <button
                     onClick={handleDownload}
-                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full text-xs font-semibold transition-colors"
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full text-[11px] font-semibold transition-colors"
                     title="Export marksheet as CSV"
                   >
                     <Download size={13} /> Export
@@ -970,7 +1014,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   <button
                     onClick={() => handleSaveMarks(showMarksheet)}
                     disabled={saving || hasInvalidMarks}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold shadow-md shadow-amber-500/25 active:scale-95 transition-all disabled:opacity-60 disabled:shadow-none"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-[11px] font-bold shadow-md shadow-amber-500/25 active:scale-95 transition-all disabled:opacity-60 disabled:shadow-none"
                     title="Save marks"
                   >
                     <Save size={13} /> {saving ? 'Saving…' : 'Save'}
@@ -988,12 +1032,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden border-b border-indigo-100 bg-indigo-50/40"
                   >
-                    <div className="px-5 py-3.5 space-y-2.5">
+                    <div className="px-2 sm:px-5 py-3 space-y-2">
                       <div className="flex items-start gap-2">
                         <SplitSquareHorizontal size={14} className="text-indigo-500 mt-0.5 flex-shrink-0" />
                         <div>
-                          <p className="text-xs font-bold text-slate-700">Components</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                          <p className="text-[11px] font-bold text-slate-700">Components</p>
+                          <p className="text-[9px] text-slate-500 leading-relaxed">
                             Split this assessment into parts marked separately — e.g. Lab out of 20 and
                             Examination out of 80. The assessment is then scored out of their combined total.
                             Use the <FileInput size={10} className="inline -mt-0.5 text-indigo-500" /> button to
@@ -1003,7 +1047,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       </div>
 
                       {componentDrafts.length === 0 ? (
-                        <p className="text-[11px] text-slate-500 italic">
+                        <p className="text-[9px] text-slate-500 italic">
                           No components — the assessment is marked as a single score.
                         </p>
                       ) : (
@@ -1023,7 +1067,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                     onChange={(e) => setComponentDrafts(prev =>
                                       prev.map((d, i) => i === idx ? { ...d, name: e.target.value } : d))}
                                     placeholder="Component name"
-                                    className="w-full border border-slate-200 rounded-lg pl-2.5 pr-9 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                    className="w-full border border-slate-200 rounded-lg pl-2.5 pr-9 py-1.5 text-[11px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                                   />
                                   {/* Import: fill this component from another
                                       marksheet in the classroom instead of
@@ -1045,14 +1089,14 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                   </button>
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                  <span className="text-[11px] text-slate-500">out of</span>
+                                  <span className="text-[9px] text-slate-500">out of</span>
                                   <input
                                     type="number"
                                     min={1}
                                     value={draft.maxMarks}
                                     onChange={(e) => setComponentDrafts(prev =>
                                       prev.map((d, i) => i === idx ? { ...d, maxMarks: e.target.value } : d))}
-                                    className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                    className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                                   />
                                 </div>
                                 <button
@@ -1072,7 +1116,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                   it is saved — including the rescaling, which
                                   is the part worth checking. */}
                               {draft.imported && (
-                                <div className="mt-1 ml-0.5 flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                                <div className="mt-1 ml-0.5 flex items-center gap-1.5 flex-wrap text-[9px] text-slate-500">
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-semibold">
                                     <FileInput size={9} /> {draft.imported.title}
                                   </span>
@@ -1112,7 +1156,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                         }
                                       }}
                                       placeholder="Search this classroom's marksheets…"
-                                      className="flex-1 min-w-0 text-xs bg-transparent focus:outline-none text-slate-700 placeholder:text-slate-400"
+                                      className="flex-1 min-w-0 text-[11px] bg-transparent focus:outline-none text-slate-700 placeholder:text-slate-400"
                                     />
                                     <button
                                       type="button"
@@ -1123,7 +1167,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                     </button>
                                   </div>
                                   {importCandidates.length === 0 ? (
-                                    <p className="px-2.5 py-3 text-[11px] text-slate-400 text-center">
+                                    <p className="px-2.5 py-3 text-[9px] text-slate-400 text-center">
                                       {assessments.length <= 1
                                         ? 'This is the only assessment in the classroom.'
                                         : 'No other marksheet matches that.'}
@@ -1139,8 +1183,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                           className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-indigo-50/60 transition-colors disabled:opacity-50"
                                         >
                                           <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-semibold text-slate-700 truncate">{candidate.title}</p>
-                                            <p className="text-[10px] text-slate-400">
+                                            <p className="text-[11px] font-semibold text-slate-700 truncate">{candidate.title}</p>
+                                            <p className="text-[9px] text-slate-400">
                                               out of {Number(candidate.max_marks)}
                                               {candidate.date ? ` · ${new Date(candidate.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                                               {candidate.report_card_title ? ` · ${candidate.report_card_title}` : ''}
@@ -1162,7 +1206,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       )}
 
                       {componentDraftError && (
-                        <p className="flex items-center gap-1.5 text-[11px] text-red-600 font-medium">
+                        <p className="flex items-center gap-1.5 text-[9px] text-red-600 font-medium">
                           <AlertTriangle size={12} className="flex-shrink-0" /> {componentDraftError}
                         </p>
                       )}
@@ -1177,7 +1221,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                             setImportPickerRow(componentDrafts.length)
                             setImportQuery('')
                           }}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-[11px] font-semibold hover:bg-indigo-50 transition-colors"
                         >
                           <Plus size={12} /> Add component
                         </button>
@@ -1193,7 +1237,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                             setShowComponentEditor(false)
                             setComponentDrafts(components.map(c => ({ id: c.id, name: c.name, maxMarks: String(c.max_marks) })))
                           }}
-                          className="text-xs text-slate-600 hover:text-slate-900 px-2"
+                          className="text-[11px] text-slate-600 hover:text-slate-900 px-2"
                         >
                           Cancel
                         </button>
@@ -1201,7 +1245,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                           type="button"
                           onClick={handleSaveComponents}
                           disabled={savingComponents || componentDraftError != null}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50"
                         >
                           <Save size={12} /> {savingComponents ? 'Saving…' : 'Save components'}
                         </button>
@@ -1212,7 +1256,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               </AnimatePresence>
 
                 {students.length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-6">No students in this classroom</p>
+                  <p className="text-[11px] text-slate-500 text-center py-6">No students in this classroom</p>
                 ) : (
                   (() => {
                     const split = components.length > 0
@@ -1247,40 +1291,47 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     return (
                   <>
                     {hasInvalidMarks && (
-                      <div className="mx-5 mt-2.5 flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-medium">
+                      <div className="mx-2 sm:mx-5 mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 border border-red-100 rounded-lg text-[9px] text-red-600 font-medium">
                         <AlertTriangle size={13} className="flex-shrink-0" /> Some marks are invalid — fix them before saving.
                       </div>
                     )}
 
                     {/* Dense, excel-like table — small row height so far more
-                        students are visible at once without scrolling. */}
-                    <div className="overflow-x-auto px-5 pt-2.5 pb-1">
-                      <table className="w-full text-xs border-collapse">
+                        students are visible at once without scrolling.
+                        Exactly two type sizes throughout: 11px for every
+                        figure and name, 9px for every label. Each column says
+                        what it is marked out of in its own heading, so no row
+                        has to repeat it. */}
+                    <div className="overflow-x-auto px-2 sm:px-5 pt-2 pb-1">
+                      <table className="w-full text-[11px] border-collapse">
                         <thead>
-                          <tr className="text-left text-[10px] uppercase tracking-wide text-slate-600 font-bold">
-                            <th className="py-1.5 pr-2 w-7 font-bold">#</th>
-                            <th className="py-1.5 pr-2 font-bold">Student</th>
+                          <tr className="text-left text-[9px] uppercase tracking-wide text-slate-600 font-bold align-bottom">
+                            <th className="hidden sm:table-cell py-1 pr-2 w-7 font-bold">#</th>
+                            <th className="py-1 pr-1.5 font-bold">Student</th>
                             {components.map(c => (
-                              <th key={c.id} className="py-1.5 px-2 text-center w-24 font-bold">
+                              <th key={c.id} className="py-1 px-1 sm:px-2 text-center w-[58px] sm:w-24 font-bold">
                                 <span className="block truncate" title={c.name}>{c.name}</span>
-                                <span className="block text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
-                                  out of {Number(c.max_marks)}
+                                <span className="block font-semibold text-slate-400 normal-case tracking-normal">
+                                  /{Number(c.max_marks)}
                                 </span>
                               </th>
                             ))}
-                            <th className={`py-1.5 px-2 text-center font-bold ${split ? 'w-20 border-l border-slate-200' : 'w-28'}`}>
-                              {split ? 'Total' : 'Marks'}
+                            <th className={`py-1 px-1 sm:px-2 text-center font-bold ${split ? 'w-[52px] sm:w-20 border-l border-slate-200' : 'w-[62px] sm:w-28'}`}>
+                              <span className="block">{split ? 'Total' : 'Marks'}</span>
+                              <span className="block font-semibold text-slate-400 normal-case tracking-normal">
+                                /{assessmentMaxMarks}
+                              </span>
                             </th>
                             {conversionTotal != null && (
-                              <th className="py-1.5 px-2 text-center w-20 font-bold text-violet-700">
-                                <span className="block">Converted</span>
-                                <span className="block text-[9px] font-semibold text-violet-400 normal-case tracking-normal">
-                                  out of {conversionTotal}
+                              <th className="py-1 px-1 sm:px-2 text-center w-[54px] sm:w-20 font-bold text-violet-700">
+                                <span className="block">Conv.</span>
+                                <span className="block font-semibold text-violet-400 normal-case tracking-normal">
+                                  /{conversionTotal}
                                 </span>
                               </th>
                             )}
-                            <th className="py-1.5 px-2 text-center w-14 font-bold">%</th>
-                            <th className="py-1.5 pl-2 text-center w-12 font-bold">AB</th>
+                            <th className="py-1 px-1 sm:px-2 text-center w-11 sm:w-14 font-bold">%</th>
+                            <th className="py-1 pl-1 sm:pl-2 text-center w-9 sm:w-12 font-bold">AB</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1297,10 +1348,17 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                 key={student.user_id}
                                 className={`border-b border-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-amber-50/40`}
                               >
-                                <td className="py-1 pr-2 text-slate-500 tabular-nums align-middle">{idx + 1}</td>
-                                <td className="py-1 pr-2 align-middle">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={22} userId={student.user_id} />
+                                <td className="hidden sm:table-cell py-1 pr-2 text-slate-500 tabular-nums align-middle">{idx + 1}</td>
+                                <td className="py-1 pr-1.5 align-middle">
+                                  {/* A fixed width from the inside: a table
+                                      cell ignores max-width, so without it the
+                                      longest name decides how little room the
+                                      marks get on a phone. */}
+                                  <div className="w-[104px] sm:w-auto flex items-center gap-1.5 sm:gap-2 min-w-0">
+                                    <span className="hidden sm:inline-flex">
+                                      <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={22} userId={student.user_id} />
+                                    </span>
+                                    <span className="sm:hidden text-slate-400 tabular-nums w-3.5 flex-shrink-0 text-[9px]">{idx + 1}</span>
                                     <span className="truncate font-medium text-slate-700">{student.user.full_name}</span>
                                   </div>
                                 </td>
@@ -1312,7 +1370,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                   const raw = componentMarks[student.user_id]?.[c.id] ?? ''
                                   const cellError = mark.isAbsent ? null : markError(raw, Number(c.max_marks))
                                   return (
-                                    <td key={c.id} className="py-1 px-2 align-middle">
+                                    <td key={c.id} className="py-1 px-1 sm:px-2 align-middle">
                                       <div className="flex items-center justify-center">
                                         <input
                                           ref={(el) => { markInputRefs.current[cellKey] = el }}
@@ -1331,7 +1389,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                           onKeyDown={(e) => handleMarkKeyDown(e, cellKey, order)}
                                           placeholder={mark.isAbsent ? 'AB' : '—'}
                                           title={cellError ?? `${c.name} — out of ${Number(c.max_marks)}`}
-                                          className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
+                                          className={`w-[52px] sm:w-14 border rounded-md sm:rounded-lg px-1 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
                                             cellError
                                               ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
                                               : 'border-slate-200 focus:ring-amber-400/50'
@@ -1342,7 +1400,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                   )
                                 })}
 
-                                <td className={`py-1 px-2 align-middle ${split ? 'border-l border-slate-200' : ''}`}>
+                                <td className={`py-1 px-1 sm:px-2 align-middle ${split ? 'border-l border-slate-200' : ''}`}>
                                   {split ? (
                                     // Derived, never typed: the total is the sum
                                     // of the components above it.
@@ -1350,15 +1408,13 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                       {mark.isAbsent ? (
                                         <span className="text-slate-400">AB</span>
                                       ) : num != null ? (
-                                        <span className="font-bold text-slate-800">
-                                          {num}<span className="font-normal text-slate-400">/{assessmentMaxMarks}</span>
-                                        </span>
+                                        <span className="font-bold text-slate-800">{num}</span>
                                       ) : (
-                                        <span className="text-slate-400">—/{assessmentMaxMarks}</span>
+                                        <span className="text-slate-400">—</span>
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="flex items-center justify-center gap-1">
+                                    <div className="flex items-center justify-center">
                                       <input
                                         ref={(el) => { markInputRefs.current[student.user_id] = el }}
                                         type="number"
@@ -1373,43 +1429,40 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                         onKeyDown={(e) => handleMarkKeyDown(e, student.user_id, order)}
                                         placeholder={mark.isAbsent ? 'AB' : '—'}
                                         title={error ?? undefined}
-                                        className={`w-14 border rounded-lg px-1.5 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
+                                        className={`w-[52px] sm:w-14 border rounded-md sm:rounded-lg px-1 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
                                           error
                                             ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
                                             : 'border-slate-200 focus:ring-amber-400/50'
                                         }`}
                                       />
-                                      <span className="text-slate-500">/{assessmentMaxMarks}</span>
                                     </div>
                                   )}
                                 </td>
                                 {conversionTotal != null && (
                                   // Derived on read from the total — nothing is
                                   // ever stored at the converted scale.
-                                  <td className="py-1 px-2 text-center align-middle tabular-nums">
+                                  <td className="py-1 px-1 sm:px-2 text-center align-middle tabular-nums">
                                     {mark.isAbsent ? (
                                       <span className="text-slate-400">AB</span>
                                     ) : converted != null ? (
-                                      <span className="font-bold text-violet-700">
-                                        {converted}<span className="font-normal text-violet-300">/{conversionTotal}</span>
-                                      </span>
+                                      <span className="font-bold text-violet-700">{converted}</span>
                                     ) : (
-                                      <span className="text-slate-400">—/{conversionTotal}</span>
+                                      <span className="text-slate-400">—</span>
                                     )}
                                   </td>
                                 )}
-                                <td className="py-1 px-2 text-center align-middle">
+                                <td className="py-1 px-1 sm:px-2 text-center align-middle">
                                   {mark.isAbsent ? (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-slate-200 text-slate-500">AB</span>
+                                    <span className="text-[9px] px-1 py-0.5 rounded-full font-bold bg-slate-200 text-slate-500">AB</span>
                                   ) : pct != null ? (
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                    <span className={`text-[9px] px-1 py-0.5 rounded-full font-bold ${
                                       pct >= 80 ? 'bg-green-100 text-green-700' :
                                       pct >= 60 ? 'bg-amber-100 text-amber-700' :
                                       'bg-red-100 text-red-700'
-                                    }`}>{pct}%</span>
+                                    }`}>{pct}</span>
                                   ) : <span className="text-slate-400">—</span>}
                                 </td>
-                                <td className="py-1 pl-2 text-center align-middle">
+                                <td className="py-1 pl-1 sm:pl-2 text-center align-middle">
                                   <button
                                     type="button"
                                     tabIndex={-1}
@@ -1445,11 +1498,11 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       </table>
                     </div>
 
-                    <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+                    <div className="px-2 sm:px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
                       <button
                         onClick={() => handleSaveMarks(showMarksheet)}
                         disabled={saving || hasInvalidMarks}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-semibold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all disabled:opacity-60 disabled:shadow-none"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all disabled:opacity-60 disabled:shadow-none"
                       >
                         <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
                       </button>
@@ -1458,6 +1511,50 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     )
                   })()
                 )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
+
+      {/* Unsaved marks on the way out */}
+      <AnimatePresence>
+        {confirmingClose && showMarksheet && (
+          <ModalShell
+            onClose={() => setConfirmingClose(false)}
+            size="sm"
+            title="Save your marks?"
+            subtitle="This marksheet has changes that have not been saved."
+            icon={<AlertTriangle size={16} />}
+            iconClassName="bg-amber-100 text-amber-600"
+            zClass="z-[70]"
+          >
+            <div className="space-y-2.5">
+              {hasInvalidMarks && (
+                <p className="flex items-start gap-1.5 text-xs text-red-600 font-medium">
+                  <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                  Some marks are invalid, so they cannot be saved yet. Go back and fix them, or
+                  close without saving.
+                </p>
+              )}
+              <button
+                onClick={() => handleSaveMarks(showMarksheet)}
+                disabled={saving || hasInvalidMarks}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                <Save size={14} /> {saving ? 'Saving…' : 'Save and close'}
+              </button>
+              <button
+                onClick={discardAndClose}
+                className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
+              >
+                Close without saving
+              </button>
+              <button
+                onClick={() => setConfirmingClose(false)}
+                className="w-full py-2 text-slate-500 hover:text-slate-800 text-sm font-medium"
+              >
+                Keep editing
+              </button>
+            </div>
           </ModalShell>
         )}
       </AnimatePresence>

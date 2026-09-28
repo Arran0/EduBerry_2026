@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   markCell, num, overallOf, sortStudents, averageOf, buildExportTable,
-  ClasswiseSort,
+  allComponentNames, ClasswiseSort,
 } from './classwiseMarks'
 import type { ClasswiseCellData, ClasswiseSubject } from './classrooms'
 import type { UserProfile } from './supabase'
@@ -206,5 +206,74 @@ describe('buildExportTable', () => {
       const t = buildExportTable(students, subjects, cellData, { includeComponents, sort: byName })
       for (const row of t.rows) expect(row).toHaveLength(t.headers.length)
     }
+  })
+})
+
+describe('allComponentNames', () => {
+  it('lists each name once, in the order it is first marked in', () => {
+    expect(allComponentNames(subjects)).toEqual(['Lab', 'Examination'])
+  })
+
+  it('is empty when nothing is split', () => {
+    expect(allComponentNames([maths])).toEqual([])
+  })
+})
+
+describe('buildExportTable with components dropped', () => {
+  const dropLab = { includeComponents: true, sort: byName, excludedComponents: ['Lab'] }
+
+  it('takes the dropped component out of the subject total, not just its column', () => {
+    const t = buildExportTable(students, subjects, cellData, dropLab)
+    // Physics was 90/100 with Lab's 18/20 in it; without Lab it is 72/80.
+    expect(t.headers).toContain('Physics (out of 80)')
+    expect(t.headers).not.toContain('Physics · Lab (out of 20)')
+    const ada = t.rows.find(r => r[0] === 'Ada Lovelace')!
+    expect(ada.slice(3, 6)).toEqual(['72 (90.0%)', '72 (90.0%)', '80 (80.0%)'])
+  })
+
+  it('carries the drop through to the overall total and its heading', () => {
+    const t = buildExportTable(students, subjects, cellData, dropLab)
+    // Overall was /200; Physics loses Lab's 20, so the column is /180.
+    expect(t.headers).toContain('Overall (out of 180)')
+    const ada = t.rows.find(r => r[0] === 'Ada Lovelace')!
+    // 72 + 80 out of 80 + 100.
+    expect(ada.at(-3)).toBe('152 (84.4%)')
+    expect(ada.at(-2)).toBe('84.4%')
+  })
+
+  it('leaves a subject with no components alone', () => {
+    const t = buildExportTable(students, subjects, cellData, dropLab)
+    expect(t.headers).toContain('Maths (out of 100)')
+    expect(t.rows.find(r => r[0] === 'Ada Lovelace')!.at(-4)).toBe('80 (80.0%)')
+  })
+
+  it('reports nothing for a student whose only marks were dropped', () => {
+    // Chen sat the lab and nothing else in Physics.
+    const t = buildExportTable(students, subjects, cellData, dropLab)
+    const chen = t.rows.find(r => r[0] === 'Chen Wei')!
+    expect(chen.slice(3, 5)).toEqual(['—', '—'])
+    expect(chen.at(-1)).toBe('—')
+  })
+
+  it('drops every component when they are all excluded', () => {
+    const t = buildExportTable(students, subjects, cellData, {
+      includeComponents: true, sort: byName, excludedComponents: ['Lab', 'Examination'],
+    })
+    expect(t.headers).toContain('Physics (out of 0)')
+    expect(t.headers.some(h => h.includes('·'))).toBe(false)
+    // Only Maths is left to report.
+    expect(t.rows.find(r => r[0] === 'Ada Lovelace')!.at(-3)).toBe('80 (80.0%)')
+  })
+
+  it('is a no-op when the excluded list is empty', () => {
+    const plain = buildExportTable(students, subjects, cellData, { includeComponents: true, sort: byName })
+    const empty = buildExportTable(students, subjects, cellData,
+      { includeComponents: true, sort: byName, excludedComponents: [] })
+    expect(empty).toEqual(plain)
+  })
+
+  it('still gives every row as many cells as there are headings', () => {
+    const t = buildExportTable(students, subjects, cellData, dropLab)
+    for (const row of t.rows) expect(row).toHaveLength(t.headers.length)
   })
 })

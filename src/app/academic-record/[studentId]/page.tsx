@@ -2,8 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ArrowLeft, Award, Bookmark, FileText, GraduationCap,
-  Loader2, MessageSquare, Printer, Save, Trash2,
+  ArrowLeft, Award, Bookmark, FileText, GraduationCap, Loader2, Printer,
 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -16,12 +15,11 @@ import {
   fetchReportCardsForStudent,
   fetchAvailableAcademicYearsForStudent,
   fetchRemarksForStudent,
-  upsertRemark,
-  deleteRemark,
 } from '@/lib/classrooms'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
-import { gradeLetter, formatShortDate, componentTotals } from '@/lib/reportCardGrading'
+import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
+import RemarksPanel from '@/components/academics/RemarksPanel'
 import { recordReportCardVisit } from '@/lib/reportCardVisits'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -263,14 +261,10 @@ function ReportCardBlock({
   const overallPct    = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
   const overallGrade  = gradeLetter(overallPct)
 
-  // Components rolled up by name across every subject — how the student did on
-  // each part of the split overall, not just assessment by assessment.
-  const componentRollup = useMemo(() => componentTotals(entries), [entries])
-
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
 
   return (
-    <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm">
+    <div className="-mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm">
 
       {/* Header */}
       <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-3 py-3 sm:px-6 sm:py-5 text-white">
@@ -393,35 +387,6 @@ function ReportCardBlock({
         </table>
       </div>
 
-      {/* Component roll-up */}
-      {componentRollup.length > 0 && (
-        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-slate-50/70 border-t border-slate-200">
-          <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-2">
-            Component Totals
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {componentRollup.map(c => {
-              const pct = c.max > 0 ? (c.obtained / c.max) * 100 : 0
-              const g = gradeLetter(pct)
-              return (
-                <div
-                  key={c.name}
-                  className="flex items-baseline gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5"
-                >
-                  <span className="text-xs font-semibold text-slate-700">{c.name}</span>
-                  <span className="text-sm font-bold text-slate-800 tabular-nums">
-                    {c.obtained}<span className="text-slate-400 font-medium">/{c.max}</span>
-                  </span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${g.bg} ${g.fg}`}>
-                    {pct.toFixed(0)}%
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Overall strip */}
       {totalMax > 0 && (
         <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-white border-t border-slate-100 flex items-center gap-x-3 gap-y-1.5 sm:gap-4 flex-wrap">
@@ -442,7 +407,7 @@ function ReportCardBlock({
       )}
 
       {/* Remarks */}
-      <RemarksBlock
+      <RemarksPanel
         remarks={remarks}
         studentId={student.id}
         reportCardTitle={title}
@@ -451,138 +416,6 @@ function ReportCardBlock({
         canEdit={canEditRemarks}
         onChanged={onRemarksChanged}
       />
-    </div>
-  )
-}
-
-// ─── Remarks block ─────────────────────────────────────────────────────────────
-
-function RemarksBlock({
-  remarks, studentId, reportCardTitle, viewerId, viewer, canEdit, onChanged,
-}: {
-  remarks: ReportCardRemark[]
-  studentId: string
-  reportCardTitle: string
-  viewerId: string
-  viewer: UserProfile
-  canEdit: boolean
-  onChanged: () => void
-}) {
-  const myRemark = remarks.find(r => r.author_id === viewerId)
-  const others   = remarks.filter(r => r.author_id !== viewerId)
-
-  const [draft,      setDraft]      = useState(myRemark?.remark ?? '')
-  const [saving,     setSaving]     = useState(false)
-  const [savedFlash, setSavedFlash] = useState(false)
-  const [editing,    setEditing]    = useState(false)
-
-  useEffect(() => { setDraft(myRemark?.remark ?? '') }, [myRemark?.remark])
-
-  const handleSave = async () => {
-    if (saving) return
-    setSaving(true)
-    await upsertRemark(studentId, reportCardTitle, viewerId, draft)
-    setSaving(false); setSavedFlash(true); setEditing(false)
-    setTimeout(() => setSavedFlash(false), 1800)
-    onChanged()
-  }
-
-  const handleDelete = async () => {
-    if (!myRemark || !confirm('Delete your remark?')) return
-    setSaving(true)
-    await deleteRemark(myRemark.id)
-    setSaving(false); setDraft(''); setEditing(false)
-    onChanged()
-  }
-
-  return (
-    <div className="px-3 py-3 sm:px-5 sm:py-4 bg-slate-50 border-t border-slate-200">
-      <div className="flex items-center gap-2 mb-3">
-        <MessageSquare size={13} className="text-slate-500" />
-        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-600">Remarks</h4>
-        <span className="text-[10px] text-slate-400">
-          {remarks.length} {remarks.length === 1 ? 'comment' : 'comments'}
-        </span>
-      </div>
-
-      {others.length > 0 && (
-        <div className="space-y-2 mb-3">
-          {others.map(r => <RemarkBubble key={r.id} remark={r} />)}
-        </div>
-      )}
-
-      {canEdit ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          {!editing && myRemark ? (
-            <div>
-              <RemarkBubble remark={myRemark} self />
-              <div className="flex items-center gap-2 mt-2">
-                <button onClick={() => setEditing(true)} className="text-xs text-slate-600 hover:text-slate-900 font-medium transition-colors">Edit</button>
-                <button onClick={handleDelete} disabled={saving} className="text-xs text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 disabled:opacity-60 transition-colors">
-                  <Trash2 size={11} /> Delete
-                </button>
-                {savedFlash && <span className="text-xs text-slate-500 font-medium">Saved ✓</span>}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Avatar avatarUrl={viewer.avatar_url} name={viewer.full_name ?? 'You'} size={26} userId={viewerId} />
-                <p className="text-xs font-semibold text-slate-700">{viewer.full_name ?? 'Your remark'}</p>
-                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full uppercase tracking-wide font-bold">
-                  {viewer.role ?? 'Staff'}
-                </span>
-              </div>
-              <textarea
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                placeholder={`Add a remark for ${reportCardTitle}…`}
-                rows={3}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 resize-none"
-              />
-              <div className="flex items-center gap-2 justify-end">
-                {myRemark && (
-                  <button onClick={() => { setEditing(false); setDraft(myRemark.remark) }} className="text-xs text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
-                )}
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !draft.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                >
-                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                  {saving ? 'Saving…' : myRemark ? 'Update remark' : 'Post remark'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        remarks.length === 0 && <p className="text-xs text-slate-400 italic">No remarks yet.</p>
-      )}
-    </div>
-  )
-}
-
-function RemarkBubble({ remark, self = false }: { remark: ReportCardRemark; self?: boolean }) {
-  const author = remark.author
-  const date   = new Date(remark.updated_at || remark.created_at)
-  return (
-    <div className={`flex items-start gap-2.5 p-2.5 rounded-xl ${self ? 'bg-slate-100/70' : 'bg-white border border-slate-100'}`}>
-      <Avatar avatarUrl={author?.avatar_url} name={author?.full_name ?? 'Staff'} size={28} userId={remark.author_id} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-xs font-semibold text-slate-700 truncate">{author?.full_name ?? 'Staff'}</p>
-          {author?.role && (
-            <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase tracking-wide font-bold">
-              {author.role}
-            </span>
-          )}
-          <span className="text-[10px] text-slate-400">
-            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-        </div>
-        <p className="text-sm text-slate-700 mt-0.5 whitespace-pre-wrap leading-relaxed">{remark.remark}</p>
-      </div>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown, ChevronRight, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
-  GraduationCap, MessageSquare, Save, Loader2, Trash2, Printer, Award,
+  GraduationCap, Loader2, Printer, Award,
   LayoutGrid, Download, Table2, ArrowUpDown, CalendarRange,
   SplitSquareHorizontal, CheckSquare, Square,
 } from 'lucide-react'
@@ -17,8 +17,6 @@ import {
   fetchAvailableAcademicYearsForStudent,
   searchStudentsForReportCard,
   fetchRemarksForStudent,
-  upsertRemark,
-  deleteRemark,
   fetchAllReportCardTitles,
   fetchGradeSectionsWithStudents,
   fetchClasswiseMarks,
@@ -31,14 +29,16 @@ import { UserProfile, UserRole } from '@/lib/supabase'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
 import Avatar from '@/components/Avatar'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
+import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/reportCardVisits'
 import { gradeLabel } from '@/lib/grades'
-import { gradeLetter, formatShortDate, componentTotals } from '@/lib/reportCardGrading'
+import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
 import ModalShell from '@/components/ui/ModalShell'
+import RemarksPanel from '@/components/academics/RemarksPanel'
 import {
   ClasswiseSort, SortDir, num, overallOf, sortStudents, averageOf,
-  buildExportTable, downloadClasswiseWorkbook,
+  buildExportTable, downloadClasswiseWorkbook, allComponentNames,
 } from '@/lib/classwiseMarks'
 
 // ─── Congratulations messages (auto-rotated by student + title hash) ──────────
@@ -95,6 +95,7 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
   const sectionRef = useRef<HTMLElement>(null)
   const searchParams = useSearchParams()
   const { open: keyboardOpen } = useKeyboardInset()
+  const [panelAnimating, setPanelAnimating] = useState(false)
 
   useEffect(() => {
     fetchBranding().then(setBranding).catch(() => {})
@@ -188,12 +189,17 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
+            onAnimationStart={() => setPanelAnimating(true)}
+            onAnimationComplete={() => setPanelAnimating(false)}
+            // The collapse animation needs to clip, but clipping also cuts off
+            // the full-bleed panel below — so it only clips while it is
+            // actually moving.
+            className={panelAnimating ? 'overflow-hidden' : undefined}
           >
-            {/* Barely any padding on a phone: the cards and the marks matrix
-                inside bleed to the panel's edge, so every pixel of width that
-                is not the page's own gutter goes to the data. */}
-            <div className="glass-card rounded-[1.5rem] p-2 sm:p-5">
+            {/* On a phone the panel gives up its own padding *and* the page's
+                gutter, so the cards and the marks matrix run the full width of
+                the screen. Controls put a small inset back for themselves. */}
+            <div className="glass-card -mx-4 sm:mx-0 rounded-none sm:rounded-[1.5rem] px-0 sm:px-5 py-3 sm:py-5">
               {isStudent ? (
                 <ReportCardForStudent
                   studentProfile={profile}
@@ -309,7 +315,7 @@ function StaffReportCardView({
   return (
     <div className="space-y-4">
       {/* Tab toggle */}
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+      <div className="flex gap-1 p-1 mx-3 sm:mx-0 bg-slate-100 rounded-xl w-fit">
         <button
           onClick={() => setTab('individual')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -437,7 +443,7 @@ function StaffReportCardSearch({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 px-3 sm:px-0">
       <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-slate-300">
         <Search size={16} className="text-slate-400 flex-shrink-0" />
         {/* No autofocus: the panel is open from the moment the page loads, so
@@ -467,7 +473,7 @@ function StaffReportCardSearch({
       </div>
 
       {query.trim() && results.length === 0 && !searching && (
-        <div className="text-center py-10 text-sm text-slate-400">
+        <div className="text-center py-10 px-3 sm:px-0 text-sm text-slate-400">
           No students match &ldquo;{query.trim()}&rdquo;
           {viewerRole !== 'admin' && viewerRole !== 'principal' && (
             <p className="text-xs text-slate-300 mt-1">
@@ -508,7 +514,7 @@ function StaffReportCardSearch({
             </div>
           </div>
         ) : (
-          <div className="text-center py-10">
+          <div className="text-center py-10 px-3 sm:px-0">
             <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
             <p className="text-slate-500 text-sm">Search for a student to view their report cards</p>
             {viewerRole !== 'admin' && viewerRole !== 'principal' && (
@@ -565,14 +571,18 @@ function ClasswiseExportModal({
   initialSort: ClasswiseSort
   onClose: () => void
 }) {
-  const hasComponents = subjects.some(s => s.componentNames.length > 0)
+  const componentNames = useMemo(() => allComponentNames(subjects), [subjects])
+  const hasComponents = componentNames.length > 0
   const [includeComponents, setIncludeComponents] = useState(hasComponents)
+  const [excluded, setExcluded] = useState<string[]>([])
   const [sort, setSort] = useState<ClasswiseSort>(initialSort)
   const [writing, setWriting] = useState(false)
 
   const table = useMemo(
-    () => buildExportTable(students, subjects, cellData, { includeComponents, sort }),
-    [students, subjects, cellData, includeComponents, sort],
+    () => buildExportTable(students, subjects, cellData, {
+      includeComponents, sort, excludedComponents: excluded,
+    }),
+    [students, subjects, cellData, includeComponents, sort, excluded],
   )
 
   const handleExport = async () => {
@@ -653,6 +663,40 @@ function ClasswiseExportModal({
             {table.headers.length} columns · {table.rows.length} students
           </span>
         </div>
+
+        {/* Which components count. Dropping one takes its marks out of the
+            subject total and the overall, not just out of its own column — so
+            a term can be reported on the examination alone. */}
+        {hasComponents && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Counts toward total</span>
+            {componentNames.map(name => {
+              const on = !excluded.includes(name)
+              return (
+                <button
+                  key={name}
+                  onClick={() => setExcluded(prev =>
+                    prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                    on ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 line-through'
+                  }`}
+                  title={on ? `Drop ${name} from the totals` : `Count ${name} toward the totals again`}
+                >
+                  {on ? <CheckSquare size={12} /> : <Square size={12} />}
+                  {name}
+                </button>
+              )
+            })}
+            {excluded.length > 0 && (
+              <button
+                onClick={() => setExcluded([])}
+                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Preview — the table the workbook is written from, not a lookalike. */}
@@ -740,6 +784,7 @@ function ClasswiseMarksView() {
   const [sort, setSort] = useState<ClasswiseSort>({ by: 'name', dir: 'asc' })
   const [showSplit, setShowSplit] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const { openProfileCard } = useProfileCard()
 
   useEffect(() => {
     fetchGradeSectionsWithStudents().then(setGradeSections)
@@ -838,7 +883,7 @@ function ClasswiseMarksView() {
   return (
     <div className="space-y-4">
       {/* Cascade selectors */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 px-3 sm:px-0">
         <div>
           <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Grade</label>
           <select
@@ -884,7 +929,7 @@ function ClasswiseMarksView() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap px-3 sm:px-0">
         <button
           onClick={handleLoad}
           disabled={!canLoad || loading}
@@ -900,9 +945,9 @@ function ClasswiseMarksView() {
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
               splitVisible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
-            title="Show each subject's component-wise split inside its cell"
+            title="Show each subject's components inside its cell"
           >
-            <SplitSquareHorizontal size={13} /> Split
+            <SplitSquareHorizontal size={13} /> Components
           </button>
         )}
 
@@ -920,12 +965,12 @@ function ClasswiseMarksView() {
       {loaded && !loading && (
         <>
           {students.length === 0 ? (
-            <div className="text-center py-10">
+            <div className="text-center py-10 px-3 sm:px-0">
               <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">No students found for Grade {selectedGrade} · {selectedSection}</p>
             </div>
           ) : subjects.length === 0 ? (
-            <div className="text-center py-10">
+            <div className="text-center py-10 px-3 sm:px-0">
               <FileText size={28} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">No classrooms with a subject set have assessments under &ldquo;{selectedTitle}&rdquo; for Grade {selectedGrade} · {selectedSection}</p>
               <p className="text-xs text-slate-400 mt-1">Set a subject on classrooms in Classroom Management to see them here.</p>
@@ -933,7 +978,7 @@ function ClasswiseMarksView() {
           ) : (
             // Full-bleed on a phone: this table wants every pixel of width, so
             // it escapes the card's padding rather than being squeezed by it.
-            <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 overflow-hidden sm:shadow-sm">
+            <div className="rounded-none sm:rounded-2xl border-y sm:border border-slate-200 overflow-hidden sm:shadow-sm">
               {/* Summary strip */}
               <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] sm:text-xs">
                 <span className="font-bold text-slate-800">G{selectedGrade}·{selectedSection}</span>
@@ -955,8 +1000,11 @@ function ClasswiseMarksView() {
                 <table className="w-full text-[11px] sm:text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="sticky left-0 bg-slate-50 text-left px-2 sm:px-3 py-1.5 font-bold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[10px] whitespace-nowrap z-10 border-r border-slate-200 min-w-[104px] sm:min-w-[160px]">
-                        <button onClick={() => toggleSort({ by: 'name', dir: 'asc' })} className="flex items-center gap-1 hover:text-slate-800 transition-colors">
+                      <th className="sticky left-0 bg-slate-50 text-left px-2 sm:px-3 py-1.5 font-bold text-slate-600 uppercase tracking-wide text-[9px] sm:text-[10px] whitespace-nowrap z-10 border-r border-slate-200">
+                        <button
+                          onClick={() => toggleSort({ by: 'name', dir: 'asc' })}
+                          className="w-[92px] sm:w-[150px] flex items-center gap-1 hover:text-slate-800 transition-colors"
+                        >
                           Student
                           <SortArrow active={sort.by === 'name'} dir={sort.dir} />
                         </button>
@@ -1011,16 +1059,25 @@ function ClasswiseMarksView() {
 
                       return (
                         <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50 transition-colors`}>
-                          <td className="sticky left-0 bg-inherit px-2 sm:px-3 py-1.5 border-r border-slate-200 z-10">
-                            <div className="flex items-center gap-1.5 sm:gap-2">
+                          <td className="sticky left-0 bg-inherit px-1.5 sm:px-3 py-1.5 border-r border-slate-200 z-10">
+                            {/* A table cell ignores max-width in auto layout,
+                                so the column is pinned to a fixed width from
+                                the inside — otherwise the longest name decides
+                                how much of a phone screen the frozen column
+                                eats, leaving almost nothing for the marks. */}
+                            <button
+                              onClick={() => openProfileCard(student.id)}
+                              className="w-[92px] sm:w-[150px] flex items-center gap-1.5 sm:gap-2 text-left rounded hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                              title={`${student.full_name} — view profile`}
+                            >
                               {/* The avatar is the first thing to go when
                                   width is scarce — the name identifies. */}
                               <span className="hidden sm:inline-flex">
                                 <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={22} userId={student.id} />
                               </span>
-                              <span className="text-slate-400 tabular-nums text-[9px] sm:hidden w-4">{idx + 1}</span>
-                              <p className="font-semibold text-slate-700 truncate text-[10px] sm:text-[11px] leading-tight">{student.full_name}</p>
-                            </div>
+                              <span className="text-slate-400 tabular-nums text-[10px] sm:hidden w-3.5 flex-shrink-0">{idx + 1}</span>
+                              <span className="font-semibold text-slate-700 truncate text-[11px] leading-tight">{student.full_name}</span>
+                            </button>
                           </td>
 
                           {subjects.map(s => {
@@ -1085,8 +1142,10 @@ function ClasswiseMarksView() {
                   {/* Class averages — per subject, per component, and overall */}
                   <tfoot>
                     <tr className="bg-slate-50 border-t-2 border-slate-200">
-                      <td className="sticky left-0 bg-slate-50 px-2 sm:px-3 py-1.5 font-bold text-slate-600 text-[9px] sm:text-[10px] uppercase tracking-wide border-r border-slate-200 z-10">
-                        Class Avg
+                      <td className="sticky left-0 bg-slate-50 px-1.5 sm:px-3 py-1.5 border-r border-slate-200 z-10">
+                        <span className="block w-[92px] sm:w-[150px] font-bold text-slate-600 text-[10px] uppercase tracking-wide">
+                          Class Avg
+                        </span>
                       </td>
                       {columnAverages.map((stat, i) => {
                         const s = subjects[i]
@@ -1231,7 +1290,7 @@ function ReportCardForStudent({
 
   if (loading) {
     return (
-      <div className="text-center py-10">
+      <div className="text-center py-10 px-3 sm:px-0">
         <div className="spinner mx-auto mb-3" />
         <p className="text-sm text-slate-500">Loading report cards…</p>
       </div>
@@ -1242,7 +1301,7 @@ function ReportCardForStudent({
     <div className="space-y-5">
       {/* Academic year toggle — only shown for student self-view with multiple years */}
       {selfView && availableYears.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 px-3 sm:px-0">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             <CalendarRange size={13} className="text-rose-400" /> Academic Year
           </span>
@@ -1265,7 +1324,7 @@ function ReportCardForStudent({
       )}
 
       {(!groups || groups.size === 0) ? (
-        <div className="text-center py-10">
+        <div className="text-center py-10 px-3 sm:px-0">
           <FileText size={32} className="text-slate-300 mx-auto mb-2" />
           <p className="text-sm text-slate-500">No report cards yet</p>
           <p className="text-xs text-slate-400 mt-1">
@@ -1346,11 +1405,6 @@ function ReportCard({
   const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
   const overallGrade = gradeLetter(overallPct)
 
-  // Components rolled up by name across every subject, so a card split into
-  // "Lab" and "Examination" reports how the student did on each overall — not
-  // just assessment by assessment.
-  const componentRollup = useMemo(() => componentTotals(entries), [entries])
-
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
   const periodStart = dates[0]
   const periodEnd = dates[dates.length - 1]
@@ -1362,7 +1416,7 @@ function ReportCard({
   const showCongrats = totalMax > 0 && overallPct >= 81
 
   return (
-    <div className="-mx-2 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm print:shadow-none">
+    <div className="rounded-none sm:rounded-2xl border-y sm:border border-slate-200 bg-white overflow-hidden sm:shadow-sm print:shadow-none">
 
       {/* ── Header ── */}
       <div className="relative bg-gradient-to-br from-slate-600 to-slate-700 px-3 py-3 sm:px-6 sm:py-5 text-white">
@@ -1495,35 +1549,6 @@ function ReportCard({
         </table>
       </div>
 
-      {/* ── Component roll-up ── */}
-      {componentRollup.length > 0 && (
-        <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-slate-50/70 border-t border-slate-200">
-          <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold mb-2">
-            Component Totals
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {componentRollup.map(c => {
-              const pct = c.max > 0 ? (c.obtained / c.max) * 100 : 0
-              const g = gradeLetter(pct)
-              return (
-                <div
-                  key={c.name}
-                  className="flex items-baseline gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5"
-                >
-                  <span className="text-xs font-semibold text-slate-700">{c.name}</span>
-                  <span className="text-sm font-bold text-slate-800 tabular-nums">
-                    {c.obtained}<span className="text-slate-400 font-medium">/{c.max}</span>
-                  </span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${g.bg} ${g.fg}`}>
-                    {pct.toFixed(0)}%
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ── Result summary strip ── */}
       {totalMax > 0 && (
         <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-white border-t border-slate-100 flex items-center gap-x-3 gap-y-1.5 sm:gap-4 flex-wrap">
@@ -1618,168 +1643,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="min-w-0">
       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold">{label}</p>
       <p className="text-sm font-medium text-slate-700 truncate mt-0.5">{children}</p>
-    </div>
-  )
-}
-
-// ─── Remarks panel ────────────────────────────────────────────────────────────
-
-interface RemarksPanelProps {
-  remarks: ReportCardRemark[]
-  studentId: string
-  reportCardTitle: string
-  viewerId: string
-  viewer?: UserProfile
-  canEdit: boolean
-  onChanged: () => void
-}
-
-function RemarksPanel({
-  remarks, studentId, reportCardTitle, viewerId, viewer, canEdit, onChanged,
-}: RemarksPanelProps) {
-  const myRemark = remarks.find(r => r.author_id === viewerId)
-  const others = remarks.filter(r => r.author_id !== viewerId)
-
-  const [draft, setDraft] = useState(myRemark?.remark ?? '')
-  const [saving, setSaving] = useState(false)
-  const [savedFlash, setSavedFlash] = useState(false)
-  const [editing, setEditing] = useState(false)
-
-  useEffect(() => { setDraft(myRemark?.remark ?? '') }, [myRemark?.remark])
-
-  const handleSave = async () => {
-    if (saving) return
-    setSaving(true)
-    await upsertRemark(studentId, reportCardTitle, viewerId, draft)
-    setSaving(false)
-    setSavedFlash(true)
-    setEditing(false)
-    setTimeout(() => setSavedFlash(false), 1800)
-    onChanged()
-  }
-
-  const handleDelete = async () => {
-    if (!myRemark) return
-    if (!confirm('Delete your remark?')) return
-    setSaving(true)
-    await deleteRemark(myRemark.id)
-    setSaving(false)
-    setDraft('')
-    setEditing(false)
-    onChanged()
-  }
-
-  return (
-    <div className="px-3 py-3 sm:px-5 sm:py-4 bg-slate-50 border-t border-slate-200">
-      <div className="flex items-center gap-2 mb-3">
-        <MessageSquare size={13} className="text-slate-500" />
-        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-600">Remarks</h4>
-        <span className="text-[10px] text-slate-400">
-          {remarks.length} {remarks.length === 1 ? 'comment' : 'comments'}
-        </span>
-      </div>
-
-      {others.length > 0 && (
-        <div className="space-y-2 mb-3">
-          {others.map(r => (
-            <RemarkBubble key={r.id} remark={r} />
-          ))}
-        </div>
-      )}
-
-      {canEdit ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          {!editing && myRemark ? (
-            <div>
-              <RemarkBubble remark={myRemark} self />
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={saving}
-                  className="text-xs text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 disabled:opacity-60 transition-colors"
-                >
-                  <Trash2 size={11} /> Delete
-                </button>
-                {savedFlash && (
-                  <span className="text-xs text-slate-500 font-medium">Saved ✓</span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Avatar avatarUrl={viewer?.avatar_url} name={viewer?.full_name ?? 'You'} size={26} userId={viewerId} />
-                <p className="text-xs font-semibold text-slate-700">{viewer?.full_name ?? 'Your remark'}</p>
-                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full uppercase tracking-wide font-bold">
-                  {viewer?.role ?? 'Staff'}
-                </span>
-              </div>
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={`Add a remark for ${reportCardTitle}…`}
-                rows={3}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 resize-none"
-              />
-              <div className="flex items-center gap-2">
-                <div className="flex-1" />
-                {myRemark && (
-                  <button
-                    onClick={() => { setEditing(false); setDraft(myRemark.remark) }}
-                    className="text-xs text-slate-500 hover:text-slate-700 font-medium"
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !draft.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-                >
-                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                  {saving ? 'Saving…' : myRemark ? 'Update remark' : 'Post remark'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        remarks.length === 0 && (
-          <p className="text-xs text-slate-400 italic">No remarks yet.</p>
-        )
-      )}
-    </div>
-  )
-}
-
-function RemarkBubble({ remark, self = false }: { remark: ReportCardRemark; self?: boolean }) {
-  const author = remark.author
-  const date = new Date(remark.updated_at || remark.created_at)
-  return (
-    <div className={`flex items-start gap-2.5 p-2.5 rounded-xl ${self ? 'bg-slate-100/70' : 'bg-white border border-slate-100'}`}>
-      <Avatar avatarUrl={author?.avatar_url} name={author?.full_name ?? 'Staff'} size={28} userId={remark.author_id} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-xs font-semibold text-slate-700 truncate">
-            {author?.full_name ?? 'Staff'}
-          </p>
-          {author?.role && (
-            <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase tracking-wide font-bold">
-              {author.role}
-            </span>
-          )}
-          <span className="text-[10px] text-slate-400">
-            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-        </div>
-        <p className="text-sm text-slate-700 mt-0.5 whitespace-pre-wrap leading-relaxed">{remark.remark}</p>
-      </div>
     </div>
   )
 }

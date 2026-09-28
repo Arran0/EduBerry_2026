@@ -122,6 +122,58 @@ export function averageOf(values: { obtained: number; max: number }[]): ColumnAv
 export interface ExportOptions {
   includeComponents: boolean
   sort: ClasswiseSort
+  /** Component names left out of the export entirely — their marks come off
+   *  the subject total and the overall, not just out of their own column. */
+  excludedComponents?: string[]
+}
+
+/** Every distinct component name across the subjects, in the order they are
+ *  first marked in — what the export offers to drop. */
+export function allComponentNames(subjects: ClasswiseSubject[]): string[] {
+  const seen: string[] = []
+  for (const s of subjects) {
+    for (const name of s.componentNames) if (!seen.includes(name)) seen.push(name)
+  }
+  return seen
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * One subject's figures for one student with the dropped components taken out.
+ *
+ * Subtracting works because a split assessment's components add up to its own
+ * total — so removing a component removes exactly its share of both sides of
+ * the fraction. An assessment that is not split has no components and is
+ * untouched, which is the right answer: there is nothing there to drop.
+ */
+function subjectFigures(
+  cell: ClasswiseCellData | undefined,
+  subject: ClasswiseSubject,
+  excluded: string[],
+): { obtained: number; max: number; hasAnyMark: boolean } {
+  if (!cell?.hasAnyMark) return { obtained: 0, max: 0, hasAnyMark: false }
+  if (excluded.length === 0) return { obtained: cell.obtained, max: cell.max, hasAnyMark: true }
+
+  let obtained = cell.obtained
+  let max = cell.max
+  for (const part of cell.components) {
+    if (!excluded.includes(part.name)) continue
+    obtained -= part.obtained
+    max -= part.max
+  }
+  obtained = round2(obtained)
+  max = round2(max)
+  // Dropping every component a student has in a subject leaves nothing to
+  // report there, rather than a bare zero.
+  return { obtained, max, hasAnyMark: max > 0 }
+}
+
+/** The subject's column denominator with the dropped components removed. */
+function subjectColumnMax(subject: ClasswiseSubject, excluded: string[]): number {
+  let max = subject.maxMarks
+  for (const name of excluded) max -= subject.componentMax[name] ?? 0
+  return round2(max)
 }
 
 export interface ExportTable {
@@ -140,8 +192,15 @@ export function buildExportTable(
   cellData: Record<string, Record<string, ClasswiseCellData>>,
   opts: ExportOptions,
 ): ExportTable {
-  const splitSubjects = subjects.filter(s => s.componentNames.length > 0)
+  const excluded = opts.excludedComponents ?? []
+  const splitSubjects = subjects.filter(s => s.componentNames.some(n => !excluded.includes(n)))
   const withComponents = opts.includeComponents && splitSubjects.length > 0
+
+  const keptNames = (s: ClasswiseSubject) => s.componentNames.filter(n => !excluded.includes(n))
+  const columnMaxOf = new Map(subjects.map(s => [s.classroomId, subjectColumnMax(s, excluded)]))
+  const overallColumnMax = round2(
+    subjects.reduce((sum, s) => sum + (columnMaxOf.get(s.classroomId) ?? 0), 0)
+  )
 
   const headers = [
     'Student Name',
@@ -149,11 +208,11 @@ export function buildExportTable(
     'Section',
     ...subjects.flatMap(s => [
       ...(withComponents
-        ? s.componentNames.map(name => `${s.subject} · ${name} (out of ${num(s.componentMax[name] ?? 0)})`)
+        ? keptNames(s).map(name => `${s.subject} · ${name} (out of ${num(s.componentMax[name] ?? 0)})`)
         : []),
-      `${s.subject} (out of ${num(s.maxMarks)})`,
+      `${s.subject} (out of ${num(columnMaxOf.get(s.classroomId) ?? 0)})`,
     ]),
-    `Overall (out of ${num(subjects.reduce((sum, s) => sum + s.maxMarks, 0))})`,
+    `Overall (out of ${num(overallColumnMax)})`,
     'Overall %',
     'Grade Band',
   ]
@@ -165,21 +224,28 @@ export function buildExportTable(
       student.section ?? '',
     ]
 
+    let totalObtained = 0
+    let totalMax = 0
+
     for (const s of subjects) {
       const cell = cellData[student.id]?.[s.classroomId]
       if (withComponents) {
-        for (const name of s.componentNames) {
+        for (const name of keptNames(s)) {
           const part = cell?.components.find(c => c.name === name)
           cells.push(part ? markCell(part.obtained, part.max, s.componentMax[name] ?? part.max) : '—')
         }
       }
-      cells.push(cell?.hasAnyMark ? markCell(cell.obtained, cell.max, s.maxMarks) : '—')
+      const figures = subjectFigures(cell, s, excluded)
+      cells.push(figures.hasAnyMark
+        ? markCell(figures.obtained, figures.max, columnMaxOf.get(s.classroomId) ?? figures.max)
+        : '—')
+      if (figures.hasAnyMark) { totalObtained += figures.obtained; totalMax += figures.max }
     }
 
-    const total = overallOf(student.id, subjects, cellData)
-    const columnMax = subjects.reduce((sum, s) => sum + s.maxMarks, 0)
-    const pct = total.max > 0 ? (total.obtained / total.max) * 100 : null
-    cells.push(total.max > 0 ? markCell(total.obtained, total.max, columnMax) : '—')
+    totalObtained = round2(totalObtained)
+    totalMax = round2(totalMax)
+    const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : null
+    cells.push(totalMax > 0 ? markCell(totalObtained, totalMax, overallColumnMax) : '—')
     cells.push(pct != null ? `${pct.toFixed(1)}%` : '—')
     cells.push(pct != null ? gradeLetter(pct).letter : '—')
     return cells
