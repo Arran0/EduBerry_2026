@@ -20,6 +20,8 @@ import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig
 import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
 import RemarksPanel from '@/components/academics/RemarksPanel'
+import PublishedPill from '@/components/academics/PublishedPill'
+import { fetchPublishedKeys, publicationKey } from '@/lib/reportCardPublication'
 import { recordReportCardVisit } from '@/lib/reportCardVisits'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -69,14 +71,43 @@ export default function AcademicRecordPage() {
   )
   useEffect(() => { loadRemarks() }, [loadRemarks])
 
-  // Load report cards when the year changes
+  const isStaff = viewerProfile ? isStaffRole(viewerProfile.role) : false
+  const isSelf  = viewerProfile?.id === studentId
+
+  // Load report cards when the year changes. Staff looking at someone else's
+  // record see cards their class teacher has not published yet (each one says
+  // so); a student reading their own record sees only what has been released.
   const loadCards = useCallback(async (year: string | null) => {
     setLoadingCards(true)
-    setReportCards(await fetchReportCardsForStudent(studentId, year))
+    setReportCards(await fetchReportCardsForStudent(studentId, year, isStaff && !isSelf))
     setLoadingCards(false)
-  }, [studentId])
+  }, [studentId, isStaff, isSelf])
 
   useEffect(() => { loadCards(selectedYear) }, [selectedYear, loadCards])
+
+  // Staff reading someone else's record now see cards that have not been
+  // released yet, so each one has to say which it is. A student reading their
+  // own record only ever gets released cards, so the pill is left off there.
+  const [publishedKeys, setPublishedKeys] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (!isStaff || isSelf) { setPublishedKeys(null); return }
+    const classes = Array.from(reportCards.values()).flat()
+      .map(e => ({ grade: e.classroom_grade, section: e.classroom_section }))
+    let cancelled = false
+    fetchPublishedKeys(classes)
+      .then(keys => { if (!cancelled) setPublishedKeys(keys) })
+      .catch(() => { if (!cancelled) setPublishedKeys(null) })
+    return () => { cancelled = true }
+  }, [reportCards, isStaff, isSelf])
+
+  /** Released only when every subject in the card is — anything less and the
+   *  student is not seeing what this staff member is. */
+  const isPublished = useCallback((title: string, list: StudentReportCardEntry[]): boolean | null => {
+    if (!publishedKeys) return null
+    const classed = list.filter(e => e.classroom_grade != null && e.classroom_section)
+    if (classed.length === 0) return false
+    return classed.every(e => publishedKeys.has(publicationKey(e.classroom_grade!, e.classroom_section!, title)))
+  }, [publishedKeys])
 
   // Sort report card titles by most-recently-assessed date
   const sortedEntries = useMemo(() => {
@@ -86,9 +117,6 @@ export default function AcademicRecordPage() {
       return latest(b) - latest(a)
     })
   }, [reportCards])
-
-  const isStaff = viewerProfile ? isStaffRole(viewerProfile.role) : false
-  const isSelf  = viewerProfile?.id === studentId
 
   // Access guard — students can only view their own record
   useEffect(() => {
@@ -194,6 +222,7 @@ export default function AcademicRecordPage() {
                       key={title}
                       title={title}
                       entries={entries}
+                      published={isPublished(title, entries)}
                       student={student}
                       branding={branding}
                       remarks={remarks.filter(r => r.report_card_title === title)}
@@ -225,10 +254,13 @@ interface SubjectRow {
 }
 
 function ReportCardBlock({
-  title, entries, student, branding, remarks, viewerId, viewer, canEditRemarks, onRemarksChanged,
+  title, entries, published, student, branding, remarks, viewerId, viewer, canEditRemarks, onRemarksChanged,
 }: {
   title: string
   entries: StudentReportCardEntry[]
+  /** Whether this card has reached the student — null for a student reading
+   *  their own record (all of it is released) or while the status loads. */
+  published?: boolean | null
   student: UserProfile
   branding: SiteBranding
   remarks: ReportCardRemark[]
@@ -290,8 +322,11 @@ function ReportCardBlock({
             <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
               {branding.schoolName || 'Report Card'}
             </h3>
-            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5">
+            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5 flex-wrap">
               <Bookmark size={12} className="opacity-70" /> {title}
+              {/* Status only — publishing happens for a whole class, on the
+                  Class Marks tab of the Academics report cards section. */}
+              {published != null && <PublishedPill published={published} size="xs" />}
             </p>
           </div>
           <button

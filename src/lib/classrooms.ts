@@ -1,5 +1,6 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
+import { fetchPublishedKeys, publicationKey } from './reportCardPublication'
 
 // --- Types ---
 
@@ -1703,6 +1704,10 @@ export async function createReportCardTitle(title: string, createdBy: string): P
 export interface StudentReportCardEntry {
   classroom_id: string
   classroom_title: string
+  /** The class this classroom belongs to — what a report card is published
+   *  against, so a staff view can show whether it has been released. */
+  classroom_grade: number | null
+  classroom_section: string | null
   assessment: ClassroomAssessment
   mark: AssessmentMark | null
   /** The assessment's components in display order — empty when it is scored as
@@ -1725,6 +1730,10 @@ interface ReportCardClassroom {
   title: string
   start_date: string | null
   end_date: string | null
+  /** The class this classroom belongs to — the level report cards are
+   *  published at (see lib/reportCardPublication). */
+  grade: number | null
+  section: string | null
 }
 
 /** Every classroom the student belongs to, in one round trip (the membership
@@ -1734,7 +1743,7 @@ interface ReportCardClassroom {
 async function fetchStudentClassrooms(studentId: string): Promise<ReportCardClassroom[]> {
   const { data, error } = await supabase
     .from('classroom_members')
-    .select('classroom:classrooms!inner(id, title, start_date, end_date)')
+    .select('classroom:classrooms!inner(id, title, start_date, end_date, grade, section)')
     .eq('user_id', studentId)
 
   if (error) {
@@ -1841,16 +1850,22 @@ async function fetchStudentMarksForClassrooms(
 export function fetchReportCardsForStudent(
   studentId: string,
   academicYear?: string | null,
+  /** Staff views (a teacher's lookup, the academic record) pass true to see
+   *  cards that have not been released yet, alongside their status. A
+   *  student's own view never does — an unpublished card does not exist for
+   *  them until their class teacher publishes it. */
+  includeUnpublished = false,
 ): Promise<Map<string, StudentReportCardEntry[]>> {
   return coalesce(
-    `cards:${studentId}:${academicYear ?? ''}`,
-    () => loadReportCardsForStudent(studentId, academicYear),
+    `cards:${studentId}:${academicYear ?? ''}:${includeUnpublished ? 'all' : 'published'}`,
+    () => loadReportCardsForStudent(studentId, academicYear, includeUnpublished),
   )
 }
 
 async function loadReportCardsForStudent(
   studentId: string,
   academicYear?: string | null,
+  includeUnpublished = false,
 ): Promise<Map<string, StudentReportCardEntry[]>> {
   // 1. Classrooms the student is a member of (one round trip, classroom inline).
   const classrooms = await fetchStudentClassrooms(studentId)
@@ -1861,9 +1876,7 @@ async function loadReportCardsForStudent(
 
   const filteredClassroomIds = inScope.map(c => c.id)
   if (filteredClassroomIds.length === 0) return new Map()
-  const classroomMap = new Map<string, { id: string; title: string }>(
-    inScope.map(c => [c.id, { id: c.id, title: c.title }])
-  )
+  const classroomMap = new Map<string, ReportCardClassroom>(inScope.map(c => [c.id, c]))
 
   // 2. Tagged assessments in those classrooms, and this student's marks —
   //    in parallel: the marks query keys off the assessment's classroom (an
@@ -1892,15 +1905,23 @@ async function loadReportCardsForStudent(
     fetchStudentComponentMarks(studentId, assessmentIds),
   ])
 
-  // 4. Group.
+  // 4. Which of these classes have actually released their report cards. A
+  //    student sees a card only once their class teacher (or a principal or
+  //    admin) has published it for that grade + section and title.
+  const published = includeUnpublished ? null : await fetchPublishedKeys(inScope)
+
+  // 5. Group, dropping anything still held back.
   const grouped = new Map<string, StudentReportCardEntry[]>()
   for (const a of assessments as ClassroomAssessment[]) {
     if (!a.report_card_title) continue
     const cls = classroomMap.get(a.classroom_id)
     if (!cls) continue
+    if (published && !isReleased(published, cls, a.report_card_title)) continue
     const entry: StudentReportCardEntry = {
       classroom_id: cls.id,
       classroom_title: cls.title,
+      classroom_grade: cls.grade,
+      classroom_section: cls.section,
       assessment: a,
       mark: markMap.get(a.id) ?? null,
       components: componentsByAssessment[a.id] ?? [],
@@ -1911,6 +1932,19 @@ async function loadReportCardsForStudent(
     grouped.set(a.report_card_title, list)
   }
   return grouped
+}
+
+/** A classroom's marks count toward a released card only when that card was
+ *  published for the classroom's own grade + section. A classroom with no
+ *  grade/section set belongs to no publishable class, so it stays held back
+ *  rather than leaking through the gate. */
+function isReleased(
+  published: Set<string>,
+  classroom: Pick<ReportCardClassroom, 'grade' | 'section'>,
+  title: string,
+): boolean {
+  if (classroom.grade == null || !classroom.section) return false
+  return published.has(publicationKey(classroom.grade, classroom.section, title))
 }
 
 /** Fetches every assessment grouped by report card title for the given
@@ -1948,9 +1982,7 @@ export async function fetchReportCardsForStudentAsViewer(
   const active = allowed.filter(c => isActiveOn(c, today))
   const activeIds = active.map(c => c.id)
   if (activeIds.length === 0) return new Map()
-  const classroomMap = new Map<string, { id: string; title: string }>(
-    active.map(c => [c.id, { id: c.id, title: c.title }])
-  )
+  const classroomMap = new Map<string, ReportCardClassroom>(active.map(c => [c.id, c]))
 
   // 4. Tagged assessments and the student's marks, in parallel.
   const [{ data: assessments }, marks] = await Promise.all([
@@ -1984,6 +2016,8 @@ export async function fetchReportCardsForStudentAsViewer(
     list.push({
       classroom_id: cls.id,
       classroom_title: cls.title,
+      classroom_grade: cls.grade,
+      classroom_section: cls.section,
       assessment: a,
       mark: markMap.get(a.id) ?? null,
       components: componentsByAssessment[a.id] ?? [],

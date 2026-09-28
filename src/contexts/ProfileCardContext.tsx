@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useMemo, useState, useCallback } from 'react'
 
 interface ProfileCardContextType {
   openProfileCard: (userId: string) => void
@@ -21,8 +21,17 @@ export function ProfileCardProvider({ children }: { children: React.ReactNode })
     setActiveUserId(null)
   }, [])
 
+  // Memoised: this provider wraps the whole app, so a fresh object here made
+  // every consumer re-render on each open *and* close — including heavy ones
+  // like the class marks matrix, whose re-render was visible as a stutter
+  // behind the card. Only `activeUserId` actually changes.
+  const value = useMemo(
+    () => ({ openProfileCard, closeProfileCard, activeUserId }),
+    [openProfileCard, closeProfileCard, activeUserId],
+  )
+
   return (
-    <ProfileCardContext.Provider value={{ openProfileCard, closeProfileCard, activeUserId }}>
+    <ProfileCardContext.Provider value={value}>
       {children}
     </ProfileCardContext.Provider>
   )

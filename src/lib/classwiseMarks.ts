@@ -125,6 +125,22 @@ export interface ExportOptions {
   /** Component names left out of the export entirely — their marks come off
    *  the subject total and the overall, not just out of their own column. */
   excludedComponents?: string[]
+  /** Classroom ids of the subjects to report on, when the export is narrowed
+   *  to some of them. Undefined (the default) means every subject. A dropped
+   *  subject leaves the overall too — the sheet totals what it shows, so a
+   *  single-subject export reads as that subject's own sheet rather than a
+   *  full report card with most of its columns hidden. */
+  includedSubjectIds?: string[]
+}
+
+/** The subjects an export actually covers, in the matrix's own order. */
+export function exportSubjects(
+  subjects: ClasswiseSubject[],
+  includedSubjectIds?: string[],
+): ClasswiseSubject[] {
+  if (!includedSubjectIds) return subjects
+  const keep = new Set(includedSubjectIds)
+  return subjects.filter(s => keep.has(s.classroomId))
 }
 
 /** Every distinct component name across the subjects, in the order they are
@@ -188,10 +204,14 @@ export interface ExportTable {
  */
 export function buildExportTable(
   students: UserProfile[],
-  subjects: ClasswiseSubject[],
+  allSubjects: ClasswiseSubject[],
   cellData: Record<string, Record<string, ClasswiseCellData>>,
   opts: ExportOptions,
 ): ExportTable {
+  // Narrowing to some subjects narrows everything downstream of it — the
+  // columns, the overall, the sort, the grade band — because they are all
+  // computed from this one list.
+  const subjects = exportSubjects(allSubjects, opts.includedSubjectIds)
   const excluded = opts.excludedComponents ?? []
   const splitSubjects = subjects.filter(s => s.componentNames.some(n => !excluded.includes(n)))
   const withComponents = opts.includeComponents && splitSubjects.length > 0
@@ -261,14 +281,23 @@ export async function downloadClasswiseWorkbook(
   grade: number,
   section: string,
   reportCardTitle: string,
+  /** Names the subjects when the sheet covers only some of them, so a narrowed
+   *  export is not mistaken for the full class marks once it leaves the app. */
+  subjectNote?: string,
 ) {
   const XLSX = await import('xlsx')
   const title = `Grade ${grade} · Section ${section} — ${reportCardTitle}`
+    + (subjectNote ? ` · ${subjectNote}` : '')
   const aoa = [[title], [], table.headers, ...table.rows]
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = table.headers.map((h, i) => ({ wch: Math.min(38, Math.max(12, i === 0 ? 24 : h.length + 2)) }))
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(0, table.headers.length - 1) } }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Class Marks')
-  XLSX.writeFile(wb, `Class_Marks_Grade${grade}${section}_${reportCardTitle.replace(/\s+/g, '_')}.xlsx`)
+  const slug = (text: string) => text.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '')
+  XLSX.writeFile(wb, [
+    `Class_Marks_Grade${grade}${section}`,
+    slug(reportCardTitle),
+    subjectNote ? slug(subjectNote) : '',
+  ].filter(Boolean).join('_') + '.xlsx')
 }

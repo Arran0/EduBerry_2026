@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronRight, ChevronUp, FileText, Search, X, User as UserIcon, Bookmark,
   GraduationCap, Loader2, Printer, Award,
   LayoutGrid, Download, Table2, ArrowUpDown, CalendarRange,
-  SplitSquareHorizontal, CheckSquare, Square,
+  SplitSquareHorizontal, CheckSquare, Square, Eye, EyeOff, Lock,
 } from 'lucide-react'
 import {
   StudentReportCardEntry,
@@ -33,9 +33,15 @@ import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/reportCardVisits'
 import { gradeLabel } from '@/lib/grades'
 import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
+import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
+import {
+  ReportCardPublication, canPublishReportCards, fetchPublication, fetchPublishedKeys,
+  publicationKey, publishReportCards, unpublishReportCards,
+} from '@/lib/reportCardPublication'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
 import ModalShell from '@/components/ui/ModalShell'
 import RemarksPanel from '@/components/academics/RemarksPanel'
+import PublishedPill from '@/components/academics/PublishedPill'
 import {
   ClasswiseSort, SortDir, num, overallOf, sortStudents, averageOf,
   buildExportTable, downloadClasswiseWorkbook, allComponentNames,
@@ -298,6 +304,108 @@ export default function ReportCardsSection(props: ReportCardsSectionProps) {
   )
 }
 
+// ─── Publication status ───────────────────────────────────────────────────────
+
+/**
+ * Publish or withdraw one class's report cards — the whole grade + section +
+ * report card title at once.
+ *
+ * This is the only place either happens. An individual student's card carries
+ * the status but no control: releasing a class one student at a time would
+ * leave the rest of the class wondering where theirs was, so the decision is
+ * made for the class as a unit.
+ *
+ * Only this class's class teacher, a principal or an admin may act. Everyone
+ * else sees the status and why the control is not theirs — the database
+ * enforces the same rule, so a hidden button is a courtesy, not the guard.
+ */
+function PublishPanel({
+  grade, section, reportCardTitle, viewerId, viewerRole, classTeacherOf,
+}: {
+  grade: number
+  section: string
+  reportCardTitle: string
+  viewerId: string
+  viewerRole: UserRole
+  classTeacherOf: Homeroom[]
+}) {
+  const [publication, setPublication] = useState<ReportCardPublication | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const mayPublish = canPublishReportCards(viewerRole, classTeacherOf, grade, section)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setPublication(await fetchPublication(grade, section, reportCardTitle))
+    setLoading(false)
+  }, [grade, section, reportCardTitle])
+
+  useEffect(() => { load() }, [load])
+
+  const toggle = async () => {
+    setSaving(true); setError('')
+    const result = publication
+      ? await unpublishReportCards(grade, section, reportCardTitle)
+      : await publishReportCards(grade, section, reportCardTitle, viewerId)
+    if (!result.ok) setError(result.error ?? 'Could not save that.')
+    else await load()
+    setSaving(false)
+  }
+
+  const published = !!publication
+
+  return (
+    <div className={`mx-3 sm:mx-0 rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 flex items-center gap-3 flex-wrap ${
+      published ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'
+    }`}>
+      <div className="flex-1 min-w-[12rem]">
+        <div className="flex items-center gap-2 flex-wrap">
+          {loading ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+              <Loader2 size={11} className="animate-spin" /> Checking status…
+            </span>
+          ) : (
+            <PublishedPill published={published} />
+          )}
+          <span className="text-[11px] font-semibold text-slate-600">
+            Grade {grade} · {section} — {reportCardTitle}
+          </span>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+          {loading
+            ? '\u00a0'
+            : published
+              ? 'Students in this class can see this report card. Unpublishing hides it again for all of them.'
+              : 'Students cannot see this report card yet. Publishing releases it to the whole class at once.'}
+        </p>
+        {error && <p className="text-[11px] font-semibold text-rose-600 mt-1">{error}</p>}
+      </div>
+
+      {mayPublish ? (
+        <button
+          onClick={toggle}
+          disabled={loading || saving}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-colors disabled:opacity-50 ${
+            published ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
+          }`}
+        >
+          {saving ? <Loader2 size={13} className="animate-spin" /> : published ? <EyeOff size={13} /> : <Eye size={13} />}
+          {saving ? 'Saving…' : published ? 'Unpublish' : 'Publish'}
+        </button>
+      ) : (
+        <span
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400"
+          title="Only this class's class teacher, a principal or an admin can publish its report cards"
+        >
+          <Lock size={11} /> Class teacher only
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ─── Staff view: tab toggle between individual search and class-wide matrix ───
 
 type StaffTab = 'individual' | 'classwise'
@@ -311,6 +419,14 @@ function StaffReportCardView({
   branding: SiteBranding
 }) {
   const [tab, setTab] = useState<StaffTab>('individual')
+  // The homerooms this viewer is the class teacher of — what decides whether
+  // they may publish a class's report cards. Principals and admins may do so
+  // anywhere, so the lookup is skipped for them.
+  const [classTeacherOf, setClassTeacherOf] = useState<Homeroom[]>([])
+  useEffect(() => {
+    if (['principal', 'admin'].includes(viewerRole)) return
+    fetchHomeroomsForClassTeacher(viewerId).then(setClassTeacherOf).catch(() => {})
+  }, [viewerId, viewerRole])
 
   return (
     <div className="space-y-4">
@@ -346,7 +462,11 @@ function StaffReportCardView({
           branding={branding}
         />
       ) : (
-        <ClasswiseMarksView />
+        <ClasswiseMarksView
+          viewerId={viewerId}
+          viewerRole={viewerRole}
+          classTeacherOf={classTeacherOf}
+        />
       )}
     </div>
   )
@@ -571,24 +691,54 @@ function ClasswiseExportModal({
   initialSort: ClasswiseSort
   onClose: () => void
 }) {
-  const componentNames = useMemo(() => allComponentNames(subjects), [subjects])
+  // Which subjects the sheet reports on. Starts as all of them; narrowing to
+  // one turns the export into that subject's own marks sheet, totals included.
+  const [subjectIds, setSubjectIds] = useState<string[]>(() => subjects.map(s => s.classroomId))
+  const includedSubjects = useMemo(
+    () => subjects.filter(s => subjectIds.includes(s.classroomId)),
+    [subjects, subjectIds],
+  )
+  const componentNames = useMemo(() => allComponentNames(includedSubjects), [includedSubjects])
   const hasComponents = componentNames.length > 0
-  const [includeComponents, setIncludeComponents] = useState(hasComponents)
+  const [includeComponents, setIncludeComponents] = useState(true)
   const [excluded, setExcluded] = useState<string[]>([])
   const [sort, setSort] = useState<ClasswiseSort>(initialSort)
   const [writing, setWriting] = useState(false)
 
+  // A sort on a subject that has since been dropped would rank every student
+  // the same, so it falls back to the overall the moment its column leaves.
+  useEffect(() => {
+    if (sort.by === 'subject' && !subjectIds.includes(sort.classroomId)) {
+      setSort({ by: 'overall', dir: 'desc' })
+    }
+  }, [sort, subjectIds])
+
+  const toggleSubject = (classroomId: string) => {
+    setSubjectIds(prev => {
+      if (!prev.includes(classroomId)) return [...prev, classroomId]
+      // Never leave the sheet with no subjects at all — there would be nothing
+      // to export, and the last chip would look broken rather than protected.
+      if (prev.length === 1) return prev
+      return prev.filter(id => id !== classroomId)
+    })
+  }
+
   const table = useMemo(
     () => buildExportTable(students, subjects, cellData, {
-      includeComponents, sort, excludedComponents: excluded,
+      includeComponents, sort, excludedComponents: excluded, includedSubjectIds: subjectIds,
     }),
-    [students, subjects, cellData, includeComponents, sort, excluded],
+    [students, subjects, cellData, includeComponents, sort, excluded, subjectIds],
   )
+
+  /** Only when the sheet is narrowed — a full export needs no qualifier. */
+  const subjectNote = subjectIds.length === subjects.length
+    ? undefined
+    : includedSubjects.map(s => s.subject).join(', ')
 
   const handleExport = async () => {
     setWriting(true)
     try {
-      await downloadClasswiseWorkbook(table, grade, section, reportCardTitle)
+      await downloadClasswiseWorkbook(table, grade, section, reportCardTitle, subjectNote)
       onClose()
     } catch (err) {
       console.error('Failed to write the class marks workbook:', err)
@@ -636,11 +786,73 @@ function ClasswiseExportModal({
               {option.label}
             </button>
           ))}
+          {/* Sorting on one subject's column, the same axis the matrix's own
+              headings sort on — offered here as a dropdown because a class can
+              carry a dozen subjects and that many chips would bury the four
+              presets. Picking the active subject again flips the direction. */}
+          <select
+            value={sort.by === 'subject' ? sort.classroomId : ''}
+            onChange={e => {
+              const id = e.target.value
+              if (!id) { setSort({ by: 'overall', dir: 'desc' }); return }
+              setSort(current =>
+                current.by === 'subject' && current.classroomId === id
+                  ? { by: 'subject', classroomId: id, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+                  : { by: 'subject', classroomId: id, dir: 'desc' })
+            }}
+            className={`rounded-full text-[11px] font-semibold px-2.5 py-1 border-0 focus:outline-none focus:ring-2 focus:ring-slate-300 ${
+              sort.by === 'subject' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+            title="Sort on one subject's marks"
+          >
+            <option value="">By subject…</option>
+            {includedSubjects.map(s => (
+              <option key={s.classroomId} value={s.classroomId}>{s.subject}</option>
+            ))}
+          </select>
           {sort.by === 'subject' && (
-            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-700 text-white">
-              {subjects.find(s => s.classroomId === sort.classroomId)?.subject ?? 'Subject'}
-              {sort.dir === 'desc' ? ' high–low' : ' low–high'}
-            </span>
+            <button
+              onClick={() => setSort(current => ({ ...current, dir: current.dir === 'asc' ? 'desc' : 'asc' } as ClasswiseSort))}
+              className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-700 text-white hover:bg-slate-800 transition-colors"
+              title="Flip the direction"
+            >
+              {sort.dir === 'desc' ? 'high–low' : 'low–high'}
+            </button>
+          )}
+        </div>
+
+        {/* Which subjects the sheet covers. Dropping one takes its column and
+            its share of the overall with it, so a narrowed export still totals
+            exactly what it shows. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Subjects</span>
+          {subjects.map(s => {
+            const on = subjectIds.includes(s.classroomId)
+            const last = on && subjectIds.length === 1
+            return (
+              <button
+                key={s.classroomId}
+                onClick={() => toggleSubject(s.classroomId)}
+                disabled={last}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors disabled:cursor-not-allowed ${
+                  on ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-400 line-through'
+                }`}
+                title={last
+                  ? 'The sheet needs at least one subject'
+                  : on ? `Leave ${s.subject} out of the sheet` : `Put ${s.subject} back in`}
+              >
+                {on ? <CheckSquare size={12} /> : <Square size={12} />}
+                {s.subject}
+              </button>
+            )
+          })}
+          {subjectIds.length !== subjects.length && (
+            <button
+              onClick={() => setSubjectIds(subjects.map(s => s.classroomId))}
+              className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 underline"
+            >
+              All subjects
+            </button>
           )}
         </div>
 
@@ -718,7 +930,10 @@ function ClasswiseExportModal({
           </thead>
           <tbody>
             {table.rows.map((row, idx) => (
-              <tr key={row[0] + idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+              // Opaque zebra: the first column is sticky and inherits this
+              // background, so a translucent one showed the scrolling marks
+              // through the student names.
+              <tr key={row[0] + idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#FBFCFE]'}>
                 {row.map((cell, i) => (
                   <td
                     key={i}
@@ -769,7 +984,13 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
     : <ChevronDown size={10} className="flex-shrink-0" />
 }
 
-function ClasswiseMarksView() {
+function ClasswiseMarksView({
+  viewerId, viewerRole, classTeacherOf,
+}: {
+  viewerId: string
+  viewerRole: UserRole
+  classTeacherOf: Homeroom[]
+}) {
   const [gradeSections, setGradeSections] = useState<{ grade: number; section: string }[]>([])
   const [allTitles, setAllTitles] = useState<string[]>([])
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null)
@@ -964,6 +1185,20 @@ function ClasswiseMarksView() {
       {/* Results */}
       {loaded && !loading && (
         <>
+          {/* Publishing lives here, at the class level, and nowhere else — see
+              PublishPanel. It sits above the matrix because releasing the cards
+              is the decision the marks below are read in order to make. */}
+          {selectedGrade != null && selectedSection !== '' && selectedTitle !== '' && (
+            <PublishPanel
+              grade={selectedGrade}
+              section={selectedSection}
+              reportCardTitle={selectedTitle}
+              viewerId={viewerId}
+              viewerRole={viewerRole}
+              classTeacherOf={classTeacherOf}
+            />
+          )}
+
           {students.length === 0 ? (
             <div className="text-center py-10 px-3 sm:px-0">
               <UserIcon size={28} className="text-slate-300 mx-auto mb-2" />
@@ -1058,7 +1293,12 @@ function ClasswiseMarksView() {
                       const overallGrade = overallPct != null ? gradeLetter(overallPct) : null
 
                       return (
-                        <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-slate-50 transition-colors`}>
+                        // The zebra stripe is an opaque colour, not slate-50
+                        // at 40%: the frozen name column takes its background
+                        // from the row (bg-inherit), and a translucent one let
+                        // the marks scroll visibly underneath the names on a
+                        // phone. This is slate-50 already blended onto white.
+                        <tr key={student.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FCFDFE]'} hover:bg-slate-50 transition-colors`}>
                           <td className="sticky left-0 bg-inherit px-1.5 sm:px-3 py-1.5 border-r border-slate-200 z-10">
                             {/* A table cell ignores max-width in auto layout,
                                 so the column is pinned to a fixed width from
@@ -1278,6 +1518,30 @@ function ReportCardForStudent({
     load(selfView ? selectedYear : null)
   }, [load, selfView, selectedYear])
 
+  // Publication status, for staff only. A student's own view is already
+  // filtered to released cards, so a pill there would say "Published" on every
+  // card and tell them nothing.
+  const [publishedKeys, setPublishedKeys] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (selfView || !groups) { setPublishedKeys(null); return }
+    const classes = Array.from(groups.values()).flat()
+      .map(e => ({ grade: e.classroom_grade, section: e.classroom_section }))
+    let cancelled = false
+    fetchPublishedKeys(classes)
+      .then(keys => { if (!cancelled) setPublishedKeys(keys) })
+      .catch(() => { if (!cancelled) setPublishedKeys(null) })
+    return () => { cancelled = true }
+  }, [groups, selfView])
+
+  /** A card counts as released only when every subject in it has been —
+   *  anything less and the student is not seeing the card this staff member is. */
+  const isPublished = useCallback((title: string, list: StudentReportCardEntry[]): boolean | null => {
+    if (!publishedKeys) return null
+    const classed = list.filter(e => e.classroom_grade != null && e.classroom_section)
+    if (classed.length === 0) return false
+    return classed.every(e => publishedKeys.has(publicationKey(e.classroom_grade!, e.classroom_section!, title)))
+  }, [publishedKeys])
+
   // Sort report card groups so the most-recently-assessed title appears first.
   const sortedEntries = useMemo(() => {
     if (!groups) return []
@@ -1328,7 +1592,12 @@ function ReportCardForStudent({
           <FileText size={32} className="text-slate-300 mx-auto mb-2" />
           <p className="text-sm text-slate-500">No report cards yet</p>
           <p className="text-xs text-slate-400 mt-1">
-            Assessments tagged with a report card title will appear here.
+            {selfView
+              // A student's view is filtered to released cards, so "none" here
+              // usually means marked but not yet published — say so, rather
+              // than leaving them to wonder whether the marks exist at all.
+              ? 'A report card appears here once your class teacher publishes it.'
+              : 'Assessments tagged with a report card title will appear here.'}
           </p>
         </div>
       ) : (
@@ -1337,6 +1606,7 @@ function ReportCardForStudent({
             key={title}
             title={title}
             entries={entries}
+            published={isPublished(title, entries)}
             studentProfile={studentProfile}
             remarks={remarks.filter(r => r.report_card_title === title)}
             viewerId={viewerId}
@@ -1356,6 +1626,10 @@ function ReportCardForStudent({
 interface ReportCardProps {
   title: string
   entries: StudentReportCardEntry[]
+  /** Whether this card has been released to the student — null when the
+   *  viewer is the student themselves (everything they can see is released,
+   *  so the pill would be noise) or while the status is still loading. */
+  published?: boolean | null
   studentProfile: UserProfile
   remarks: ReportCardRemark[]
   viewerId: string
@@ -1375,7 +1649,7 @@ interface SubjectRow {
 }
 
 function ReportCard({
-  title, entries, studentProfile, remarks, viewerId, viewer, canEditRemarks,
+  title, entries, published, studentProfile, remarks, viewerId, viewer, canEditRemarks,
   branding, onRemarksChanged,
 }: ReportCardProps) {
   const subjects: SubjectRow[] = useMemo(() => {
@@ -1445,8 +1719,11 @@ function ReportCard({
             <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
               {branding.schoolName || 'Report Card'}
             </h3>
-            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5">
+            <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5 flex-wrap">
               <Bookmark size={12} className="opacity-70" /> {title}
+              {/* Status only — a single card is never published on its own.
+                  That happens for the whole class, on the Class Marks tab. */}
+              {published != null && <PublishedPill published={published} size="xs" />}
             </p>
           </div>
           <button

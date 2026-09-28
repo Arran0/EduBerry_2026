@@ -245,6 +245,15 @@ body:has([data-page-theme="admin"]) { background: #EDE9E3; }
 
 html {
   scroll-behavior: smooth;
+  /* Every overlay in the app freezes the page with `overflow: hidden` on body
+     (see useBodyScrollLock). Without a reserved gutter that also removes the
+     scrollbar, so the whole layout widens by its width the moment a modal
+     opens and snaps back when it closes — most visible over the class marks
+     matrix, which re-lays out its columns on the way through. Reserving the
+     gutter permanently means hiding the scrollbar changes nothing.
+     Overlay scrollbars (iOS, Android) have zero width, so this is a no-op
+     there rather than a wasted strip. */
+  scrollbar-gutter: stable;
 }
 
 body {

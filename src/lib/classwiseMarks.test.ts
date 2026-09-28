@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   markCell, num, overallOf, sortStudents, averageOf, buildExportTable,
-  allComponentNames, ClasswiseSort,
+  allComponentNames, exportSubjects, ClasswiseSort,
 } from './classwiseMarks'
 import type { ClasswiseCellData, ClasswiseSubject } from './classrooms'
 import type { UserProfile } from './supabase'
@@ -275,5 +275,55 @@ describe('buildExportTable with components dropped', () => {
   it('still gives every row as many cells as there are headings', () => {
     const t = buildExportTable(students, subjects, cellData, dropLab)
     for (const row of t.rows) expect(row).toHaveLength(t.headers.length)
+  })
+})
+
+describe('buildExportTable narrowed to some subjects', () => {
+  const physicsOnly = { includeComponents: false, sort: byName, includedSubjectIds: ['c-phy'] }
+
+  it('drops the other subjects\u2019 columns', () => {
+    const t = buildExportTable(students, subjects, cellData, physicsOnly)
+    expect(t.headers).toEqual([
+      'Student Name', 'Grade', 'Section',
+      'Physics (out of 100)', 'Overall (out of 100)', 'Overall %', 'Grade Band',
+    ])
+  })
+
+  it('totals only what it shows, so the overall is the subject itself', () => {
+    const t = buildExportTable(students, subjects, cellData, physicsOnly)
+    const ada = t.rows.find(r => r[0] === 'Ada Lovelace')!
+    // 90/100 in Physics alone — not 170/200 across both subjects.
+    expect(ada.slice(3)).toEqual(['90 (90.0%)', '90 (90.0%)', '90.0%', 'A2'])
+  })
+
+  it('ranks on the narrowed overall, not the full one', () => {
+    const t = buildExportTable(students, subjects, cellData,
+      { ...physicsOnly, sort: { by: 'overall', dir: 'desc' } })
+    // Chen's 75% in Physics beats Brij's 50%, though Brij leads overall.
+    expect(t.rows.map(r => r[0])).toEqual(['Ada Lovelace', 'Chen Wei', 'Brij Kumar'])
+  })
+
+  it('still offers the kept subject\u2019s components', () => {
+    const t = buildExportTable(students, subjects, cellData, { ...physicsOnly, includeComponents: true })
+    expect(t.headers.slice(3, 6)).toEqual([
+      'Physics \u00b7 Lab (out of 20)',
+      'Physics \u00b7 Examination (out of 80)',
+      'Physics (out of 100)',
+    ])
+  })
+
+  it('keeps every row the width of the headings', () => {
+    const t = buildExportTable(students, subjects, cellData, physicsOnly)
+    for (const row of t.rows) expect(row).toHaveLength(t.headers.length)
+  })
+})
+
+describe('exportSubjects', () => {
+  it('keeps every subject when nothing is named', () => {
+    expect(exportSubjects(subjects)).toEqual(subjects)
+  })
+
+  it('keeps the matrix order rather than the order they were picked in', () => {
+    expect(exportSubjects(subjects, ['c-mat', 'c-phy']).map(s => s.subject)).toEqual(['Physics', 'Maths'])
   })
 })
