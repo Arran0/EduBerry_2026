@@ -35,6 +35,29 @@ export function formatShortDate(d: string): string {
   } catch { return d }
 }
 
+/**
+ * Restates a mark against a different maximum, keeping the proportion: 45 out
+ * of 50 shown out of 20 is 18.
+ *
+ * One function for two jobs that turn out to be the same arithmetic — the
+ * "total conversion" column, which reports a mark at the scale a school
+ * publishes it at, and the rescaling applied when a marksheet imported into a
+ * component is given a different weight than it was marked at.
+ *
+ * Rounded to two decimals: a scaled mark is a reported figure, and a trailing
+ * 18.799999999999997 helps nobody. Returns null for anything that cannot be
+ * scaled (no mark, or a source maximum of zero).
+ */
+export function rescaleMark(
+  marks: number | null | undefined,
+  fromMax: number,
+  toMax: number,
+): number | null {
+  if (marks == null || !isFinite(marks)) return null
+  if (!isFinite(fromMax) || fromMax <= 0 || !isFinite(toMax) || toMax < 0) return null
+  return Math.round((marks / fromMax) * toMax * 100) / 100
+}
+
 /** One component name's marks rolled up across a whole report card. */
 export interface ComponentTotal {
   name: string

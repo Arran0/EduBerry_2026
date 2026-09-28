@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X, User, SplitSquareHorizontal } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, Calendar, Save, Edit3, Award, Download, Bookmark, ArrowUpDown, ChevronUp, ChevronDown, UserX, AlertTriangle, Pencil, Check, X, User, SplitSquareHorizontal, Scale, FileInput, Loader2, Search } from 'lucide-react'
 import {
   ClassroomAssessment, AssessmentMark, AssessmentComponent, AssessmentComponentMark,
   createAssessment, fetchAssessments, deleteAssessment, updateAssessment,
@@ -12,6 +12,7 @@ import {
   ClassroomMember, ClassroomWithDetails,
 } from '@/lib/classrooms'
 import { UserRole, UserProfile } from '@/lib/supabase'
+import { rescaleMark } from '@/lib/reportCardGrading'
 import Avatar from '@/components/Avatar'
 import ReportCardTitlePicker from '@/components/classrooms/ReportCardTitlePicker'
 import ModalShell from '@/components/ui/ModalShell'
@@ -23,6 +24,17 @@ interface AssessmentsTabProps {
   classroom: ClassroomWithDetails
 }
 
+/** Another marksheet in the same classroom, captured to fill a component from.
+ *  The marks are held at the scale they were awarded at (`sourceMax`) so that
+ *  re-weighting the component can rescale them from the original figures rather
+ *  than compounding one rounding on top of another. */
+interface ImportedMarksheet {
+  title: string
+  sourceMax: number
+  /** studentId → that student's result in the source assessment. */
+  marks: Record<string, { marks: number | null; isAbsent: boolean }>
+}
+
 /** A row in the component editor. `id` is present for a component that already
  *  exists, so editing its name or weight keeps the marks already entered
  *  against it; the strings are what the two inputs hold mid-edit. */
@@ -30,6 +42,8 @@ interface ComponentDraftRow {
   id?: string
   name: string
   maxMarks: string
+  /** Set when the row was filled from another marksheet rather than typed. */
+  imported?: ImportedMarksheet
 }
 
 /** Sums the marks typed across an assessment's components. Returns null when
@@ -94,6 +108,17 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [showComponentEditor, setShowComponentEditor] = useState(false)
   const [componentDrafts, setComponentDrafts] = useState<ComponentDraftRow[]>([])
   const [savingComponents, setSavingComponents] = useState(false)
+  // Which draft row has its "import from another marksheet" picker open, and
+  // what is typed into it. One at a time — the picker is a focused choice.
+  const [importPickerRow, setImportPickerRow] = useState<number | null>(null)
+  const [importQuery, setImportQuery] = useState('')
+  const [importingFrom, setImportingFrom] = useState<string | null>(null)
+
+  // Total conversion — the optional second maximum the marks are reported at.
+  const [conversionTotal, setConversionTotal] = useState<number | null>(null)
+  const [editingConversion, setEditingConversion] = useState(false)
+  const [conversionDraft, setConversionDraft] = useState('')
+  const [savingConversion, setSavingConversion] = useState(false)
 
   // Edit assessment state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -217,6 +242,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setShowComponentEditor(false)
     const assessment = assessments.find(a => a.id === assessmentId)
     setAssessmentMaxMarks(assessment?.max_marks ?? 100)
+    setConversionTotal(assessment?.conversion_total != null ? Number(assessment.conversion_total) : null)
+    setEditingConversion(false)
+    setImportPickerRow(null)
+    setImportQuery('')
     // Clear the previous sheet's split before its replacement arrives, so the
     // columns on screen never belong to a different assessment than the marks
     // under them. What is already known locally goes straight in.
@@ -240,15 +269,28 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       setAssessmentMaxMarks(comps.reduce((s, c) => s + Number(c.max_marks), 0))
     }
 
-    // Absence is recorded per component but toggled for the whole row, so the
-    // total row (which the database derives) is the honest source for it.
+    fillSheet(studentList, comps, existingMarks, existingComponentMarks)
+  }
+
+  /** Lays stored marks into the two grids the sheet edits.
+   *
+   *  Absence is recorded per component but toggled for the whole row, so the
+   *  total row — which the database derives from the components — is the honest
+   *  source for it. That is also why this runs after an import rather than the
+   *  UI predicting what the derivation will produce. */
+  const fillSheet = (
+    studentList: (ClassroomMember & { user: UserProfile })[],
+    comps: AssessmentComponent[],
+    totals: AssessmentMark[],
+    componentMarkRows: AssessmentComponentMark[],
+  ) => {
     const marksMap: Record<string, { marks: string; isAbsent: boolean }> = {}
     const componentMap: Record<string, Record<string, string>> = {}
     const byKey = new Map<string, AssessmentComponentMark>(
-      existingComponentMarks.map(m => [`${m.component_id}:${m.student_id}`, m])
+      componentMarkRows.map(m => [`${m.component_id}:${m.student_id}`, m])
     )
     for (const student of studentList) {
-      const existing = existingMarks.find((m) => m.student_id === student.user_id)
+      const existing = totals.find((m) => m.student_id === student.user_id)
       marksMap[student.user_id] = {
         marks: existing?.marks != null ? String(existing.marks) : '',
         isAbsent: existing?.is_absent ?? false,
@@ -274,6 +316,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       ...components.map(c => `${c.name} (out of ${c.max_marks})`),
       'Marks',
       'Out of',
+      ...(conversionTotal != null ? [`Converted (out of ${conversionTotal})`] : []),
       'Percentage',
     ]]
     for (const student of students) {
@@ -282,11 +325,17 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
         ? componentRowTotal(componentMarks[student.user_id], components)
         : (mark.marks !== '' ? parseFloat(mark.marks) : null)
       const pct = !mark.isAbsent && num != null && !isNaN(num) ? `${Math.round((num / assessmentMaxMarks) * 100)}%` : ''
+      const converted = conversionTotal != null && !mark.isAbsent && num != null && !isNaN(num)
+        ? rescaleMark(num, assessmentMaxMarks, conversionTotal)
+        : null
       rows.push([
         student.user.full_name,
         ...components.map(c => mark.isAbsent ? 'AB' : (componentMarks[student.user_id]?.[c.id] ?? '')),
         mark.isAbsent ? 'AB' : (num != null ? String(num) : ''),
         String(assessmentMaxMarks),
+        ...(conversionTotal != null
+          ? [mark.isAbsent ? 'AB' : (converted != null ? String(converted) : '')]
+          : []),
         pct,
       ])
     }
@@ -381,24 +430,70 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       showMarksheet,
       componentDrafts.map(d => ({ id: d.id, name: d.name, max_marks: parseFloat(d.maxMarks) })),
     )
-    setSavingComponents(false)
-    if (!saved) return
+    if (!saved) { setSavingComponents(false); return }
+
+    // Imported rows bring their source's marks with them, rescaled if the
+    // component was given a different weight than the marksheet was marked at.
+    // Names are unique per assessment, which is what lets a draft be matched to
+    // the row that came back.
+    const savedByName = new Map(saved.map(c => [c.name, c]))
+    const importedEntries: {
+      componentId: string; studentId: string; marks: number | null; isAbsent: boolean
+    }[] = []
+
+    for (const draft of componentDrafts) {
+      if (!draft.imported) continue
+      const component = savedByName.get(draft.name.trim())
+      if (!component) continue
+      for (const student of students) {
+        const source = draft.imported.marks[student.user_id]
+        if (!source) continue
+        importedEntries.push({
+          componentId: component.id,
+          studentId: student.user_id,
+          // Scaled from the source's own figures, so re-weighting twice never
+          // compounds one rounding on top of another.
+          marks: source.isAbsent
+            ? null
+            : rescaleMark(source.marks, draft.imported.sourceMax, Number(component.max_marks)),
+          isAbsent: source.isAbsent,
+        })
+      }
+    }
+
+    if (importedEntries.length > 0) {
+      await upsertAssessmentComponentMarks(importedEntries)
+    }
 
     setComponents(saved)
     setComponentDrafts(saved.map(c => ({ id: c.id, name: c.name, maxMarks: String(c.max_marks) })))
     setComponentsByAssessment(prev => ({ ...prev, [showMarksheet]: saved }))
     setShowComponentEditor(false)
 
-    // Keep the cells that survived, and give any new component a blank column.
-    setComponentMarks(prev => {
-      const next: Record<string, Record<string, string>> = {}
-      for (const student of students) {
-        const cells: Record<string, string> = {}
-        for (const c of saved) cells[c.id] = prev[student.user_id]?.[c.id] ?? ''
-        next[student.user_id] = cells
-      }
-      return next
-    })
+    if (importedEntries.length > 0) {
+      // An import writes marks, and the database derives the totals (and the
+      // absences) from them. Read both back rather than predicting what that
+      // derivation produced — a guess that is even slightly off would be
+      // written straight back out by the next Save Marks.
+      const [totals, componentMarkRows] = await Promise.all([
+        fetchAssessmentMarks(showMarksheet),
+        fetchAssessmentComponentMarks(showMarksheet),
+      ])
+      fillSheet(students, saved, totals, componentMarkRows)
+    } else {
+      // Nothing was written, so the typed cells stand: keep the ones whose
+      // component survived and give any new component a blank column.
+      setComponentMarks(prev => {
+        const next: Record<string, Record<string, string>> = {}
+        for (const student of students) {
+          const cells: Record<string, string> = {}
+          for (const c of saved) cells[c.id] = prev[student.user_id]?.[c.id] ?? ''
+          next[student.user_id] = cells
+        }
+        return next
+      })
+    }
+    setSavingComponents(false)
 
     // The assessment's max is now the sum of its parts (or, once the last
     // component goes, whatever it was before the split).
@@ -407,6 +502,78 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       : assessmentMaxMarks
     setAssessmentMaxMarks(newMax)
     setAssessments(prev => prev.map(a => a.id === showMarksheet ? { ...a, max_marks: newMax } : a))
+  }
+
+  /** Other marksheets in this classroom, ranked against what is typed in the
+   *  picker. An assessment cannot be imported into itself. */
+  const importCandidates = (() => {
+    const q = importQuery.trim().toLowerCase()
+    return assessments
+      .filter(a => a.id !== showMarksheet)
+      .filter(a => q === '' || a.title.toLowerCase().includes(q) || (a.report_card_title ?? '').toLowerCase().includes(q))
+      // A title that starts with what was typed is the likelier match, so it
+      // sorts above one that merely contains it.
+      .sort((a, b) => {
+        if (q !== '') {
+          const aStarts = a.title.toLowerCase().startsWith(q)
+          const bStarts = b.title.toLowerCase().startsWith(q)
+          if (aStarts !== bStarts) return aStarts ? -1 : 1
+        }
+        return (b.date ?? '').localeCompare(a.date ?? '')
+      })
+      .slice(0, 8)
+  })()
+
+  /** Fills a component row from another marksheet: its title, its maximum, and
+   *  every student's result. The marks are not written until the component set
+   *  is saved, so the weight can still be changed first. */
+  const handleImportMarksheet = async (rowIndex: number, source: ClassroomAssessment) => {
+    setImportingFrom(source.id)
+    const sourceMarks = await fetchAssessmentMarks(source.id)
+    setImportingFrom(null)
+
+    const marks: ImportedMarksheet['marks'] = {}
+    for (const m of sourceMarks) {
+      marks[m.student_id] = { marks: m.marks != null ? Number(m.marks) : null, isAbsent: m.is_absent }
+    }
+
+    setComponentDrafts(prev => prev.map((d, i) => i === rowIndex ? {
+      ...d,
+      // A name already typed is the teacher's own wording, so it is kept.
+      name: d.name.trim() === '' ? source.title : d.name,
+      // Default the weight to what the marksheet was marked out of; changing
+      // it afterwards rescales the marks to fit.
+      maxMarks: String(Number(source.max_marks)),
+      imported: {
+        title: source.title,
+        sourceMax: Number(source.max_marks),
+        marks,
+      },
+    } : d))
+    setImportPickerRow(null)
+    setImportQuery('')
+  }
+
+  const handleStartEditConversion = () => {
+    setConversionDraft(conversionTotal != null ? String(conversionTotal) : '')
+    setEditingConversion(true)
+  }
+
+  /** Saves the conversion total, or clears it when the field is left empty. */
+  const handleSaveConversion = async () => {
+    if (!showMarksheet) return
+    const raw = conversionDraft.trim()
+    const next = raw === '' ? null : parseFloat(raw)
+    if (next != null && (!isFinite(next) || next <= 0)) return
+
+    setSavingConversion(true)
+    const ok = await updateAssessment(showMarksheet, { conversion_total: next })
+    if (ok) {
+      setConversionTotal(next)
+      setAssessments(prev => prev.map(a => a.id === showMarksheet ? { ...a, conversion_total: next } : a))
+      setEditingConversion(false)
+    }
+    setSavingConversion(false)
   }
 
   const handleStartEditMaxMarks = () => {
@@ -742,6 +909,54 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                     )}
                   </div>
 
+                  {/* Total conversion — an optional second maximum the marks
+                      are reported at. Blank it out to drop the column. */}
+                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    conversionTotal != null ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {editingConversion ? (
+                      <>
+                        <span className="whitespace-nowrap">Convert to</span>
+                        <input
+                          type="number"
+                          min={1}
+                          autoFocus
+                          value={conversionDraft}
+                          onChange={(e) => setConversionDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleSaveConversion() }
+                            if (e.key === 'Escape') setEditingConversion(false)
+                          }}
+                          placeholder="off"
+                          className="w-14 border border-slate-300 rounded-md px-1 py-0.5 text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                        />
+                        <button
+                          onClick={handleSaveConversion}
+                          disabled={savingConversion}
+                          className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                          title="Save total conversion"
+                        >
+                          <Check size={13} />
+                        </button>
+                        <button onClick={() => setEditingConversion(false)} className="text-slate-400 hover:text-slate-600" title="Cancel">
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={handleStartEditConversion}
+                        className="flex items-center gap-1 hover:opacity-80"
+                        title={conversionTotal != null
+                          ? `Marks are also reported out of ${conversionTotal} — click to change or clear`
+                          : 'Also report these marks out of a different total'}
+                      >
+                        <Scale size={11} />
+                        {conversionTotal != null ? `Convert to ${conversionTotal}` : 'Convert'}
+                        <Pencil size={10} />
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleDownload}
                     className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-full text-xs font-semibold transition-colors"
@@ -781,6 +996,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                           <p className="text-[11px] text-slate-500 leading-relaxed">
                             Split this assessment into parts marked separately — e.g. Lab out of 20 and
                             Examination out of 80. The assessment is then scored out of their combined total.
+                            Use the <FileInput size={10} className="inline -mt-0.5 text-indigo-500" /> button to
+                            fill a part from another marksheet in this classroom instead of marking it again.
                           </p>
                         </div>
                       </div>
@@ -791,37 +1008,156 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         </p>
                       ) : (
                         <div className="space-y-1.5">
-                          {componentDrafts.map((draft, idx) => (
-                            <div key={draft.id ?? `new-${idx}`} className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={draft.name}
-                                onChange={(e) => setComponentDrafts(prev =>
-                                  prev.map((d, i) => i === idx ? { ...d, name: e.target.value } : d))}
-                                placeholder="Component name"
-                                className="flex-1 min-w-0 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-                              />
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <span className="text-[11px] text-slate-500">out of</span>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={draft.maxMarks}
-                                  onChange={(e) => setComponentDrafts(prev =>
-                                    prev.map((d, i) => i === idx ? { ...d, maxMarks: e.target.value } : d))}
-                                  className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
-                                />
+                          {componentDrafts.map((draft, idx) => {
+                            const rowMax = parseFloat(draft.maxMarks)
+                            const rescaled = draft.imported != null
+                              && isFinite(rowMax) && rowMax > 0
+                              && rowMax !== draft.imported.sourceMax
+                            return (
+                            <div key={draft.id ?? `new-${idx}`}>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 min-w-0 relative">
+                                  <input
+                                    type="text"
+                                    value={draft.name}
+                                    onChange={(e) => setComponentDrafts(prev =>
+                                      prev.map((d, i) => i === idx ? { ...d, name: e.target.value } : d))}
+                                    placeholder="Component name"
+                                    className="w-full border border-slate-200 rounded-lg pl-2.5 pr-9 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                  />
+                                  {/* Import: fill this component from another
+                                      marksheet in the classroom instead of
+                                      marking it from scratch. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setImportPickerRow(importPickerRow === idx ? null : idx)
+                                      setImportQuery('')
+                                    }}
+                                    className={`absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${
+                                      importPickerRow === idx || draft.imported
+                                        ? 'bg-indigo-100 text-indigo-600'
+                                        : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                                    }`}
+                                    title="Import marks from another marksheet in this classroom"
+                                  >
+                                    <FileInput size={13} />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className="text-[11px] text-slate-500">out of</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={draft.maxMarks}
+                                    onChange={(e) => setComponentDrafts(prev =>
+                                      prev.map((d, i) => i === idx ? { ...d, maxMarks: e.target.value } : d))}
+                                    className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center tabular-nums bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setComponentDrafts(prev => prev.filter((_, i) => i !== idx))
+                                    setImportPickerRow(null)
+                                  }}
+                                  className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                                  title={`Remove ${draft.name.trim() || 'this component'}`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setComponentDrafts(prev => prev.filter((_, i) => i !== idx))}
-                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                                title={`Remove ${draft.name.trim() || 'this component'}`}
-                              >
-                                <Trash2 size={13} />
-                              </button>
+
+                              {/* What the import will do, said plainly before
+                                  it is saved — including the rescaling, which
+                                  is the part worth checking. */}
+                              {draft.imported && (
+                                <div className="mt-1 ml-0.5 flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-semibold">
+                                    <FileInput size={9} /> {draft.imported.title}
+                                  </span>
+                                  <span>
+                                    {Object.keys(draft.imported.marks).length} mark
+                                    {Object.keys(draft.imported.marks).length === 1 ? '' : 's'} out of {draft.imported.sourceMax}
+                                    {rescaled
+                                      ? ` — rescaled to fit out of ${rowMax}`
+                                      : ' — copied as they are'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setComponentDrafts(prev => prev.map((d, i) =>
+                                      i === idx ? { ...d, imported: undefined } : d))}
+                                    className="text-slate-400 hover:text-red-500 font-medium underline"
+                                  >
+                                    Don&apos;t import
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Type-ahead over the classroom's other marksheets. */}
+                              {importPickerRow === idx && (
+                                <div className="mt-1.5 rounded-xl border border-indigo-200 bg-white overflow-hidden shadow-sm">
+                                  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-slate-100">
+                                    <Search size={12} className="text-slate-400 flex-shrink-0" />
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={importQuery}
+                                      onChange={(e) => setImportQuery(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Escape') setImportPickerRow(null)
+                                        if (e.key === 'Enter' && importCandidates.length > 0) {
+                                          e.preventDefault()
+                                          handleImportMarksheet(idx, importCandidates[0])
+                                        }
+                                      }}
+                                      placeholder="Search this classroom's marksheets…"
+                                      className="flex-1 min-w-0 text-xs bg-transparent focus:outline-none text-slate-700 placeholder:text-slate-400"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setImportPickerRow(null)}
+                                      className="text-slate-300 hover:text-slate-500 flex-shrink-0"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                  {importCandidates.length === 0 ? (
+                                    <p className="px-2.5 py-3 text-[11px] text-slate-400 text-center">
+                                      {assessments.length <= 1
+                                        ? 'This is the only assessment in the classroom.'
+                                        : 'No other marksheet matches that.'}
+                                    </p>
+                                  ) : (
+                                    <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+                                      {importCandidates.map(candidate => (
+                                        <button
+                                          key={candidate.id}
+                                          type="button"
+                                          disabled={importingFrom != null}
+                                          onClick={() => handleImportMarksheet(idx, candidate)}
+                                          className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-indigo-50/60 transition-colors disabled:opacity-50"
+                                        >
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-semibold text-slate-700 truncate">{candidate.title}</p>
+                                            <p className="text-[10px] text-slate-400">
+                                              out of {Number(candidate.max_marks)}
+                                              {candidate.date ? ` · ${new Date(candidate.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                                              {candidate.report_card_title ? ` · ${candidate.report_card_title}` : ''}
+                                            </p>
+                                          </div>
+                                          {importingFrom === candidate.id
+                                            ? <Loader2 size={12} className="text-indigo-500 animate-spin flex-shrink-0" />
+                                            : <FileInput size={12} className="text-slate-300 flex-shrink-0" />}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
 
@@ -834,7 +1170,13 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
-                          onClick={() => setComponentDrafts(prev => [...prev, { name: '', maxMarks: '' }])}
+                          onClick={() => {
+                            setComponentDrafts(prev => [...prev, { name: '', maxMarks: '' }])
+                            // Open the picker on the new row: importing is the
+                            // faster path whenever the marks already exist.
+                            setImportPickerRow(componentDrafts.length)
+                            setImportQuery('')
+                          }}
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors"
                         >
                           <Plus size={12} /> Add component
@@ -929,6 +1271,14 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                             <th className={`py-1.5 px-2 text-center font-bold ${split ? 'w-20 border-l border-slate-200' : 'w-28'}`}>
                               {split ? 'Total' : 'Marks'}
                             </th>
+                            {conversionTotal != null && (
+                              <th className="py-1.5 px-2 text-center w-20 font-bold text-violet-700">
+                                <span className="block">Converted</span>
+                                <span className="block text-[9px] font-semibold text-violet-400 normal-case tracking-normal">
+                                  out of {conversionTotal}
+                                </span>
+                              </th>
+                            )}
                             <th className="py-1.5 px-2 text-center w-14 font-bold">%</th>
                             <th className="py-1.5 pl-2 text-center w-12 font-bold">AB</th>
                           </tr>
@@ -939,6 +1289,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                             const num = scoreOf(student.user_id)
                             const pct = !mark.isAbsent && num != null
                               ? Math.round((num / assessmentMaxMarks) * 100) : null
+                            const converted = conversionTotal != null && !mark.isAbsent
+                              ? rescaleMark(num, assessmentMaxMarks, conversionTotal) : null
                             const error = !mark.isAbsent && !split ? getMarkError(mark.marks) : null
                             return (
                               <tr
@@ -1031,6 +1383,21 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                     </div>
                                   )}
                                 </td>
+                                {conversionTotal != null && (
+                                  // Derived on read from the total — nothing is
+                                  // ever stored at the converted scale.
+                                  <td className="py-1 px-2 text-center align-middle tabular-nums">
+                                    {mark.isAbsent ? (
+                                      <span className="text-slate-400">AB</span>
+                                    ) : converted != null ? (
+                                      <span className="font-bold text-violet-700">
+                                        {converted}<span className="font-normal text-violet-300">/{conversionTotal}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—/{conversionTotal}</span>
+                                    )}
+                                  </td>
+                                )}
                                 <td className="py-1 px-2 text-center align-middle">
                                   {mark.isAbsent ? (
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-slate-200 text-slate-500">AB</span>
@@ -1144,6 +1511,10 @@ function AssessmentCard({
     ? Math.round((myMark.marks / myMark.max_marks) * 100)
     : null
 
+  const convertedMark = assessment.conversion_total != null && myMark && !myMark.is_absent
+    ? rescaleMark(myMark.marks, Number(myMark.max_marks), Number(assessment.conversion_total))
+    : null
+
   return (
     <div
       className={`bg-white border-y sm:border sm:rounded-2xl border-slate-300 sm:shadow-sm transition-all ${
@@ -1179,6 +1550,14 @@ function AssessmentCard({
                   {components.map(c => `${c.name} ${Number(c.max_marks)}`).join(' + ')}
                 </span>
               )}
+              {assessment.conversion_total != null && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full font-semibold"
+                  title={`Also reported out of ${assessment.conversion_total}`}
+                >
+                  <Scale size={9} /> → {Number(assessment.conversion_total)}
+                </span>
+              )}
               {creatorName && (
                 <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
                   <User size={9} /> {creatorName}
@@ -1208,6 +1587,15 @@ function AssessmentCard({
                     <span className="text-lg font-bold text-slate-800">{myMark.is_absent ? 'AB' : myMark.marks ?? '—'}</span>
                     {!myMark.is_absent && <span className="text-xs text-slate-500">/ {myMark.max_marks}</span>}
                   </div>
+                  {/* Where the school reports these marks at another scale,
+                      the student sees that figure alongside the raw one. */}
+                  {convertedMark != null && (
+                    <div className="flex items-baseline gap-1 px-3 py-1.5 bg-violet-50 rounded-xl border border-violet-200">
+                      <span className="text-[9px] uppercase tracking-widest text-violet-400 font-semibold mr-1">Converted</span>
+                      <span className="text-lg font-bold text-violet-700">{convertedMark}</span>
+                      <span className="text-xs text-violet-400">/ {assessment.conversion_total}</span>
+                    </div>
+                  )}
                   {pct != null && (
                     <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
                       pct >= 80 ? 'bg-green-100 text-green-700' :

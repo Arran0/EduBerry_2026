@@ -102,6 +102,10 @@ export interface ClassroomAssessment {
   tag: AssessmentTag
   report_card_title: string | null
   max_marks: number
+  /** An optional second maximum the marks are *displayed* against — a test
+   *  marked out of 120 that a school reports out of 50. Null means the marks
+   *  are only ever shown at their own scale. */
+  conversion_total: number | null
   created_by: string
   created_at: string
   updated_at: string
@@ -866,6 +870,7 @@ export async function createAssessment(input: {
     tag: input.tag,
     report_card_title: input.report_card_title || null,
     max_marks: maxMarks,
+    conversion_total: null,
     created_by: createdBy,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -896,7 +901,7 @@ export async function deleteAssessment(assessmentId: string): Promise<boolean> {
 
 export async function updateAssessment(
   assessmentId: string,
-  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag' | 'report_card_title' | 'max_marks'>>
+  updates: Partial<Pick<ClassroomAssessment, 'title' | 'description' | 'date' | 'tag' | 'report_card_title' | 'max_marks' | 'conversion_total'>>
 ): Promise<boolean> {
   const { error } = await supabase
     .from('classroom_assessments')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { componentTotals, gradeLetter } from './reportCardGrading'
+import { componentTotals, gradeLetter, rescaleMark } from './reportCardGrading'
 import type {
   AssessmentComponent, AssessmentComponentMark, ClassroomAssessment, StudentReportCardEntry,
 } from './classrooms'
@@ -52,6 +52,7 @@ function entry(
     tag: 'other',
     report_card_title: 'Term 1',
     max_marks: parts.reduce((s, [c]) => s + c.max_marks, 0),
+    conversion_total: null,
     created_by: 'teacher',
     created_at: '',
     updated_at: '',
@@ -137,6 +138,55 @@ describe('componentTotals', () => {
     const assignment = component('Assignment', 10)
     expect(componentTotals([entry('Unit Test', [[viva, 8], [assignment, 9]])]).map(c => c.name))
       .toEqual(['Assignment', 'Viva'])
+  })
+})
+
+describe('rescaleMark', () => {
+  it('restates a mark against a smaller maximum', () => {
+    // The total-conversion column: a test marked out of 120, reported out of 50.
+    expect(rescaleMark(90, 120, 50)).toBe(37.5)
+    // The import rescale: a marksheet marked out of 50, imported as a /20 part.
+    expect(rescaleMark(45, 50, 20)).toBe(18)
+  })
+
+  it('restates a mark against a larger maximum', () => {
+    expect(rescaleMark(18, 20, 80)).toBe(72)
+  })
+
+  it('is the identity when the two maximums match', () => {
+    expect(rescaleMark(37, 50, 50)).toBe(37)
+  })
+
+  it('rounds to two decimals rather than trailing float noise', () => {
+    // 47/50 out of 20 is 18.8 — not 18.799999999999997.
+    expect(rescaleMark(47, 50, 20)).toBe(18.8)
+    expect(rescaleMark(1, 3, 10)).toBe(3.33)
+  })
+
+  it('keeps full marks full and zero zero', () => {
+    expect(rescaleMark(50, 50, 20)).toBe(20)
+    expect(rescaleMark(0, 50, 20)).toBe(0)
+  })
+
+  it('has nothing to scale when there is no mark', () => {
+    expect(rescaleMark(null, 50, 20)).toBeNull()
+    expect(rescaleMark(undefined, 50, 20)).toBeNull()
+  })
+
+  it('refuses a source maximum that cannot be divided by', () => {
+    expect(rescaleMark(10, 0, 20)).toBeNull()
+    expect(rescaleMark(10, -5, 20)).toBeNull()
+    expect(rescaleMark(10, Number.NaN, 20)).toBeNull()
+  })
+
+  it('refuses a nonsensical target', () => {
+    expect(rescaleMark(10, 50, -1)).toBeNull()
+    expect(rescaleMark(10, 50, Number.NaN)).toBeNull()
+  })
+
+  it('round-trips back to the original scale within rounding', () => {
+    const down = rescaleMark(45, 50, 20)!
+    expect(rescaleMark(down, 20, 50)).toBe(45)
   })
 })
 
