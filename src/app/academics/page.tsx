@@ -386,11 +386,14 @@ export default function AcademicsPage() {
   const CLASSROOM_COL_GAP = 12
   const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
   const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
+  // Reveal exactly one row at a time, whatever the live column count is (see
+  // useGridColumns), so an auto-load always lands a full row — never a
+  // part-filled one on narrow screens or a short one on wide ones.
   const {
     visibleCount: classroomVisibleCount,
     containerRef: classroomsScrollRef,
     handleScroll: handleClassroomsScroll,
-  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: CLASSROOM_ROW_GAP })
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: classroomColumns, intervalMs: 3000, bottomBufferPx: CLASSROOM_ROW_GAP })
   const filteredClassrooms = classroomSearch
     ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
     : classrooms.slice(0, classroomVisibleCount)

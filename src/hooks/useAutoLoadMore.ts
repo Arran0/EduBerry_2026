@@ -27,7 +27,7 @@ interface UseAutoLoadMoreResult {
 }
 
 /**
- * Drives a "load 4 more" list that also auto-advances on a timer, pausing
+ * Drives a "load `step` more" list that also auto-advances on a timer, pausing
  * the countdown whenever the user scrolls and stopping for good once
  * everything has been revealed.
  */

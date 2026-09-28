@@ -1,6 +1,7 @@
 import { supabase, UserProfile } from './supabase'
 import { Homeroom } from './homerooms'
 import { addClassroomMember, Classroom } from './classrooms'
+import { staffRolesForClassTeachers } from './homeroomClassTeachers'
 import { compressImageIfNeeded } from './imageCompression'
 
 // Reuse the same four-state model as staff tasks / classroom progress.
@@ -40,16 +41,20 @@ export interface ImportHomeroomResult {
   smartboardAdded: boolean
   /** Whether the homeroom actually had a board linked (helps explain a no-op). */
   hadSmartboard: boolean
+  classTeacherAdded: boolean
+  /** Whether the homeroom actually had a class teacher (helps explain a no-op). */
+  hadClassTeacher: boolean
   error?: string
 }
 
 /**
- * Imports every student of a homeroom into a classroom and, when the homeroom
- * has a smart board account, adds that board as a teacher-level classroom member.
+ * Imports every student of a homeroom into a classroom, along with the two
+ * accounts that belong to the homeroom rather than to its roster: its smart
+ * board, and its class teacher.
  *
- * The smart board is intentionally added with the 'teacher' role (not 'student')
- * so it never appears in student rosters, mark sheets, or leaderboards while
- * still getting teacher-level access inside the classroom.
+ * Both are intentionally added with staff roles (never 'student') so they never
+ * appear in student rosters, mark sheets, or leaderboards while still getting
+ * staff-level access inside the classroom.
  */
 export async function importHomeroomIntoClassroom(
   classroomId: string,
@@ -63,7 +68,10 @@ export async function importHomeroomIntoClassroom(
 
   if (memErr) {
     console.error('importHomeroomIntoClassroom members error:', memErr)
-    return { success: false, studentsAdded: 0, smartboardAdded: false, hadSmartboard: false, error: 'Failed to read homeroom students' }
+    return {
+      success: false, studentsAdded: 0, smartboardAdded: false, hadSmartboard: false,
+      classTeacherAdded: false, hadClassTeacher: false, error: 'Failed to read homeroom students',
+    }
   }
 
   let studentsAdded = 0
@@ -72,10 +80,10 @@ export async function importHomeroomIntoClassroom(
     if (ok) studentsAdded++
   }
 
-  // 2. Smart board account (teacher-level).
+  // 2. The homeroom's own accounts: smart board and class teacher.
   const { data: hr, error: hrErr } = await supabase
     .from('homerooms')
-    .select('smartboard_id')
+    .select('smartboard_id, class_teacher_id')
     .eq('id', homeroomId)
     .single()
 
@@ -88,7 +96,18 @@ export async function importHomeroomIntoClassroom(
     if (!smartboardAdded) console.error('importHomeroomIntoClassroom: failed to add smart board', hr.smartboard_id)
   }
 
-  return { success: true, studentsAdded, smartboardAdded, hadSmartboard }
+  // The class teacher comes along with their homeroom, at their own staff role.
+  const hadClassTeacher = !!hr?.class_teacher_id
+  let classTeacherAdded = false
+  if (hr?.class_teacher_id) {
+    const [teacher] = await staffRolesForClassTeachers([hr.class_teacher_id])
+    if (teacher) {
+      classTeacherAdded = await addClassroomMember(classroomId, teacher.id, teacher.role)
+      if (!classTeacherAdded) console.error('importHomeroomIntoClassroom: failed to add class teacher', hr.class_teacher_id)
+    }
+  }
+
+  return { success: true, studentsAdded, smartboardAdded, hadSmartboard, classTeacherAdded, hadClassTeacher }
 }
 
 /** All smart board accounts (role = 'smartboard'), for pickers/managers. */

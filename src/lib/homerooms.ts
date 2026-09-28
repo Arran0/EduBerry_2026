@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { enrolClassTeacherInMatchingClassrooms } from './homeroomClassTeachers'
 
 // ============================================
 // Types
@@ -238,7 +239,14 @@ export async function updateHomeroom(
   return data
 }
 
-/** Sets (or clears, with null) the class teacher for a homeroom. */
+/** Sets (or clears, with null) the class teacher for a homeroom.
+ *
+ *  Naming a class teacher also enrols them in the homeroom's classrooms (see
+ *  enrolClassTeacherInMatchingClassrooms), so a teacher assigned after those
+ *  classrooms already exist still ends up inside them — the same rule the
+ *  create-classroom and import-homeroom paths apply in the other direction.
+ *  An outgoing teacher is deliberately left in place: they may well still
+ *  teach the classroom, so removing them is an admin's call, not ours. */
 export async function updateHomeroomClassTeacher(
   homeroomId: string,
   teacherId: string | null,
@@ -252,6 +260,8 @@ export async function updateHomeroomClassTeacher(
     console.error('updateHomeroomClassTeacher error:', error)
     return false
   }
+
+  if (teacherId) await enrolClassTeacherInMatchingClassrooms(homeroomId, teacherId)
   return true
 }
 

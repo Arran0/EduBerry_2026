@@ -10,13 +10,14 @@ import PageBanner from '@/components/PageBanner'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
-import { BookOpen, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Lock, LockOpen, Trash2, ExternalLink, Search, Tag, Home, MonitorPlay, DownloadCloud, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Lock, LockOpen, Trash2, ExternalLink, Search, Tag, Home, MonitorPlay, Info, DownloadCloud, CheckCircle2 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
 import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom, fetchSmartboardIdsForGradeSection } from '@/lib/smartboard'
+import { fetchClassTeachersForGradeSection } from '@/lib/homeroomClassTeachers'
 import { UserProfile } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
+import { ClassroomMemberRole, ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
 import { supabase } from '@/lib/supabase'
 
 const containerVariants = {
@@ -184,7 +185,7 @@ export default function ClassroomManagerPage() {
 
       // Every roster lookup is independent of the others, so they go together
       // rather than the smart board query waiting behind two inserts.
-      const [defaultRes, studentsRes, boardIds] = await Promise.all([
+      const [defaultRes, studentsRes, boardIds, classTeachers] = await Promise.all([
         supabase.from('profiles').select('id, role').in('role', ['principal', 'admin']),
         gradeNum && section
           ? supabase.from('profiles').select('id').eq('role', 'student').eq('grade', gradeNum).eq('section', section)
@@ -192,13 +193,17 @@ export default function ClassroomManagerPage() {
         gradeNum && section
           ? fetchSmartboardIdsForGradeSection(gradeNum, section)
           : Promise.resolve([] as string[]),
+        gradeNum && section
+          ? fetchClassTeachersForGradeSection(gradeNum, section)
+          : Promise.resolve([] as { id: string; role: ClassroomMemberRole }[]),
       ])
       if (newClassroom.teacher_email.trim()) {
         await addMemberByEmail(result.id, newClassroom.teacher_email.trim())
       }
 
       // One insert for the whole starting roster — admins/principals, the
-      // grade+section's students, and its smart board(s) — instead of three.
+      // grade+section's students, its smart board(s), and the class teacher(s)
+      // of its homeroom(s) — instead of four.
       // (classroom_members is UNIQUE (classroom_id, user_id), and a duplicate
       // *within* a single statement fails the whole insert rather than just
       // that row, so the same id appearing in two of these lists is dropped
@@ -212,6 +217,9 @@ export default function ClassroomManagerPage() {
       for (const m of (defaultRes.data ?? []) as { id: string; role: string }[]) addRow(m.id, m.role)
       for (const s of (studentsRes.data ?? []) as { id: string }[]) addRow(s.id, 'student')
       for (const id of boardIds) addRow(id, 'teacher')
+      // A homeroom's class teacher comes with the homeroom, at their own staff
+      // role — never as a student, so they stay out of rosters and mark sheets.
+      for (const t of classTeachers) addRow(t.id, t.role)
 
       if (memberRows.size > 0) {
         const { error } = await supabase.from('classroom_members').insert([...memberRows.values()])
@@ -353,6 +361,27 @@ export default function ClassroomManagerPage() {
                           <input type="text" value={newClassroom.section} onChange={e => setNewClassroom({ ...newClassroom, section: e.target.value })} className={ai} placeholder="A" maxLength={5} />
                         </div>
                       </div>
+                    </div>
+                    {/* Says up front what a grade + section pulls in on its own,
+                        so the roster arriving pre-filled is never a surprise —
+                        and the same rule that governs the Import Homeroom panel
+                        below: a homeroom always brings its class teacher. */}
+                    <div className="flex items-start gap-2 text-[11px] leading-relaxed text-[#525252] bg-[#EBEBEB] border border-[#D4D4D8] rounded-lg px-3 py-2">
+                      <Info size={13} className="flex-shrink-0 mt-0.5 text-[#71717A]" />
+                      <span>
+                        {newClassroom.grade && newClassroom.section.trim() ? (
+                          <>
+                            Every homeroom for <strong>Grade {newClassroom.grade} {newClassroom.section.trim().toUpperCase()}</strong> joins
+                            automatically — its students, its smart board, and its <strong>class teacher</strong>.
+                          </>
+                        ) : (
+                          <>
+                            Set a grade and section and every homeroom matching it joins automatically — students,
+                            smart board, and <strong>class teacher</strong>. Homerooms imported later bring their
+                            class teachers too.
+                          </>
+                        )}
+                      </span>
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</label>
@@ -733,7 +762,7 @@ function ClassroomRow({
                 )}
               </AnimatePresence>
 
-              {/* Import homeroom (students + its smart board account) */}
+              {/* Import homeroom (students + its smart board + its class teacher) */}
               {isAdmin && !closed && (
                 <HomeroomImport classroomId={classroom.id} onImported={onImported} />
               )}
@@ -757,15 +786,16 @@ function ClassroomRow({
 }
 
 // ── Import Homeroom ──
-// Adds every student of a homeroom into the classroom, plus the homeroom's
-// smart board account as a teacher-level member (when one exists).
+// Adds every student of a homeroom into the classroom, plus the two accounts
+// that belong to the homeroom itself rather than to its roster — its smart
+// board and its class teacher — both at staff level (when they exist).
 function HomeroomImport({ classroomId, onImported }: { classroomId: string; onImported: () => void }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Homeroom[]>([])
   const [searching, setSearching] = useState(false)
   const [importingId, setImportingId] = useState<string | null>(null)
-  const [result, setResult] = useState<{ name: string; students: number; board: boolean; hadBoard: boolean } | null>(null)
+  const [result, setResult] = useState<{ name: string; students: number; board: boolean; hadBoard: boolean; teacher: boolean; hadTeacher: boolean } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -783,7 +813,11 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
     const res = await importHomeroomIntoClassroom(classroomId, hr.id)
     setImportingId(null)
     if (res.success) {
-      setResult({ name: hr.name, students: res.studentsAdded, board: res.smartboardAdded, hadBoard: res.hadSmartboard })
+      setResult({
+        name: hr.name, students: res.studentsAdded,
+        board: res.smartboardAdded, hadBoard: res.hadSmartboard,
+        teacher: res.classTeacherAdded, hadTeacher: res.hadClassTeacher,
+      })
       onImported()
     }
   }
@@ -804,7 +838,8 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
       {open && (
         <div className="border-t border-[#E4E4E7] p-3 space-y-2">
           <p className="text-[11px] text-[#71717A]">
-            Adds all homeroom students and links its smart board account with teacher access.
+            Adds all homeroom students, and brings the homeroom&rsquo;s own accounts with it —
+            its smart board and its <strong>class teacher</strong> — both with teacher access.
           </p>
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
@@ -816,15 +851,16 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
           </div>
 
           {result && (
-            <div className={`flex items-start gap-2 text-xs rounded px-2.5 py-1.5 border ${result.hadBoard && !result.board ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
+            <div className={`flex items-start gap-2 text-xs rounded px-2.5 py-1.5 border ${(result.hadBoard && !result.board) || (result.hadTeacher && !result.teacher) ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
               <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
               <span>
                 Imported <strong>{result.name}</strong>: {result.students} student{result.students !== 1 ? 's' : ''}
-                {result.board
-                  ? ' + smart board'
-                  : result.hadBoard
-                    ? ' (smart board could not be added — check console)'
-                    : ' (no smart board linked to this homeroom)'}.
+                {result.board ? ' + smart board' : ''}
+                {result.teacher ? ' + class teacher' : ''}.
+                {result.hadBoard && !result.board ? ' Smart board could not be added — check console.' : ''}
+                {!result.hadBoard ? ' No smart board linked to this homeroom.' : ''}
+                {result.hadTeacher && !result.teacher ? ' Class teacher could not be added — check console.' : ''}
+                {!result.hadTeacher ? ' No class teacher set for this homeroom.' : ''}
               </span>
             </div>
           )}
@@ -843,6 +879,13 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
                     <p className="text-sm font-medium text-[#18181B] truncate flex items-center gap-1.5">
                       {hr.name}
                       {hr.smartboard_id && <MonitorPlay size={11} className="text-indigo-500 flex-shrink-0" />}
+                    </p>
+                    {/* Names the teacher who will come along, so the import is
+                        never a surprise addition to the classroom roster. */}
+                    <p className="text-[11px] text-[#71717A] truncate">
+                      {hr.class_teacher
+                        ? <>Class teacher: {hr.class_teacher.full_name}</>
+                        : 'No class teacher set'}
                     </p>
                   </div>
                   <button
