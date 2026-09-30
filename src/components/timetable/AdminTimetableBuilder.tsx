@@ -8,6 +8,7 @@ import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
 import SetupTab from './admin/SetupTab'
 import GenerateTab from './admin/GenerateTab'
+import { TimetableDraftProvider } from './draft/TimetableDraftContext'
 import HomeroomModal from './admin/homeroom/HomeroomModal'
 import TeacherModal from './admin/teacher/TeacherModal'
 import SubjectModal from './admin/subject/SubjectModal'
@@ -66,6 +67,9 @@ export default function AdminTimetableBuilder() {
   const closeModal = () => setOpenModal(null)
   const currentBtn = TOOLBAR.find((b) => b.key === openModal)
 
+  // The master grid and the entity editors share one in-memory draft: the
+  // Homeroom / Teacher / Subject calendars show the same lessons and move the
+  // same pins, so the draft is owned above all of them rather than by the grid.
   return (
     <div className="border border-[#D4D4D8] bg-white">
       {/* Toolbar — sits on top of the master grid at all times. Left: the working-
@@ -115,7 +119,29 @@ export default function AdminTimetableBuilder() {
             <Loader2 className="animate-spin" size={22} />
           </div>
         ) : selectedConfig ? (
-          <GenerateTab config={selectedConfig} />
+          <TimetableDraftProvider config={selectedConfig} key={selectedConfig.id}>
+            <GenerateTab />
+            <Modal
+              open={openModal !== null}
+              onClose={closeModal}
+              title={currentBtn?.label ?? ''}
+              icon={currentBtn?.icon}
+              size="2xl"
+              fullHeight
+            >
+              {openModal === 'config' && (
+                <SetupTab
+                  configs={configs}
+                  selectedConfig={selectedConfig}
+                  onSelectConfig={setSelectedConfigId}
+                  onChanged={loadConfigs}
+                />
+              )}
+              {openModal === 'homeroom' && <HomeroomModal config={selectedConfig} />}
+              {openModal === 'teacher' && <TeacherModal config={selectedConfig} />}
+              {openModal === 'subjects' && <SubjectModal config={selectedConfig} />}
+            </Modal>
+          </TimetableDraftProvider>
         ) : (
           <div className="py-16 text-center">
             <LayoutGrid size={30} className="mx-auto text-[#D4D4D8]" />
@@ -133,31 +159,30 @@ export default function AdminTimetableBuilder() {
         )}
       </div>
 
-      {/* Entity editors — modal overlays. In this round they host the existing
-          editing surfaces; Rounds 2–3 restructure them into the column layouts. */}
-      <Modal
-        open={openModal !== null}
-        onClose={closeModal}
-        title={currentBtn?.label ?? ''}
-        icon={currentBtn?.icon}
-        size="2xl"
-        fullHeight
-      >
-        {openModal === 'config' && (
-          <SetupTab
-            configs={configs}
-            selectedConfig={selectedConfig}
-            onSelectConfig={setSelectedConfigId}
-            onChanged={loadConfigs}
-          />
-        )}
-
-        {openModal === 'homeroom' && <HomeroomModal config={selectedConfig} />}
-
-        {openModal === 'teacher' && <TeacherModal config={selectedConfig} />}
-
-        {openModal === 'subjects' && <SubjectModal config={selectedConfig} />}
-      </Modal>
+      {/* With no config there is no draft to provide, so the editors render on
+          their own — only Configuration has anything to show at that point. */}
+      {!selectedConfig && (
+        <Modal
+          open={openModal !== null}
+          onClose={closeModal}
+          title={currentBtn?.label ?? ''}
+          icon={currentBtn?.icon}
+          size="2xl"
+          fullHeight
+        >
+          {openModal === 'config' && (
+            <SetupTab
+              configs={configs}
+              selectedConfig={null}
+              onSelectConfig={setSelectedConfigId}
+              onChanged={loadConfigs}
+            />
+          )}
+          {openModal === 'homeroom' && <HomeroomModal config={null} />}
+          {openModal === 'teacher' && <TeacherModal config={null} />}
+          {openModal === 'subjects' && <SubjectModal config={null} />}
+        </Modal>
+      )}
     </div>
   )
 }

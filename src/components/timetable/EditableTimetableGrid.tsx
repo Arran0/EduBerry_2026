@@ -23,6 +23,8 @@ interface Props {
   rooms: Room[]
   constraints?: TimetableConstraint[]
   homerooms?: HomeroomLite[]
+  // Periods of other bell schedules sharing a wall-clock hour (Round 9).
+  slotClash?: Map<string, string[]>
   groupName?: (groupId: string) => string | undefined
   cellConflicts?: (homeroomId: string, day: Weekday, slotId: string) => string[]
   onSetCell: (
@@ -31,6 +33,8 @@ interface Props {
   ) => void
   onClearCell: (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) => void
   onTogglePin: (entry: PlacedEntry) => void
+  // Dropping a lesson on another period. Returns false when refused.
+  onMove?: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean
 }
 
 const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroomId}__${day}__${slotId}`
@@ -41,14 +45,17 @@ export const TIME_OFF_FILL =
 
 export default function EditableTimetableGrid({
   days, slots, homeroomId, homeroomName, entries, unavailability, subjects, teachers, rooms,
-  constraints = [], homerooms = [], groupName, cellConflicts,
-  onSetCell, onClearCell, onTogglePin,
+  constraints = [], homerooms = [], slotClash, groupName, cellConflicts,
+  onSetCell, onClearCell, onTogglePin, onMove,
 }: Props) {
   const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
+  const [dragCell, setDragCell] = useState<string | null>(null)
+  const [overCell, setOverCell] = useState<string | null>(null)
+  const draggable = typeof onMove === 'function'
 
   const conflicts = useMemo(
-    () => conflictCellKeys(entries, unavailability, constraints, homerooms),
-    [entries, unavailability, constraints, homerooms],
+    () => conflictCellKeys(entries, unavailability, constraints, homerooms, slotClash),
+    [entries, unavailability, constraints, homerooms, slotClash],
   )
 
   // Periods this class is kept free (Homeroom → Time off). The generator never
@@ -94,6 +101,29 @@ export default function EditableTimetableGrid({
   const teacherById = useMemo(() => new Map(teachers.map((t) => [t.id, t])), [teachers])
   const roomById = useMemo(() => new Map(rooms.map((r) => [r.id, r])), [rooms])
 
+  // How long each double/triple runs, so its periods can be drawn as one slab
+  // rather than as separate lessons that happen to sit next to each other.
+  const blockSpan = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of entries) {
+      if (e.homeroomId === homeroomId && e.blockKey) m.set(e.blockKey, (m.get(e.blockKey) ?? 0) + 1)
+    }
+    return m
+  }, [entries, homeroomId])
+
+  const teachingOrder = useMemo(() => slots.filter((s) => !s.is_break).map((s) => s.id), [slots])
+
+  // Is the period above/below this one part of the same block?
+  const linkedTo = (entry: PlacedEntry, day: Weekday, delta: -1 | 1): boolean => {
+    if (!entry.blockKey) return false
+    const i = teachingOrder.indexOf(entry.slotId)
+    const neighbour = teachingOrder[i + delta]
+    if (i < 0 || !neighbour) return false
+    return entries.some(
+      (o) => o.blockKey === entry.blockKey && o.day === day && o.slotId === neighbour,
+    )
+  }
+
   // Names of every teacher on a lesson — co-taught periods list them all.
   const teacherLine = (entry: PlacedEntry) =>
     teacherIdsOf(entry)
@@ -137,34 +167,65 @@ export default function EditableTimetableGrid({
                     </td>
                   )
                 }
-                const entry = byCell.get(`${day}__${slot.id}`)
-                const splits = splitCount.get(`${day}__${slot.id}`) ?? 0
+                const cellK = `${day}__${slot.id}`
+                const entry = byCell.get(cellK)
+                const splits = splitCount.get(cellK) ?? 0
                 const off = isTimeOff(day, slot.id)
                 const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
                 const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
                 const room = entry?.roomId ? roomById.get(entry.roomId) : null
                 const names = entry ? teacherLine(entry) : ''
+                const span = entry?.blockKey ? blockSpan.get(entry.blockKey) ?? 1 : 1
+                const linkedAbove = entry ? linkedTo(entry, day, -1) : false
+                const linkedBelow = entry ? linkedTo(entry, day, 1) : false
+                const isOver = overCell === cellK
                 return (
-                  <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
+                  <td
+                    key={day}
+                    className={`p-0.5 sm:p-1 border-t border-l border-[#E4E4E7] ${isOver ? 'bg-indigo-50' : ''}`}
+                    onDragOver={draggable ? (ev) => { ev.preventDefault(); setOverCell(cellK) } : undefined}
+                    onDragLeave={draggable ? () => setOverCell((c) => (c === cellK ? null : c)) : undefined}
+                    onDrop={draggable ? () => {
+                      const from = dragCell
+                      setDragCell(null)
+                      setOverCell(null)
+                      const dragged = from ? byCell.get(from) : null
+                      if (dragged) onMove?.(dragged, day, slot.id)
+                    } : undefined}
+                  >
                     <button
+                      draggable={draggable && !!entry}
+                      onDragStart={entry ? () => setDragCell(cellK) : undefined}
+                      onDragEnd={() => { setDragCell(null); setOverCell(null) }}
                       onClick={() => setOpenCell({ day, slot })}
                       title={
                         entry
-                          ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${off ? ' · marked time off' : ''}`
+                          ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${
+                              span > 1 ? ` · ${span === 2 ? 'double' : span === 3 ? 'triple' : `${span}-period`} block` : ''
+                            }${off ? ' · marked time off' : ''}`
                           : off ? 'Time off — this class is kept free' : 'Free period'
                       }
                       className={`relative w-full h-10 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight transition-all ${
+                        dragCell === cellK ? 'opacity-40' : ''
+                      } ${
                         inConflict
                           ? 'ring-2 ring-inset ring-rose-400'
                           : entry
-                            ? 'hover:brightness-95'
+                            ? `hover:brightness-95 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`
                             : off
                               ? 'border border-rose-200 text-rose-400 hover:border-rose-300'
                               : 'border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A]'
                       }`}
                       style={
                         entry
-                          ? { background: (subj?.color ?? '#52525B') + '1f', borderLeft: `3px solid ${subj?.color ?? '#52525B'}` }
+                          ? {
+                              background: (subj?.color ?? '#52525B') + '1f',
+                              borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
+                              // A block is one lesson across several rows, so the
+                              // edges between its periods are left open and it
+                              // reads as a single slab.
+                              borderTopColor: linkedAbove ? 'transparent' : undefined,
+                            }
                           : off
                             ? { background: TIME_OFF_FILL }
                             : undefined
@@ -172,10 +233,26 @@ export default function EditableTimetableGrid({
                     >
                       {entry ? (
                         <>
-                          <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
-                          {names && <div className="text-[#52525B] truncate">{names}</div>}
-                          {room && <div className="text-[#A1A1AA] truncate hidden sm:block">{room.name}</div>}
-                          {entry.isLocked && (
+                          {!linkedAbove && (
+                            <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
+                          )}
+                          {!linkedAbove && names && <div className="text-[#52525B] truncate">{names}</div>}
+                          {!linkedAbove && room && <div className="text-[#A1A1AA] truncate hidden sm:block">{room.name}</div>}
+                          {span > 1 && !linkedAbove && (
+                            <div className="text-[9px] uppercase tracking-wide text-[#71717A]">
+                              {span === 2 ? 'Double' : span === 3 ? 'Triple' : `${span} in a row`}
+                            </div>
+                          )}
+                          {linkedAbove && (
+                            <span className="block text-center text-[#A1A1AA] leading-[2.25rem] sm:leading-[3rem]">⌄</span>
+                          )}
+                          {linkedBelow && (
+                            <span
+                              className="absolute left-0 right-0 bottom-[-1px] h-px"
+                              style={{ background: (subj?.color ?? '#52525B') + '1f' }}
+                            />
+                          )}
+                          {entry.isLocked && !linkedAbove && (
                             <Pin size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
                           )}
                           {off && <Ban size={10} className="absolute bottom-0.5 right-0.5 text-rose-500" />}

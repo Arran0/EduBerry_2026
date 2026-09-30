@@ -18,13 +18,15 @@ interface Props {
   slots: PeriodSlot[]
   homerooms: Homeroom[] // rows (scheduled homerooms)
   entries: PlacedEntry[]
-  onChange: (next: PlacedEntry[]) => void
   subjects: Subject[]
   teachers: UserProfile[]
   rooms: Room[]
   unavailability: TeacherUnavailability[]
   constraints: TimetableConstraint[]
   homeroomsLite: HomeroomLite[]
+  // Periods of other bell schedules that share a wall-clock hour, so a teacher
+  // booked across two bands highlights as the clash it is.
+  slotClash?: Map<string, string[]>
   groupName?: (groupId: string) => string | undefined
   cellConflicts?: (homeroomId: string, day: Weekday, slotId: string) => string[]
   onSetCell: (
@@ -33,6 +35,9 @@ interface Props {
   ) => void
   onClearCell: (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) => void
   onTogglePin: (entry: PlacedEntry) => void
+  // Returns false when the drop is refused (a block that would run off the day,
+  // or land on top of another lesson), leaving the grid untouched.
+  onMove: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean
 }
 
 const cellId = (hr: string, day: Weekday, slotId: string) => `${hr}__${day}__${slotId}`
@@ -80,9 +85,9 @@ function shortYear(year: string | null): string | null {
 // lesson to another period; click one for details, pinning and editing.
 // Live-validated against clashes and constraints.
 export default function MasterTimetableEditor({
-  days, slots, homerooms, entries, onChange, subjects, teachers, rooms,
-  unavailability, constraints, homeroomsLite, groupName, cellConflicts,
-  onSetCell, onClearCell, onTogglePin,
+  days, slots, homerooms, entries, subjects, teachers, rooms,
+  unavailability, constraints, homeroomsLite, slotClash, groupName, cellConflicts,
+  onSetCell, onClearCell, onTogglePin, onMove,
 }: Props) {
   const teachingSlots = useMemo(() => slots.filter((s) => !s.is_break), [slots])
   const dragRef = useRef<PlacedEntry | null>(null)
@@ -149,8 +154,8 @@ export default function MasterTimetableEditor({
   const roomById = useMemo(() => new Map(rooms.map((r) => [r.id, r])), [rooms])
 
   const conflicts = useMemo(
-    () => conflictCellKeys(entries, unavailability, constraints, homeroomsLite),
-    [entries, unavailability, constraints, homeroomsLite],
+    () => conflictCellKeys(entries, unavailability, constraints, homeroomsLite, slotClash),
+    [entries, unavailability, constraints, homeroomsLite, slotClash],
   )
 
   // Periods a class is kept free (Homeroom → Time off) are drawn as closed, so
@@ -173,48 +178,41 @@ export default function MasterTimetableEditor({
     return m
   }, [entries])
 
-  // ── Move logic ───────────────────────────────────────────────
+  // How many periods each double/triple runs for, and which of its periods sit
+  // next to each other — enough to draw a block as one slab across columns.
+  const blockSpan = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of entries) if (e.blockKey) m.set(e.blockKey, (m.get(e.blockKey) ?? 0) + 1)
+    return m
+  }, [entries])
+
+  const slotAt = useMemo(() => new Map(teachingSlots.map((s, i) => [s.id, i])), [teachingSlots])
+
+  const blockNeighbour = (e: PlacedEntry, delta: -1 | 1): boolean => {
+    if (!e.blockKey) return false
+    const i = slotAt.get(e.slotId)
+    if (i == null) return false
+    const neighbour = teachingSlots[i + delta]
+    if (!neighbour) return false
+    return entries.some(
+      (o) => o.blockKey === e.blockKey && o.day === e.day && o.slotId === neighbour.id,
+    )
+  }
+
+  // ── Move ─────────────────────────────────────────────────────
+  // Where a lesson may land — blocks staying whole, combined lessons moving
+  // together — is the draft's business, not the grid's. The grid only says
+  // what was dropped where; a refused move leaves everything as it was.
   const handleDrop = (targetHr: string, day: Weekday, slotId: string) => {
     const dragged = dragRef.current
     dragRef.current = null
     setDragId(null)
     setOverCell(null)
     if (!dragged) return
-
-    // Combined lesson → move every member entry to the new day+slot together.
-    if (dragged.combinedKey) {
-      const combinedId = dragged.combinedKey.split('__')[0]
-      const newKey = `${combinedId}__${day}__${slotId}`
-      onChange(
-        entries.map((e) =>
-          e.combinedKey === dragged.combinedKey ? { ...e, day, slotId, combinedKey: newKey } : e,
-        ),
-      )
-      return
-    }
-
-    // A class's lesson only moves within its own row.
-    if (targetHr !== dragged.homeroomId) return
-    if (dragged.day === day && dragged.slotId === slotId) return
-
-    const token = dragged.groupId ?? '__whole__'
-    const draggedKey = entryId(dragged)
-    // An occupant of the target cell with the same token gets swapped back.
-    const occupant = entries.find(
-      (e) =>
-        e.homeroomId === targetHr && e.day === day && e.slotId === slotId &&
-        (e.groupId ?? '__whole__') === token && !e.combinedKey,
-    )
-
-    onChange(
-      entries.map((e) => {
-        if (entryId(e) === draggedKey) return { ...e, day, slotId }
-        if (occupant && entryId(e) === entryId(occupant)) {
-          return { ...e, day: dragged.day, slotId: dragged.slotId }
-        }
-        return e
-      }),
-    )
+    // A class's lesson only moves within its own row; a combined lesson is
+    // anchored to its member classes and carries them all with it.
+    if (!dragged.combinedKey && targetHr !== dragged.homeroomId) return
+    onMove(dragged, day, slotId)
   }
 
   const openEntries = open ? byCell.get(cellId(open.homeroom.id, open.day, open.slot.id)) ?? [] : []
@@ -317,6 +315,9 @@ export default function MasterTimetableEditor({
                             .filter((n): n is string => !!n)
                           const room = entry.roomId ? roomById.get(entry.roomId) : null
                           const eid = entryId(entry)
+                          const span = entry.blockKey ? blockSpan.get(entry.blockKey) ?? 1 : 1
+                          const linkedLeft = blockNeighbour(entry, -1)
+                          const linkedRight = blockNeighbour(entry, 1)
                           return (
                             <div
                               key={eid}
@@ -330,19 +331,24 @@ export default function MasterTimetableEditor({
                                 setDragId(null)
                                 setOverCell(null)
                               }}
-                              title={`${subj?.name ?? 'Lesson'}${names.length ? ' · ' + names.join(', ') : ''}${room ? ' · ' + room.name : ''}${entry.isLocked ? ' · pinned' : ''}`}
+                              title={`${subj?.name ?? 'Lesson'}${names.length ? ' · ' + names.join(', ') : ''}${room ? ' · ' + room.name : ''}${span > 1 ? ` · ${span}-period block` : ''}${entry.isLocked ? ' · pinned' : ''}`}
                               className={`relative px-0.5 cursor-grab active:cursor-grabbing leading-tight ${
                                 dragId === eid ? 'opacity-40' : ''
                               } ${inConflict ? 'ring-1 ring-inset ring-rose-400' : ''}`}
                               style={{
                                 background: (subj?.color ?? '#52525B') + '26',
-                                borderLeft: `2px solid ${subj?.color ?? '#52525B'}`,
+                                // A double/triple runs across adjacent period
+                                // columns: only the outer edges of the run are
+                                // drawn, so it reads as one wide lesson.
+                                borderLeft: linkedLeft ? 'none' : `2px solid ${subj?.color ?? '#52525B'}`,
+                                marginLeft: linkedLeft ? -1 : undefined,
+                                marginRight: linkedRight ? -1 : undefined,
                               }}
                             >
                               <div className="font-semibold text-[#18181B] truncate">
-                                {subj?.code || subj?.name?.slice(0, 4) || '—'}
+                                {linkedLeft ? '·' : subj?.code || subj?.name?.slice(0, 4) || '—'}
                               </div>
-                              {!dense && names.length > 0 && (
+                              {!dense && !linkedLeft && names.length > 0 && (
                                 <div className="text-[#52525B] truncate" style={{ fontSize: px(fontSub) }}>
                                   {names.length > 1 ? `${shortName(names[0])} +${names.length - 1}` : shortName(names[0])}
                                 </div>
@@ -351,8 +357,17 @@ export default function MasterTimetableEditor({
                                 {entry.groupId && (
                                   <span className="w-1 h-1 rounded-full bg-indigo-400" title="Split group" />
                                 )}
+                                {span > 1 && !linkedLeft && (
+                                  <span
+                                    className="font-bold text-[#71717A]"
+                                    style={{ fontSize: px(Math.max(6, Math.round(7 * zoom))) }}
+                                    title={`${span}-period block`}
+                                  >
+                                    ×{span}
+                                  </span>
+                                )}
                                 {entry.combinedKey && <Layers size={Math.max(7, Math.round(9 * zoom))} className="text-indigo-500" />}
-                                {entry.isLocked && (
+                                {entry.isLocked && !linkedLeft && (
                                   <Pin size={Math.max(7, Math.round(9 * zoom))} className="text-[#27272A]" />
                                 )}
                               </div>
