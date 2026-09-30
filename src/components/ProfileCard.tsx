@@ -68,17 +68,97 @@ function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
   return (ROLE_RANK[viewer.role] ?? 0) > (ROLE_RANK[target.role] ?? 0)
 }
 
-/** Small labeled fact chip — used for admission/roll no. and employee id/designation. */
-function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+/**
+ * The card's resting height: banner, avatar, name, role, two contact rows, the
+ * chip pair and the action row. Opening states are drawn to it so a card that
+ * has to fetch its profile is the same size as one that was handed it.
+ */
+const CARD_MIN_HEIGHT = 430
+
+/** The card's own layout in grey, for the opens that have nothing to draw yet. */
+function ProfileCardSkeleton({ bannerUrl }: { bannerUrl: string | null }) {
+  const bar = 'rounded bg-slate-200 animate-pulse'
+  return (
+    <div style={{ minHeight: CARD_MIN_HEIGHT }}>
+      <div
+        className="relative h-32 flex-shrink-0"
+        style={bannerUrl
+          ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+          : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }}
+      />
+      <div className="relative flex flex-col items-center -mt-9 pb-4 px-5">
+        <div className="w-[72px] h-[72px] rounded-full ring-4 ring-white bg-slate-200 animate-pulse" />
+        <div className={`mt-3 h-4 w-40 ${bar}`} />
+        <div className={`mt-2 h-4 w-20 rounded-full ${bar}`} />
+        <div className="mt-3 w-full flex flex-col gap-2">
+          <div className={`h-[30px] w-full ${bar}`} />
+          <div className={`h-[30px] w-full ${bar}`} />
+          <div className="grid grid-cols-2 gap-2">
+            <div className={`h-[38px] ${bar}`} />
+            <div className={`h-[38px] ${bar}`} />
+          </div>
+        </div>
+        <div className={`w-full mt-3 h-14 ${bar}`} />
+      </div>
+    </div>
+  )
+}
+
+/** A value still in flight, drawn at the height the value itself will take. */
+function ValueSkeleton({ className = 'w-16' }: { className?: string }) {
+  return <span className={`inline-block h-3 align-middle rounded bg-slate-200 animate-pulse ${className}`} />
+}
+
+/**
+ * Small labeled fact chip — admission/roll no., employee id/designation.
+ *
+ * Always renders, blank or not: these chips are filled by a query that lands
+ * after the card is open, so dropping the empty ones made the card's height a
+ * function of data it did not have yet.
+ */
+function InfoChip({ icon, label, value, loading }: {
+  icon: React.ReactNode
+  label: string
+  value: string | null
+  loading: boolean
+}) {
   return (
     <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-lg min-w-0">
       <span className="text-slate-400 flex-shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 leading-none">{label}</p>
-        <p className="text-xs text-slate-600 truncate leading-tight mt-0.5">{value}</p>
+        <p className="text-xs truncate leading-tight mt-0.5">
+          {loading
+            ? <ValueSkeleton className="w-12" />
+            : value
+              ? <span className="text-slate-600">{value}</span>
+              : <span className="text-slate-300">Nil</span>}
+        </p>
       </div>
     </div>
   )
+}
+
+/** A contact line that holds its place whether or not there is anything on it. */
+function ContactRow({ icon, value, href, loading, empty }: {
+  icon: React.ReactNode
+  value: string | null
+  href?: string
+  loading: boolean
+  empty: string
+}) {
+  const body = (
+    <>
+      {icon}
+      {loading
+        ? <ValueSkeleton className="w-28" />
+        : <span className={`text-xs truncate ${value ? 'text-slate-600' : 'text-slate-300'}`}>{value ?? empty}</span>}
+    </>
+  )
+  const shell = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg min-w-0 h-[30px]'
+  return href
+    ? <a href={href} className={`${shell} bg-slate-50 hover:bg-slate-100 transition-colors`}>{body}</a>
+    : <div className={`${shell} bg-slate-50`}>{body}</div>
 }
 
 /**
@@ -121,6 +201,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   // Staff-only facts
   const [employeeId, setEmployeeId] = useState<string | null>(null)
   const [designation, setDesignation] = useState<string | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(true)
 
   const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(bannerCache ?? null)
 
@@ -136,13 +217,6 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   // elsewhere, opened in place of the card (it hides while this is up).
   const [showDownloadCentre, setShowDownloadCentre] = useState(false)
 
-  // Layout animation is switched on only once the card has finished arriving.
-  // A `layout` child measures itself against its ancestors' transforms, and
-  // the wrapper below is still mid-spring on the way in — enabling it earlier
-  // makes the card wobble as it opens. Content that lands during the opening
-  // is carried by that motion anyway; it is the later arrivals that need the
-  // ease.
-  const [entered, setEntered] = useState(false)
 
   const isStudentProfile = targetProfile?.role === 'student'
   const isDriverProfile = targetProfile?.role === 'driver'
@@ -171,23 +245,36 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
-  // Load phone + a few identifying facts from the appropriate details table
+  // Load phone + a few identifying facts from the appropriate details table.
+  //
+  // Keyed on the id and role rather than the profile object: a seeded card
+  // replaces `targetProfile` once its own fetch lands, and depending on the
+  // object meant that second, identical profile ran this query all over again.
+  const detailsId = targetProfile?.id
+  const detailsRole = targetProfile?.role
   useEffect(() => {
-    if (!targetProfile) return
-    if (targetProfile.role === 'student') {
-      fetchStudentDetails(targetProfile.id).then(d => {
+    if (!detailsId || !detailsRole) return
+    let active = true
+    setLoadingDetails(true)
+    if (detailsRole === 'student') {
+      fetchStudentDetails(detailsId).then(d => {
+        if (!active) return
         setPhone(d?.phone ?? null)
         setAdmissionNo(d?.admission_no ?? null)
         setRollNo(d?.roll_no ?? null)
+        setLoadingDetails(false)
       })
     } else {
-      fetchStaffDirectory(targetProfile.id).then(d => {
+      fetchStaffDirectory(detailsId).then(d => {
+        if (!active) return
         setPhone(d?.phone ?? null)
         setEmployeeId(d?.employee_id ?? null)
         setDesignation(d?.designation ?? null)
+        setLoadingDetails(false)
       })
     }
-  }, [targetProfile])
+    return () => { active = false }
+  }, [detailsId, detailsRole])
 
   // Look up the student's homeroom the first time the attendance drill-down opens
   useEffect(() => {
@@ -202,11 +289,6 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
     })
     return () => { active = false }
   }, [showAttendance, isStudentProfile, targetProfile])
-
-  // Opening the Download Centre unmounts the card's backdrop and body, so
-  // coming back replays the enter animation. Drop back out of layout mode for
-  // that return trip, for the same reason it is off during the first one.
-  useEffect(() => { if (showDownloadCentre) setEntered(false) }, [showDownloadCentre])
 
   // Escape closes whatever is actually on top: the Download Centre, then the
   // attendance drill-down, then the card itself. Without this the only way out
@@ -259,25 +341,22 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
         // it arrives and AnimatePresence knows exactly when it is gone.
         exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14, ease: 'easeIn' } }}
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        onAnimationComplete={() => setEntered(true)}
         className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
       >
-        <motion.div
-          // The phone number and the ID chips arrive after the profile does,
-          // and each one appearing used to resize the card under the cursor.
-          // `layout` turns those into one short ease instead of a snap.
-          layout={entered}
-          transition={{ layout: { duration: 0.18, ease: 'easeOut' } }}
+        {/* A plain div again: every slot inside is drawn whether or not it has
+            a value, so the card is the same height from the frame it opens to
+            the frame it closes. Nothing left to animate — and the layout
+            animation that used to cover the resizing was itself what made
+            closing lurch, since it re-measures against a card that is at the
+            same time being scaled away. */}
+        <div
           className="w-full max-w-sm rounded-3xl overflow-y-auto shadow-2xl bg-white border border-slate-100 max-h-[88vh] pointer-events-auto"
           onClick={e => e.stopPropagation()}
         >
           {loadingProfile ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 size={28} className="animate-spin text-slate-300" />
-              <p className="text-sm text-slate-400">Loading profile…</p>
-            </div>
+            <ProfileCardSkeleton bannerUrl={profileBannerUrl} />
           ) : !targetProfile ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 px-6 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ minHeight: CARD_MIN_HEIGHT }}>
               <p className="text-slate-500 text-sm">Profile not found.</p>
               <button onClick={onClose} className="text-xs text-slate-400 underline">Close</button>
             </div>
@@ -329,7 +408,14 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   )}
                 </div>
 
-                {/* Email + phone — each its own line — plus a couple of identifying facts */}
+                {/* Contact + identifying facts.
+                    Every slot is always drawn, empty ones included. These
+                    values arrive from a second query after the card is already
+                    open, and hiding the ones that came back blank meant the
+                    card's height depended on data it did not have yet — so it
+                    resized under the cursor, and animating that away only
+                    traded a jump for a slide. A row that says "Not on file"
+                    is also a straighter answer than a row that isn't there. */}
                 <div className="mt-3 w-full flex flex-col gap-2">
                   <a
                     href={`mailto:${targetProfile.email}`}
@@ -338,33 +424,36 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                     <Mail size={12} className="text-slate-400 flex-shrink-0" />
                     <span className="text-xs text-slate-600 truncate">{targetProfile.email}</span>
                   </a>
-                  {phone && (
-                    <a
-                      href={`tel:${phone.replace(/\D/g, '')}`}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
-                    >
-                      <PhoneIcon size={12} className="text-slate-400 flex-shrink-0" />
-                      <span className="text-xs text-slate-600 truncate">{phone}</span>
-                    </a>
-                  )}
-                  {isStudentProfile && (admissionNo || rollNo) && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {admissionNo && <InfoChip icon={<IdCard size={14} />} label="Admission No." value={admissionNo} />}
-                      {rollNo && <InfoChip icon={<Hash size={14} />} label="Roll No." value={rollNo} />}
-                    </div>
-                  )}
-                  {!isStudentProfile && (employeeId || designation) && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {employeeId && <InfoChip icon={<IdCard size={14} />} label="Employee ID" value={employeeId} />}
-                      {designation && <InfoChip icon={<Briefcase size={14} />} label="Designation" value={designation} />}
-                    </div>
-                  )}
+
+                  <ContactRow
+                    icon={<PhoneIcon size={12} className="text-slate-400 flex-shrink-0" />}
+                    value={phone}
+                    href={phone ? `tel:${phone.replace(/\D/g, '')}` : undefined}
+                    loading={loadingDetails}
+                    empty="No phone on file"
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {isStudentProfile ? (
+                      <>
+                        <InfoChip icon={<IdCard size={14} />} label="Admission No." value={admissionNo} loading={loadingDetails} />
+                        <InfoChip icon={<Hash size={14} />} label="Roll No." value={rollNo} loading={loadingDetails} />
+                      </>
+                    ) : (
+                      <>
+                        <InfoChip icon={<IdCard size={14} />} label="Employee ID" value={employeeId} loading={loadingDetails} />
+                        <InfoChip icon={<Briefcase size={14} />} label="Designation" value={designation} loading={loadingDetails} />
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record,
                      Download Centre; rectangular, equally sized, spanning the card's full
                      width ──────────────────────────────────────────────────────────────── */}
-                {viewerProfile && (() => {
+                {/* The row keeps its place even before the viewer's own profile
+                    has resolved, so the card is never briefly a button shorter. */}
+                {!viewerProfile ? <div className="w-full mt-3 h-14" /> : (() => {
                   // Staff can see student contact buttons; so can the student themselves
                   const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
                   // Everyone can see staff contact buttons
@@ -377,26 +466,31 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                     ? canSeeStudentActions
                     : canSeeStaffActions && hasCalendarAccess(viewerProfile, targetProfile)
 
-                  type ActionBtn = { key: string; label: string; href?: string; external?: boolean; onClick?: () => void; cls: string; content: React.ReactNode }
+                  type ActionBtn = { key: string; label: string; href?: string; external?: boolean; onClick?: () => void; cls: string; content: React.ReactNode; disabled?: boolean }
                   const buttons: ActionBtn[] = []
 
-                  if (phone) {
-                    buttons.push({
-                      key: 'whatsapp',
-                      label: 'WhatsApp',
-                      href: `https://wa.me/${phone.replace(/\D/g, '')}`,
-                      external: true,
-                      cls: 'bg-[#25D366] border-[#25D366] text-white hover:bg-[#20BD5A]',
-                      content: <WhatsAppIcon size={20} />,
-                    })
-                    buttons.push({
-                      key: 'call',
-                      label: 'Call',
-                      href: `tel:${phone.replace(/\D/g, '')}`,
-                      cls: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
-                      content: <PhoneIcon size={18} />,
-                    })
-                  }
+                  // Always both, whether or not there is a number to dial.
+                  // They used to appear only once the phone lookup came back,
+                  // which re-columned this grid a beat after the card opened;
+                  // greyed out they say the same thing without moving.
+                  const dialable = phone ? phone.replace(/\D/g, '') : ''
+                  buttons.push({
+                    key: 'whatsapp',
+                    label: dialable ? 'WhatsApp' : 'No phone on file',
+                    href: dialable ? `https://wa.me/${dialable}` : undefined,
+                    external: true,
+                    disabled: !dialable,
+                    cls: 'bg-[#25D366] border-[#25D366] text-white hover:bg-[#20BD5A]',
+                    content: <WhatsAppIcon size={20} />,
+                  })
+                  buttons.push({
+                    key: 'call',
+                    label: dialable ? 'Call' : 'No phone on file',
+                    href: dialable ? `tel:${dialable}` : undefined,
+                    disabled: !dialable,
+                    cls: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
+                    content: <PhoneIcon size={18} />,
+                  })
                   if (showAttendanceBtn) {
                     buttons.push({
                       key: 'attendance',
@@ -443,7 +537,16 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
 
                   return (
                     <div className={`w-full mt-3 grid ${GRID_COLS[buttons.length] ?? 'grid-cols-5'} gap-2`}>
-                      {buttons.map(b => b.href ? (
+                      {buttons.map(b => b.disabled ? (
+                        <div
+                          key={b.key}
+                          title={b.label}
+                          aria-disabled
+                          className={`${btnCls} bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed`}
+                        >
+                          {b.content}
+                        </div>
+                      ) : b.href ? (
                         <a
                           key={b.key}
                           href={b.href}
@@ -465,7 +568,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
               </div>
             </>
           )}
-        </motion.div>
+        </div>
       </motion.div>
         </>
       )}
