@@ -115,7 +115,7 @@ const hrToken = (groupId: string | null | undefined) => groupId ?? WHOLE
 const BASE = '__base__'
 const groupKey = (id: string | null | undefined) => id ?? BASE
 
-interface SlotGeometry {
+export interface SlotGeometry {
   key: string // groupKey
   name: string
   days: Weekday[]
@@ -137,7 +137,7 @@ interface SlotGeometry {
  *    Primary period 3 is unavailable for an overlapping Secondary period, and
  *    only this map can see that — the two are different slot rows.
  */
-interface Schedules {
+export interface Schedules {
   geoms: Map<string, SlotGeometry>
   order: SlotGeometry[] // stable display order
   byHomeroom: Map<string, string> // homeroomId -> groupKey
@@ -246,7 +246,7 @@ export function buildSchedules(
 }
 
 /** The schedule a homeroom is solved against (base when unassigned). */
-const scheduleFor = (sched: Schedules, homeroomId: string): SlotGeometry =>
+export const scheduleFor = (sched: Schedules, homeroomId: string): SlotGeometry =>
   sched.geoms.get(sched.byHomeroom.get(homeroomId) ?? BASE) ?? sched.geoms.get(BASE)!
 
 /** Every cell key a booking at day+slot occupies, overlapping bands included. */

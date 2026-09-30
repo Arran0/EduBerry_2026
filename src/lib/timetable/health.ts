@@ -7,9 +7,9 @@
 
 import type {
   PlacedEntry, PeriodSlot, Requirement, TimetableConstraint, HomeroomLite, TimetableConfig, Weekday,
-  GeneratorConflict,
+  GeneratorConflict, SlotGroup,
 } from './types'
-import { detectConflicts } from './generator'
+import { detectConflicts, buildSchedules, scheduleFor } from './generator'
 import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
 import { teacherIdsOf } from './types'
 
@@ -45,6 +45,10 @@ export interface HealthInput {
   slots: PeriodSlot[]
   config: TimetableConfig
   homerooms: HomeroomLite[]
+  // Round 9: the extra bell schedules and who follows them. Omitting both
+  // scores everything against the config's single week, as before.
+  slotGroups?: SlotGroup[]
+  homeroomGroupIds?: Record<string, string | null>
   unavailability?: { teacher_id: string; day: Weekday; slot_id: string; id: string; config_id: string; created_at: string }[]
   /**
    * detectConflicts() over the same entries, when the caller has already run it
@@ -67,9 +71,12 @@ export function computeHealth(input: HealthInput): HealthReport {
   const tName = input.teacherName ?? ((id) => id.slice(0, 8))
   const sName = input.subjectName ?? ((id) => id.slice(0, 8))
 
-  const days = config.working_days
-  const teaching = slots.filter((s) => !s.is_break)
-  const slotOrder = new Map(teaching.map((s, i) => [s.id, i]))
+  // Periods of different bell schedules are different rows, so ordering them
+  // by position alone interleaves two bands into one meaningless sequence.
+  // The solver's config-wide clock is what the gap and run maths needs.
+  const sched = buildSchedules(config, slots, input.slotGroups ?? [], input.homeroomGroupIds ?? {})
+  const slotOrder = sched.clock
+  const weekDays = (homeroomId: string) => scheduleFor(sched, homeroomId).days
   const index = buildConstraintIndex(constraints, homerooms)
   for (const u of input.unavailability ?? []) {
     if (!index.teacherTimeOff.has(u.teacher_id)) index.teacherTimeOff.set(u.teacher_id, new Set())
@@ -183,9 +190,16 @@ export function computeHealth(input: HealthInput): HealthReport {
   const gapScore = clamp(100 - gaps * 5)
 
   // ── 5. Subject spread (same subject repeated in a day) ───────
+  // A double or triple is one lesson occupying several periods, not a subject
+  // taught twice — counting its periods would mark every deliberate block as
+  // poor spread and quietly drag the score down.
   const subjDay = new Map<string, number>()
+  const countedUnits = new Set<string>()
   for (const e of entries) {
     const k = `${e.homeroomId}|${e.subjectId}|${e.groupId ?? ''}|${e.day}`
+    const unit = e.blockKey ? `blk:${e.blockKey}` : `one:${e.slotId}`
+    if (countedUnits.has(`${k}|${unit}`)) continue
+    countedUnits.add(`${k}|${unit}`)
     subjDay.set(k, (subjDay.get(k) ?? 0) + 1)
   }
   let clusters = 0
@@ -202,8 +216,9 @@ export function computeHealth(input: HealthInput): HealthReport {
     hrLoads.get(hr)!.push(v)
   }
   let imbalance = 0
-  for (const loads of hrLoads.values()) {
-    const avg = loads.reduce((a, b) => a + b, 0) / Math.max(1, days.length)
+  for (const [hr, loads] of hrLoads) {
+    // Each class is levelled against the length of its own week.
+    const avg = loads.reduce((a, b) => a + b, 0) / Math.max(1, weekDays(hr).length)
     for (const l of loads) imbalance += Math.abs(l - avg)
   }
   const balanceScore = clamp(100 - imbalance * 2)

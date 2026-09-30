@@ -4,7 +4,7 @@ import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUn
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'
-import { teacherIdsOf } from './timetable/types'
+import { teacherIdsOf, WEEKDAYS } from './timetable/types'
 
 // PostgREST puts `.in()` lists in the query string, so a long one (a CSV import
 // of a whole year group) overruns the URL length limit and the request fails
@@ -651,11 +651,17 @@ async function buildViewData(
 
   const involvedConfigIds = [...new Set(publishedTimetables.map((t) => t.config_id))]
 
-  const { data: allSlots } = await supabase
-    .from('timetable_period_slots')
-    .select('*')
-    .in('config_id', involvedConfigIds)
-    .order('position', { ascending: true })
+  const [{ data: allSlots }, { data: allGroups }] = await Promise.all([
+    supabase
+      .from('timetable_period_slots')
+      .select('*')
+      .in('config_id', involvedConfigIds)
+      .order('position', { ascending: true }),
+    supabase
+      .from('timetable_slot_groups')
+      .select('*')
+      .in('config_id', involvedConfigIds),
+  ])
 
   const slotsMap = new Map<string, PeriodSlot[]>()
   for (const s of (allSlots ?? []) as PeriodSlot[]) {
@@ -663,6 +669,7 @@ async function buildViewData(
     arr.push(s)
     slotsMap.set(s.config_id, arr)
   }
+  const groupById = new Map((allGroups ?? []).map((g: SlotGroup) => [g.id, g]))
 
   const entriesByTimetable = new Map<string, TimetableEntry[]>()
   for (const e of entries) {
@@ -678,9 +685,40 @@ async function buildViewData(
       const cfg = configMap.get(tt.config_id)
       const ttEntries = entriesByTimetable.get(tt.id)
       if (!cfg || !ttEntries?.length) return null
+
+      // A config can run several bell schedules (Round 9). The viewer only
+      // wants the one(s) their own lessons are in — otherwise a Secondary
+      // student is shown Primary's period rows as a column of blank cells.
+      // Which periods the entries sit in is what identifies the schedule, so
+      // no homeroom-to-group lookup is needed here.
+      const configSlots = slotsMap.get(cfg.id) ?? []
+      const slotGroupOf = new Map(configSlots.map((s) => [s.id, s.group_id ?? null]))
+      const usedGroups = new Set<string | null>()
+      for (const e of ttEntries) {
+        const g = slotGroupOf.get(e.slot_id)
+        if (g !== undefined) usedGroups.add(g)
+      }
+
+      // Nothing recognised (entries from deleted slots) → show the lot, as before.
+      const slots = usedGroups.size === 0
+        ? configSlots
+        : configSlots.filter((s) => usedGroups.has(s.group_id ?? null))
+
+      // The week is the union of the schedules in play, in weekday order.
+      const dayset = new Set<Weekday>()
+      for (const g of usedGroups) {
+        const days = g === null
+          ? cfg.working_days
+          : groupById.get(g)?.working_days ?? cfg.working_days
+        for (const d of days) dayset.add(d)
+      }
+      const working_days = dayset.size > 0
+        ? WEEKDAYS.filter((d) => dayset.has(d))
+        : cfg.working_days
+
       return {
-        config: cfg,
-        slots: slotsMap.get(cfg.id) ?? [],
+        config: { ...cfg, working_days },
+        slots,
         timetable: tt,
         entries: ttEntries,
       }

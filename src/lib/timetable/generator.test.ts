@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateTimetable } from './generator'
+import { computeHealth } from './health'
 import type {
   GeneratorInput, PeriodSlot, Requirement, TimetableConfig, SlotGroup, Weekday, PlacedEntry,
 } from './types'
@@ -251,5 +252,31 @@ describe('slot groups', () => {
     expect(result.unplacedCount).toBe(0)
     const baseIds = new Set(slots(5).map((s) => s.id))
     for (const e of result.entries) expect(baseIds.has(e.slotId)).toBe(true)
+  })
+})
+
+// ── Health scoring ───────────────────────────────────────────
+
+describe('health scoring', () => {
+  const baseSlots = slots(6)
+
+  const health = (entries: PlacedEntry[], reqs: Requirement[]) =>
+    computeHealth({
+      entries, requirements: reqs, constraints: [], slots: baseSlots,
+      config: config(), homerooms: [{ id: 'hr1', class_teacher_id: null }], unavailability: [],
+    })
+
+  it('does not count a double period as poor subject spread', () => {
+    const asDouble: PlacedEntry[] = [
+      { homeroomId: 'hr1', day: 'monday', slotId: 'base-s1', subjectId: 'sci', teacherId: null, roomId: null, isLocked: false, blockKey: 'blk1' },
+      { homeroomId: 'hr1', day: 'monday', slotId: 'base-s2', subjectId: 'sci', teacherId: null, roomId: null, isLocked: false, blockKey: 'blk1' },
+    ]
+    const asTwoSingles = asDouble.map((e) => ({ ...e, blockKey: null }))
+    const req = [requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'sci', periods_per_week: 2, max_per_day: 2, min_block: 2, max_block: 2 })]
+
+    const spread = (r: ReturnType<typeof health>) => r.components.find((c) => c.key === 'spread')!.score
+    expect(spread(health(asDouble, req))).toBe(100)
+    // Two unrelated periods of the same subject on one day still read as a clump.
+    expect(spread(health(asTwoSingles, req))).toBeLessThan(100)
   })
 })

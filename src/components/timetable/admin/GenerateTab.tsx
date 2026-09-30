@@ -83,12 +83,13 @@ export default function GenerateTab() {
     const sName = new Map(subjects.map((s) => [s.id, s.name]))
     return computeHealth({
       entries, requirements, constraints, slots, config, homerooms: homeroomsLite, unavailability,
+      slotGroups, homeroomGroupIds: slotGroupIds,
       conflicts: allConflicts,
       homeroomName: (id) => hrName.get(id) ?? 'Class',
       teacherName: (id) => tName.get(id) ?? 'Teacher',
       subjectName: (id) => sName.get(id) ?? 'Subject',
     })
-  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, allConflicts, draft.homerooms, teachers, subjects])
+  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, slotGroups, slotGroupIds, allConflicts, draft.homerooms, teachers, subjects])
 
   const homeroomOptions: SmartOption[] = useMemo(
     () => scheduledHomerooms.map((h) => ({ value: h.id, label: h.name })),
