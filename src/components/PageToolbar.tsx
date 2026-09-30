@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Search, X } from 'lucide-react'
+import { Loader2, Search, X } from 'lucide-react'
 
 /**
  * The search + filter bar that every admin manager floats over the bottom of
@@ -16,9 +16,17 @@ import { Search, X } from 'lucide-react'
  * and nothing depends on what the banner behind it happens to look like.
  */
 
-/** A <select> inside the toolbar. `pl-7` leaves room for a leading icon. */
+/**
+ * A <select> inside the toolbar. `pl-7` leaves room for a leading icon.
+ *
+ * `text-ellipsis` rather than `truncate`: a <select> is not a text box, and
+ * `overflow: hidden` on one clips the label instead of shortening it — which
+ * is how "All Grades (120)" ended up cut off mid-word on a phone. The real
+ * fix is the width the controls get (see the grid below); this is the
+ * backstop.
+ */
 export const toolbarSelect =
-  'h-9 w-full min-w-0 appearance-none cursor-pointer truncate rounded-lg border border-[#E4E4E7] bg-white ' +
+  'h-9 w-full min-w-0 appearance-none cursor-pointer text-ellipsis rounded-lg border border-[#E4E4E7] bg-white ' +
   'pl-2.5 pr-6 text-[11px] font-medium text-[#3F3F46] transition-colors ' +
   'hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A]'
 
@@ -43,7 +51,11 @@ export function ToolbarField({ icon, children, className = '' }: {
   className?: string
 }) {
   return (
-    <div className={`relative min-w-0 flex-1 ${className}`}>
+    // An explicit width rather than flex-1. A <select> sized by flex-basis
+    // ends up as narrow as the row wants it, which is what clipped these
+    // labels; 9.5rem is measured against the longest label any of them
+    // carries ("Non-Teaching (12)") at this font size.
+    <div className={`relative w-full min-w-0 lg:w-[9.5rem] ${className}`}>
       {icon && (
         <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA]">
           {icon}
@@ -74,8 +86,11 @@ export default function PageToolbar({
   controls, actions, onClearFilters, summary,
 }: PageToolbarProps) {
   return (
-    <div className="relative z-20 -mt-7 mb-3">
-      <div className="rounded-2xl border border-[#E4E4E7] bg-white p-2 shadow-[0_12px_32px_-14px_rgba(24,24,27,0.45)]">
+    // A shallower overlap on a phone: the banner is proportionally taller
+    // there and the card is two rows deep, so the wide-screen -mt-7 pulled it
+    // up into the title.
+    <div className="relative z-20 -mt-4 mb-3 sm:-mt-7">
+      <div className="rounded-2xl border border-[#E4E4E7] bg-white p-2 shadow-[0_12px_32px_-14px_rgba(24,24,27,0.45)] sm:p-2.5">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
           {/* Search */}
           <div className="relative min-w-0 flex-1">
@@ -98,18 +113,27 @@ export default function PageToolbar({
             )}
           </div>
 
+          {/* Four controls sharing one phone-width row left each about 80px —
+              not enough for "All Sections", let alone the count after it, so
+              the labels were cut off mid-word. Two per row below `lg` gives
+              every one of them room to be read in full; they only flow into a
+              single row once the viewport can actually hold one. */}
           {(controls || onClearFilters || actions) && (
-            <div className="flex min-w-0 items-center gap-1.5 lg:w-auto">
+            <div className="grid min-w-0 grid-cols-2 items-center gap-1.5 lg:flex lg:w-auto">
               {controls}
               {onClearFilters && (
                 <button
                   onClick={onClearFilters}
-                  className="flex h-9 flex-shrink-0 items-center gap-1 rounded-lg border border-[#D4D4D8] bg-[#F4F4F5] px-2.5 text-[11px] font-semibold text-[#52525B] transition-colors hover:border-[#71717A] hover:bg-[#E4E4E7] hover:text-[#18181B]"
+                  className="col-span-2 flex h-9 flex-shrink-0 items-center justify-center gap-1 rounded-lg border border-[#D4D4D8] bg-[#F4F4F5] px-2.5 text-[11px] font-semibold text-[#52525B] transition-colors hover:border-[#71717A] hover:bg-[#E4E4E7] hover:text-[#18181B] lg:col-auto"
                 >
-                  <X size={11} /> Clear
+                  <X size={11} /> Clear filters
                 </button>
               )}
-              {actions && <div className="flex flex-shrink-0 items-center gap-1.5 lg:border-l lg:border-[#E4E4E7] lg:pl-1.5">{actions}</div>}
+              {actions && (
+                <div className="col-span-2 flex flex-shrink-0 items-center gap-1.5 lg:col-auto lg:border-l lg:border-[#E4E4E7] lg:pl-1.5 [&>*]:flex-1 lg:[&>*]:flex-none">
+                  {actions}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -127,28 +151,34 @@ export default function PageToolbar({
  * plus a manual button for anyone who never triggers it (keyboard paging,
  * reduced-motion, a very tall viewport).
  */
-export function ListSentinel({ sentinelRef, hasMore, shown, total, onLoadMore, noun }: {
+export function ListSentinel({ sentinelRef, hasMore, shown, total, onLoadMore, noun, loadingMore = false }: {
   sentinelRef: (node: HTMLElement | null) => void
   hasMore: boolean
   shown: number
   total: number
   onLoadMore: () => void
   noun: string
+  /** Server-paged lists show that the next page is actually in flight. */
+  loadingMore?: boolean
 }) {
   if (total === 0) return null
   return (
-    <div ref={sentinelRef} className="flex items-center justify-center gap-3 border-t border-[#E4E4E7] bg-[#FAFAFA] px-4 py-3">
+    <div ref={sentinelRef} className="flex items-center justify-center gap-3 border-t border-[#E4E4E7] bg-[#FAFAFA] px-4 py-2.5">
       <span className="text-[11px] text-[#A1A1AA]">
         {shown} of {total} {noun}
       </span>
-      {hasMore && (
+      {loadingMore ? (
+        <span className="flex items-center gap-1.5 text-[11px] text-[#A1A1AA]">
+          <Loader2 size={11} className="animate-spin" /> Loading…
+        </span>
+      ) : hasMore ? (
         <button
           onClick={onLoadMore}
           className="rounded-lg border border-[#D4D4D8] bg-white px-3 py-1 text-[11px] font-semibold text-[#3F3F46] transition-colors hover:border-[#71717A] hover:bg-[#F4F4F5]"
         >
           Show more
         </button>
-      )}
+      ) : null}
     </div>
   )
 }

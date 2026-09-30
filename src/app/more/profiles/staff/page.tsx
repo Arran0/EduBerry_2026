@@ -510,7 +510,7 @@ export default function StaffProfileManagerPage() {
               summary={!loading ? `${shownRows} of ${totalRows} shown · ${profiles.length} staff${supportStaff.length > 0 ? ` · ${supportStaff.length} support` : ''}` : undefined}
               controls={
                 <>
-                  <ToolbarField icon={<Filter size={10} />} className="sm:w-40">
+                  <ToolbarField icon={<Filter size={10} />}>
                     <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className={toolbarSelectWithIcon}>
                       {ROLE_FILTER_OPTIONS.map(o => (
                         <option key={o.value} value={o.value}>
@@ -520,7 +520,7 @@ export default function StaffProfileManagerPage() {
                     </select>
                   </ToolbarField>
 
-                  <ToolbarField className="sm:w-40">
+                  <ToolbarField>
                     <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} className={toolbarSelect}>
                       <option value="all">All Statuses</option>
                       <option value="active">Active Only</option>
@@ -528,7 +528,7 @@ export default function StaffProfileManagerPage() {
                     </select>
                   </ToolbarField>
 
-                  <ToolbarField icon={<ArrowUpDown size={10} />} className="sm:w-36">
+                  <ToolbarField icon={<ArrowUpDown size={10} />}>
                     <select value={sortBy} onChange={e => setSortBy(e.target.value as SortKey)} className={toolbarSelectWithIcon}>
                       {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -552,7 +552,7 @@ export default function StaffProfileManagerPage() {
             ) : (
               <div className="border border-[#E4E4E7] overflow-hidden rounded-xl">
                 {/* Column headers */}
-                <div className="bg-[#27272A] pl-1 pr-4 py-2 hidden sm:flex items-center gap-3">
+                <div className="bg-[#27272A] pl-1 pr-3 py-1.5 hidden sm:flex items-center gap-3">
                   <span className="w-9 flex-shrink-0" />
                   <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name / Email</span>
                   <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Role</span>
@@ -568,21 +568,21 @@ export default function StaffProfileManagerPage() {
                       <motion.div key={p.id} variants={itemVariants}>
                         <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => openProfileCard(p.id)}>
                           <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
-                          <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
+                          <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
                             <div className="flex-shrink-0">
-                              <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={30} userId={p.id} />
+                              <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={26} userId={p.id} />
                             </div>
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
+                                <p className={`truncate text-[13px] font-semibold leading-tight ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
                                 {p.is_banned && (
                                   <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
                                     <Ban size={8} /> Resigned{formatResignedDate(p.banned_at) ? ` · ${formatResignedDate(p.banned_at)}` : ''}
                                   </span>
                                 )}
                               </div>
-                              <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
+                              <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">{p.email}</p>
                             </div>
 
                             {/* Role badge */}
@@ -640,21 +640,21 @@ export default function StaffProfileManagerPage() {
                     <motion.div key={s.id} variants={itemVariants}>
                       <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors group">
                         <div className={`w-1 flex-shrink-0 ${ROLE_BAR.support}`} />
-                        <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
+                        <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
                           <div className="flex-shrink-0">
-                            <Avatar name={s.full_name} size={30} />
+                            <Avatar name={s.full_name} size={26} />
                           </div>
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`text-sm font-semibold truncate ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
+                              <p className={`truncate text-[13px] font-semibold leading-tight ${s.is_active ? 'text-[#18181B]' : 'text-[#A1A1AA] line-through'}`}>{s.full_name}</p>
                               {!s.is_active && (
                                 <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
                                   <Ban size={8} /> Resigned{formatResignedDate(s.resigned_at) ? ` · ${formatResignedDate(s.resigned_at)}` : ''}
                                 </span>
                               )}
                             </div>
-                            <p className="hidden sm:block text-xs text-[#71717A] truncate">
+                            <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">
                               {s.phone || <span className="text-[#C4C4C8]">No phone</span>}
                             </p>
                           </div>

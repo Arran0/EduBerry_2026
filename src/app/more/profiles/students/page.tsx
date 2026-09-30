@@ -32,19 +32,20 @@ const BulkImportModal = dynamic(() => import('@/components/BulkImportModal'))
 const EditStudentDetailsModal = dynamic(() => import('@/components/certificates/EditStudentDetailsModal'))
 import {
   ProfileWithTeams,
-  fetchAllProfiles,
+  fetchStudentPage,
+  fetchStudentFacets,
+  fetchStudentEmails,
+  StudentFacets,
   createNewUser,
   deleteUser,
   toggleBan,
   setUserPassword,
   NewUserInput,
 } from '@/lib/admin'
-import { UserRole } from '@/lib/supabase'
 import { upsertStudentDetails } from '@/lib/studentDetails'
 import { GRADE_OPTIONS, gradeLabel } from '@/lib/grades'
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
-
-const STUDENT_ROLES: UserRole[] = ['student']
+import { useServerPagedList } from '@/hooks/useServerPagedList'
+import useDebounce from '@/hooks/useDebounce'
 
 const STUDENTS_BANNER_DEFAULT = {
   gradFrom: '#1D4ED8',
@@ -91,14 +92,14 @@ export default function StudentProfileManagerPage() {
   const isAdmin = profile?.role === 'admin'
   const { openProfileCard } = useProfileCard()
 
-  const [profiles, setProfiles] = useState<ProfileWithTeams[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [gradeFilter, setGradeFilter] = useState('all')
   const [sectionFilter, setSectionFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [sortBy, setSortBy] = useState<SortKey>('name_asc')
   const [showBulkImport, setShowBulkImport] = useState(false)
+  const [importEmails, setImportEmails] = useState<Set<string>>(new Set())
+  const [preparingImport, setPreparingImport] = useState(false)
 
   const [, setPageBannerCfg] = useState<AnnouncementBannerConfig>(STUDENTS_BANNER_DEFAULT)
   const [bannerEditing, setBannerEditing] = useState(false)
@@ -130,80 +131,54 @@ export default function StudentProfileManagerPage() {
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const loadProfiles = useCallback(async () => {
-    setLoading(true)
-    // Students only, and no team join: this page renders neither staff rows
-    // nor team chips, so both were pure wire overhead.
-    const data = await fetchAllProfiles({ roles: STUDENT_ROLES, withTeams: false })
-    setProfiles(data)
-    setLoading(false)
-  }, [])
+  // Search, filter, sort and paging all happen in Postgres. The roster is a
+  // thousand students; what used to arrive was every column of every one of
+  // them, in two round trips, before a single row was drawn.
+  const debouncedSearch = useDebounce(searchQuery, 250)
+  const query = useMemo(() => ({
+    search: debouncedSearch,
+    grade: gradeFilter,
+    section: sectionFilter,
+    status: statusFilter,
+    sort: sortBy,
+  }), [debouncedSearch, gradeFilter, sectionFilter, statusFilter, sortBy])
 
-  useEffect(() => { loadProfiles() }, [loadProfiles])
-
-  // Handed to the bulk-import modal; rebuilding the Set on every render made
-  // the modal re-check the whole roster for each keystroke behind it.
-  const existingEmails = useMemo(
-    () => new Set(profiles.map(p => p.email.toLowerCase())),
-    [profiles],
+  const fetchPage = useCallback(
+    (offset: number, limit: number) => fetchStudentPage(query, offset, limit),
+    [query],
   )
+  const list = useServerPagedList(fetchPage, {
+    resetKey: `${query.search}|${query.grade}|${query.section}|${query.status}|${query.sort}`,
+  })
+  const { rows: visibleProfiles, total, loading } = list
 
-  // The whole roster is filtered, counted and sorted below. Every one of the
-  // ~30 inputs in the Add Student modal lives in this component's state, so
-  // without memoisation each keystroke in any of them re-ran the lot over
-  // every student on the roll.
-  const searchedProfiles = useMemo(() => {
-    const q = searchQuery.toLowerCase()
-    return profiles.filter(p => (
-      p.full_name?.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) ||
-      (p.grade && gradeLabel(p.grade).toLowerCase().includes(q)) ||
-      (p.section && p.section.toLowerCase().includes(q))
-    ))
-  }, [profiles, searchQuery])
+  // Counts for the grade/section dropdowns. The browser no longer holds the
+  // roster to tally, so one aggregate does it — over the search-matched set
+  // only, so switching a filter never moves the number next to it.
+  const [facets, setFacets] = useState<StudentFacets>({ gradeCounts: {}, sectionCounts: {}, sections: [] })
+  const loadFacets = useCallback(() => {
+    fetchStudentFacets(debouncedSearch).then(setFacets)
+  }, [debouncedSearch])
+  useEffect(loadFacets, [loadFacets])
 
-  // Counts for the grade/section filter dropdowns — computed off the
-  // search-filtered set (not grade/section/status-filtered) so switching one
-  // filter never moves the numbers the admin is reading right before they
-  // click it. Sections aren't a fixed list like grades are, so the dropdown
-  // only ever offers the ones actually in use, alphabetically.
-  const { gradeCounts, sectionCounts, sectionFilterOptions } = useMemo(() => {
-    const gradeCounts: Record<string, number> = {}
-    const sectionCounts: Record<string, number> = {}
-    for (const p of searchedProfiles) {
-      const gradeKey = String(p.grade ?? '')
-      if (gradeKey) gradeCounts[gradeKey] = (gradeCounts[gradeKey] ?? 0) + 1
-      if (p.section) sectionCounts[p.section] = (sectionCounts[p.section] ?? 0) + 1
-    }
-    return { gradeCounts, sectionCounts, sectionFilterOptions: Object.keys(sectionCounts).sort() }
-  }, [searchedProfiles])
+  const { gradeCounts, sectionCounts, sections: sectionFilterOptions } = facets
 
-  const filteredProfiles = useMemo(() => {
-    const matchesStatus = (isBanned: boolean) =>
-      statusFilter === 'all' || (statusFilter === 'inactive' ? isBanned : !isBanned)
+  const loadProfiles = useCallback(async () => {
+    await list.reload()
+    loadFacets()
+  }, [list.reload, loadFacets]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    return searchedProfiles
-      .filter(p =>
-        (gradeFilter === 'all' || gradeFilter === String(p.grade ?? '')) &&
-        (sectionFilter === 'all' || sectionFilter === (p.section ?? '')) &&
-        matchesStatus(!!p.is_banned))
-      .sort((a, b) => {
-        if (sortBy === 'name_desc') return (b.full_name ?? '').localeCompare(a.full_name ?? '')
-        if (sortBy === 'grade') return (a.grade ?? 0) - (b.grade ?? 0) || (a.full_name ?? '').localeCompare(b.full_name ?? '')
-        if (sortBy === 'recent') return (b.created_at ?? '').localeCompare(a.created_at ?? '')
-        return (a.full_name ?? '').localeCompare(b.full_name ?? '') // name_asc
-      })
-  }, [searchedProfiles, gradeFilter, sectionFilter, statusFilter, sortBy])
+  /** The import preview marks emails that already exist — one column of the
+   *  whole roster, so it is fetched when that modal opens, not before. */
+  const openBulkImport = useCallback(async () => {
+    setPreparingImport(true)
+    setImportEmails(await fetchStudentEmails())
+    setPreparingImport(false)
+    setShowBulkImport(true)
+  }, [])
 
   const filtersActive = gradeFilter !== 'all' || sectionFilter !== 'all' || statusFilter !== 'all'
   const clearFilters = () => { setGradeFilter('all'); setSectionFilter('all'); setStatusFilter('all') }
-
-  // A thousand students is a thousand animated rows on mount — render a page
-  // at a time and let scrolling ask for the next one.
-  const { visible: visibleProfiles, sentinelRef, hasMore, shown, total, loadMore } =
-    useInfiniteScroll(filteredProfiles, {
-      resetKey: `${searchQuery}|${gradeFilter}|${sectionFilter}|${statusFilter}|${sortBy}`,
-    })
 
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
@@ -307,15 +282,15 @@ export default function StudentProfileManagerPage() {
           onEditingChange={setBannerEditing}
           actions={
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white/70 hidden sm:block">{profiles.length} students</span>
+              <span className="text-sm text-white/70 hidden sm:block">{total} students</span>
               <button
-                onClick={() => setShowBulkImport(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors"
+                onClick={openBulkImport} disabled={preparingImport}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium border border-white/20 rounded-lg transition-colors disabled:opacity-60"
               >
-                <FileSpreadsheet size={15} /> Import CSV
+                {preparingImport ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />} Import CSV
               </button>
-              <button onClick={() => setShowBulkImport(true)} className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg flex items-center justify-center text-white transition-colors" title="Import CSV">
-                <FileSpreadsheet size={18} />
+              <button onClick={openBulkImport} disabled={preparingImport} className="sm:hidden w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg flex items-center justify-center text-white transition-colors disabled:opacity-60" title="Import CSV">
+                {preparingImport ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -338,10 +313,10 @@ export default function StudentProfileManagerPage() {
               onSearchChange={setSearchQuery}
               searchPlaceholder="Search by name, email, grade or section…"
               onClearFilters={filtersActive ? clearFilters : undefined}
-              summary={!loading ? `${shown} of ${total} shown · ${profiles.length} students on the roll` : undefined}
+              summary={!loading ? `${visibleProfiles.length} of ${total} loaded` : undefined}
               controls={
                 <>
-                  <ToolbarField icon={<Filter size={10} />} className="sm:w-32">
+                  <ToolbarField icon={<Filter size={10} />}>
                     <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} className={toolbarSelectWithIcon}>
                       {GRADE_FILTER_OPTIONS.map(o => (
                         <option key={o.value} value={o.value}>
@@ -351,7 +326,7 @@ export default function StudentProfileManagerPage() {
                     </select>
                   </ToolbarField>
 
-                  <ToolbarField className="sm:w-32">
+                  <ToolbarField>
                     <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} className={toolbarSelect}>
                       <option value="all">All Sections</option>
                       {sectionFilterOptions.map(sec => (
@@ -360,7 +335,7 @@ export default function StudentProfileManagerPage() {
                     </select>
                   </ToolbarField>
 
-                  <ToolbarField className="sm:w-32">
+                  <ToolbarField>
                     <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} className={toolbarSelect}>
                       <option value="all">All Statuses</option>
                       <option value="active">Active Only</option>
@@ -368,7 +343,7 @@ export default function StudentProfileManagerPage() {
                     </select>
                   </ToolbarField>
 
-                  <ToolbarField icon={<ArrowUpDown size={10} />} className="sm:w-36">
+                  <ToolbarField icon={<ArrowUpDown size={10} />}>
                     <select value={sortBy} onChange={e => setSortBy(e.target.value as SortKey)} className={toolbarSelectWithIcon}>
                       {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -383,7 +358,7 @@ export default function StudentProfileManagerPage() {
                 <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
                 <p className="text-sm text-[#71717A]">Loading students…</p>
               </div>
-            ) : filteredProfiles.length === 0 ? (
+            ) : total === 0 ? (
               <div className="border border-[#E4E4E7] bg-white rounded-xl p-12 text-center">
                 <GraduationCap size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-sm font-semibold text-[#18181B] mb-1">No Students Found</p>
@@ -392,7 +367,7 @@ export default function StudentProfileManagerPage() {
             ) : (
               <div className="border border-[#E4E4E7] overflow-hidden rounded-xl">
                 {/* Column headers */}
-                <div className="bg-[#27272A] pl-1 pr-4 py-2 hidden sm:flex items-center gap-3">
+                <div className="bg-[#27272A] pl-1 pr-3 py-1.5 hidden sm:flex items-center gap-3">
                   <span className="w-9 flex-shrink-0" />
                   <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name / Email</span>
                   <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade</span>
@@ -407,21 +382,21 @@ export default function StudentProfileManagerPage() {
                         onClick={() => openProfileCard(p.id)}
                       >
                         <div className="w-1 flex-shrink-0 bg-blue-500" />
-                        <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
+                        <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
                           <div className="flex-shrink-0">
-                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={30} userId={p.id} />
+                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={26} userId={p.id} />
                           </div>
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className={`text-sm font-semibold truncate ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
+                              <p className={`truncate text-[13px] font-semibold leading-tight ${p.is_banned ? 'text-[#A1A1AA] line-through' : 'text-[#18181B]'}`}>{p.full_name || 'No Name'}</p>
                               {p.is_banned && (
                                 <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA] rounded flex-shrink-0 flex items-center gap-1">
                                   <Ban size={8} /> Banned{formatBannedDate(p.banned_at) ? ` · ${formatBannedDate(p.banned_at)}` : ''}
                                 </span>
                               )}
                             </div>
-                            <p className="hidden sm:block text-xs text-[#71717A] truncate">{p.email}</p>
+                            <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">{p.email}</p>
                           </div>
 
                           {/* Grade */}
@@ -453,8 +428,8 @@ export default function StudentProfileManagerPage() {
                 </motion.div>
 
                 <ListSentinel
-                  sentinelRef={sentinelRef} hasMore={hasMore}
-                  shown={shown} total={total} onLoadMore={loadMore} noun="students"
+                  sentinelRef={list.sentinelRef} hasMore={list.hasMore} loadingMore={list.loadingMore}
+                  shown={visibleProfiles.length} total={total} onLoadMore={list.loadMore} noun="students"
                 />
               </div>
             )}
@@ -606,7 +581,7 @@ export default function StudentProfileManagerPage() {
       {showBulkImport && (
         <BulkImportModal
           mode="student"
-          existingEmails={existingEmails}
+          existingEmails={importEmails}
           onClose={() => setShowBulkImport(false)}
           onDone={() => { loadProfiles() }}
         />

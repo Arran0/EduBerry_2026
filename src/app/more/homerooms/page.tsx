@@ -578,7 +578,7 @@ export default function HomeroomsPage() {
           ) : (
             <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
+              <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
                 <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name</span>
                 <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade/Section</span>
                 <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Expiry</span>
@@ -591,11 +591,11 @@ export default function HomeroomsPage() {
                     {/* Row */}
                     <div className="flex items-stretch border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors">
                       <div className="w-1 flex-shrink-0 bg-[#D4D4D8]" />
-                      <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
+                      <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
 
                         {/* Name */}
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
-                          <p className="text-sm font-semibold text-[#18181B] truncate">{hr.name}</p>
+                          <p className="truncate text-[13px] font-semibold leading-tight text-[#18181B]">{hr.name}</p>
                           {hr.academic_year && (
                             <span className="text-[10px] text-[#71717A] font-medium">AY {hr.academic_year}</span>
                           )}
@@ -922,13 +922,13 @@ export default function HomeroomsPage() {
                                   <p className="text-sm text-[#71717A]">No students in this homeroom yet</p>
                                 </div>
                               ) : (
-                                <div className="max-h-[360px] overflow-y-auto rounded-lg border border-[#E4E4E7] bg-white divide-y divide-[#F4F4F5]">
+                                <div className="max-h-[420px] overflow-y-auto rounded-lg border border-[#E4E4E7] bg-white divide-y divide-[#F4F4F5]">
                                   {expandedData?.members.map(m => (
-                                    <div key={m.id} className="flex items-center gap-3 py-2 px-3 hover:bg-[#F7F7F5] transition-colors group">
-                                      <Avatar avatarUrl={m.student?.avatar_url} name={m.student?.full_name ?? ''} email={m.student?.email ?? ''} size={28} />
+                                    <div key={m.id} className="flex items-center gap-3 py-1.5 px-3 hover:bg-[#F7F7F5] transition-colors group">
+                                      <Avatar avatarUrl={m.student?.avatar_url} name={m.student?.full_name ?? ''} email={m.student?.email ?? ''} size={26} />
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-[#18181B] truncate">{m.student?.full_name}</p>
-                                        <p className="text-xs text-[#71717A] truncate">{m.student?.email}</p>
+                                        <p className="truncate text-[13px] font-medium leading-tight text-[#18181B]">{m.student?.full_name}</p>
+                                        <p className="truncate text-[11px] leading-tight text-[#71717A]">{m.student?.email}</p>
                                       </div>
                                       {m.student?.grade && (
                                         <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8] rounded flex-shrink-0">

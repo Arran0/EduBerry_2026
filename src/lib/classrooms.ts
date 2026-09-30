@@ -2465,3 +2465,61 @@ export async function fetchClasswiseMarks(
 
   return { students, subjects, cellData }
 }
+
+// ── Classroom manager, a page at a time ──────────────────────────────────────
+
+export interface ClassroomPageRow {
+  classroom: ClassroomWithDetails
+  closed: boolean
+}
+
+export interface ClassroomPage {
+  rows: ClassroomPageRow[]
+  activeTotal: number
+  closedTotal: number
+  total: number
+}
+
+/**
+ * One page of the admin classroom manager: active classrooms first (newest
+ * first), then closed ones, each already carrying its member count and the
+ * size of both bands.
+ *
+ * Deliberately an RPC rather than a PostgREST query. Splitting active from
+ * closed needs an ordering over `end_date < today`, which is not a column, and
+ * the member counts and band totals would each be another round trip. This is
+ * one. See supabase-migrations/admin_manager_paging.sql.
+ */
+export async function fetchClassroomManagerPage(
+  search: string,
+  offset: number,
+  limit: number,
+): Promise<ClassroomPage> {
+  const { data, error } = await supabase.rpc('classroom_manager_page', {
+    p_search: search.trim(),
+    p_limit: limit,
+    p_offset: offset,
+  })
+  if (error) {
+    console.error('fetchClassroomManagerPage error:', error.message)
+    return { rows: [], activeTotal: 0, closedTotal: 0, total: 0 }
+  }
+  const raw = (data ?? []) as {
+    classroom: Classroom
+    member_count: number
+    is_closed: boolean
+    active_total: number
+    closed_total: number
+  }[]
+  const activeTotal = raw[0]?.active_total ?? 0
+  const closedTotal = raw[0]?.closed_total ?? 0
+  return {
+    rows: raw.map(r => ({
+      classroom: { ...r.classroom, members: [], member_count: r.member_count },
+      closed: r.is_closed,
+    })),
+    activeTotal,
+    closedTotal,
+    total: activeTotal + closedTotal,
+  }
+}

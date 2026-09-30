@@ -1,4 +1,5 @@
 import { supabase, UserProfile, UserRole } from './supabase'
+import { GRADE_OPTIONS } from './grades'
 
 // ============================================
 // Admin Functions for User Management
@@ -354,4 +355,142 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   admin: 'bg-red-100 text-red-700 border-red-200',
   driver: 'bg-orange-100 text-orange-700 border-orange-200',
   smartboard: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+}
+
+// ── Student roster, a page at a time ─────────────────────────────────────────
+// The student manager holds 1000+ profiles. It used to fetch all of them —
+// every column, two round trips — and then search, filter, sort and count them
+// in the browser. All of that now happens in Postgres, and only the rows the
+// reader has scrolled to cross the wire.
+
+export type StudentSort = 'name_asc' | 'name_desc' | 'grade' | 'recent'
+
+export interface StudentQuery {
+  search: string
+  /** 'all', or a stored grade value as a string (pre-primary grades are negative). */
+  grade: string
+  /** 'all', or a section letter. */
+  section: string
+  status: 'all' | 'active' | 'inactive'
+  sort: StudentSort
+}
+
+/** Only what a roster row, the edit modal and the profile card actually read. */
+const STUDENT_ROW_COLUMNS =
+  'id, email, full_name, role, avatar_url, grade, section, is_banned, banned_at, display_role, created_at, updated_at'
+
+/**
+ * PostgREST's `or=` takes a comma-separated list inside parentheses, so a
+ * search term containing those characters would be read as filter syntax
+ * rather than as text. They are dropped instead of escaped: none of them
+ * appears in a name, an email or a section.
+ */
+function sanitiseSearch(raw: string): string {
+  return raw.trim().replace(/[,()"\\*]/g, '')
+}
+
+/** Grade values whose label matches the search text, e.g. "lkg" → [-2]. */
+export function gradeValuesMatching(search: string): number[] {
+  const q = search.trim().toLowerCase()
+  if (!q) return []
+  return GRADE_OPTIONS.filter(g => g.label.toLowerCase().includes(q)).map(g => g.value)
+}
+
+export async function fetchStudentPage(
+  query: StudentQuery,
+  offset: number,
+  limit: number,
+): Promise<{ rows: ProfileWithTeams[]; total: number }> {
+  let q = supabase
+    .from('profiles')
+    .select(STUDENT_ROW_COLUMNS, { count: 'exact' })
+    .eq('role', 'student')
+
+  const search = sanitiseSearch(query.search)
+  if (search) {
+    // Searching "Grade 5" has to reach an integer column, so the labels are
+    // resolved to their stored values here and matched by value.
+    const grades = gradeValuesMatching(search)
+    const clauses = [
+      `full_name.ilike.%${search}%`,
+      `email.ilike.%${search}%`,
+      `section.ilike.%${search}%`,
+      ...(grades.length ? [`grade.in.(${grades.join(',')})`] : []),
+    ]
+    q = q.or(clauses.join(','))
+  }
+
+  if (query.grade !== 'all') q = q.eq('grade', Number(query.grade))
+  if (query.section !== 'all') q = q.eq('section', query.section)
+  if (query.status !== 'all') q = q.eq('is_banned', query.status === 'inactive')
+
+  if (query.sort === 'name_desc') q = q.order('full_name', { ascending: false })
+  else if (query.sort === 'recent') q = q.order('created_at', { ascending: false })
+  else if (query.sort === 'grade') q = q.order('grade', { ascending: true }).order('full_name', { ascending: true })
+  else q = q.order('full_name', { ascending: true })
+
+  // A stable tiebreaker: without one, rows with equal sort keys can swap
+  // between pages and the same student arrives twice while another never does.
+  q = q.order('id', { ascending: true }).range(offset, offset + limit - 1)
+
+  const { data, error, count } = await q
+  if (error) {
+    console.error('fetchStudentPage error:', error)
+    return { rows: [], total: 0 }
+  }
+  return {
+    rows: (data ?? []).map(p => ({ ...p, teams: [] })) as unknown as ProfileWithTeams[],
+    total: count ?? 0,
+  }
+}
+
+export interface StudentFacets {
+  gradeCounts: Record<string, number>
+  sectionCounts: Record<string, number>
+  sections: string[]
+}
+
+/**
+ * How many students sit behind each grade and section option, counted over the
+ * search-matched roster but not the grade/section/status selection — so
+ * switching one filter never moves the numbers being read right before the
+ * click. See supabase-migrations/admin_manager_paging.sql.
+ */
+export async function fetchStudentFacets(search: string): Promise<StudentFacets> {
+  const clean = search.trim()
+  const { data, error } = await supabase.rpc('student_roster_facets', {
+    p_search: clean,
+    p_grades: gradeValuesMatching(clean),
+  })
+  if (error) {
+    console.error('fetchStudentFacets error:', error)
+    return { gradeCounts: {}, sectionCounts: {}, sections: [] }
+  }
+  const gradeCounts: Record<string, number> = {}
+  const sectionCounts: Record<string, number> = {}
+  for (const row of (data ?? []) as { facet: string; key: string; n: number }[]) {
+    if (row.facet === 'grade') gradeCounts[row.key] = row.n
+    else sectionCounts[row.key] = row.n
+  }
+  return { gradeCounts, sectionCounts, sections: Object.keys(sectionCounts).sort() }
+}
+
+/**
+ * Every student email, for the bulk-import preview to mark rows that already
+ * exist. Fetched when that modal opens rather than kept alongside the roster:
+ * it is one column the list itself never renders.
+ */
+export async function fetchStudentEmails(): Promise<Set<string>> {
+  const emails = new Set<string>()
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('role', 'student')
+      .range(page * PROFILE_PAGE_SIZE, page * PROFILE_PAGE_SIZE + PROFILE_PAGE_SIZE - 1)
+    if (error) { console.error('fetchStudentEmails error:', error); break }
+    for (const r of data ?? []) emails.add((r as { email: string }).email.toLowerCase())
+    if (!data || data.length < PROFILE_PAGE_SIZE) break
+  }
+  return emails
 }

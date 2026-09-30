@@ -303,7 +303,7 @@ export default function TeacherTeamsPage() {
               {(filteredTeams.length > 0 || (activeTeams.length === 0 && expiredTeams.length > 0)) && filteredTeams.length > 0 && (
                 <div className="border border-[#D4D4D8] rounded-xl overflow-hidden mb-3">
                   {/* Column headers */}
-                  <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
+                  <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
                     <span className="w-8 flex-shrink-0" />
                     <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name</span>
                     <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Coordinator</span>
@@ -519,17 +519,17 @@ function TeamRow({
         onClick={onExpand}
       >
         <div className={`w-1 flex-shrink-0 ${expired ? 'bg-[#A1A1AA]' : 'bg-[#D4D4D8]'}`} />
-        <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
+        <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
 
           {/* Initials avatar */}
-          <div className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center text-white text-sm font-bold ${expired ? 'bg-[#71717A]' : 'bg-[#27272A]'}`}>
+          <div className={`w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center text-white text-sm font-bold ${expired ? 'bg-[#71717A]' : 'bg-[#27272A]'}`}>
             {team.name.charAt(0).toUpperCase()}
           </div>
 
           {/* Name */}
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold truncate ${expired ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{team.name}</p>
-            {team.description && <p className="hidden sm:block text-xs text-[#71717A] truncate">{team.description}</p>}
+            <p className={`truncate text-[13px] font-semibold leading-tight ${expired ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{team.name}</p>
+            {team.description && <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">{team.description}</p>}
           </div>
 
           {/* Coordinators — desktop */}
@@ -647,12 +647,12 @@ function TeamRow({
                           const isTeamCoordinator = team.coordinators.some(c => c.id === member.user_id)
                           const canRemove = isAdmin && !expired && member.user?.role !== 'principal' && member.user?.role !== 'admin'
                           return (
-                            <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                            <div key={member.id} className="flex items-center justify-between py-1.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                               <div className="flex items-center gap-3 min-w-0">
-                                <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={28} userId={member.user?.id} />
+                                <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} />
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
-                                  <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
+                                  <p className="truncate text-[13px] font-medium leading-tight text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
+                                  <p className="truncate text-[11px] leading-tight text-[#71717A]">{member.user?.email}</p>
                                 </div>
                                 {isTeamCoordinator ? (
                                   <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">

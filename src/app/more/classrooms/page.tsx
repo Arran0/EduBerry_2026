@@ -18,9 +18,10 @@ import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToCl
 import { fetchClassTeachersForGradeSection } from '@/lib/homeroomClassTeachers'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { ClassroomMember, ClassroomMemberRole, ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
+import { ClassroomMember, ClassroomMemberRole, ClassroomWithDetails, fetchClassroomManagerPage, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
 import { supabase } from '@/lib/supabase'
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import { useServerPagedList } from '@/hooks/useServerPagedList'
+import useDebounce from '@/hooks/useDebounce'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -40,8 +41,6 @@ export default function ClassroomManagerPage() {
   const isAdmin = profile?.role === 'admin'
   const router = useRouter()
 
-  const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
-  const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [expandedClassroom, setExpandedClassroom] = useState<string | null>(null)
   const [bannerEditing, setBannerEditing] = useState(false)
@@ -77,15 +76,21 @@ export default function ClassroomManagerPage() {
     return `${y}-${String(y + 1).slice(-2)}`
   }
 
-  const loadClassrooms = useCallback(async () => {
-    if (!user || !profile) return
-    setLoading(true)
-    const data = await fetchClassroomsForUser(user.id, profile.role, true)
-    setClassrooms(data)
-    setLoading(false)
-  }, [user, profile])
+  // The roster of classrooms is read a page at a time, searched and ordered
+  // and counted by Postgres. Typing is debounced so a search is one query when
+  // the admin stops, not one per keystroke.
+  const debouncedSearch = useDebounce(classroomSearch, 250)
+  const [bandTotals, setBandTotals] = useState({ active: 0, closed: 0 })
 
-  useEffect(() => { loadClassrooms() }, [loadClassrooms])
+  const fetchPage = useCallback(async (offset: number, limit: number) => {
+    const page = await fetchClassroomManagerPage(debouncedSearch, offset, limit)
+    setBandTotals({ active: page.activeTotal, closed: page.closedTotal })
+    return { rows: page.rows, total: page.total }
+  }, [debouncedSearch])
+
+  const list = useServerPagedList(fetchPage, { resetKey: debouncedSearch.trim().toLowerCase() })
+  const { rows: visibleRows, total, loading } = list
+  const loadClassrooms = list.reload
 
   const loadClassroomDetails = async (classroomId: string) => {
     const details = await fetchClassroomById(classroomId)
@@ -262,32 +267,6 @@ export default function ClassroomManagerPage() {
     }
   }
 
-  const searchLower = classroomSearch.trim().toLowerCase()
-  // The create-classroom form keeps eight inputs in this component's state, so
-  // without memoisation every keystroke in one re-filtered and re-partitioned
-  // the whole classroom list. Must stay above the `!user` early return — hooks
-  // cannot be called conditionally.
-  const { activeClassrooms, closedClassrooms, rows } = useMemo(() => {
-    const filtered = searchLower
-      ? classrooms.filter(c => c.title.toLowerCase().includes(searchLower) || (c.description && c.description.toLowerCase().includes(searchLower)))
-      : classrooms
-    const activeClassrooms = filtered.filter(c => !isClassroomClosed(c))
-    const closedClassrooms = filtered.filter(c => isClassroomClosed(c))
-    // Active then closed as one sequence, so a single scroll sentinel pages
-    // the whole list — two sentinels would race, the closed one coming into
-    // view while the active list above it was still only a page deep.
-    return {
-      activeClassrooms,
-      closedClassrooms,
-      rows: [
-        ...activeClassrooms.map(c => ({ classroom: c, closed: false })),
-        ...closedClassrooms.map(c => ({ classroom: c, closed: true })),
-      ],
-    }
-  }, [classrooms, searchLower])
-
-  const { visible: visibleRows, sentinelRef, hasMore, shown, total, loadMore } = useInfiniteScroll(rows, { resetKey: searchLower })
-
   if (!user || !profile) return null
 
   return (
@@ -298,8 +277,8 @@ export default function ClassroomManagerPage() {
           defaultBanner={CLASSROOMS_BANNER_DEFAULT}
           icon={<BookOpen size={26} className="text-white" />}
           title="Classroom Management"
-          subtitle={!loading && classrooms.length > 0
-            ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
+          subtitle={!loading && total > 0
+            ? `${bandTotals.active} active · ${bandTotals.closed} closed`
             : 'Create and manage classrooms'}
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
@@ -330,8 +309,8 @@ export default function ClassroomManagerPage() {
             search={classroomSearch}
             onSearchChange={setClassroomSearch}
             searchPlaceholder="Search classrooms by title or description…"
-            summary={!loading && classrooms.length > 0
-              ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
+            summary={!loading && total > 0
+              ? `${visibleRows.length} of ${total} loaded · ${bandTotals.active} active · ${bandTotals.closed} closed`
               : undefined}
           />
 
@@ -434,7 +413,7 @@ export default function ClassroomManagerPage() {
               <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
               <p className="text-sm text-[#71717A]">Loading classrooms…</p>
             </div>
-          ) : classrooms.length === 0 ? (
+          ) : total === 0 && !debouncedSearch ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-12 text-center">
               <BookOpen size={36} className="text-[#D4D4D8] mx-auto mb-3" />
               <p className="text-sm font-semibold text-[#18181B] mb-1">No Classrooms Yet</p>
@@ -445,14 +424,14 @@ export default function ClassroomManagerPage() {
                 </button>
               )}
             </div>
-          ) : activeClassrooms.length + closedClassrooms.length === 0 && classroomSearch ? (
+          ) : total === 0 ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-10 text-center">
               <p className="text-sm text-[#71717A]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
             </div>
           ) : (
             <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
+              <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
                 <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title</span>
                 <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Subject</span>
                 <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">A.Y.</span>
@@ -465,10 +444,10 @@ export default function ClassroomManagerPage() {
               <motion.div variants={containerVariants} initial="hidden" animate="show">
                 {visibleRows.map(({ classroom, closed }, i) => (
                   <React.Fragment key={classroom.id}>
-                    {(i === 0 || visibleRows[i - 1].closed !== closed) && (closed || closedClassrooms.length > 0) && (
+                    {(i === 0 || visibleRows[i - 1].closed !== closed) && (closed || bandTotals.closed > 0) && (
                       <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{closed ? 'Closed' : 'Active'}</span>
-                        <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closed ? closedClassrooms.length : activeClassrooms.length}</span>
+                        <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closed ? bandTotals.closed : bandTotals.active}</span>
                       </div>
                     )}
                     <ClassroomRow
@@ -490,8 +469,8 @@ export default function ClassroomManagerPage() {
               </motion.div>
 
               <ListSentinel
-                sentinelRef={sentinelRef} hasMore={hasMore}
-                shown={shown} total={total} onLoadMore={loadMore} noun="classrooms"
+                sentinelRef={list.sentinelRef} hasMore={list.hasMore} loadingMore={list.loadingMore}
+                shown={visibleRows.length} total={total} onLoadMore={list.loadMore} noun="classrooms"
               />
             </div>
           )}
@@ -616,7 +595,7 @@ function ClassroomRow({
     <motion.div variants={itemVariants}>
       {/* Row */}
       <div
-        className={`flex items-center gap-3 px-4 py-2 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
+        className={`flex items-center gap-3 px-3 py-1.5 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
         onClick={onExpand}
       >
         {/* Icon dot */}
@@ -625,11 +604,11 @@ function ClassroomRow({
         {/* Title + subject */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-sm font-semibold truncate ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
+            <span className={`truncate text-[13px] font-semibold leading-tight ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
             {closed && <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA]">Closed</span>}
           </div>
           {classroom.description && (
-            <p className="hidden sm:block text-xs text-[#71717A] truncate">{classroom.description}</p>
+            <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">{classroom.description}</p>
           )}
         </div>
 
@@ -727,12 +706,12 @@ function ClassroomRow({
                         <p className="text-sm text-[#71717A] px-3 py-3">No members yet</p>
                       ) : (
                         expandedDetails.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                          <div key={member.id} className="flex items-center justify-between py-1.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                             <div className="flex items-center gap-3 min-w-0">
-                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={28} userId={member.user?.id} />
+                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} />
                               <div className="min-w-0">
-                                <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
-                                <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
+                                <p className="truncate text-[13px] font-medium leading-tight text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="truncate text-[11px] leading-tight text-[#71717A]">{member.user?.email}</p>
                               </div>
                               {/* The person's own label — their admin-set display_role
                                   ("HM") when they have one, else the standard name for

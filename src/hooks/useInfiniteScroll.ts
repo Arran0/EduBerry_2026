@@ -49,6 +49,7 @@ export function useInfiniteScroll<T>(
 ): UseInfiniteScrollResult<T> {
   const [count, setCount] = useState(initialCount)
   const observerRef = useRef<IntersectionObserver | null>(null)
+  const nodeRef = useRef<HTMLElement | null>(null)
   const totalRef = useRef(items.length)
   totalRef.current = items.length
 
@@ -65,12 +66,25 @@ export function useInfiniteScroll<T>(
   // a callback ref is the only form that reliably tells us about both.
   const sentinelRef = useCallback((node: HTMLElement | null) => {
     observerRef.current?.disconnect()
+    nodeRef.current = node
     if (!node) return
     observerRef.current = new IntersectionObserver(entries => {
       if (entries.some(e => e.isIntersecting)) loadMore()
     }, { rootMargin })
     observerRef.current.observe(node)
   }, [loadMore, rootMargin])
+
+  // Revealing a page can leave the sentinel still on screen — a tall display,
+  // or rows shorter than the observer's margin. The intersection never
+  // changes, so it never fires again and the list stalls half-revealed.
+  // Re-observing re-reports the current state, which asks for the next page.
+  useEffect(() => {
+    const node = nodeRef.current
+    const io = observerRef.current
+    if (!node || !io || !hasMore) return
+    io.unobserve(node)
+    io.observe(node)
+  }, [count, hasMore])
 
   useEffect(() => () => observerRef.current?.disconnect(), [])
 
