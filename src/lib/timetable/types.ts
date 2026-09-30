@@ -79,9 +79,50 @@ export interface TimetableConfig {
   updated_at: string
 }
 
+// ── Slot groups (Round 9) ────────────────────────────────────
+// A school can run more than one bell schedule side by side — Primary on a
+// 5-day week of 6 periods, Secondary on 6 days of 8. A slot group owns its own
+// working days and its own period slots; homerooms are assigned to one.
+// A config with no groups behaves as before: the base schedule is
+// config.working_days plus the slots whose group_id is null.
+
+export interface SlotGroup {
+  id: string
+  config_id: string
+  name: string
+  working_days: Weekday[]
+  position: number
+  color: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SlotGroupHomeroom {
+  id: string
+  config_id: string
+  group_id: string
+  homeroom_id: string
+  created_at: string
+}
+
+/**
+ * The week one homeroom is scheduled against: its slot group's days and slots,
+ * or the config's base schedule when it isn't assigned to a group.
+ */
+export interface ScheduleWeek {
+  groupId: string | null
+  name: string
+  days: Weekday[]
+  slots: PeriodSlot[] // teaching slots only (breaks filtered out)
+}
+
 export interface PeriodSlot {
   id: string
   config_id: string
+  // Round 9: which bell schedule this period belongs to. null = the config's
+  // base schedule, followed by every homeroom not assigned to a slot group.
+  group_id: string | null
   position: number
   label: string | null
   // Timings are optional (Round 1): a slot can be defined by
@@ -236,6 +277,9 @@ export interface TimetableEntry {
   group_id: string | null
   split_key: string | null
   combined_key: string | null
+  // Every period of one double/triple block shares this key (Round 9), so a
+  // block moves, pins and is scored as a single unit. null = single period.
+  block_key: string | null
   created_at: string
   updated_at: string
   // Optional joins
@@ -345,11 +389,19 @@ export interface PlacedEntry {
   groupId?: string | null
   splitKey?: string | null
   combinedKey?: string | null
+  // Consecutive-period block (Round 9): shared by every period of one block.
+  blockKey?: string | null
 }
 
 export interface GeneratorInput {
   config: TimetableConfig
-  slots: PeriodSlot[] // teaching slots (is_break filtered out by caller)
+  slots: PeriodSlot[] // every slot of the config; breaks are filtered internally
+  // Round 9: extra bell schedules. Each group carries its own working days and
+  // owns the slots whose group_id matches it; `homeroomGroupIds` says which
+  // homerooms follow which. Anything unlisted falls back to config.working_days
+  // and the slots with group_id null, so omitting both is the old behaviour.
+  slotGroups?: SlotGroup[]
+  homeroomGroupIds?: Record<string, string | null>
   requirements: Requirement[]
   unavailability: TeacherUnavailability[]
   rooms: Room[]

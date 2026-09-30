@@ -42,6 +42,7 @@ const toPlaced = (e: TimetableEntry): PlacedEntry => ({
   groupId: e.group_id ?? null,
   splitKey: e.split_key ?? null,
   combinedKey: e.combined_key ?? null,
+  blockKey: e.block_key ?? null,
 })
 
 export default function GenerateTab({ config }: { config: TimetableConfig }) {

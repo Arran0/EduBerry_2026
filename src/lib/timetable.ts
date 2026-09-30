@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import type { UserProfile } from './supabase'
-import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Timetable, TimetableEntry, TimetableStatus, TimetableViewData, Weekday, PlacedEntry, HomeroomGroup, TimetableConstraint, ConstraintScope, ConstraintType, CombinedClass } from './timetable/types'
+import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Timetable, TimetableEntry, TimetableStatus, TimetableViewData, Weekday, PlacedEntry, HomeroomGroup, TimetableConstraint, ConstraintScope, ConstraintType, CombinedClass, SlotGroup, SlotGroupHomeroom, ScheduleWeek } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'
@@ -201,7 +201,7 @@ export async function fetchPeriodSlots(configId: string): Promise<PeriodSlot[]> 
 
 export async function createPeriodSlot(
   input: Pick<PeriodSlot, 'config_id' | 'position'> &
-    Partial<Pick<PeriodSlot, 'label' | 'is_break' | 'start_time' | 'end_time'>>,
+    Partial<Pick<PeriodSlot, 'label' | 'is_break' | 'start_time' | 'end_time' | 'group_id'>>,
 ): Promise<PeriodSlot | null> {
   const { data, error } = await supabase
     .from('timetable_period_slots')
@@ -279,6 +279,33 @@ export async function createRequirement(
 let lastRequirementError: string | null = null
 export const requirementError = () => lastRequirementError
 
+export type RequirementPatch = Partial<
+  Pick<
+    Requirement,
+    'subject_id' | 'teacher_id' | 'teacher_ids' | 'periods_per_week' | 'room_type'
+    | 'max_per_day' | 'min_block' | 'max_block' | 'group_id'
+  >
+>
+
+export async function updateRequirement(id: string, patch: RequirementPatch): Promise<Requirement | null> {
+  const { data, error } = await supabase
+    .from('timetable_requirements')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    console.error('updateRequirement error:', error)
+    lastRequirementError =
+      error.code === '23505'
+        ? 'This class already has that subject for the same group.'
+        : `${error.message}${error.hint ? ` (${error.hint})` : ''}`
+    return null
+  }
+  lastRequirementError = null
+  return data
+}
+
 export async function deleteRequirement(id: string): Promise<boolean> {
   const { error } = await supabase.from('timetable_requirements').delete().eq('id', id)
   if (error) {
@@ -286,6 +313,60 @@ export async function deleteRequirement(id: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+/**
+ * Copies requirements onto another homeroom.
+ *
+ * Group targeting never survives the trip: a split group belongs to the class
+ * it was defined on, so a copied requirement always lands as whole-class and
+ * the admin re-points it if the destination is split too. Subjects the target
+ * already has are skipped rather than failing the whole paste — the unique
+ * index would reject them one by one anyway.
+ *
+ * Returns what happened so the UI can say "4 copied, 2 already there".
+ */
+export async function copyRequirementsTo(
+  sources: Requirement[],
+  targetHomeroomId: string,
+): Promise<{ copied: number; skipped: number; failed: number }> {
+  if (sources.length === 0) return { copied: 0, skipped: 0, failed: 0 }
+  const configId = sources[0].config_id
+  const existing = await fetchRequirements(configId, targetHomeroomId)
+  const taken = new Set(existing.filter((r) => !r.group_id).map((r) => r.subject_id))
+
+  const rows = []
+  let skipped = 0
+  for (const r of sources) {
+    if (taken.has(r.subject_id)) {
+      skipped++
+      continue
+    }
+    taken.add(r.subject_id)
+    rows.push({
+      config_id: r.config_id,
+      homeroom_id: targetHomeroomId,
+      subject_id: r.subject_id,
+      teacher_id: r.teacher_id,
+      teacher_ids: teacherIdsOf(r),
+      periods_per_week: r.periods_per_week,
+      room_type: r.room_type,
+      max_per_day: r.max_per_day,
+      min_block: r.min_block,
+      max_block: r.max_block,
+      group_id: null,
+    })
+  }
+  if (rows.length === 0) return { copied: 0, skipped, failed: 0 }
+
+  const { data, error } = await supabase.from('timetable_requirements').insert(rows).select('id')
+  if (error) {
+    console.error('copyRequirementsTo error:', error)
+    lastRequirementError = `${error.message}${error.hint ? ` (${error.hint})` : ''}`
+    return { copied: 0, skipped, failed: rows.length }
+  }
+  lastRequirementError = null
+  return { copied: data?.length ?? rows.length, skipped, failed: 0 }
 }
 
 // ============================================================
@@ -504,6 +585,9 @@ export async function replaceEntries(
     group_id: e.groupId ?? null,
     split_key: e.splitKey ?? null,
     combined_key: e.combinedKey ?? null,
+    // Every period of a double/triple carries the same key, so a reloaded
+    // draft still knows which rows are one lesson.
+    block_key: e.blockKey ?? null,
     }
   })
   const { error } = await supabase.from('timetable_entries').insert(rows)
@@ -1025,4 +1109,152 @@ export async function deleteCombinedClass(id: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+// ============================================================
+// Slot groups (Round 9) — several bell schedules in one config
+// ============================================================
+// A config's "base" schedule is config.working_days plus the period slots with
+// group_id null. A slot group overrides both for the homerooms assigned to it.
+// A config with no groups therefore behaves exactly as it always did.
+
+export async function fetchSlotGroups(configId: string): Promise<SlotGroup[]> {
+  const { data, error } = await supabase
+    .from('timetable_slot_groups')
+    .select('*')
+    .eq('config_id', configId)
+    .order('position', { ascending: true })
+  if (error) {
+    console.error('fetchSlotGroups error:', error)
+    return []
+  }
+  return (data ?? []) as SlotGroup[]
+}
+
+export async function createSlotGroup(
+  input: Pick<SlotGroup, 'config_id' | 'name'> &
+    Partial<Pick<SlotGroup, 'working_days' | 'position' | 'color'>>,
+): Promise<SlotGroup | null> {
+  const { data, error } = await supabase.from('timetable_slot_groups').insert(input).select().single()
+  if (error) {
+    console.error('createSlotGroup error:', error)
+    return null
+  }
+  return data as SlotGroup
+}
+
+export async function updateSlotGroup(
+  id: string,
+  patch: Partial<Pick<SlotGroup, 'name' | 'working_days' | 'position' | 'color'>>,
+): Promise<boolean> {
+  const { error } = await supabase.from('timetable_slot_groups').update(patch).eq('id', id)
+  if (error) {
+    console.error('updateSlotGroup error:', error)
+    return false
+  }
+  return true
+}
+
+// Cascades to the group's period slots and its homeroom assignments, which
+// drop those classes back onto the config's base schedule.
+export async function deleteSlotGroup(id: string): Promise<boolean> {
+  const { error } = await supabase.from('timetable_slot_groups').delete().eq('id', id)
+  if (error) {
+    console.error('deleteSlotGroup error:', error)
+    return false
+  }
+  return true
+}
+
+export async function fetchSlotGroupHomerooms(configId: string): Promise<SlotGroupHomeroom[]> {
+  const { data, error } = await supabase
+    .from('timetable_slot_group_homerooms')
+    .select('*')
+    .eq('config_id', configId)
+  if (error) {
+    console.error('fetchSlotGroupHomerooms error:', error)
+    return []
+  }
+  return (data ?? []) as SlotGroupHomeroom[]
+}
+
+/**
+ * Points a homeroom at a slot group, or back at the base schedule when
+ * `groupId` is null. One row per (config, homeroom) — the upsert relies on that
+ * unique index so switching groups is a single round trip.
+ */
+export async function assignHomeroomToSlotGroup(
+  configId: string,
+  homeroomId: string,
+  groupId: string | null,
+): Promise<boolean> {
+  if (!groupId) {
+    const { error } = await supabase
+      .from('timetable_slot_group_homerooms')
+      .delete()
+      .eq('config_id', configId)
+      .eq('homeroom_id', homeroomId)
+    if (error) {
+      console.error('assignHomeroomToSlotGroup (clear) error:', error)
+      return false
+    }
+    return true
+  }
+  const { error } = await supabase
+    .from('timetable_slot_group_homerooms')
+    .upsert(
+      { config_id: configId, homeroom_id: homeroomId, group_id: groupId },
+      { onConflict: 'config_id,homeroom_id' },
+    )
+  if (error) {
+    console.error('assignHomeroomToSlotGroup error:', error)
+    return false
+  }
+  return true
+}
+
+/** homeroomId -> slot group id (absent = the base schedule). */
+export function slotGroupMap(rows: SlotGroupHomeroom[]): Record<string, string | null> {
+  const out: Record<string, string | null> = {}
+  for (const r of rows) out[r.homeroom_id] = r.group_id
+  return out
+}
+
+/**
+ * The distinct weeks a config is scheduled against, base first. Groups with no
+ * teaching periods of their own are dropped — they can hold nothing, and a
+ * grid built on an empty week renders as a column-less table.
+ */
+export function scheduleWeeks(
+  config: TimetableConfig,
+  slots: PeriodSlot[],
+  groups: SlotGroup[],
+): ScheduleWeek[] {
+  const teaching = (groupId: string | null) =>
+    slots
+      .filter((s) => !s.is_break && (s.group_id ?? null) === groupId)
+      .sort((a, b) => a.position - b.position)
+
+  const weeks: ScheduleWeek[] = [
+    { groupId: null, name: 'Base schedule', days: config.working_days, slots: teaching(null) },
+  ]
+  for (const g of [...groups].sort((a, b) => a.position - b.position)) {
+    weeks.push({
+      groupId: g.id,
+      name: g.name,
+      days: g.working_days.length > 0 ? g.working_days : config.working_days,
+      slots: teaching(g.id),
+    })
+  }
+  return weeks.filter((w) => w.slots.length > 0)
+}
+
+/** The week one homeroom follows, falling back to the base schedule. */
+export function weekForHomeroom(
+  weeks: ScheduleWeek[],
+  groupIds: Record<string, string | null>,
+  homeroomId: string,
+): ScheduleWeek {
+  const gid = groupIds[homeroomId] ?? null
+  return weeks.find((w) => w.groupId === gid) ?? weeks.find((w) => w.groupId === null) ?? weeks[0]
 }

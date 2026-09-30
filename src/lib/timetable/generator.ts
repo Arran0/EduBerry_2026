@@ -38,6 +38,8 @@ import type {
   TimetableConstraint,
   HomeroomLite,
   CombinedClassInput,
+  SlotGroup,
+  TimetableConfig,
   Weekday,
 } from './types'
 import { teacherIdsOf } from './types'
@@ -103,23 +105,155 @@ const hrToken = (groupId: string | null | undefined) => groupId ?? WHOLE
 // ── Slot geometry ────────────────────────────────────────────
 // Teaching slots in order, plus whether each is position-adjacent to the
 // next (no break slot between them) so blocks never straddle a break.
+//
+// Round 9: a config can run several bell schedules at once (slot groups), so
+// geometry is per group and each homeroom is solved against its own week. The
+// base schedule — config.working_days plus the slots with group_id null — is
+// keyed BASE and used by every homeroom not assigned to a group, which is
+// exactly the old single-schedule behaviour when no groups exist.
+
+const BASE = '__base__'
+const groupKey = (id: string | null | undefined) => id ?? BASE
 
 interface SlotGeometry {
+  key: string // groupKey
+  name: string
+  days: Weekday[]
   teachingSlots: PeriodSlot[]
   slotIds: string[]
-  slotOrder: Map<string, number> // slotId -> index in teachingSlots
+  slotOrder: Map<string, number> // slotId -> index within this schedule
   adjacentNext: boolean[] // adjacentNext[i] = slot i and i+1 are consecutive periods
 }
 
-function slotGeometry(all: PeriodSlot[]): SlotGeometry {
-  const teachingSlots = all.filter((s) => !s.is_break)
+/**
+ * Every schedule in play, plus the cross-schedule bookkeeping that only matters
+ * once more than one exists:
+ *
+ *  - `clock` is a config-wide chronological ordinal per slot. A teacher's
+ *    max-in-a-row and idle-gap scoring compare periods across schedules, so
+ *    they need one shared number line rather than per-schedule indices.
+ *  - `clash` maps a slot to every slot (its own included) that occupies the
+ *    same wall-clock time in another schedule. A teacher or room booked in
+ *    Primary period 3 is unavailable for an overlapping Secondary period, and
+ *    only this map can see that — the two are different slot rows.
+ */
+interface Schedules {
+  geoms: Map<string, SlotGeometry>
+  order: SlotGeometry[] // stable display order
+  byHomeroom: Map<string, string> // homeroomId -> groupKey
+  clock: Map<string, number> // slotId -> chronological ordinal
+  clash: Map<string, string[]> // slotId -> overlapping slotIds, itself first
+  multi: boolean // more than one schedule is in play
+}
+
+const minutes = (t: string | null): number | null => {
+  if (!t) return null
+  const m = t.match(/^(\d{1,2}):(\d{2})/)
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null
+}
+
+function geometryOf(key: string, name: string, days: Weekday[], slots: PeriodSlot[]): SlotGeometry {
+  const teachingSlots = slots.filter((s) => !s.is_break).sort((a, b) => a.position - b.position)
   const slotIds = teachingSlots.map((s) => s.id)
   const slotOrder = new Map(teachingSlots.map((s, i) => [s.id, i]))
   const adjacentNext: boolean[] = []
   for (let i = 0; i < teachingSlots.length - 1; i++) {
     adjacentNext.push(teachingSlots[i + 1].position === teachingSlots[i].position + 1)
   }
-  return { teachingSlots, slotIds, slotOrder, adjacentNext }
+  return { key, name, days, teachingSlots, slotIds, slotOrder, adjacentNext }
+}
+
+/**
+ * Two slots from different schedules collide when their clock times overlap.
+ * Schedules built without timings fall back to the period number: "period 3"
+ * of one band is assumed to run against "period 3" of another.
+ */
+function slotsCollide(a: PeriodSlot, b: PeriodSlot): boolean {
+  const aStart = minutes(a.start_time)
+  const aEnd = minutes(a.end_time)
+  const bStart = minutes(b.start_time)
+  const bEnd = minutes(b.end_time)
+  if (aStart != null && aEnd != null && bStart != null && bEnd != null) {
+    return aStart < bEnd && bStart < aEnd
+  }
+  return a.position === b.position
+}
+
+export function buildSchedules(
+  config: Pick<TimetableConfig, 'working_days'>,
+  slots: PeriodSlot[],
+  slotGroups: SlotGroup[] = [],
+  homeroomGroupIds: Record<string, string | null> = {},
+): Schedules {
+  const geoms = new Map<string, SlotGeometry>()
+  geoms.set(
+    BASE,
+    geometryOf(BASE, 'Base schedule', config.working_days, slots.filter((s) => !s.group_id)),
+  )
+  const groups = [...slotGroups].sort((a, b) => a.position - b.position)
+  for (const g of groups) {
+    geoms.set(
+      g.id,
+      geometryOf(
+        g.id,
+        g.name,
+        g.working_days.length > 0 ? g.working_days : config.working_days,
+        slots.filter((s) => s.group_id === g.id),
+      ),
+    )
+  }
+
+  const byHomeroom = new Map<string, string>()
+  for (const [hr, gid] of Object.entries(homeroomGroupIds)) {
+    byHomeroom.set(hr, geoms.has(groupKey(gid)) ? groupKey(gid) : BASE)
+  }
+
+  // A schedule with no teaching slots can't hold anything, so it is dropped
+  // from the display order — but kept in `geoms` so a homeroom pointed at it
+  // still resolves (to an empty week) instead of silently falling back to base.
+  const order = [geoms.get(BASE)!, ...groups.map((g) => geoms.get(g.id)!)].filter(
+    (g) => g.teachingSlots.length > 0,
+  )
+
+  const all = [...geoms.values()].flatMap((g) => g.teachingSlots)
+  const positionIn = new Map<string, number>()
+  for (const g of geoms.values()) g.teachingSlots.forEach((s, i) => positionIn.set(s.id, i))
+  const sorted = [...all].sort((a, b) => {
+    const am = minutes(a.start_time)
+    const bm = minutes(b.start_time)
+    if (am != null && bm != null && am !== bm) return am - bm
+    return (positionIn.get(a.id) ?? 0) - (positionIn.get(b.id) ?? 0)
+  })
+  const clock = new Map<string, number>()
+  sorted.forEach((s, i) => clock.set(s.id, i))
+
+  const clash = new Map<string, string[]>()
+  const multi = order.length > 1
+  for (const s of all) {
+    if (!multi) {
+      clash.set(s.id, [s.id])
+      continue
+    }
+    const hits = [s.id]
+    for (const o of all) {
+      if (o.id === s.id || o.group_id === s.group_id) continue
+      if (slotsCollide(s, o)) hits.push(o.id)
+    }
+    clash.set(s.id, hits)
+  }
+
+  return { geoms, order, byHomeroom, clock, clash, multi }
+}
+
+/** The schedule a homeroom is solved against (base when unassigned). */
+const scheduleFor = (sched: Schedules, homeroomId: string): SlotGeometry =>
+  sched.geoms.get(sched.byHomeroom.get(homeroomId) ?? BASE) ?? sched.geoms.get(BASE)!
+
+/** Every cell key a booking at day+slot occupies, overlapping bands included. */
+function busyKeys(sched: Schedules, day: Weekday, slotId: string): string[] {
+  const ids = sched.clash.get(slotId)
+  if (!ids || ids.length === 1) return [cellKey(day, slotId)]
+  return ids.map((id) => cellKey(day, id))
 }
 
 // ── Solver working state ─────────────────────────────────────
@@ -134,6 +268,7 @@ class SolveState {
   teacherDaySlots = new Map<string, Set<number>>() // `${teacher}|${day}` -> slot indices
   limitCounts = new Map<string, number>() // `${ruleIdx}|${bucket}` -> count
   placements: PlacedEntry[] = []
+  blockSeq = 0 // names each multi-period block it places
 
   // Can a lesson with this token occupy the homeroom cell? Whole-class lessons
   // need an empty cell; a group coexists with other (different) groups only.
@@ -252,8 +387,7 @@ interface CombinedUnit {
 // ── Construction ─────────────────────────────────────────────
 
 interface BuildArgs {
-  days: Weekday[]
-  geo: SlotGeometry
+  sched: Schedules
   blocks: Block[]
   combined: CombinedUnit[]
   locked: PlacedEntry[]
@@ -284,6 +418,9 @@ function longestRun(indices: Set<number>): number {
   return best
 }
 
+// `keys` are the cell keys a booking would occupy — the block's own periods
+// plus, when several bell schedules overlap, the colliding periods of the other
+// bands, so one room isn't handed to two schedules running at the same hour.
 function pickRoomForBlock(
   roomsByType: Map<RoomType, Room[]>,
   roomUsedAt: Map<string, Set<string>>,
@@ -310,7 +447,8 @@ function scoreBlock(
   args: BuildArgs,
   relaxMaxPerDay: boolean,
 ): { roomId: string | null; penalty: number } | null {
-  const { geo, index, roomsByType, rng } = args
+  const { sched, index, roomsByType, rng } = args
+  const geo = scheduleFor(sched, block.homeroomId)
   const size = block.size
   if (start + size > geo.slotIds.length) return null
   // Contiguous with no break between.
@@ -318,7 +456,8 @@ function scoreBlock(
     if (!geo.adjacentNext[j]) return null
   }
 
-  const keys: string[] = []
+  const keys: string[] = [] // the block's own cells
+  const bookKeys: string[] = [] // those plus the cells they collide with
   const token = hrToken(block.groupId)
   const blockTeachers = teachersOf(block)
   const busySets = blockTeachers.map((t) => state.teacherBusy.get(t))
@@ -327,9 +466,13 @@ function scoreBlock(
     const slotId = geo.slotIds[j]
     const key = cellKey(day, slotId)
     keys.push(key)
+    const booked = busyKeys(sched, day, slotId)
+    bookKeys.push(...booked)
     if (!state.homeroomFree(block.homeroomId, key, token)) return null
     // Every teacher of a co-taught lesson has to be free and not timed off.
-    if (busySets.some((s) => s?.has(key))) return null
+    // "Free" spans every schedule: a teacher in an overlapping period of
+    // another band is just as unavailable as one in this band.
+    if (busySets.some((set) => set && booked.some((k) => set.has(k)))) return null
     if (blockTeachers.length === 0) {
       if (timeOffBlocked(index.teacherTimeOff, null, key)) return null
     } else if (blockTeachers.some((t) => timeOffBlocked(index.teacherTimeOff, t, key))) {
@@ -362,16 +505,17 @@ function scoreBlock(
     }
   }
 
-  // Max-in-a-row (hard) — checked for every teacher of the lesson.
+  // Max-in-a-row (hard) — checked for every teacher of the lesson, on the
+  // config-wide clock so consecutive periods count even across bell schedules.
   for (const t of blockTeachers) {
     const maxRow = effectiveMaxInARow(index, t)
     if (maxRow == null) continue
     const union = new Set(state.teacherDaySlots.get(`${t}|${day}`) ?? [])
-    for (let j = start; j < start + size; j++) union.add(j)
+    for (let j = start; j < start + size; j++) union.add(sched.clock.get(geo.slotIds[j]) ?? j)
     if (longestRun(union) > maxRow) return null
   }
 
-  const room = pickRoomForBlock(roomsByType, state.roomUsedAt, block.roomType, keys)
+  const room = pickRoomForBlock(roomsByType, state.roomUsedAt, block.roomType, bookKeys)
   if (!room.ok) return null
 
   const dl = state.dayLoad.get(`${block.homeroomId}|${day}`) ?? 0
@@ -381,10 +525,11 @@ function scoreBlock(
 }
 
 function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boolean): boolean {
-  const { days, geo, index } = args
+  const { sched, index } = args
+  const geo = scheduleFor(sched, block.homeroomId)
   let best: { day: Weekday; start: number; roomId: string | null; penalty: number } | null = null
 
-  for (const day of days) {
+  for (const day of geo.days) {
     for (let start = 0; start + block.size <= geo.slotIds.length; start++) {
       const scored = scoreBlock(state, block, day, start, args, relax)
       if (!scored) continue
@@ -395,6 +540,11 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
   }
 
   if (!best) return false
+  // A double/triple is several rows that mean one lesson. They all carry the
+  // same block key so the local search below, the grids, and a later reload
+  // can tell the block apart from two unrelated periods of the same subject —
+  // without it, anything that moves one period silently breaks the block.
+  const blockKey = block.size > 1 ? `blk${++state.blockSeq}` : null
   for (let j = best.start; j < best.start + block.size; j++) {
     const slotId = geo.slotIds[j]
     const p: PlacedEntry = {
@@ -409,18 +559,24 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
       groupId: block.groupId,
       // Parallel group lessons in one cell share a split key.
       splitKey: block.groupId ? `${block.homeroomId}__${best.day}__${slotId}` : null,
+      blockKey,
     }
-    state.occupyCell(p, j, index.limits)
+    state.occupyCell(p, sched.clock.get(slotId) ?? j, index.limits)
   }
   return true
 }
 
 function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } {
-  const { blocks, locked, geo, index } = args
+  const { blocks, locked, sched, index } = args
   const state = new SolveState()
   for (const l of locked) {
-    const idx = geo.slotOrder.get(l.slotId) ?? 0
-    state.occupyCell(l, idx, index.limits)
+    state.occupyCell(l, sched.clock.get(l.slotId) ?? 0, index.limits)
+  }
+  // Pinned blocks already carry keys from an earlier solve; keep the counter
+  // past them so a fresh block never reuses one.
+  for (const l of locked) {
+    const n = l.blockKey?.match(/^blk(\d+)$/)
+    if (n) state.blockSeq = Math.max(state.blockSeq, parseInt(n[1], 10))
   }
 
   // Combined classes are the most constrained (they occupy many homerooms at
@@ -443,17 +599,21 @@ function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unp
 
 // Scores a combined unit at day+start (size 1). Null if any hard rule blocks it.
 function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, start: number, args: BuildArgs): number | null {
-  const { geo, index } = args
+  const { sched, index } = args
+  const geo = combinedSchedule(sched, unit)
+  if (!geo) return null
   const slotId = geo.slotIds[start]
   const key = cellKey(day, slotId)
+  const booked = busyKeys(sched, day, slotId)
   const unitTeachers = teachersOf(unit)
   for (const t of unitTeachers) {
-    if (state.teacherBusy.get(t)?.has(key)) return null
+    const busy = state.teacherBusy.get(t)
+    if (busy && booked.some((k) => busy.has(k))) return null
     if (timeOffBlocked(index.teacherTimeOff, t, key)) return null
   }
   if (unitTeachers.length === 0 && timeOffBlocked(index.teacherTimeOff, null, key)) return null
   if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
-  if (unit.roomId && state.roomUsedAt.get(key)?.has(unit.roomId)) return null
+  if (unit.roomId && booked.some((k) => state.roomUsedAt.get(k)?.has(unit.roomId!))) return null
   for (const m of unit.members) {
     if (!state.homeroomFree(m.homeroomId, key, hrToken(m.groupId))) return null
     if (timeOffBlocked(index.homeroomTimeOff, m.homeroomId, key)) return null
@@ -462,7 +622,7 @@ function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, star
     const maxRow = effectiveMaxInARow(index, t)
     if (maxRow == null) continue
     const union = new Set(state.teacherDaySlots.get(`${t}|${day}`) ?? [])
-    union.add(start)
+    union.add(sched.clock.get(slotId) ?? start)
     if (longestRun(union) > maxRow) return null
   }
   let penalty = 0
@@ -470,10 +630,27 @@ function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, star
   return penalty + args.rng() * 0.5
 }
 
+/**
+ * The one schedule a combined lesson can run in. Its member classes all sit in
+ * the same period, so they have to share a bell schedule — a lesson spanning
+ * two bands has no common slot and is reported unplaceable rather than
+ * silently scheduled against one band's clock.
+ */
+function combinedSchedule(sched: Schedules, unit: CombinedUnit): SlotGeometry | null {
+  let geo: SlotGeometry | null = null
+  for (const m of unit.members) {
+    const g = scheduleFor(sched, m.homeroomId)
+    if (!geo) geo = g
+    else if (g.key !== geo.key) return null
+  }
+  return geo
+}
+
 function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArgs): boolean {
-  const { days, geo } = args
+  const geo = combinedSchedule(args.sched, unit)
+  if (!geo) return false
   let best: { day: Weekday; start: number; penalty: number } | null = null
-  for (const day of days) {
+  for (const day of geo.days) {
     for (let start = 0; start < geo.slotIds.length; start++) {
       const penalty = scoreCombined(state, unit, day, start, args)
       if (penalty == null) continue
@@ -481,7 +658,8 @@ function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArg
     }
   }
   if (!best) return false
-  state.occupyCombined(unit, best.day, geo.slotIds[best.start], best.start)
+  const slotId = geo.slotIds[best.start]
+  state.occupyCombined(unit, best.day, slotId, args.sched.clock.get(slotId) ?? best.start)
   return true
 }
 
@@ -489,17 +667,25 @@ function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArg
 
 function softPenalty(
   placements: PlacedEntry[],
-  geo: SlotGeometry,
-  days: Weekday[],
+  sched: Schedules,
   index: ConstraintIndex,
 ): number {
   let penalty = 0
-  const slotOrder = geo.slotOrder
 
+  // "Spread a subject across the week" counts LESSONS, not periods: a double
+  // period is one lesson sitting in two slots, so charging it the repeat
+  // penalty would make splitting every block look like an improvement — which
+  // is precisely what the local search used to do to them.
   const subjDay = new Map<string, number>()
   const hrDay = new Map<string, number>()
+  const countedUnits = new Set<string>()
   for (const p of placements) {
-    subjDay.set(`${p.homeroomId}|${p.subjectId}|${p.day}`, (subjDay.get(`${p.homeroomId}|${p.subjectId}|${p.day}`) ?? 0) + 1)
+    const dayKey = `${p.homeroomId}|${p.subjectId}|${p.day}`
+    const unit = p.blockKey ? `blk:${p.blockKey}` : `one:${p.slotId}|${p.groupId ?? ''}`
+    if (!countedUnits.has(`${dayKey}|${unit}`)) {
+      countedUnits.add(`${dayKey}|${unit}`)
+      subjDay.set(dayKey, (subjDay.get(dayKey) ?? 0) + 1)
+    }
     hrDay.set(`${p.homeroomId}|${p.day}`, (hrDay.get(`${p.homeroomId}|${p.day}`) ?? 0) + 1)
   }
   for (const count of subjDay.values()) if (count > 1) penalty += (count - 1) * 6
@@ -510,8 +696,11 @@ function softPenalty(
     if (!hrTotals.has(hr)) hrTotals.set(hr, [])
     hrTotals.get(hr)!.push(v)
   }
-  for (const loads of hrTotals.values()) {
-    const avg = loads.reduce((a, b) => a + b, 0) / Math.max(1, days.length)
+  for (const [hr, loads] of hrTotals) {
+    // Each class is levelled against the length of ITS OWN week — bands can
+    // run a different number of days.
+    const dayCount = Math.max(1, scheduleFor(sched, hr).days.length)
+    const avg = loads.reduce((a, b) => a + b, 0) / dayCount
     for (const l of loads) penalty += Math.abs(l - avg)
   }
 
@@ -520,7 +709,7 @@ function softPenalty(
     for (const t of teachersOf(p)) {
       const k = `${t}|${p.day}`
       if (!teacherDaySlots.has(k)) teacherDaySlots.set(k, new Set())
-      teacherDaySlots.get(k)!.add(slotOrder.get(p.slotId) ?? 0)
+      teacherDaySlots.get(k)!.add(sched.clock.get(p.slotId) ?? 0)
     }
   }
   for (const set of teacherDaySlots.values()) {
@@ -529,14 +718,14 @@ function softPenalty(
     penalty += (span - idxs.length) * 3
   }
 
-  penalty += minTargetShortfall(placements, days, index)
+  penalty += minTargetShortfall(placements, index)
   penalty += unfilledPins(placements, index) * 8
 
   return penalty
 }
 
 // Sum of unmet min-per-day / min-per-week targets (soft).
-function minTargetShortfall(placements: PlacedEntry[], days: Weekday[], index: ConstraintIndex): number {
+function minTargetShortfall(placements: PlacedEntry[], index: ConstraintIndex): number {
   let penalty = 0
   for (let r = 0; r < index.limits.length; r++) {
     const rule = index.limits[r]
@@ -581,48 +770,78 @@ function unfilledPins(placements: PlacedEntry[], index: ConstraintIndex): number
 }
 
 // ── Bounded local search ─────────────────────────────────────
-// Relocates unlocked SINGLE-period placements to better empty cells.
-// Multi-period blocks are left where construction put them.
+// Relocates one unlocked lesson at a time to a better cell. A double or triple
+// period is ONE lesson here: it is lifted and re-placed whole, never picked
+// apart period by period.
 
 function localSearch(state: SolveState, args: BuildArgs, iterations: number): void {
-  const { days, geo, index } = args
-  let current = softPenalty(state.placements, geo, days, index)
+  const { sched, index } = args
+  let current = softPenalty(state.placements, sched, index)
 
-  // Only relocate plain whole-class single lessons. Split-group lessons and
+  // Only relocate plain whole-class lessons. Split-group lessons and
   // combined-class lessons are structurally tied to their cell and must not be
   // moved independently (that would drop their split/combined key).
-  const movable = () => state.placements.filter((p) => !p.isLocked && !p.groupId && !p.combinedKey)
+  const isMovable = (p: PlacedEntry) => !p.isLocked && !p.groupId && !p.combinedKey
+
+  // One move candidate: a single period, or every period of one block.
+  const units = (): PlacedEntry[][] => {
+    const blocks = new Map<string, PlacedEntry[]>()
+    const out: PlacedEntry[][] = []
+    for (const p of state.placements) {
+      if (!isMovable(p)) continue
+      if (!p.blockKey) {
+        out.push([p])
+        continue
+      }
+      const arr = blocks.get(p.blockKey)
+      if (arr) arr.push(p)
+      else blocks.set(p.blockKey, [p])
+    }
+    // A block whose periods were somehow scattered is not a block any more —
+    // leave it alone rather than re-placing it as a contiguous run elsewhere.
+    for (const arr of blocks.values()) if (arr.length > 1) out.push(arr)
+    return out
+  }
+
+  const clockOf = (p: PlacedEntry) => sched.clock.get(p.slotId) ?? 0
+  const restore = (unit: PlacedEntry[]) => {
+    for (const p of unit) state.occupyCell(p, clockOf(p), index.limits)
+  }
+  const lift = (unit: PlacedEntry[]) => {
+    for (const p of unit) state.removeCell(p, clockOf(p), index.limits)
+  }
 
   for (let it = 0; it < iterations; it++) {
-    const pool = movable()
+    const pool = units()
     if (pool.length === 0) return
-    const p = pool[Math.floor(args.rng() * pool.length)]
-    const slotIdx = geo.slotOrder.get(p.slotId) ?? 0
+    const unit = pool[Math.floor(args.rng() * pool.length)]
+    const head = unit[0]
 
-    state.removeCell(p, slotIdx, index.limits)
+    lift(unit)
     const block: Block = {
       requirementId: '',
-      homeroomId: p.homeroomId,
-      subjectId: p.subjectId,
-      teacherId: p.teacherId,
-      teacherIds: teachersOf(p),
-      roomType: roomTypeOf(p, args.roomsByType),
-      size: 1,
+      homeroomId: head.homeroomId,
+      subjectId: head.subjectId,
+      teacherId: head.teacherId,
+      teacherIds: teachersOf(head),
+      roomType: roomTypeOf(head, args.roomsByType),
+      size: unit.length,
       maxPerDay: Number.POSITIVE_INFINITY,
-      groupId: p.groupId ?? null,
+      groupId: head.groupId ?? null,
     }
     const before = current
-    const placed = placeBlock(state, block, args, true)
-    if (!placed) {
-      state.occupyCell(p, slotIdx, index.limits)
+    const seqBefore = state.blockSeq
+    const countBefore = state.placements.length
+    if (!placeBlock(state, block, args, true)) {
+      restore(unit)
       continue
     }
-    const after = softPenalty(state.placements, geo, days, index)
+    const after = softPenalty(state.placements, sched, index)
     if (after > before) {
-      const moved = state.placements[state.placements.length - 1]
-      const movedIdx = geo.slotOrder.get(moved.slotId) ?? 0
-      state.removeCell(moved, movedIdx, index.limits)
-      state.occupyCell(p, slotIdx, index.limits)
+      const moved = state.placements.slice(countBefore)
+      lift(moved)
+      state.blockSeq = seqBefore
+      restore(unit)
     } else {
       current = after
     }
@@ -638,8 +857,12 @@ function roomTypeOf(p: PlacedEntry, roomsByType: Map<RoomType, Room[]>): RoomTyp
 // ── Public API ───────────────────────────────────────────────
 
 export function generateTimetable(input: GeneratorInput): GeneratorResult {
-  const days = input.config.working_days
-  const geo = slotGeometry(input.slots)
+  const sched = buildSchedules(
+    input.config,
+    input.slots,
+    input.slotGroups ?? [],
+    input.homeroomGroupIds ?? {},
+  )
 
   const index = buildConstraintIndex(input.constraints ?? [], input.homerooms ?? [])
   mergeLegacyUnavailability(index, input.unavailability)
@@ -654,7 +877,8 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
   const blocks = expandBlocks(input.requirements, locked)
   const combined = expandCombined(input.combined ?? [], locked)
 
-  if (geo.slotIds.length === 0 || days.length === 0) {
+  const anyWeek = sched.order.some((g) => g.slotIds.length > 0 && g.days.length > 0)
+  if (!anyWeek) {
     return {
       entries: locked,
       conflicts: [{ kind: 'unplaced_lesson', message: 'No teaching periods or working days are configured.' }],
@@ -673,14 +897,14 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
 
   for (let r = 0; r < RESTARTS; r++) {
     const rng = makeRng(baseSeed + r * 7919)
-    const args: BuildArgs = { days, geo, blocks, combined, locked, index, roomsByType, rng }
+    const args: BuildArgs = { sched, blocks, combined, locked, index, roomsByType, rng }
     const attempt = buildOnce(args)
     if (
       !best ||
       totalUnplaced(attempt) < totalUnplaced(best) ||
       (totalUnplaced(attempt) === totalUnplaced(best) &&
-        softPenalty(attempt.state.placements, geo, days, index) <
-          softPenalty(best.state.placements, geo, days, index))
+        softPenalty(attempt.state.placements, sched, index) <
+          softPenalty(best.state.placements, sched, index))
     ) {
       best = attempt
     }
@@ -690,11 +914,13 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
   const lsRng = makeRng(baseSeed + 104729)
   localSearch(
     finalState,
-    { days, geo, blocks, combined, locked, index, roomsByType, rng: lsRng },
+    { sched, blocks, combined, locked, index, roomsByType, rng: lsRng },
     Math.min(2000, finalState.placements.length * 40),
   )
 
-  const conflicts = detectConflicts(finalState.placements, input.unavailability, input.constraints, input.homerooms)
+  const conflicts = detectConflicts(
+    finalState.placements, input.unavailability, input.constraints, input.homerooms, sched.clash,
+  )
   let unplacedCount = 0
   for (const b of best!.unplaced) {
     unplacedCount += b.size
@@ -713,7 +939,9 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
     unplacedCount += 1
     conflicts.push({
       kind: 'unplaced_lesson',
-      message: 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.',
+      message: combinedSchedule(sched, u)
+        ? 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.'
+        : 'Its classes follow different period groups, so this combined lesson has no period they all share. Put them in one period group, or split the lesson.',
       subjectId: u.subjectId,
       teacherId: u.teacherId ?? undefined,
     })
@@ -736,7 +964,7 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
     entries: finalState.placements,
     conflicts,
     unplacedCount,
-    softPenalty: softPenalty(finalState.placements, geo, days, index),
+    softPenalty: softPenalty(finalState.placements, sched, index),
     ok: unplacedCount === 0 && !conflicts.some((c) => hardKinds.has(c.kind)),
   }
 }
@@ -835,6 +1063,20 @@ function push<T>(map: Map<string, T[]>, key: string, value: T) {
   map.get(key)!.push(value)
 }
 
+/**
+ * One stable id per wall-clock period across every bell schedule. Slots that
+ * overlap in time all resolve to the same id (the smallest of the group), so
+ * a teacher double-booked across two bands collides on a plain map lookup.
+ * With one schedule, or no clash map, a slot is its own canonical id.
+ */
+function canonicalSlot(clash: Map<string, string[]> | undefined, slotId: string): string {
+  const ids = clash?.get(slotId)
+  if (!ids || ids.length <= 1) return slotId
+  let min = slotId
+  for (const id of ids) if (id < min) min = id
+  return min
+}
+
 // How many independent lessons occupy a teacher/room at one cell. Entries that
 // share a combined_key are one combined lesson, so they collapse to a single unit.
 function occupancyCount(list: PlacedEntry[]): number {
@@ -852,18 +1094,25 @@ export function detectConflicts(
   unavailability: TeacherUnavailability[],
   constraints: TimetableConstraint[] = [],
   homerooms: HomeroomLite[] = [],
+  // Round 9: slotId -> the slots of other bell schedules it overlaps in time.
+  // Without it, two bands running at the same hour look like different cells
+  // and a teacher booked in both reads as free. Omit it for a single schedule.
+  slotClash?: Map<string, string[]>,
 ): GeneratorConflict[] {
   const conflicts: GeneratorConflict[] = []
   const teacherAt = new Map<string, PlacedEntry[]>()
   const roomAt = new Map<string, PlacedEntry[]>()
   const homeroomAt = new Map<string, PlacedEntry[]>()
+  // Everything that shares a wall-clock slot is filed under one canonical key,
+  // so an overlap across bands lands in the same bucket as a plain clash.
+  const timeKey = (day: Weekday, slotId: string) => cellKey(day, canonicalSlot(slotClash, slotId))
 
   for (const e of entries) {
-    const key = cellKey(e.day, e.slotId)
+    const key = timeKey(e.day, e.slotId)
     // A co-taught period books every one of its teachers at that cell.
     for (const t of teachersOf(e)) push(teacherAt, `${t}|${key}`, e)
     if (e.roomId) push(roomAt, `${e.roomId}|${key}`, e)
-    push(homeroomAt, `${e.homeroomId}|${key}`, e)
+    push(homeroomAt, `${e.homeroomId}|${cellKey(e.day, e.slotId)}`, e)
   }
 
   for (const [k, list] of teacherAt) {
@@ -966,12 +1215,13 @@ export function conflictCellKeys(
   unavailability: TeacherUnavailability[],
   constraints: TimetableConstraint[] = [],
   homerooms: HomeroomLite[] = [],
+  slotClash?: Map<string, string[]>,
 ): Set<string> {
   const keys = new Set<string>()
   const teacherAt = new Map<string, PlacedEntry[]>()
   const roomAt = new Map<string, PlacedEntry[]>()
   for (const e of entries) {
-    const k = cellKey(e.day, e.slotId)
+    const k = cellKey(e.day, canonicalSlot(slotClash, e.slotId))
     for (const t of teachersOf(e)) push(teacherAt, `${t}|${k}`, e)
     if (e.roomId) push(roomAt, `${e.roomId}|${k}`, e)
   }
