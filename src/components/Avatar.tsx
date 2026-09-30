@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { useProfileCard } from '@/contexts/ProfileCardContext'
+import { useProfileCard, type ProfileCardSeed } from '@/contexts/ProfileCardContext'
 
 interface AvatarProps {
   avatarUrl?: string | null
@@ -12,11 +12,14 @@ interface AvatarProps {
   className?: string
   /** When provided, clicking the avatar opens that user's profile card. */
   userId?: string
+  /** The profile the caller already holds, so the card opens fully drawn
+   *  rather than as a spinner that resizes. */
+  profileSeed?: ProfileCardSeed | null
 }
 
 /** Renders a circular avatar: image if avatarUrl is set, otherwise initials.
  *  Pass `userId` to make the avatar clickable — it will open the global profile card. */
-export default function Avatar({ avatarUrl, name, email, size = 36, className = '', userId }: AvatarProps) {
+export default function Avatar({ avatarUrl, name, email, size = 36, className = '', userId, profileSeed }: AvatarProps) {
   const profileCard = useProfileCard()
 
   const initials =
@@ -35,14 +38,14 @@ export default function Avatar({ avatarUrl, name, email, size = 36, className = 
     ? {
         onClick: (e: React.MouseEvent) => {
           e.stopPropagation()
-          profileCard.openProfileCard(userId)
+          profileCard.openProfileCard(userId, profileSeed)
         },
         role: 'button' as const,
         tabIndex: 0,
         onKeyDown: (e: React.KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.stopPropagation()
-            profileCard.openProfileCard(userId)
+            profileCard.openProfileCard(userId, profileSeed)
           }
         },
         title: name ? `View ${name}'s profile` : 'View profile',

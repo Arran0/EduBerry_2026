@@ -708,7 +708,7 @@ function ClassroomRow({
                         expandedDetails.members.map(member => (
                           <div key={member.id} className="flex items-center justify-between py-1.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                             <div className="flex items-center gap-3 min-w-0">
-                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} />
+                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} profileSeed={member.user} />
                               <div className="min-w-0">
                                 <p className="truncate text-[13px] font-medium leading-tight text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
                                 <p className="truncate text-[11px] leading-tight text-[#71717A]">{member.user?.email}</p>

@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useProfileCard } from '@/contexts/ProfileCardContext'
+import { useProfileCard, type ProfileCardSeed } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchRawSetting } from '@/lib/pageConfig'
 import { fetchStudentDetails } from '@/lib/studentDetails'
@@ -81,8 +81,25 @@ function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string
   )
 }
 
+/**
+ * The banner is one site-wide setting, identical for every card. Fetching it
+ * per open meant the header painted as the fallback gradient and then swapped
+ * to the image a moment later — a flash on every single open. Read once.
+ */
+let bannerCache: string | null | undefined
+
+/**
+ * A seed is only good enough to render from if it carries the fields the card
+ * shows above the fold. Anything less falls back to the loading state rather
+ * than drawing a half-empty card.
+ */
+function seedToProfile(seed?: ProfileCardSeed | null): UserProfile | null {
+  if (!seed?.full_name || !seed.email || !seed.role) return null
+  return { created_at: '', updated_at: '', ...seed } as UserProfile
+}
+
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
-function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: ProfileCardSeed | null; onClose: () => void }) {
   // Freeze the page underneath. Without this the card floats over a document
   // that is still free to scroll — and over a horizontally scrolled table, such
   // as the class-marks matrix, the page visibly lurches as the card opens and
@@ -93,8 +110,10 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const { profile: viewerProfile } = useAuth()
   const router = useRouter()
 
-  const [targetProfile, setTargetProfile] = useState<UserProfile | null>(null)
-  const [loadingProfile, setLoadingProfile] = useState(true)
+  // Opened from a list that already knows this person, the card starts fully
+  // drawn and the fetch below only fills in what the list didn't have.
+  const [targetProfile, setTargetProfile] = useState<UserProfile | null>(() => seedToProfile(seed))
+  const [loadingProfile, setLoadingProfile] = useState(() => !seedToProfile(seed))
   const [phone, setPhone] = useState<string | null>(null)
   // Student-only facts
   const [admissionNo, setAdmissionNo] = useState<string | null>(null)
@@ -103,7 +122,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   const [employeeId, setEmployeeId] = useState<string | null>(null)
   const [designation, setDesignation] = useState<string | null>(null)
 
-  const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(null)
+  const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(bannerCache ?? null)
 
   // Attendance calendar drill-down (stacked on top of the card)
   const [showAttendance, setShowAttendance] = useState(false)
@@ -117,6 +136,14 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
   // elsewhere, opened in place of the card (it hides while this is up).
   const [showDownloadCentre, setShowDownloadCentre] = useState(false)
 
+  // Layout animation is switched on only once the card has finished arriving.
+  // A `layout` child measures itself against its ancestors' transforms, and
+  // the wrapper below is still mid-spring on the way in — enabling it earlier
+  // makes the card wobble as it opens. Content that lands during the opening
+  // is carried by that motion anyway; it is the later arrivals that need the
+  // ease.
+  const [entered, setEntered] = useState(false)
+
   const isStudentProfile = targetProfile?.role === 'student'
   const isDriverProfile = targetProfile?.role === 'driver'
   const isSalaryStaffProfile = !!targetProfile && isStaff(targetProfile.role)
@@ -125,12 +152,14 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     && (isStudentProfile || isDriverProfile || isSalaryStaffProfile)
 
   useEffect(() => {
-    fetchRawSetting<string>('profile_banner')
-      .then(url => { if (typeof url === 'string' && url) setProfileBannerUrl(url) })
+    if (bannerCache !== undefined) return
+    fetchRawSetting<string>('profile_banner').then(url => {
+      bannerCache = typeof url === 'string' && url ? url : null
+      setProfileBannerUrl(bannerCache)
+    })
   }, [])
 
   const loadProfile = useCallback(async () => {
-    setLoadingProfile(true)
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -140,15 +169,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     setLoadingProfile(false)
   }, [userId])
 
-  useEffect(() => {
-    setTargetProfile(null)
-    setPhone(null)
-    setAdmissionNo(null)
-    setRollNo(null)
-    setEmployeeId(null)
-    setDesignation(null)
-    loadProfile()
-  }, [userId, loadProfile])
+  useEffect(() => { loadProfile() }, [loadProfile])
 
   // Load phone + a few identifying facts from the appropriate details table
   useEffect(() => {
@@ -182,6 +203,25 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
     return () => { active = false }
   }, [showAttendance, isStudentProfile, targetProfile])
 
+  // Opening the Download Centre unmounts the card's backdrop and body, so
+  // coming back replays the enter animation. Drop back out of layout mode for
+  // that return trip, for the same reason it is off during the first one.
+  useEffect(() => { if (showDownloadCentre) setEntered(false) }, [showDownloadCentre])
+
+  // Escape closes whatever is actually on top: the Download Centre, then the
+  // attendance drill-down, then the card itself. Without this the only way out
+  // of a stack was to find each close button in turn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showDownloadCentre) setShowDownloadCentre(false)
+      else if (showAttendance) setShowAttendance(false)
+      else onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showDownloadCentre, showAttendance, onClose])
+
   const openAcademicRecord = () => {
     if (!targetProfile) return
     onClose()
@@ -205,19 +245,29 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
         onClick={onClose}
         className="fixed inset-0 bg-black/50 z-[9998]"
       />
 
       {/* Card */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        // A spring has no duration to wait on, which made closing drift; the
+        // exit is an explicit short tween so the card leaves as decisively as
+        // it arrives and AnimatePresence knows exactly when it is gone.
+        exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14, ease: 'easeIn' } }}
+        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        onAnimationComplete={() => setEntered(true)}
         className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
       >
-        <div
+        <motion.div
+          // The phone number and the ID chips arrive after the profile does,
+          // and each one appearing used to resize the card under the cursor.
+          // `layout` turns those into one short ease instead of a snap.
+          layout={entered}
+          transition={{ layout: { duration: 0.18, ease: 'easeOut' } }}
           className="w-full max-w-sm rounded-3xl overflow-y-auto shadow-2xl bg-white border border-slate-100 max-h-[88vh] pointer-events-auto"
           onClick={e => e.stopPropagation()}
         >
@@ -415,7 +465,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
               </div>
             </>
           )}
-        </div>
+        </motion.div>
       </motion.div>
         </>
       )}
@@ -516,7 +566,7 @@ function ProfileCardModal({ userId, onClose }: { userId: string; onClose: () => 
 
 // ─── Portal wrapper (rendered in ProfileCardProvider) ─────────────────────────
 export default function ProfileCard() {
-  const { activeUserId, closeProfileCard } = useProfileCard()
+  const { activeUserId, activeSeed, closeProfileCard } = useProfileCard()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
@@ -524,9 +574,18 @@ export default function ProfileCard() {
   if (!mounted) return null
 
   return createPortal(
-    <AnimatePresence>
+    // mode="wait" because the card is keyed by user: closing one and opening
+    // another before the first has left would otherwise mount both at once,
+    // stacking two backdrops into a visible double-darkening. The exits below
+    // are short tweens, so waiting for one costs a frame or two.
+    <AnimatePresence mode="wait">
       {activeUserId && (
-        <ProfileCardModal key={activeUserId} userId={activeUserId} onClose={closeProfileCard} />
+        <ProfileCardModal
+          key={activeUserId}
+          userId={activeUserId}
+          seed={activeSeed}
+          onClose={closeProfileCard}
+        />
       )}
     </AnimatePresence>,
     document.body

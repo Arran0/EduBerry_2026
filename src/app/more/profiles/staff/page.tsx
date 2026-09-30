@@ -566,11 +566,11 @@ export default function StaffProfileManagerPage() {
                     const d = details[p.id]
                     return (
                       <motion.div key={p.id} variants={itemVariants}>
-                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => openProfileCard(p.id)}>
+                        <div className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group" onClick={() => openProfileCard(p.id, p)}>
                           <div className={`w-1 flex-shrink-0 ${ROLE_BAR[roleStyleKey(p)] || 'bg-[#71717A]'}`} />
                           <div className="flex items-center gap-3 flex-1 px-3 py-1.5 min-w-0">
                             <div className="flex-shrink-0">
-                              <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={26} userId={p.id} />
+                              <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={26} userId={p.id} profileSeed={p} />
                             </div>
 
                             <div className="flex-1 min-w-0">
