@@ -211,7 +211,7 @@ export default function DraftWeekGrid({
                               draggable={draggable}
                               onDragStart={draggable ? () => setDragId(id) : undefined}
                               onDragEnd={draggable ? () => { setDragId(null); setOverCell(null) } : undefined}
-                              onClick={() => onOpen?.(entry, day, slot)}
+                              onClick={() => (onOpen ? onOpen(entry, day, slot) : onTogglePin?.(entry))}
                               title={`${subj?.name ?? 'Lesson'}${names.length ? ' · ' + names.join(', ') : ''}${
                                 room ? ' · ' + room.name : ''
                               }${span > 1 ? ` · ${BLOCK_WORD[span] ?? `${span}-period`} block` : ''}${
@@ -249,7 +249,7 @@ export default function DraftWeekGrid({
                                   {BLOCK_WORD[span] ?? `${span} in a row`}
                                 </span>
                               )}
-                              <div className="absolute top-0.5 right-0.5 flex items-center gap-px">
+                              <div className="absolute bottom-0.5 right-0.5 flex items-center gap-px">
                                 {entry.combinedKey && <Layers size={10} className="text-indigo-500" />}
                                 {entry.isLocked && <Pin size={10} className="text-[#27272A]" />}
                               </div>
@@ -262,19 +262,37 @@ export default function DraftWeekGrid({
                             </div>
                           )
                         })}
-                        {/* With a lesson in the way the toggle moves to a corner
-                            button, so dragging the lesson never toggles the cell. */}
-                        <button
-                          onClick={(ev) => { ev.stopPropagation(); onToggleOff(day, slot.id) }}
-                          title={active ? `Clear ${offLabel.toLowerCase()}` : `Mark ${offLabel.toLowerCase()} — the lesson here would have to move`}
-                          className={`absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center transition-colors ${
-                            active
-                              ? offColor === 'rose' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'
-                              : 'bg-white/70 text-[#A1A1AA] hover:bg-white hover:text-[#52525B]'
-                          }`}
-                        >
-                          <Ban size={9} />
-                        </button>
+                        {/* With a lesson in the way the cell's own controls move
+                            to corner buttons, so dragging the lesson never
+                            toggles anything by accident. */}
+                        <div className="absolute -top-0.5 -right-0.5 flex">
+                          {onTogglePin && (
+                            <button
+                              onClick={(ev) => { ev.stopPropagation(); onTogglePin(here[0]) }}
+                              title={here[0].isLocked
+                                ? 'Pinned here — the generator builds around it. Click to release.'
+                                : 'Pin this lesson to this period'}
+                              className={`w-4 h-4 flex items-center justify-center transition-colors ${
+                                here[0].isLocked
+                                  ? 'bg-[#27272A] text-white'
+                                  : 'bg-white/70 text-[#A1A1AA] hover:bg-white hover:text-[#52525B]'
+                              }`}
+                            >
+                              <Pin size={9} />
+                            </button>
+                          )}
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); onToggleOff(day, slot.id) }}
+                            title={active ? `Clear ${offLabel.toLowerCase()}` : `Mark ${offLabel.toLowerCase()} — the lesson here would have to move`}
+                            className={`w-4 h-4 flex items-center justify-center transition-colors ${
+                              active
+                                ? offColor === 'rose' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'
+                                : 'bg-white/70 text-[#A1A1AA] hover:bg-white hover:text-[#52525B]'
+                            }`}
+                          >
+                            <Ban size={9} />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </td>

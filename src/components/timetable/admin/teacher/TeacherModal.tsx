@@ -7,11 +7,14 @@ import type { Homeroom } from '@/lib/homerooms'
 import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import type { TimetableConfig, Weekday } from '@/lib/timetable'
-import { SmartSelect, Section, Field } from '../../ui'
+import { SmartSelect, Section, Field, SECTION_LABEL } from '../../ui'
 import type { SmartOption } from '../../ui'
 import NameLink from '../../NameLink'
 import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
+import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
+import DraftWeekGrid from '../../draft/DraftWeekGrid'
+import { teacherIdsOf } from '@/lib/timetable'
 
 /**
  * The Teacher hub — a searchable list of staff, the homeroom(s) each is class
@@ -134,6 +137,7 @@ function TeacherConstraintsPanel({
   homerooms: Homeroom[]
 }) {
   const { slots, constraints, loading, toggleSlot, commitValue } = useConstraints(config)
+  const draft = useTimetableDraftOptional()
   const [homeroomTarget, setHomeroomTarget] = useState('')
   const scopeId = teacher.id
   const hrTarget = homeroomTarget || null
@@ -146,13 +150,50 @@ function TeacherConstraintsPanel({
   const isOff = (day: Weekday, slotId: string) =>
     constraints.some((c) => c.type === 'time_off' && c.scope === 'teacher' && c.scope_id === scopeId && c.day === day && c.slot_id === slotId)
 
+  // The lessons this teacher already has in the draft, so a period is blocked
+  // while looking at what is actually scheduled in it rather than blind.
+  const lessons = useMemo(
+    () => (draft?.entries ?? []).filter((e) => teacherIdsOf(e).includes(scopeId)),
+    [draft?.entries, scopeId],
+  )
+  const homeroomName = useMemo(() => {
+    const m = new Map(homerooms.map((h) => [h.id, h.name]))
+    return (id: string) => m.get(id) ?? 'Class'
+  }, [homerooms])
+
   if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
   if (slots.length === 0) return <p className="text-sm text-[#71717A] py-4">Add teaching period slots first (Configuration).</p>
 
   return (
     <div>
-      <Section title="Time off" hint="Tap a period to block it — the generator never schedules this teacher there." first>
-        <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('teacher', scopeId, 'time_off', d, s)} />
+      <Section
+        title="Time off"
+        hint="Tap a free period to block it — the generator never schedules this teacher there. The draft is drawn in, so a lesson in the way can be dragged to another period or pinned in place."
+        first
+      >
+        {draft ? (
+          <div className="space-y-4">
+            {draft.weeks.map((week) => (
+              <div key={week.groupId ?? 'base'}>
+                {draft.weeks.length > 1 && <div className={`${SECTION_LABEL} mb-1.5`}>{week.name}</div>}
+                <DraftWeekGrid
+                  week={week}
+                  lessons={lessons.filter((e) => (draft.slotGroupIds[e.homeroomId] ?? null) === week.groupId)}
+                  isOff={(d, s) => draft.isConstraintOn('teacher', scopeId, 'time_off', d, s)}
+                  onToggleOff={(d, s) => draft.toggleConstraintCell('teacher', scopeId, 'time_off', d, s)}
+                  subjects={draft.subjects}
+                  teachers={draft.teachers}
+                  rooms={draft.rooms}
+                  classLabel={homeroomName}
+                  onMove={draft.moveEntry}
+                  onTogglePin={draft.togglePin}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('teacher', scopeId, 'time_off', d, s)} />
+        )}
       </Section>
 
       <Section title="Load limits" hint="Leave blank for no limit. Optionally restrict per-day / per-week caps to one homeroom.">

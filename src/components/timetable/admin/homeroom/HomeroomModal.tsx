@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, Plus, Trash2, X, Users, UserCog, ListChecks, CalendarOff, Layers,
-  Upload, UserPlus, AlertTriangle, Search, GraduationCap,
+  Upload, UserPlus, AlertTriangle, Search, GraduationCap, Copy, ClipboardPaste, Pencil, Check,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import {
@@ -11,7 +11,8 @@ import {
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
   bulkAddGroupMembersByEmails, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
-  addConstraint, deleteConstraint, requirementError, ROOM_TYPE_LABELS,
+  requirementError, ROOM_TYPE_LABELS,
+  updateRequirement, copyRequirementsTo, assignHomeroomToSlotGroup,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, Subject, Room, PeriodSlot, Requirement, TimetableConstraint,
@@ -24,13 +25,15 @@ import type { Classroom } from '@/lib/classrooms'
 import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import useDebounce from '@/hooks/useDebounce'
-import { INPUT, BTN_PRIMARY, SECTION_LABEL, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
+import { INPUT, BTN_PRIMARY, BTN_NEUTRAL, SECTION_LABEL, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
 import type { SegItem, SmartOption } from '../../ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import NameLink from '../../NameLink'
-import { TimeOffGrid } from '../constraintAtoms'
 import { ColorPicker } from '../colorPicker'
 import MultiTeacherSelect from '../../MultiTeacherSelect'
+import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
+import DraftWeekGrid from '../../draft/DraftWeekGrid'
+import SlotDetailsModal from '../../SlotDetailsModal'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
 
@@ -61,6 +64,9 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [panel, setPanel] = useState<Panel>('teacher')
+  // Copied requirements live on the hub, not on the panel, so they survive
+  // switching to the class they are going to be pasted into.
+  const [clipboard, setClipboard] = useState<{ fromHomeroomId: string; items: Requirement[] } | null>(null)
 
   const loadRefs = useCallback(async () => {
     setLoading(true)
@@ -144,9 +150,10 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
         ) : (
           <>
             <div className="px-4 pt-3.5 pb-2 border-b border-[#E4E4E7]">
-              <div className="flex items-center gap-2 mb-2.5">
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                 <GraduationCap size={16} className="text-[#71717A]" />
                 <NameLink kind="homeroom" id={selected.id} name={selected.name} className="font-semibold text-[#18181B]" />
+                <PeriodGroupPicker homeroom={selected} />
               </div>
               <SegmentedNav items={PANELS} value={panel} onChange={setPanel} />
             </div>
@@ -162,11 +169,18 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
               )}
               {panel === 'requirements' && (
                 config
-                  ? <RequirementsPanel config={config} homeroom={selected} subjects={subjects} teachers={teachers} rooms={rooms} homerooms={active} />
+                  ? (
+                    <RequirementsPanel
+                      config={config} homeroom={selected} subjects={subjects} teachers={teachers}
+                      rooms={rooms} homerooms={active}
+                      clipboard={clipboard}
+                      onCopy={(items, fromHomeroomId) => setClipboard({ fromHomeroomId, items })}
+                    />
+                  )
                   : <NeedConfig />
               )}
               {panel === 'timeoff' && (
-                config ? <TimeOffPanel config={config} homeroom={selected} /> : <NeedConfig />
+                config ? <TimeOffPanel homeroom={selected} /> : <NeedConfig />
               )}
             </div>
           </>
@@ -181,6 +195,41 @@ function NeedConfig() {
     <p className="text-sm text-[#71717A] py-6 text-center">
       Select or create a timetable configuration (Configuration button) to edit this.
     </p>
+  )
+}
+
+/**
+ * Which bell schedule this class rings to. Only shown once a config actually
+ * has more than one period group — with a single schedule there is nothing to
+ * choose and the control would be noise.
+ */
+function PeriodGroupPicker({ homeroom }: { homeroom: Homeroom }) {
+  const draft = useTimetableDraftOptional()
+  const [saving, setSaving] = useState(false)
+  if (!draft || draft.slotGroups.length === 0) return null
+
+  const current = draft.slotGroupIds[homeroom.id] ?? ''
+
+  return (
+    <label className="inline-flex items-center gap-1.5 ml-auto text-[11px] text-[#71717A]">
+      <Layers size={13} className="text-indigo-500" />
+      Period group
+      <select
+        className="border border-[#D4D4D8] bg-white text-[11px] px-1.5 py-0.5 focus:outline-none focus:border-[#27272A]"
+        value={current}
+        disabled={saving}
+        onChange={async (e) => {
+          setSaving(true)
+          await assignHomeroomToSlotGroup(draft.config.id, homeroom.id, e.target.value || null)
+          await draft.reload()
+          setSaving(false)
+        }}
+      >
+        <option value="">Base schedule</option>
+        {draft.slotGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+      {saving && <Loader2 className="animate-spin" size={12} />}
+    </label>
   )
 }
 
@@ -611,17 +660,18 @@ interface WeeklyBudget {
 }
 
 function weeklyBudget({
-  config, homeroom, slots, constraints, requirements, combined, groups,
+  homeroom, slots, constraints, requirements, combined, groups, workingDays,
 }: {
-  config: TimetableConfig
   homeroom: Homeroom
-  slots: PeriodSlot[] // teaching slots only
+  slots: PeriodSlot[] // teaching slots only, from the class's period group
   constraints: TimetableConstraint[]
   requirements: Requirement[]
   combined: CombinedClass[]
   groups: HomeroomGroup[]
+  // Days in THIS class's week — its period group's, not always the config's.
+  workingDays: number
 }): WeeklyBudget {
-  const total = config.working_days.length * slots.length
+  const total = workingDays * slots.length
   const timeOff = constraints.filter(
     (c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === homeroom.id,
   ).length
@@ -694,8 +744,132 @@ function SlotMeter({ budget }: { budget: WeeklyBudget }) {
   )
 }
 
+// ── Requirement fields ───────────────────────────────────────
+// Shared by "add a requirement" and by editing one in place, so a saved
+// requirement is changed against exactly the rules it was created against
+// rather than having to be deleted and retyped.
+
+interface ReqDraft {
+  subjectId: string
+  teacherIds: string[]
+  groupId: string
+  perWeek: string
+  maxPerDay: string
+  blockSize: string
+  roomType: RoomType
+}
+
+const emptyDraft = (): ReqDraft => ({
+  subjectId: '', teacherIds: [], groupId: '', perWeek: '5',
+  maxPerDay: '1', blockSize: '1', roomType: 'classroom',
+})
+
+const draftOf = (r: Requirement): ReqDraft => ({
+  subjectId: r.subject_id,
+  teacherIds: teacherIdsOf(r),
+  groupId: r.group_id ?? '',
+  perWeek: String(r.periods_per_week),
+  maxPerDay: String(r.max_per_day),
+  blockSize: String(Math.max(1, r.min_block ?? 1)),
+  roomType: r.room_type,
+})
+
+/**
+ * Catches requirements the solver could never satisfy, so they are refused at
+ * the form rather than silently generating an unplaceable lesson: a weekly
+ * total that exceeds what the daily cap allows across the working week, or a
+ * block longer than either that cap or the requirement itself.
+ */
+function requirementProblem(d: ReqDraft, workingDays: number, combined: boolean): string | null {
+  const days = Math.max(1, workingDays)
+  const week = Math.max(1, parseInt(d.perWeek, 10) || 1)
+  if (combined) {
+    return week > days
+      ? `${week} periods a week needs ${week} days, but the week only has ${days}. A combined lesson runs at most once a day.`
+      : null
+  }
+  const perDay = Math.max(1, parseInt(d.maxPerDay, 10) || 1)
+  const block = Math.max(1, parseInt(d.blockSize, 10) || 1)
+  if (block > perDay) {
+    return `A block of ${block} in a row needs max / day of at least ${block}, not ${perDay}.`
+  }
+  if (block > week) {
+    return `A block of ${block} in a row needs at least ${block} periods a week, not ${week}.`
+  }
+  if (week > perDay * days) {
+    return `${week} periods a week can't fit at ${perDay} a day across ${days} working day${days === 1 ? '' : 's'} (max ${perDay * days}).`
+  }
+  return null
+}
+
+function RequirementFields({
+  draft, onChange, subjects, teachers, groups, showGroup, showLesson,
+}: {
+  draft: ReqDraft
+  onChange: (next: ReqDraft) => void
+  subjects: Subject[]
+  teachers: UserProfile[]
+  groups: HomeroomGroup[]
+  showGroup: boolean
+  /** Combined lessons take their periods from the combined record, not here. */
+  showLesson: boolean
+}) {
+  const set = <K extends keyof ReqDraft>(k: K, v: ReqDraft[K]) => onChange({ ...draft, [k]: v })
+  const subjectOptions: SmartOption[] = useMemo(
+    () => subjects.map((s) => ({ value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined })),
+    [subjects],
+  )
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Subject">
+        <SmartSelect options={subjectOptions} value={draft.subjectId} onChange={(v) => set('subjectId', v)} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
+      </Field>
+      <Field label="Teachers">
+        <MultiTeacherSelect
+          teachers={teachers}
+          value={draft.teacherIds}
+          onChange={(v) => set('teacherIds', v)}
+          placeholder="Add a teacher…"
+          emptyLabel="Unassigned — add one or more teachers."
+        />
+      </Field>
+      {showGroup && groups.length > 0 && (
+        <Field label="Group (split class)">
+          <select className={INPUT} value={draft.groupId} onChange={(e) => set('groupId', e.target.value)}>
+            <option value="">Whole class</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </Field>
+      )}
+      <Field label="Periods / week">
+        <input className={INPUT} type="number" min={1} value={draft.perWeek} onChange={(e) => set('perWeek', e.target.value)} />
+      </Field>
+      {showLesson && (
+        <>
+          <Field label="Max / day">
+            <input className={INPUT} type="number" min={1} value={draft.maxPerDay} onChange={(e) => set('maxPerDay', e.target.value)} />
+          </Field>
+          <Field label="Block size">
+            <select className={INPUT} value={draft.blockSize} onChange={(e) => set('blockSize', e.target.value)}>
+              <option value="1">Single</option>
+              <option value="2">Double (2 in a row)</option>
+              <option value="3">Triple (3 in a row)</option>
+            </select>
+          </Field>
+          <Field label="Room type">
+            <select className={INPUT} value={draft.roomType} onChange={(e) => set('roomType', e.target.value as RoomType)}>
+              {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
+            </select>
+          </Field>
+        </>
+      )}
+    </div>
+  )
+}
+
 function RequirementsPanel({
-  config, homeroom, subjects, teachers, rooms, homerooms,
+  config, homeroom, subjects, teachers, rooms, homerooms, clipboard, onCopy,
 }: {
   config: TimetableConfig
   homeroom: Homeroom
@@ -703,7 +877,11 @@ function RequirementsPanel({
   teachers: UserProfile[]
   rooms: Room[]
   homerooms: Homeroom[]
+  /** Requirements copied from some homeroom, waiting to be pasted. */
+  clipboard: { fromHomeroomId: string; items: Requirement[] } | null
+  onCopy: (items: Requirement[], fromHomeroomId: string) => void
 }) {
+  const draftCtx = useTimetableDraftOptional()
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [combined, setCombined] = useState<CombinedClass[]>([])
   const [groups, setGroups] = useState<HomeroomGroup[]>([])
@@ -711,14 +889,8 @@ function RequirementsPanel({
   const [constraints, setConstraints] = useState<TimetableConstraint[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Form
-  const [subjectId, setSubjectId] = useState('')
-  const [teacherIds, setTeacherIds] = useState<string[]>([])
-  const [groupId, setGroupId] = useState('')
-  const [perWeek, setPerWeek] = useState('5')
-  const [maxPerDay, setMaxPerDay] = useState('1')
-  const [blockSize, setBlockSize] = useState('1')
-  const [roomType, setRoomType] = useState<RoomType>('classroom')
+  // Add form
+  const [form, setForm] = useState<ReqDraft>(emptyDraft())
   const [isCombined, setIsCombined] = useState(false)
   const [combinedName, setCombinedName] = useState('')
   const [roomId, setRoomId] = useState('')
@@ -727,6 +899,20 @@ function RequirementsPanel({
   const [pickExtra, setPickExtra] = useState('')
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
+
+  // Editing an existing row in place
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<ReqDraft>(emptyDraft())
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [pasting, setPasting] = useState(false)
+  const [note, setNote] = useState('')
+
+  // The week this class is actually scheduled against — its period group's, or
+  // the config's. Both the capacity meter and the "can this ever fit" checks
+  // have to use it, or a Saturday class is told it has five days.
+  const week = draftCtx?.weekFor(homeroom.id) ?? null
+  const workingDays = week?.days.length ?? config.working_days.length
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -746,7 +932,17 @@ function RequirementsPanel({
   }, [config.id, homeroom.id])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setGroupId(''); setExtraMembers([]) }, [homeroom.id])
+  useEffect(() => {
+    setForm((f) => ({ ...f, groupId: '' }))
+    setExtraMembers([])
+    setEditingId(null)
+    setNote('')
+  }, [homeroom.id])
+
+  const flash = (msg: string) => {
+    setNote(msg)
+    setTimeout(() => setNote(''), 4000)
+  }
 
   const subjectName = (id: string | null) => (id ? subjects.find((s) => s.id === id)?.name ?? '—' : '—')
   const subjectColor = (id: string) => subjects.find((s) => s.id === id)?.color ?? '#94a3b8'
@@ -756,7 +952,6 @@ function RequirementsPanel({
     ids.length === 0 ? 'Unassigned' : ids.map((id) => teacherName(id)).join(', ')
   const homeroomName = (id: string) => homerooms.find((h) => h.id === id)?.name ?? '—'
 
-  const subjectOptions: SmartOption[] = useMemo(() => subjects.map((s) => ({ value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined })), [subjects])
   const roomOptions: SmartOption[] = useMemo(() => rooms.map((r) => ({ value: r.id, label: r.name })), [rooms])
   const extraOptions: SmartOption[] = useMemo(
     () => homerooms.filter((h) => h.id !== homeroom.id && !extraMembers.some((m) => m.homeroomId === h.id)).map((h) => ({ value: h.id, label: h.name })),
@@ -774,69 +969,41 @@ function RequirementsPanel({
   const setExtraGroupId = (homeroomId: string, gid: string) =>
     setExtraMembers((p) => p.map((m) => (m.homeroomId === homeroomId ? { ...m, groupId: gid || null } : m)))
 
-  /**
-   * Catches requirements the solver could never satisfy, so they are refused at
-   * the form rather than silently generating an unplaceable lesson: a weekly
-   * total that exceeds what the daily cap allows across the working week, or a
-   * block longer than either that cap or the requirement itself.
-   */
-  const requirementProblem = (): string | null => {
-    const days = Math.max(1, config.working_days.length)
-    const week = Math.max(1, parseInt(perWeek, 10) || 1)
-    if (isCombined) {
-      return week > days
-        ? `${week} periods a week needs ${week} days, but the week only has ${days}. A combined lesson runs at most once a day.`
-        : null
-    }
-    const perDay = Math.max(1, parseInt(maxPerDay, 10) || 1)
-    const block = Math.max(1, parseInt(blockSize, 10) || 1)
-    if (block > perDay) {
-      return `A block of ${block} in a row needs max / day of at least ${block}, not ${perDay}.`
-    }
-    if (block > week) {
-      return `A block of ${block} in a row needs at least ${block} periods a week, not ${week}.`
-    }
-    if (week > perDay * days) {
-      return `${week} periods a week can't fit at ${perDay} a day across ${days} working day${days === 1 ? '' : 's'} (max ${perDay * days}).`
-    }
-    return null
-  }
-
   const handleAdd = async () => {
     setError('')
-    if (!subjectId) { setError('Pick a subject.'); return }
-    const problem = requirementProblem()
+    if (!form.subjectId) { setError('Pick a subject.'); return }
+    const problem = requirementProblem(form, workingDays, isCombined)
     if (problem) { setError(problem); return }
     setAdding(true)
     if (isCombined) {
-      const members = [{ homeroomId: homeroom.id, groupId: groupId || null }, ...extraMembers]
+      const members = [{ homeroomId: homeroom.id, groupId: form.groupId || null }, ...extraMembers]
       if (members.length < 2) { setError('Add at least one more class for a combined lesson.'); setAdding(false); return }
       const created = await createCombinedClass({
         config_id: config.id,
-        name: combinedName.trim() || `${homeroomName(homeroom.id)} ${subjectName(subjectId)}`,
-        subject_id: subjectId,
-        teacher_id: teacherIds[0] ?? null,
-        teacher_ids: teacherIds,
+        name: combinedName.trim() || `${homeroomName(homeroom.id)} ${subjectName(form.subjectId)}`,
+        subject_id: form.subjectId,
+        teacher_id: form.teacherIds[0] ?? null,
+        teacher_ids: form.teacherIds,
         room_id: roomId || null,
-        periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
+        periods_per_week: Math.max(1, parseInt(form.perWeek, 10) || 1),
         members,
       })
       setAdding(false)
       if (created) { resetForm(); load() } else setError('Could not create the combined lesson.')
     } else {
-      const block = Math.max(1, parseInt(blockSize, 10) || 1)
+      const block = Math.max(1, parseInt(form.blockSize, 10) || 1)
       const created = await createRequirement({
         config_id: config.id,
         homeroom_id: homeroom.id,
-        subject_id: subjectId,
-        teacher_id: teacherIds[0] ?? null,
-        teacher_ids: teacherIds,
-        periods_per_week: Math.max(1, parseInt(perWeek, 10) || 1),
-        room_type: roomType,
-        max_per_day: Math.max(1, parseInt(maxPerDay, 10) || 1),
+        subject_id: form.subjectId,
+        teacher_id: form.teacherIds[0] ?? null,
+        teacher_ids: form.teacherIds,
+        periods_per_week: Math.max(1, parseInt(form.perWeek, 10) || 1),
+        room_type: form.roomType,
+        max_per_day: Math.max(1, parseInt(form.maxPerDay, 10) || 1),
         min_block: block,
         max_block: block,
-        group_id: groupId || null,
+        group_id: form.groupId || null,
       })
       setAdding(false)
       if (created) { resetForm(); load() }
@@ -845,14 +1012,62 @@ function RequirementsPanel({
   }
 
   const resetForm = () => {
-    setSubjectId(''); setTeacherIds([]); setGroupId(''); setBlockSize('1')
+    setForm(emptyDraft())
     setIsCombined(false); setCombinedName(''); setRoomId(''); setExtraMembers([])
   }
 
-  const liveProblem = requirementProblem()
+  // ── Editing ──────────────────────────────────────────────
+  const startEdit = (r: Requirement) => {
+    setEditingId(r.id)
+    setEditDraft(draftOf(r))
+    setEditError('')
+  }
+
+  const saveEdit = async (r: Requirement) => {
+    setEditError('')
+    if (!editDraft.subjectId) { setEditError('Pick a subject.'); return }
+    const problem = requirementProblem(editDraft, workingDays, false)
+    if (problem) { setEditError(problem); return }
+    setSavingEdit(true)
+    const block = Math.max(1, parseInt(editDraft.blockSize, 10) || 1)
+    const updated = await updateRequirement(r.id, {
+      subject_id: editDraft.subjectId,
+      teacher_id: editDraft.teacherIds[0] ?? null,
+      teacher_ids: editDraft.teacherIds,
+      periods_per_week: Math.max(1, parseInt(editDraft.perWeek, 10) || 1),
+      room_type: editDraft.roomType,
+      max_per_day: Math.max(1, parseInt(editDraft.maxPerDay, 10) || 1),
+      min_block: block,
+      max_block: block,
+      group_id: editDraft.groupId || null,
+    })
+    setSavingEdit(false)
+    if (!updated) { setEditError(requirementError() ?? 'Could not save this requirement.'); return }
+    setEditingId(null)
+    load()
+    flash('Requirement updated — regenerate to apply it to the timetable.')
+  }
+
+  // ── Copy / paste ─────────────────────────────────────────
+  const handlePaste = async () => {
+    if (!clipboard || clipboard.items.length === 0) return
+    setPasting(true)
+    const res = await copyRequirementsTo(clipboard.items, homeroom.id)
+    setPasting(false)
+    load()
+    const parts = [`${res.copied} copied`]
+    if (res.skipped > 0) parts.push(`${res.skipped} already here`)
+    if (res.failed > 0) parts.push(`${res.failed} failed`)
+    flash(parts.join(' · '))
+  }
+
+  const pasteCount = clipboard && clipboard.fromHomeroomId !== homeroom.id ? clipboard.items.length : 0
+  const liveProblem = requirementProblem(form, workingDays, isCombined)
   const budget = useMemo(
-    () => weeklyBudget({ config, homeroom, slots, constraints, requirements, combined, groups }),
-    [config, homeroom, slots, constraints, requirements, combined, groups],
+    () => weeklyBudget({
+      homeroom, slots: week?.slots ?? slots, constraints, requirements, combined, groups, workingDays,
+    }),
+    [homeroom, week, slots, constraints, requirements, combined, groups, workingDays],
   )
 
   return (
@@ -868,50 +1083,15 @@ function RequirementsPanel({
             </span>
           </div>
         )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Subject">
-            <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
-          </Field>
-          <Field label="Teachers">
-            <MultiTeacherSelect
-              teachers={teachers}
-              value={teacherIds}
-              onChange={setTeacherIds}
-              placeholder="Add a teacher…"
-              emptyLabel="Unassigned — add one or more teachers."
-            />
-          </Field>
-          {!isCombined && groups.length > 0 && (
-            <Field label="Group (split class)">
-              <select className={INPUT} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                <option value="">Whole class</option>
-                {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </Field>
-          )}
-          <Field label="Periods / week">
-            <input className={INPUT} type="number" min={1} value={perWeek} onChange={(e) => setPerWeek(e.target.value)} />
-          </Field>
-          {!isCombined && (
-            <>
-              <Field label="Max / day">
-                <input className={INPUT} type="number" min={1} value={maxPerDay} onChange={(e) => setMaxPerDay(e.target.value)} />
-              </Field>
-              <Field label="Block size">
-                <select className={INPUT} value={blockSize} onChange={(e) => setBlockSize(e.target.value)}>
-                  <option value="1">Single</option>
-                  <option value="2">Double (2 in a row)</option>
-                  <option value="3">Triple (3 in a row)</option>
-                </select>
-              </Field>
-              <Field label="Room type">
-                <select className={INPUT} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
-                  {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
-                </select>
-              </Field>
-            </>
-          )}
-        </div>
+        <RequirementFields
+          draft={form}
+          onChange={setForm}
+          subjects={subjects}
+          teachers={teachers}
+          groups={groups}
+          showGroup={!isCombined}
+          showLesson={!isCombined}
+        />
 
         {/* Combined toggle */}
         <label className="flex items-center gap-2 mt-3 text-sm text-[#3F3F46]">
@@ -940,15 +1120,16 @@ function RequirementsPanel({
               </Field>
               <p className="text-[11px] text-[#A1A1AA] mt-1.5">
                 Each class defaults to attending as a whole — pick a group instead if only part of a class joins.
-                The combined lesson still shows up on every homeroom listed here.
+                The combined lesson still shows up on every homeroom listed here. Every class in it has to follow
+                the same period group, or there is no period they all share.
               </p>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800">
                   {homeroom.name} (this)
                   {groups.length > 0 && (
                     <select
-                      value={groupId}
-                      onChange={(e) => setGroupId(e.target.value)}
+                      value={form.groupId}
+                      onChange={(e) => setForm((f) => ({ ...f, groupId: e.target.value }))}
                       className="bg-white/60 border border-indigo-200 text-[11px] px-1 py-0.5 focus:outline-none"
                     >
                       <option value="">Whole class</option>
@@ -1002,26 +1183,116 @@ function RequirementsPanel({
         }
         right={<SlotMeter budget={budget} />}
       >
+        {/* Copy / paste — a year group is usually one class's list repeated. */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <button
+            onClick={() => {
+              onCopy(requirements, homeroom.id)
+              flash(`Copied ${requirements.length} requirement${requirements.length === 1 ? '' : 's'} — open another class to paste.`)
+            }}
+            disabled={requirements.length === 0}
+            className={`${BTN_NEUTRAL} py-1 text-xs disabled:opacity-40`}
+            title="Copy every requirement of this class"
+          >
+            <Copy size={13} /> Copy all
+          </button>
+          <button
+            onClick={handlePaste}
+            disabled={pasteCount === 0 || pasting}
+            className={`${BTN_NEUTRAL} py-1 text-xs disabled:opacity-40`}
+            title={
+              pasteCount > 0
+                ? `Paste ${pasteCount} requirement(s) copied from ${homeroomName(clipboard!.fromHomeroomId)}`
+                : 'Nothing copied yet'
+            }
+          >
+            {pasting ? <Loader2 className="animate-spin" size={13} /> : <ClipboardPaste size={13} />}
+            Paste{pasteCount > 0 ? ` (${pasteCount})` : ''}
+          </button>
+          {clipboard && clipboard.items.length > 0 && (
+            <span className="text-[11px] text-[#A1A1AA]">
+              clipboard: {clipboard.items.length} from {homeroomName(clipboard.fromHomeroomId)}
+            </span>
+          )}
+          {note && <span className="text-[11px] text-emerald-700">{note}</span>}
+        </div>
+
         {loading ? (
           <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
         ) : requirements.length === 0 && combined.length === 0 ? (
           <p className="text-xs text-[#A1A1AA] py-2">Nothing yet for {homeroom.name}.</p>
         ) : (
           <div className="space-y-px">
-            {requirements.map((r) => (
-              <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
-                <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
-                <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
-                {r.group && (
-                  <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }}>{r.group.name}</span>
-                )}
-                <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(r))}>
-                  {teacherLabel(teacherIdsOf(r))}
-                </span>
-                <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{r.periods_per_week}/wk</span>
-                <button onClick={async () => { await deleteRequirement(r.id); load() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
-              </div>
-            ))}
+            {requirements.map((r) => {
+              const block = Math.max(1, r.min_block ?? 1)
+              if (editingId === r.id) {
+                return (
+                  <div key={r.id} className="px-3 py-3 bg-white border border-[#27272A]">
+                    <RequirementFields
+                      draft={editDraft}
+                      onChange={setEditDraft}
+                      subjects={subjects}
+                      teachers={teachers}
+                      groups={groups}
+                      showGroup
+                      showLesson
+                    />
+                    {editError && (
+                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span>{editError}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mt-3">
+                      <button onClick={() => saveEdit(r)} disabled={savingEdit} className={BTN_PRIMARY}>
+                        {savingEdit ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Save
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <span className="text-[11px] text-[#A1A1AA] ml-auto">
+                        Changes apply on the next generate.
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
+                  <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
+                  <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
+                  {r.group && (
+                    <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }}>{r.group.name}</span>
+                  )}
+                  {block > 1 && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 bg-[#27272A] text-white"
+                      title={`Scheduled as ${block} consecutive periods`}
+                    >
+                      {block === 2 ? 'Double' : block === 3 ? 'Triple' : `${block} in a row`}
+                    </span>
+                  )}
+                  <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(r))}>
+                    {teacherLabel(teacherIdsOf(r))}
+                  </span>
+                  <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{r.periods_per_week}/wk</span>
+                  <button
+                    onClick={() => { onCopy([r], homeroom.id); flash(`Copied ${subjectName(r.subject_id)} — open another class to paste.`) }}
+                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
+                    title="Copy just this requirement"
+                  ><Copy size={14} /></button>
+                  <button
+                    onClick={() => startEdit(r)}
+                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
+                    title="Edit"
+                  ><Pencil size={14} /></button>
+                  <button onClick={async () => { await deleteRequirement(r.id); load() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                </div>
+              )
+            })}
             {combined.map((c) => (
               <div key={c.id} className="flex items-center gap-2.5 px-3 py-2 bg-indigo-50/50 border border-indigo-100 text-sm">
                 <Layers size={15} className="text-indigo-500 flex-shrink-0" />
@@ -1045,46 +1316,72 @@ function RequirementsPanel({
 
 // ── Time off ─────────────────────────────────────────────────
 
-function TimeOffPanel({ config, homeroom }: { config: TimetableConfig; homeroom: Homeroom }) {
-  const [slots, setSlots] = useState<PeriodSlot[]>([])
-  const [constraints, setConstraints] = useState<TimetableConstraint[]>([])
-  const [loading, setLoading] = useState(true)
+/**
+ * The class's week with the current draft drawn into it. Marking a period free
+ * is done while looking at what is scheduled there, and a lesson in the way can
+ * be dragged elsewhere or pinned without leaving for the master grid.
+ */
+function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
+  const draft = useTimetableDraftOptional()
+  const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [sl, cons] = await Promise.all([fetchPeriodSlots(config.id), fetchConstraints(config.id)])
-    setSlots(sl.filter((s) => !s.is_break))
-    setConstraints(cons)
-    setLoading(false)
-  }, [config.id])
+  const lessons = useMemo(
+    () => (draft?.entries ?? []).filter((e) => e.homeroomId === homeroom.id),
+    [draft?.entries, homeroom.id],
+  )
 
-  useEffect(() => { load() }, [load])
-
-  const isOff = (day: Weekday, slotId: string) =>
-    constraints.some((c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
-  const isPinned = (day: Weekday, slotId: string) =>
-    constraints.some((c) => c.type === 'pin_class_teacher' && c.scope === 'class_teacher' && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
-
-  const toggle = (type: 'time_off' | 'pin_class_teacher') => async (day: Weekday, slotId: string) => {
-    const scope = type === 'time_off' ? 'homeroom' : 'class_teacher'
-    const existing = constraints.find((c) => c.type === type && c.scope_id === homeroom.id && c.day === day && c.slot_id === slotId)
-    if (existing) {
-      await deleteConstraint(existing.id)
-      setConstraints((prev) => prev.filter((c) => c.id !== existing.id))
-    } else {
-      const created = await addConstraint({ config_id: config.id, scope, scope_id: homeroom.id, type, day, slot_id: slotId })
-      if (created) setConstraints((prev) => [...prev, created])
+  const conflictCells = useMemo(() => {
+    const keys = new Set<string>()
+    for (const c of draft?.liveConflicts ?? []) {
+      if (c.homeroomId === homeroom.id && c.day && c.slotId) {
+        keys.add(`${homeroom.id}__${c.day}__${c.slotId}`)
+      }
     }
+    return keys
+  }, [draft?.liveConflicts, homeroom.id])
+
+  if (!draft) {
+    return <p className="text-sm text-[#71717A] py-6 text-center">Select a timetable configuration first.</p>
+  }
+  if (draft.loading) {
+    return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
   }
 
-  if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
-  if (slots.length === 0) return <p className="text-sm text-[#71717A] py-6 text-center">Add teaching period slots first (Configuration).</p>
+  const week = draft.weekFor(homeroom.id)
+  if (week.slots.length === 0) {
+    return <p className="text-sm text-[#71717A] py-6 text-center">Add teaching period slots first (Configuration).</p>
+  }
+
+  const openEntries = openCell
+    ? draft.entries.filter(
+        (e) => e.homeroomId === homeroom.id && e.day === openCell.day && e.slotId === openCell.slot.id,
+      )
+    : []
 
   return (
     <div>
-      <Section title="Time off" hint="Tap a period to keep this class free (assembly, etc.). The generator never schedules it there." first>
-        <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={toggle('time_off')} />
+      <Section
+        title="Time off"
+        hint={`Tap a free period to keep this class out of it (assembly, etc.) — the generator never schedules it there. The draft timetable is drawn in, so a lesson in the way can be dragged to another period or pinned in place.${
+          draft.weeks.length > 1 ? ` This class follows the ${week.name}.` : ''
+        }`}
+        first
+      >
+        <DraftWeekGrid
+          week={week}
+          lessons={lessons}
+          isOff={(day, slotId) => draft.isConstraintOn('homeroom', homeroom.id, 'time_off', day, slotId)}
+          onToggleOff={(day, slotId) => draft.toggleConstraintCell('homeroom', homeroom.id, 'time_off', day, slotId)}
+          subjects={draft.subjects}
+          teachers={draft.teachers}
+          rooms={draft.rooms}
+          conflicts={conflictCells}
+          onMove={draft.moveEntry}
+          onTogglePin={draft.togglePin}
+          onOpen={(_e, day, slot) => setOpenCell({ day, slot })}
+        />
       </Section>
+
       <Section
         title="Pin class teacher"
         hint={homeroom.class_teacher_id
@@ -1092,11 +1389,48 @@ function TimeOffPanel({ config, homeroom }: { config: TimetableConfig; homeroom:
           : 'Assign a class teacher (Class teacher tab) to pin them to periods.'}
       >
         {homeroom.class_teacher_id ? (
-          <TimeOffGrid days={config.working_days} slots={slots} isOn={isPinned} label="Pinned" onColor="indigo" onToggle={toggle('pin_class_teacher')} />
+          <DraftWeekGrid
+            week={week}
+            lessons={lessons}
+            isOff={(day, slotId) => draft.isConstraintOn('class_teacher', homeroom.id, 'pin_class_teacher', day, slotId)}
+            onToggleOff={(day, slotId) => draft.toggleConstraintCell('class_teacher', homeroom.id, 'pin_class_teacher', day, slotId)}
+            offLabel="Pinned"
+            offColor="indigo"
+            subjects={draft.subjects}
+            teachers={draft.teachers}
+            rooms={draft.rooms}
+            conflicts={conflictCells}
+            onMove={draft.moveEntry}
+            onTogglePin={draft.togglePin}
+            onOpen={(_e, day, slot) => setOpenCell({ day, slot })}
+          />
         ) : (
           <p className="text-xs text-[#A1A1AA]">No class teacher assigned yet.</p>
         )}
       </Section>
+
+      {openCell && (
+        <SlotDetailsModal
+          target={{ homeroomId: homeroom.id, homeroomName: homeroom.name, day: openCell.day, slot: openCell.slot }}
+          entries={openEntries}
+          subjects={draft.subjects}
+          teachers={draft.teachers}
+          rooms={draft.rooms}
+          groupName={draft.groupName}
+          conflicts={draft.cellConflicts(homeroom.id, openCell.day, openCell.slot.id)}
+          timeOff={draft.isConstraintOn('homeroom', homeroom.id, 'time_off', openCell.day, openCell.slot.id)}
+          onClose={() => setOpenCell(null)}
+          onTogglePin={draft.togglePin}
+          onSave={(groupId, subjectId, teacherIds, roomId) => {
+            draft.setCellEntry(homeroom.id, openCell.day, openCell.slot.id, groupId, subjectId, teacherIds, roomId)
+            setOpenCell(null)
+          }}
+          onClear={(entry) => {
+            draft.clearCellEntry(homeroom.id, openCell.day, openCell.slot.id, entry.groupId ?? null)
+            setOpenCell(null)
+          }}
+        />
+      )}
     </div>
   )
 }

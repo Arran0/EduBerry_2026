@@ -10,11 +10,13 @@ import type { Subject, Room, RoomType, TimetableConfig, Weekday } from '@/lib/ti
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { searchSubjects } from '@/lib/cbseSubjects'
-import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field } from '../../ui'
+import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field, SECTION_LABEL } from '../../ui'
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
 import { ColorPicker } from '../colorPicker'
+import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
+import DraftWeekGrid from '../../draft/DraftWeekGrid'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 // A vibrant, Pantone-inspired palette (Classic Blue, Turquoise, Greenery,
@@ -203,6 +205,7 @@ function SubjectConstraintsPanel({
   homerooms: Homeroom[]
 }) {
   const { slots, constraints, loading, toggleSlot, commitValue } = useConstraints(config)
+  const draft = useTimetableDraftOptional()
   const [homeroomTarget, setHomeroomTarget] = useState('')
   const scopeId = subject.id
   const hrTarget = homeroomTarget || null
@@ -215,13 +218,50 @@ function SubjectConstraintsPanel({
   const isOff = (day: Weekday, slotId: string) =>
     constraints.some((c) => c.type === 'time_off' && c.scope === 'subject' && c.scope_id === scopeId && c.day === day && c.slot_id === slotId)
 
+  // Every class already taught this subject in the draft, so blocking a period
+  // shows what it would displace rather than hiding it until the next generate.
+  const lessons = useMemo(
+    () => (draft?.entries ?? []).filter((e) => e.subjectId === scopeId),
+    [draft?.entries, scopeId],
+  )
+  const homeroomName = useMemo(() => {
+    const m = new Map(homerooms.map((h) => [h.id, h.name]))
+    return (id: string) => m.get(id) ?? 'Class'
+  }, [homerooms])
+
   if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
   if (slots.length === 0) return <p className="text-sm text-[#71717A] py-4">Add teaching period slots first (Configuration).</p>
 
   return (
     <div>
-      <Section title="Time off" hint="Tap a period this subject must never be taught in." first>
-        <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('subject', scopeId, 'time_off', d, s)} />
+      <Section
+        title="Time off"
+        hint="Tap a free period this subject must never be taught in. The draft is drawn in, so a lesson already there can be dragged elsewhere or pinned."
+        first
+      >
+        {draft ? (
+          <div className="space-y-4">
+            {draft.weeks.map((week) => (
+              <div key={week.groupId ?? 'base'}>
+                {draft.weeks.length > 1 && <div className={`${SECTION_LABEL} mb-1.5`}>{week.name}</div>}
+                <DraftWeekGrid
+                  week={week}
+                  lessons={lessons.filter((e) => (draft.slotGroupIds[e.homeroomId] ?? null) === week.groupId)}
+                  isOff={(d, s) => draft.isConstraintOn('subject', scopeId, 'time_off', d, s)}
+                  onToggleOff={(d, s) => draft.toggleConstraintCell('subject', scopeId, 'time_off', d, s)}
+                  subjects={draft.subjects}
+                  teachers={draft.teachers}
+                  rooms={draft.rooms}
+                  classLabel={homeroomName}
+                  onMove={draft.moveEntry}
+                  onTogglePin={draft.togglePin}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('subject', scopeId, 'time_off', d, s)} />
+        )}
       </Section>
 
       <Section title="Per day / per week limits" hint="Leave blank for no limit. Applies to all homerooms, or restrict to a specific one.">

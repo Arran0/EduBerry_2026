@@ -1,16 +1,18 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle,
+  Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle, Layers, Users, Pencil, X,
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
   fetchPeriodSlots, createPeriodSlot, deletePeriodSlot,
+  createSlotGroup, updateSlotGroup, deleteSlotGroup,
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
-import type { TimetableConfig, PeriodSlot, Weekday } from '@/lib/timetable'
-import { INPUT, BTN_PRIMARY, Section, Field } from '../ui'
+import type { TimetableConfig, PeriodSlot, SlotGroup, Weekday } from '@/lib/timetable'
+import { useTimetableDraftOptional } from '../draft/TimetableDraftContext'
+import { INPUT, BTN_PRIMARY, Section, Field, SECTION_LABEL } from '../ui'
 
 const _cy = new Date().getFullYear()
 const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
@@ -159,12 +161,9 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
       {/* Class teachers live in the Homeroom hub (Homeroom → Class teacher),
           alongside that class's groups, requirements and time off. */}
 
-      {/* Working days + period slots for selected config */}
+      {/* Period groups — each its own week and its own bell times */}
       {selectedConfig ? (
-        <>
-          <WorkingDaysSection config={selectedConfig} onChanged={onChanged} />
-          <PeriodSlotsSection config={selectedConfig} />
-        </>
+        <PeriodGroupsSection config={selectedConfig} onChanged={onChanged} />
       ) : (
         <Section title="Working days & periods">
           <p className="text-xs text-[#71717A]">Select or create a configuration to set its working days and period slots.</p>
@@ -174,33 +173,237 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
   )
 }
 
+// ── Period groups ────────────────────────────────────────────
+
+/**
+ * A school rarely rings one bell for everyone: Primary can finish at 14:00 on a
+ * five-day week while Secondary runs eight periods across six days. Each period
+ * group carries its own working days and its own period slots, and homerooms
+ * are pointed at one from the Homeroom editor.
+ *
+ * The base schedule is always present and is what a class follows until it is
+ * assigned to a group — a config that never adds a group behaves exactly as it
+ * always has.
+ */
+function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; onChanged: () => void }) {
+  const draft = useTimetableDraftOptional()
+  // Stable identities: both feed effect dependencies below, and a fresh literal
+  // each render would re-run them forever.
+  const groups = useMemo(() => draft?.slotGroups ?? [], [draft?.slotGroups])
+  const slotGroupIds = useMemo(() => draft?.slotGroupIds ?? {}, [draft?.slotGroupIds])
+  // `null` selects the base schedule.
+  const [selected, setSelected] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameTo, setRenameTo] = useState('')
+
+  const reload = async () => {
+    await draft?.reload()
+    onChanged()
+  }
+
+  useEffect(() => {
+    if (selected && !groups.some((g) => g.id === selected)) setSelected(null)
+  }, [groups, selected])
+
+  const classCount = (groupId: string | null) =>
+    Object.values(slotGroupIds).filter((g) => (g ?? null) === groupId).length
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return
+    setBusy(true)
+    const created = await createSlotGroup({
+      config_id: config.id,
+      name: newName.trim(),
+      working_days: config.working_days,
+      position: groups.length + 1,
+    })
+    setBusy(false)
+    if (created) {
+      setNewName('')
+      setAdding(false)
+      await reload()
+      setSelected(created.id)
+    }
+  }
+
+  const handleRename = async (g: SlotGroup) => {
+    if (!renameTo.trim() || renameTo.trim() === g.name) { setRenaming(null); return }
+    await updateSlotGroup(g.id, { name: renameTo.trim() })
+    setRenaming(null)
+    await reload()
+  }
+
+  const selectedGroup = selected ? groups.find((g) => g.id === selected) ?? null : null
+
+  const row = (
+    key: string, name: string, days: Weekday[], isBase: boolean, group: SlotGroup | null,
+  ) => {
+    const active = (group?.id ?? null) === selected
+    return (
+      <div
+        key={key}
+        onClick={() => setSelected(group?.id ?? null)}
+        className={`flex items-center gap-3 px-3 py-2.5 border cursor-pointer transition-colors ${
+          active ? 'border-[#27272A] bg-white' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-[#EBEBEB]'
+        }`}
+      >
+        {isBase
+          ? <Clock size={14} className="text-[#71717A] flex-shrink-0" />
+          : <Layers size={14} className="text-indigo-500 flex-shrink-0" />}
+        <div className="flex-1 min-w-0">
+          {group && renaming === group.id ? (
+            <input
+              autoFocus
+              className={`${INPUT} py-0.5`}
+              value={renameTo}
+              onChange={(e) => setRenameTo(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={() => handleRename(group)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRename(group)
+                if (e.key === 'Escape') setRenaming(null)
+              }}
+            />
+          ) : (
+            <div className="font-medium text-[#18181B] text-sm truncate">{name}</div>
+          )}
+          <div className="text-[11px] text-[#71717A]">
+            {days.length} working day{days.length === 1 ? '' : 's'}
+            {isBase && ' · every class not in a group'}
+          </div>
+        </div>
+        <span
+          className="inline-flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0"
+          title="Classes following this schedule"
+        >
+          <Users size={12} /> {classCount(group?.id ?? null)}
+        </span>
+        {group && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); setRenaming(group.id); setRenameTo(group.name) }}
+              className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
+              title="Rename"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                if (!confirm(`Delete "${group.name}"? Its periods go with it and its classes fall back to the base schedule.`)) return
+                await deleteSlotGroup(group.id)
+                await reload()
+              }}
+              className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
+            >
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <Section
+        title="Period groups"
+        hint="Different parts of the school can run different bells. Each group has its own working days and periods; assign classes to one from the Homeroom editor."
+      >
+        <div className="space-y-px">
+          {row('base', 'Base schedule', config.working_days, true, null)}
+          {groups.map((g) =>
+            row(g.id, g.name, g.working_days.length > 0 ? g.working_days : config.working_days, false, g),
+          )}
+        </div>
+
+        {adding ? (
+          <div className="mt-3 flex items-end gap-2">
+            <div className="flex-1">
+              <Field label="Group name">
+                <input
+                  className={INPUT}
+                  autoFocus
+                  placeholder="e.g. Primary, Secondary, Kindergarten"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+                />
+              </Field>
+            </div>
+            <button onClick={handleAdd} disabled={busy || !newName.trim()} className={BTN_PRIMARY}>
+              {busy ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />} Add
+            </button>
+            <button
+              onClick={() => { setAdding(false); setNewName('') }}
+              className="text-sm text-[#71717A] hover:text-[#18181B] px-2 py-2 transition-colors"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setAdding(true)} className={`${BTN_PRIMARY} mt-3`}>
+            <Plus size={15} /> New period group
+          </button>
+        )}
+      </Section>
+
+      <div className="border-l-2 border-[#E4E4E7] pl-3 mt-4">
+        <div className={`${SECTION_LABEL} mb-1`}>
+          Editing {selectedGroup ? selectedGroup.name : 'the base schedule'}
+        </div>
+        <WorkingDaysSection
+          config={config}
+          group={selectedGroup}
+          onChanged={reload}
+        />
+        <PeriodSlotsSection config={config} group={selectedGroup} onChanged={reload} />
+      </div>
+    </>
+  )
+}
+
 // ── Working days ─────────────────────────────────────────────
 
-function WorkingDaysSection({ config, onChanged }: { config: TimetableConfig; onChanged: () => void }) {
-  const [days, setDays] = useState<Weekday[]>(config.working_days)
+function WorkingDaysSection({
+  config, group, onChanged,
+}: {
+  config: TimetableConfig
+  // null = the config's base schedule.
+  group: SlotGroup | null
+  onChanged: () => void
+}) {
+  const saved = group
+    ? (group.working_days.length > 0 ? group.working_days : config.working_days)
+    : config.working_days
+  const [days, setDays] = useState<Weekday[]>(saved)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setDays(config.working_days)
-  }, [config.id, config.working_days])
+    setDays(saved)
+    // `saved` is derived from these two, so they are what the reset tracks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.id, config.working_days, group?.id, group?.working_days])
 
   const toggle = (d: Weekday) =>
     setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
 
-  const dirty =
-    days.length !== config.working_days.length ||
-    days.some((d) => !config.working_days.includes(d))
+  const dirty = days.length !== saved.length || days.some((d) => !saved.includes(d))
 
   const save = async () => {
     setSaving(true)
     const ordered = WEEKDAYS.filter((d) => days.includes(d))
-    await updateConfig(config.id, { working_days: ordered })
+    if (group) await updateSlotGroup(group.id, { working_days: ordered })
+    else await updateConfig(config.id, { working_days: ordered })
     setSaving(false)
     onChanged()
   }
 
   return (
-    <Section title="Working days">
+    <Section title="Working days" first>
       <div className="flex flex-wrap gap-px">
         {WEEKDAYS.map((d) => {
           const on = days.includes(d)
@@ -235,7 +438,13 @@ function WorkingDaysSection({ config, onChanged }: { config: TimetableConfig; on
 
 // ── Period slots ─────────────────────────────────────────────
 
-function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
+function PeriodSlotsSection({
+  config, group, onChanged,
+}: {
+  config: TimetableConfig
+  group: SlotGroup | null
+  onChanged: () => void
+}) {
   const [slots, setSlots] = useState<PeriodSlot[]>([])
   const [loading, setLoading] = useState(true)
   const [start, setStart] = useState('')
@@ -244,11 +453,16 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
   const [isBreak, setIsBreak] = useState(false)
   const [adding, setAdding] = useState(false)
 
+  const groupId = group?.id ?? null
+
   const load = useCallback(async () => {
     setLoading(true)
-    setSlots(await fetchPeriodSlots(config.id))
+    const all = await fetchPeriodSlots(config.id)
+    // Each period group numbers its own periods from 1, so only this group's
+    // slots are listed — and only they are renumbered when one is removed.
+    setSlots(all.filter((s) => (s.group_id ?? null) === groupId))
     setLoading(false)
-  }, [config.id])
+  }, [config.id, groupId])
 
   useEffect(() => {
     load()
@@ -276,6 +490,7 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
     const teachingCount = slots.filter((s) => !s.is_break).length
     const created = await createPeriodSlot({
       config_id: config.id,
+      group_id: groupId,
       position,
       // Timings are optional — a slot can be just "Period N".
       start_time: start || null,
@@ -290,11 +505,17 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
       setLabel('')
       setIsBreak(false)
       load()
+      onChanged()
     }
   }
 
   return (
-    <Section title="Period slots" hint="These are the rows of the grid. Mark lunch/recess as a break — the generator skips break slots.">
+    <Section
+      title="Period slots"
+      hint={`These are the rows of the grid${
+        group ? ` for ${group.name}` : ''
+      }. Mark lunch/recess as a break — the generator skips break slots.`}
+    >
       {loading ? (
         <div className="flex justify-center py-6 text-[#A1A1AA]">
           <Loader2 className="animate-spin" size={18} />
@@ -328,6 +549,7 @@ function PeriodSlotsSection({ config }: { config: TimetableConfig }) {
                 onClick={async () => {
                   await deletePeriodSlot(s.id)
                   load()
+                  onChanged()
                 }}
                 className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
               >
