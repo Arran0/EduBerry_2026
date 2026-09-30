@@ -13,6 +13,7 @@ import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDirectory } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
 import { currentAcademicYear } from '@/lib/fees'
+import { gradeLabel } from '@/lib/grades'
 import Avatar from '@/components/Avatar'
 import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 import { useRouter } from 'next/navigation'
@@ -57,6 +58,16 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
   )
 }
 
+/** The caption under an action button's glyph. Every button carries one now —
+ *  WhatsApp and Call used to be bare icons among labelled neighbours. */
+function ActionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="max-w-full truncate px-0.5 text-[8px] font-bold uppercase leading-none tracking-wide">
+      {children}
+    </span>
+  )
+}
+
 // Calendar access: viewer must rank strictly above target (or be admin / same person).
 const ROLE_RANK: Record<string, number> = {
   student: 0, teacher: 1, coordinator: 2, principal: 3, admin: 4,
@@ -69,15 +80,16 @@ function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
 }
 
 /**
- * The card's resting height: banner, avatar, name, role, two contact rows, the
- * chip pair and the action row. Opening states are drawn to it so a card that
- * has to fetch its profile is the same size as one that was handed it.
+ * The card's resting height: banner (128) + body (347) — avatar, name, role,
+ * the two contact rows, the chip pair and the action row, each with its line
+ * box pinned so this number stays true. Opening states are drawn to it, so a
+ * card that has to fetch its profile is the same size as one handed it.
  */
-const CARD_MIN_HEIGHT = 430
+const CARD_MIN_HEIGHT = 475
 
 /** The card's own layout in grey, for the opens that have nothing to draw yet. */
 function ProfileCardSkeleton({ bannerUrl }: { bannerUrl: string | null }) {
-  const bar = 'rounded bg-slate-200 animate-pulse'
+  const bar = 'rounded-lg bg-slate-200/80 animate-pulse'
   return (
     <div style={{ minHeight: CARD_MIN_HEIGHT }}>
       <div
@@ -85,20 +97,19 @@ function ProfileCardSkeleton({ bannerUrl }: { bannerUrl: string | null }) {
         style={bannerUrl
           ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
           : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }}
-      />
-      <div className="relative flex flex-col items-center -mt-9 pb-4 px-5">
-        <div className="w-[72px] h-[72px] rounded-full ring-4 ring-white bg-slate-200 animate-pulse" />
-        <div className={`mt-3 h-4 w-40 ${bar}`} />
-        <div className={`mt-2 h-4 w-20 rounded-full ${bar}`} />
-        <div className="mt-3 w-full flex flex-col gap-2">
-          <div className={`h-[30px] w-full ${bar}`} />
-          <div className={`h-[30px] w-full ${bar}`} />
-          <div className="grid grid-cols-2 gap-2">
-            <div className={`h-[38px] ${bar}`} />
-            <div className={`h-[38px] ${bar}`} />
-          </div>
+      >
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
+      </div>
+      <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
+        <div className="h-[84px] w-[84px] animate-pulse rounded-full bg-slate-200 ring-[5px] ring-white" />
+        <div className={`mt-3 h-[22px] w-44 ${bar}`} />
+        <div className={`mt-1.5 h-5 w-24 rounded-full ${bar}`} />
+        <div className={`mt-4 h-[89px] w-full ${bar}`} />
+        <div className="mt-2 grid w-full grid-cols-2 gap-2">
+          <div className={`h-[46px] ${bar}`} />
+          <div className={`h-[46px] ${bar}`} />
         </div>
-        <div className={`w-full mt-3 h-14 ${bar}`} />
+        <div className={`mt-3 h-[52px] w-full ${bar}`} />
       </div>
     </div>
   )
@@ -123,15 +134,17 @@ function InfoChip({ icon, label, value, loading }: {
   loading: boolean
 }) {
   return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-lg min-w-0">
-      <span className="text-slate-400 flex-shrink-0">{icon}</span>
+    <div className="flex h-[46px] min-w-0 items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/60 px-2.5">
+      <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200/80">
+        {icon}
+      </span>
       <div className="min-w-0">
-        <p className="text-[8px] font-bold uppercase tracking-wide text-slate-400 leading-none">{label}</p>
-        <p className="text-xs truncate leading-tight mt-0.5">
+        <p className="text-[8px] font-bold uppercase leading-none tracking-wider text-slate-400">{label}</p>
+        <p className="mt-1 truncate text-xs leading-tight">
           {loading
             ? <ValueSkeleton className="w-12" />
             : value
-              ? <span className="text-slate-600">{value}</span>
+              ? <span className="font-medium text-slate-700">{value}</span>
               : <span className="text-slate-300">Nil</span>}
         </p>
       </div>
@@ -140,8 +153,9 @@ function InfoChip({ icon, label, value, loading }: {
 }
 
 /** A contact line that holds its place whether or not there is anything on it. */
-function ContactRow({ icon, value, href, loading, empty }: {
+function ContactRow({ icon, label, value, href, loading, empty }: {
   icon: React.ReactNode
+  label: string
   value: string | null
   href?: string
   loading: boolean
@@ -149,16 +163,19 @@ function ContactRow({ icon, value, href, loading, empty }: {
 }) {
   const body = (
     <>
-      {icon}
+      <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-white">
+        {icon}
+      </span>
+      <span className="w-11 flex-shrink-0 text-[8px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
       {loading
         ? <ValueSkeleton className="w-28" />
-        : <span className={`text-xs truncate ${value ? 'text-slate-600' : 'text-slate-300'}`}>{value ?? empty}</span>}
+        : <span className={`truncate text-xs ${value ? 'font-medium text-slate-700' : 'text-slate-300'}`}>{value ?? empty}</span>}
     </>
   )
-  const shell = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg min-w-0 h-[30px]'
+  const shell = 'group flex h-11 min-w-0 items-center gap-2.5 px-3'
   return href
-    ? <a href={href} className={`${shell} bg-slate-50 hover:bg-slate-100 transition-colors`}>{body}</a>
-    : <div className={`${shell} bg-slate-50`}>{body}</div>
+    ? <a href={href} className={`${shell} transition-colors hover:bg-slate-50`}>{body}</a>
+    : <div className={shell}>{body}</div>
 }
 
 /**
@@ -329,7 +346,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
         exit={{ opacity: 0 }}
         transition={{ duration: 0.16, ease: 'easeOut' }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 z-[9998]"
+        className="fixed inset-0 z-[9998] bg-slate-900/55 backdrop-blur-[2px]"
       />
 
       {/* Card */}
@@ -350,19 +367,28 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
             closing lurch, since it re-measures against a card that is at the
             same time being scaled away. */}
         <div
-          className="w-full max-w-sm rounded-3xl overflow-y-auto shadow-2xl bg-white border border-slate-100 max-h-[88vh] pointer-events-auto"
+          className="pointer-events-auto max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-[28px] bg-white shadow-[0_28px_70px_-24px_rgba(15,23,42,0.55)] ring-1 ring-slate-900/[0.06]"
           onClick={e => e.stopPropagation()}
         >
           {loadingProfile ? (
             <ProfileCardSkeleton bannerUrl={profileBannerUrl} />
           ) : !targetProfile ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ minHeight: CARD_MIN_HEIGHT }}>
-              <p className="text-slate-500 text-sm">Profile not found.</p>
-              <button onClick={onClose} className="text-xs text-slate-400 underline">Close</button>
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-300">
+                <X size={22} />
+              </div>
+              <p className="text-sm font-medium text-slate-600">Profile not found.</p>
+              <button onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50">
+                Close
+              </button>
             </div>
           ) : (
             <>
-              {/* Gradient banner — uses the profiles_banner setting uploaded by admin */}
+              {/* Banner — the admin's profiles_banner image. Its height is
+                  deliberately left alone; what changed is that it now carries a
+                  scrim at the bottom, so the avatar's white ring and the close
+                  button read against any photograph rather than only against
+                  the dark default gradient. */}
               <div
                 className="relative h-32 flex-shrink-0"
                 style={profileBannerUrl
@@ -370,90 +396,101 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
                 }
               >
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)] pointer-events-none" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_65%)]" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
                 <button
                   onClick={onClose}
-                  className="absolute top-2.5 right-2.5 p-1.5 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"
+                  aria-label="Close profile"
+                  className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                   <X size={14} />
                 </button>
               </div>
 
               {/* Body */}
-              <div className="relative flex flex-col items-center -mt-9 pb-4 px-5">
+              <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
                 {/* Avatar */}
                 <div
-                  className="w-[72px] h-[72px] rounded-full ring-4 ring-white shadow-lg overflow-hidden flex items-center justify-center flex-shrink-0"
+                  className="h-[84px] w-[84px] flex-shrink-0 overflow-hidden rounded-full ring-[5px] ring-white shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] grid place-items-center"
                   style={{ background: profileBannerUrl ? '#27272A' : 'linear-gradient(135deg, #3f3f46, #1c1c1e)' }}
                 >
                   <Avatar
                     avatarUrl={targetProfile.avatar_url}
                     name={targetProfile.full_name}
                     email={targetProfile.email}
-                    size={72}
+                    size={84}
                   />
                 </div>
 
-                <h2 className="mt-2 font-display text-base font-bold text-slate-800 text-center leading-tight">
+                <h2 className="mt-3 font-display text-[17px] font-bold leading-[22px] text-slate-900 text-center">
                   {targetProfile.full_name || 'No Name'}
                 </h2>
-                <div className="mt-1 flex items-center justify-center gap-1.5 flex-wrap">
-                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
+                <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
+                  <span className={`rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
                     {getDisplayRole(targetProfile)}
                   </span>
-                  {targetProfile.role === 'student' && targetProfile.grade && (
-                    <span className="text-[11px] text-slate-400">
-                      Grade {targetProfile.grade}{targetProfile.section ? `-${targetProfile.section}` : ''}
+                  {/* gradeLabel, not `Grade ${grade}`: pre-primary years are
+                      stored as negative numbers, so the old string rendered
+                      LKG as "Grade -2". */}
+                  {targetProfile.role === 'student' && targetProfile.grade != null && (
+                    <span className="rounded-full bg-slate-100 px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide text-slate-500">
+                      {gradeLabel(targetProfile.grade)}{targetProfile.section ? ` · ${targetProfile.section}` : ''}
                     </span>
                   )}
                 </div>
 
-                {/* Contact + identifying facts.
-                    Every slot is always drawn, empty ones included. These
-                    values arrive from a second query after the card is already
-                    open, and hiding the ones that came back blank meant the
-                    card's height depended on data it did not have yet — so it
-                    resized under the cursor, and animating that away only
-                    traded a jump for a slide. A row that says "Not on file"
-                    is also a straighter answer than a row that isn't there. */}
-                <div className="mt-3 w-full flex flex-col gap-2">
-                  <a
-                    href={`mailto:${targetProfile.email}`}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors min-w-0"
-                  >
-                    <Mail size={12} className="text-slate-400 flex-shrink-0" />
-                    <span className="text-xs text-slate-600 truncate">{targetProfile.email}</span>
-                  </a>
+                {/* Contact — two rows of one bordered panel rather than two
+                    floating grey pills, so the card reads as a record with
+                    fields instead of a pile of chips.
 
+                    Every slot here is drawn whether or not it has a value.
+                    These arrive from a second query after the card is already
+                    open, and hiding the blank ones made the card's height a
+                    function of data it did not have yet — it resized under the
+                    cursor, and animating that away only traded a jump for a
+                    slide. "Nil" is also a straighter answer than an absence. */}
+                <div className="mt-4 w-full divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200/80">
                   <ContactRow
-                    icon={<PhoneIcon size={12} className="text-slate-400 flex-shrink-0" />}
+                    icon={<Mail size={13} />}
+                    label="Email"
+                    value={targetProfile.email}
+                    href={targetProfile.email ? `mailto:${targetProfile.email}` : undefined}
+                    loading={false}
+                    empty="Nil"
+                  />
+                  <ContactRow
+                    icon={<PhoneIcon size={13} />}
+                    label="Phone"
                     value={phone}
                     href={phone ? `tel:${phone.replace(/\D/g, '')}` : undefined}
                     loading={loadingDetails}
-                    empty="No phone on file"
+                    empty="Nil"
                   />
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {isStudentProfile ? (
-                      <>
-                        <InfoChip icon={<IdCard size={14} />} label="Admission No." value={admissionNo} loading={loadingDetails} />
-                        <InfoChip icon={<Hash size={14} />} label="Roll No." value={rollNo} loading={loadingDetails} />
-                      </>
-                    ) : (
-                      <>
-                        <InfoChip icon={<IdCard size={14} />} label="Employee ID" value={employeeId} loading={loadingDetails} />
-                        <InfoChip icon={<Briefcase size={14} />} label="Designation" value={designation} loading={loadingDetails} />
-                      </>
-                    )}
-                  </div>
                 </div>
 
-                {/* ── Action buttons — WhatsApp, Call, Attendance, Task, Academic Record,
-                     Download Centre; rectangular, equally sized, spanning the card's full
-                     width ──────────────────────────────────────────────────────────────── */}
-                {/* The row keeps its place even before the viewer's own profile
-                    has resolved, so the card is never briefly a button shorter. */}
-                {!viewerProfile ? <div className="w-full mt-3 h-14" /> : (() => {
+                <div className="mt-2 grid w-full grid-cols-2 gap-2">
+                  {isStudentProfile ? (
+                    <>
+                      <InfoChip icon={<IdCard size={13} />} label="Admission No." value={admissionNo} loading={loadingDetails} />
+                      <InfoChip icon={<Hash size={13} />} label="Roll No." value={rollNo} loading={loadingDetails} />
+                    </>
+                  ) : (
+                    <>
+                      <InfoChip icon={<IdCard size={13} />} label="Employee ID" value={employeeId} loading={loadingDetails} />
+                      <InfoChip icon={<Briefcase size={13} />} label="Designation" value={designation} loading={loadingDetails} />
+                    </>
+                  )}
+                </div>
+
+                {/* ── Actions — WhatsApp, Call, Attendance, Tasks, Record, Files.
+                     One shared shape: a tinted tile with a glyph over a caption,
+                     equally sized across the card's width. WhatsApp used to be
+                     the one solid button among pale ones and the only two
+                     without captions, which made the row read as two unrelated
+                     groups. The row also keeps its place before the viewer's own
+                     profile resolves, so the card is never briefly a tile
+                     shorter. ─────────────────────────────────────────────────── */}
+                {!viewerProfile ? <div className="mt-3 h-[52px] w-full" /> : (() => {
                   // Staff can see student contact buttons; so can the student themselves
                   const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
                   // Everyone can see staff contact buttons
@@ -480,16 +517,16 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                     href: dialable ? `https://wa.me/${dialable}` : undefined,
                     external: true,
                     disabled: !dialable,
-                    cls: 'bg-[#25D366] border-[#25D366] text-white hover:bg-[#20BD5A]',
-                    content: <WhatsAppIcon size={20} />,
+                    cls: 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100',
+                    content: <><WhatsAppIcon size={17} /><ActionLabel>WhatsApp</ActionLabel></>,
                   })
                   buttons.push({
                     key: 'call',
                     label: dialable ? 'Call' : 'No phone on file',
                     href: dialable ? `tel:${dialable}` : undefined,
                     disabled: !dialable,
-                    cls: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
-                    content: <PhoneIcon size={18} />,
+                    cls: 'bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100',
+                    content: <><PhoneIcon size={16} /><ActionLabel>Call</ActionLabel></>,
                   })
                   if (showAttendanceBtn) {
                     buttons.push({
@@ -497,7 +534,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                       label: 'Attendance',
                       onClick: () => setShowAttendance(true),
                       cls: 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100',
-                      content: <><CalendarCheck size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Attendance</span></>,
+                      content: <><CalendarCheck size={16} /><ActionLabel>Attendance</ActionLabel></>,
                     })
                   }
                   if (showTaskCalendar) {
@@ -506,7 +543,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                       label: 'Task Calendar',
                       onClick: openCalendarPage,
                       cls: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100',
-                      content: <><CalendarDays size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Task</span></>,
+                      content: <><CalendarDays size={16} /><ActionLabel>Tasks</ActionLabel></>,
                     })
                   }
                   if (showAcademicRecord) {
@@ -515,7 +552,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                       label: 'Academic Record',
                       onClick: openAcademicRecord,
                       cls: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
-                      content: <><GraduationCap size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Record</span></>,
+                      content: <><GraduationCap size={16} /><ActionLabel>Record</ActionLabel></>,
                     })
                   }
                   if (showDownloadCentreBtn) {
@@ -524,7 +561,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                       label: 'Download Centre',
                       onClick: () => setShowDownloadCentre(true),
                       cls: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100',
-                      content: <><Download size={16} /><span className="text-[8px] font-bold uppercase tracking-wide">Downloads</span></>,
+                      content: <><Download size={16} /><ActionLabel>Files</ActionLabel></>,
                     })
                   }
 
@@ -533,16 +570,16 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   const GRID_COLS: Record<number, string> = {
                     1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5',
                   }
-                  const btnCls = 'h-14 flex flex-col items-center justify-center gap-1 rounded-xl border font-medium transition-colors'
+                  const btnCls = 'h-[52px] flex flex-col items-center justify-center gap-1 rounded-xl border px-1 font-medium transition-colors active:scale-[0.97]'
 
                   return (
-                    <div className={`w-full mt-3 grid ${GRID_COLS[buttons.length] ?? 'grid-cols-5'} gap-2`}>
+                    <div className={`mt-3 grid w-full ${GRID_COLS[buttons.length] ?? 'grid-cols-5'} gap-1.5`}>
                       {buttons.map(b => b.disabled ? (
                         <div
                           key={b.key}
                           title={b.label}
                           aria-disabled
-                          className={`${btnCls} bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed`}
+                          className={`${btnCls} cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300`}
                         >
                           {b.content}
                         </div>
