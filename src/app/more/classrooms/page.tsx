@@ -7,6 +7,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import Link from 'next/link'
 import PageBanner from '@/components/PageBanner'
+import PageToolbar, { ListSentinel } from '@/components/PageToolbar'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
@@ -15,10 +16,11 @@ import SubjectPicker from '@/components/classrooms/SubjectPicker'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
 import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom, fetchSmartboardIdsForGradeSection } from '@/lib/smartboard'
 import { fetchClassTeachersForGradeSection } from '@/lib/homeroomClassTeachers'
-import { UserProfile } from '@/lib/supabase'
+import { UserProfile, getDisplayRole } from '@/lib/supabase'
 import { CLASSROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { ClassroomMemberRole, ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
+import { ClassroomMember, ClassroomMemberRole, ClassroomWithDetails, fetchClassroomsForUser, createClassroom, updateClassroom, fetchClassroomById, addMemberByEmail, removeClassroomMember, deleteClassroom, isClassroomClosed } from '@/lib/classrooms'
 import { supabase } from '@/lib/supabase'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -265,15 +267,26 @@ export default function ClassroomManagerPage() {
   // without memoisation every keystroke in one re-filtered and re-partitioned
   // the whole classroom list. Must stay above the `!user` early return — hooks
   // cannot be called conditionally.
-  const { activeClassrooms, closedClassrooms } = useMemo(() => {
+  const { activeClassrooms, closedClassrooms, rows } = useMemo(() => {
     const filtered = searchLower
       ? classrooms.filter(c => c.title.toLowerCase().includes(searchLower) || (c.description && c.description.toLowerCase().includes(searchLower)))
       : classrooms
+    const activeClassrooms = filtered.filter(c => !isClassroomClosed(c))
+    const closedClassrooms = filtered.filter(c => isClassroomClosed(c))
+    // Active then closed as one sequence, so a single scroll sentinel pages
+    // the whole list — two sentinels would race, the closed one coming into
+    // view while the active list above it was still only a page deep.
     return {
-      activeClassrooms: filtered.filter(c => !isClassroomClosed(c)),
-      closedClassrooms: filtered.filter(c => isClassroomClosed(c)),
+      activeClassrooms,
+      closedClassrooms,
+      rows: [
+        ...activeClassrooms.map(c => ({ classroom: c, closed: false })),
+        ...closedClassrooms.map(c => ({ classroom: c, closed: true })),
+      ],
     }
   }, [classrooms, searchLower])
+
+  const { visible: visibleRows, sentinelRef, hasMore, shown, total, loadMore } = useInfiniteScroll(rows, { resetKey: searchLower })
 
   if (!user || !profile) return null
 
@@ -311,25 +324,16 @@ export default function ClassroomManagerPage() {
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Search bar */}
-          {!loading && classrooms.length > 0 && (
-            <div className="mb-3 relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input
-                type="text" value={classroomSearch}
-                onChange={e => setClassroomSearch(e.target.value)}
-                className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
-                placeholder="Search classrooms by title or description…"
-              />
-              {classroomSearch && (
-                <button onClick={() => setClassroomSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]">
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          )}
+          <PageToolbar
+            search={classroomSearch}
+            onSearchChange={setClassroomSearch}
+            searchPlaceholder="Search classrooms by title or description…"
+            summary={!loading && classrooms.length > 0
+              ? `${activeClassrooms.length} active · ${closedClassrooms.length} closed`
+              : undefined}
+          />
 
           {/* Create form */}
           <AnimatePresence>
@@ -448,7 +452,7 @@ export default function ClassroomManagerPage() {
           ) : (
             <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
+              <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
                 <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title</span>
                 <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Subject</span>
                 <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">A.Y.</span>
@@ -456,65 +460,39 @@ export default function ClassroomManagerPage() {
                 <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
               </div>
 
-              {/* Active section */}
-              {activeClassrooms.length > 0 && (
-                <>
-                  {(activeClassrooms.length > 0 && closedClassrooms.length > 0) && (
-                    <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Active</span>
-                      <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{activeClassrooms.length}</span>
-                    </div>
-                  )}
-                  <motion.div variants={containerVariants} initial="hidden" animate="show">
-                    {activeClassrooms.map(classroom => (
-                      <ClassroomRow
-                        key={classroom.id}
-                        classroom={classroom} closed={false} isAdmin={isAdmin}
-                        expanded={expandedClassroom === classroom.id}
-                        expandedDetails={expandedClassroom === classroom.id ? expandedDetails : null}
-                        addMemberEmailInput={addMemberEmailInput} addingMember={addingMember} memberError={memberError}
-                        onExpand={() => handleExpand(classroom.id)}
-                        onStartEdit={() => handleStartEdit(classroom)}
-                        onAddMemberEmailChange={v => { setAddMemberEmailInput(v); setMemberError('') }}
-                        onAddMember={() => handleAddMember(classroom.id)}
-                        onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
-                        onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
-                        onToggleClose={() => handleToggleClose(classroom)}
-                        onImported={() => loadClassroomDetails(classroom.id)}
-                      />
-                    ))}
-                  </motion.div>
-                </>
-              )}
+              {/* One sequence — active rows, then closed ones, with the band
+                  headers drawn wherever the run changes. */}
+              <motion.div variants={containerVariants} initial="hidden" animate="show">
+                {visibleRows.map(({ classroom, closed }, i) => (
+                  <React.Fragment key={classroom.id}>
+                    {(i === 0 || visibleRows[i - 1].closed !== closed) && (closed || closedClassrooms.length > 0) && (
+                      <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{closed ? 'Closed' : 'Active'}</span>
+                        <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closed ? closedClassrooms.length : activeClassrooms.length}</span>
+                      </div>
+                    )}
+                    <ClassroomRow
+                      classroom={classroom} closed={closed} isAdmin={isAdmin}
+                      expanded={expandedClassroom === classroom.id}
+                      expandedDetails={expandedClassroom === classroom.id ? expandedDetails : null}
+                      addMemberEmailInput={addMemberEmailInput} addingMember={addingMember} memberError={memberError}
+                      onExpand={() => handleExpand(classroom.id)}
+                      onStartEdit={() => handleStartEdit(classroom)}
+                      onAddMemberEmailChange={v => { setAddMemberEmailInput(v); setMemberError('') }}
+                      onAddMember={() => handleAddMember(classroom.id)}
+                      onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
+                      onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
+                      onToggleClose={() => handleToggleClose(classroom)}
+                      onImported={() => loadClassroomDetails(classroom.id)}
+                    />
+                  </React.Fragment>
+                ))}
+              </motion.div>
 
-              {/* Closed section */}
-              {closedClassrooms.length > 0 && (
-                <>
-                  <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Closed</span>
-                    <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closedClassrooms.length}</span>
-                  </div>
-                  <motion.div variants={containerVariants} initial="hidden" animate="show">
-                    {closedClassrooms.map(classroom => (
-                      <ClassroomRow
-                        key={classroom.id}
-                        classroom={classroom} closed={true} isAdmin={isAdmin}
-                        expanded={expandedClassroom === classroom.id}
-                        expandedDetails={expandedClassroom === classroom.id ? expandedDetails : null}
-                        addMemberEmailInput={addMemberEmailInput} addingMember={addingMember} memberError={memberError}
-                        onExpand={() => handleExpand(classroom.id)}
-                        onStartEdit={() => handleStartEdit(classroom)}
-                        onAddMemberEmailChange={v => { setAddMemberEmailInput(v); setMemberError('') }}
-                        onAddMember={() => handleAddMember(classroom.id)}
-                        onRemoveMember={uid => handleRemoveMember(classroom.id, uid)}
-                        onDelete={() => handleDeleteClassroom(classroom.id, classroom.title)}
-                        onToggleClose={() => handleToggleClose(classroom)}
-                        onImported={() => loadClassroomDetails(classroom.id)}
-                      />
-                    ))}
-                  </motion.div>
-                </>
-              )}
+              <ListSentinel
+                sentinelRef={sentinelRef} hasMore={hasMore}
+                shown={shown} total={total} onLoadMore={loadMore} noun="classrooms"
+              />
             </div>
           )}
         </div>
@@ -604,6 +582,8 @@ const ROLE_BADGE: Record<string, string> = {
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
   student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
+  smartboard:  'bg-indigo-50 text-indigo-700 border-indigo-200',
+  driver:      'bg-orange-50 text-orange-700 border-orange-200',
 }
 
 interface ClassroomRowProps {
@@ -625,11 +605,18 @@ function ClassroomRow({
 }: ClassroomRowProps) {
   const [showMembers, setShowMembers] = useState(false)
 
+  // A smart board is an account with role 'smartboard'; it joins the roster at
+  // teacher level, so its membership role says nothing about what it is.
+  const boards = useMemo(
+    () => (expandedDetails?.members ?? []).filter(m => m.user?.role === 'smartboard'),
+    [expandedDetails],
+  )
+
   return (
     <motion.div variants={itemVariants}>
       {/* Row */}
       <div
-        className={`flex items-center gap-3 px-4 py-3 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
+        className={`flex items-center gap-3 px-4 py-2 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
         onClick={onExpand}
       >
         {/* Icon dot */}
@@ -740,14 +727,21 @@ function ClassroomRow({
                         <p className="text-sm text-[#71717A] px-3 py-3">No members yet</p>
                       ) : (
                         expandedDetails.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
-                            <div className="flex items-center gap-3">
-                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={30} userId={member.user?.id} />
-                              <div>
-                                <p className="text-sm font-medium text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
-                                <p className="text-xs text-[#71717A]">{member.user?.email}</p>
+                          <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={28} userId={member.user?.id} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
                               </div>
-                              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border ml-1 ${ROLE_BADGE[member.role] ?? ROLE_BADGE.student}`}>{member.role}</span>
+                              {/* The person's own label — their admin-set display_role
+                                  ("HM") when they have one, else the standard name for
+                                  their profile role. member.role is this classroom's
+                                  access level, which is why a coordinator added here
+                                  used to read "Teacher". */}
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border ml-1 flex-shrink-0 whitespace-nowrap ${ROLE_BADGE[member.user?.role ?? member.role] ?? ROLE_BADGE.student}`}>
+                                {member.user ? getDisplayRole(member.user) : member.role}
+                              </span>
                             </div>
                             {isAdmin && !closed && (
                               <button onClick={() => onRemoveMember(member.user_id)} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Remove">
@@ -767,9 +761,15 @@ function ClassroomRow({
                 <HomeroomImport classroomId={classroom.id} onImported={onImported} />
               )}
 
-              {/* Add a smart board account directly (teacher-level access) */}
+              {/* Smart boards already in the classroom, and a picker to add more */}
               {isAdmin && !closed && (
-                <SmartboardAdd classroomId={classroom.id} onAdded={onImported} />
+                <ClassroomSmartboards
+                  classroomId={classroom.id}
+                  boards={boards}
+                  loaded={!!expandedDetails}
+                  onChanged={onImported}
+                  onRemove={onRemoveMember}
+                />
               )}
 
               {closed && !isAdmin && (
@@ -906,100 +906,165 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
   )
 }
 
-// ── Add Smart Board ──
-// Adds a smart board account to the classroom with teacher-level access.
-function SmartboardAdd({ classroomId, onAdded }: { classroomId: string; onAdded: () => void }) {
-  const [open, setOpen] = useState(false)
+// ── Smart Boards ──
+// The classroom's smart board accounts: what is already linked, and a picker
+// to link another. Deliberately shaped like the Homeroom Manager's smart board
+// panel — same indigo tile, same dashed "add" affordance — so the two managers
+// read as one product. It goes further than that one in the ways this screen
+// needs: a classroom can hold several boards, so they are listed with a count
+// and each can be unlinked, and accounts already in the classroom are dropped
+// from the picker instead of offering an add that would do nothing.
+function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove }: {
+  classroomId: string
+  boards: ClassroomMember[]
+  loaded: boolean
+  onChanged: () => void
+  onRemove: (userId: string) => void
+}) {
+  const [picking, setPicking] = useState(false)
   const [accounts, setAccounts] = useState<UserProfile[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
   const [query, setQuery] = useState('')
   const [addingId, setAddingId] = useState<string | null>(null)
-  const [addedName, setAddedName] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!open || accounts.length > 0) return
-    setLoading(true)
-    fetchSmartboardAccounts().then(data => { setAccounts(data); setLoading(false) })
-  }, [open, accounts.length])
+    if (!picking || accounts.length > 0) return
+    setLoadingAccounts(true)
+    fetchSmartboardAccounts().then(data => { setAccounts(data); setLoadingAccounts(false) })
+  }, [picking, accounts.length])
 
-  const handleAdd = async (acc: UserProfile) => {
-    setAddingId(acc.id); setAddedName(null)
-    const ok = await addSmartboardToClassroom(classroomId, acc.id)
-    setAddingId(null)
-    if (ok) { setAddedName(acc.full_name); onAdded() }
-  }
+  const linkedIds = useMemo(() => new Set(boards.map(b => b.user_id)), [boards])
 
   const q = query.trim().toLowerCase()
-  const filtered = q
-    ? accounts.filter(a => a.full_name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q))
-    : accounts
+  const available = accounts.filter(a =>
+    !linkedIds.has(a.id) &&
+    (!q || a.full_name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q)))
+
+  const handleAdd = async (acc: UserProfile) => {
+    setAddingId(acc.id); setError('')
+    const ok = await addSmartboardToClassroom(classroomId, acc.id)
+    setAddingId(null)
+    if (ok) onChanged()
+    else setError(`Could not add ${acc.full_name}. It may already be a member.`)
+  }
 
   return (
     <div className="border border-[#D4D4D8] bg-white rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between py-2 px-3 hover:bg-[#EBEBEB] transition-colors"
-      >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#E4E4E7]">
         <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
-          <MonitorPlay size={12} className="text-indigo-500" /> Add Smart Board
+          <MonitorPlay size={12} className="text-indigo-500" /> Smart Boards
+          {loaded && <span className="font-normal text-[#71717A] normal-case">({boards.length})</span>}
         </span>
-        <ChevronDown size={13} className={`text-[#71717A] transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+        {loaded && !picking && (
+          <button
+            type="button"
+            onClick={() => { setPicking(true); setError('') }}
+            className="flex items-center gap-1 rounded-md border border-dashed border-indigo-300 px-2 py-1 text-[11px] font-semibold text-indigo-600 transition-colors hover:bg-indigo-50"
+          >
+            <Plus size={11} /> Add board
+          </button>
+        )}
+      </div>
 
-      {open && (
-        <div className="border-t border-[#E4E4E7] p-3 space-y-2">
-          <p className="text-[11px] text-[#71717A]">Adds a smart board account to this classroom with teacher-level access.</p>
+      <div className="p-3 space-y-2">
+        {!loaded ? (
+          <div className="flex items-center gap-2 text-xs text-[#71717A] py-1">
+            <Loader2 size={13} className="animate-spin" /> Loading…
+          </div>
+        ) : boards.length === 0 ? (
+          <p className="text-[11px] text-[#A1A1AA]">
+            No smart board in this classroom yet. Importing a homeroom brings its board along, or add one directly.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {boards.map(b => (
+              <div key={b.id} className="flex items-center gap-2.5 rounded-lg border border-indigo-100 bg-white px-2.5 py-2">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+                  <MonitorPlay size={14} className="text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-[#18181B]">{b.user?.full_name}</p>
+                  <p className="truncate text-[11px] text-[#71717A]">{b.user?.email}</p>
+                </div>
+                <span className="flex-shrink-0 rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                  Board
+                </span>
+                <button
+                  onClick={() => onRemove(b.user_id)}
+                  className="flex-shrink-0 p-1.5 text-[#71717A] transition-colors hover:bg-rose-50 hover:text-rose-600"
+                  title="Remove from classroom"
+                >
+                  <UserMinus size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {addedName && (
-            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5">
-              <CheckCircle2 size={13} className="flex-shrink-0" />
-              <span>Added <strong>{addedName}</strong>.</span>
+        {picking && (
+          <div className="space-y-2 rounded-lg border border-[#E4E4E7] bg-[#FAFAFA] p-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-[#71717A]">Boards join with teacher-level access.</p>
+              <button
+                onClick={() => { setPicking(false); setQuery(''); setError('') }}
+                className="p-0.5 text-[#A1A1AA] transition-colors hover:text-[#27272A]"
+                title="Done"
+              >
+                <X size={13} />
+              </button>
             </div>
-          )}
 
-          {accounts.length > 3 && (
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
               <input
                 type="text" value={query} onChange={e => setQuery(e.target.value)}
-                placeholder="Search smart boards…"
-                className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                autoFocus
+                placeholder="Search smart board accounts…"
+                className="w-full rounded-lg border border-[#D4D4D8] bg-white py-2 pl-8 pr-3 text-sm focus:border-[#27272A] focus:outline-none"
               />
             </div>
-          )}
 
-          <div className="max-h-48 overflow-y-auto space-y-1">
-            {loading ? (
-              <div className="flex items-center gap-2 text-xs text-[#71717A] py-2 px-1">
-                <Loader2 size={13} className="animate-spin" /> Loading…
-              </div>
-            ) : filtered.length === 0 ? (
-              <p className="text-xs text-[#A1A1AA] py-2 px-1">No smart board accounts found.</p>
-            ) : (
-              filtered.map(acc => (
-                <div key={acc.id} className="flex items-center gap-2 py-1.5 px-2 border border-[#E4E4E7] rounded hover:bg-[#F5F5F5]">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
-                    <MonitorPlay size={13} className="text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#18181B] truncate">{acc.full_name}</p>
-                    <p className="text-[11px] text-[#71717A] truncate">{acc.email}</p>
-                  </div>
-                  <button
-                    onClick={() => handleAdd(acc)}
-                    disabled={addingId === acc.id}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
-                  >
-                    {addingId === acc.id ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                    Add
-                  </button>
+            {error && <p className="text-xs text-rose-600">{error}</p>}
+
+            <div className="max-h-52 space-y-1 overflow-y-auto">
+              {loadingAccounts ? (
+                <div className="flex items-center gap-2 px-1 py-2 text-xs text-[#71717A]">
+                  <Loader2 size={13} className="animate-spin" /> Loading accounts…
                 </div>
-              ))
-            )}
+              ) : available.length === 0 ? (
+                <p className="px-1 py-2 text-xs text-[#A1A1AA]">
+                  {accounts.length === 0
+                    ? 'No smart board accounts exist yet — create one from the Homeroom Manager.'
+                    : query
+                      ? 'No smart board matches that search.'
+                      : 'Every smart board account is already in this classroom.'}
+                </p>
+              ) : (
+                available.map(acc => (
+                  <div key={acc.id} className="flex items-center gap-2.5 rounded-lg border border-[#E4E4E7] bg-white px-2.5 py-1.5 hover:bg-[#F5F5F5]">
+                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+                      <MonitorPlay size={13} className="text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#18181B]">{acc.full_name}</p>
+                      <p className="truncate text-[11px] text-[#71717A]">{acc.email}</p>
+                    </div>
+                    <button
+                      onClick={() => handleAdd(acc)}
+                      disabled={addingId === acc.id}
+                      className="flex flex-shrink-0 items-center gap-1 rounded-md bg-[#27272A] px-2.5 py-1 text-xs font-medium text-[#F5F5F5] transition-colors hover:bg-[#18181B] disabled:opacity-50"
+                    >
+                      {addingId === acc.id ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                      Add
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

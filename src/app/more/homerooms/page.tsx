@@ -1,18 +1,19 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
+import PageToolbar, { ListSentinel } from '@/components/PageToolbar'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   Home, Plus, X, UserMinus, ChevronDown, ChevronUp,
-  Edit3, Save, Loader2, Search, Trash2, Users, RefreshCw, CheckCircle2, Calendar,
+  Edit3, Save, Loader2, Trash2, Users, RefreshCw, CheckCircle2, Calendar,
   MonitorPlay, KeyRound, Mail, UserCog,
 } from 'lucide-react'
 import { HOMEROOMS_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -25,6 +26,7 @@ import {
   linkSmartboardToHomeroom, unlinkSmartboardFromHomeroom,
   updateHomeroomClassTeacher,
 } from '@/lib/homerooms'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
@@ -81,6 +83,11 @@ export default function HomeroomsPage() {
   } | null>(null)
 
   const [addEmail, setAddEmail] = useState('')
+  // Both the student search and the class-teacher search are opened from a
+  // plus button rather than sitting in the panel permanently — the roster is
+  // what an admin comes here to read, so it is what the panel leads with.
+  const [showAddStudent, setShowAddStudent] = useState(false)
+  const [showClassTeacherPicker, setShowClassTeacherPicker] = useState(false)
   const [addMemberSuggestions, setAddMemberSuggestions] = useState<UserProfile[]>([])
   const [addingMember, setAddingMember] = useState(false)
   const [memberError, setMemberError] = useState('')
@@ -195,6 +202,7 @@ export default function HomeroomsPage() {
   const handleExpand = async (id: string) => {
     if (expandedId === id) { setExpandedId(null); setExpandedData(null); return }
     setExpandedId(id); setExpandedData(null); setLoadingExpanded(true); setMemberError(''); setAddEmail('')
+    setShowAddStudent(false); setShowClassTeacherPicker(false)
     // Reset smart board section for the newly expanded homeroom.
     setSmartboard(null); setShowSbForm(false); setSbEmail(''); setSbName(''); setSbPassword(''); setSbError('')
     setShowSbLink(false); setSbLinkEmail('')
@@ -228,7 +236,7 @@ export default function HomeroomsPage() {
     const ok = await updateHomeroomClassTeacher(expandedId, teacher.id)
     if (ok) {
       setClassTeacherProfile(teacher)
-      setClassTeacherQuery(''); setClassTeacherSuggestions([])
+      setClassTeacherQuery(''); setClassTeacherSuggestions([]); setShowClassTeacherPicker(false)
       setExpandedData(prev => (prev ? { ...prev, class_teacher_id: teacher.id } : prev))
       setHomerooms(prev => prev.map(h => (h.id === expandedId ? { ...h, class_teacher_id: teacher.id } : h)))
     }
@@ -372,16 +380,21 @@ export default function HomeroomsPage() {
     if (!ok) setExpandedData(previous)
   }
 
-  if (!user || !profile) return null
-
   const searchLower = search.toLowerCase()
-  const filtered = searchLower
-    ? homerooms.filter((h: Homeroom) =>
-        h.name.toLowerCase().includes(searchLower) ||
-        (h.grade && String(h.grade).includes(searchLower)) ||
-        (h.section && h.section.toLowerCase().includes(searchLower))
-      )
-    : homerooms
+  const filteredHomerooms = useMemo(() => (
+    searchLower
+      ? homerooms.filter((h: Homeroom) =>
+          h.name.toLowerCase().includes(searchLower) ||
+          (h.grade && String(h.grade).includes(searchLower)) ||
+          (h.section && h.section.toLowerCase().includes(searchLower))
+        )
+      : homerooms
+  ), [homerooms, searchLower])
+
+  const { visible: visibleHomerooms, sentinelRef, hasMore, shown, total, loadMore } =
+    useInfiniteScroll(filteredHomerooms, { resetKey: searchLower })
+
+  if (!user || !profile) return null
 
   return (
     <ProtectedLayout adminOnly>
@@ -415,7 +428,24 @@ export default function HomeroomsPage() {
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+
+          <PageToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by name, grade, or section…"
+            actions={isAdmin ? (
+              <button
+                onClick={handleSync} disabled={syncing}
+                className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#D4D4D8] bg-white px-3 text-[11px] font-semibold text-[#18181B] transition-colors hover:border-[#71717A] hover:bg-[#F4F4F5] disabled:opacity-50"
+                title="Auto-enroll students into homerooms"
+              >
+                {syncing ? <Loader2 size={12} className="animate-spin text-[#A1A1AA]" /> : <RefreshCw size={12} className="text-[#71717A]" />}
+                {syncing ? 'Syncing…' : 'Sync Students'}
+              </button>
+            ) : undefined}
+            summary={!loading && homerooms.length > 0 ? `${homerooms.length} homerooms` : undefined}
+          />
 
           {/* Sync result banner */}
           <AnimatePresence>
@@ -526,33 +556,6 @@ export default function HomeroomsPage() {
             )}
           </AnimatePresence>
 
-          {/* Search + Sync toolbar */}
-          {!loading && (
-            <div className="mb-3 flex items-center gap-2">
-              {homerooms.length > 0 && (
-                <div className="relative flex-1">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-                  <input
-                    type="text" value={search} onChange={e => setSearch(e.target.value)}
-                    className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
-                    placeholder="Search by name, grade, or section…"
-                  />
-                  {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]"><X size={13} /></button>}
-                </div>
-              )}
-              {isAdmin && (
-                <button
-                  onClick={handleSync} disabled={syncing}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#D4D4D8] text-sm font-medium text-[#18181B] hover:bg-[#EBEBEB] hover:border-[#71717A] transition-colors disabled:opacity-50 whitespace-nowrap rounded-lg"
-                  title="Auto-enroll students into homerooms"
-                >
-                  {syncing ? <Loader2 size={13} className="animate-spin text-[#A1A1AA]" /> : <RefreshCw size={13} className="text-[#71717A]" />}
-                  {syncing ? 'Syncing…' : 'Sync Students'}
-                </button>
-              )}
-            </div>
-          )}
-
           {/* List */}
           {loading ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] py-16 text-center">
@@ -568,14 +571,14 @@ export default function HomeroomsPage() {
                 <Plus size={14} /> Create Homeroom
               </button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : filteredHomerooms.length === 0 ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-10 text-center">
               <p className="text-sm text-[#71717A]">No homerooms match &ldquo;{search}&rdquo;</p>
             </div>
           ) : (
             <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
+              <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
                 <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name</span>
                 <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade/Section</span>
                 <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Expiry</span>
@@ -583,12 +586,12 @@ export default function HomeroomsPage() {
               </div>
 
               <motion.div variants={containerVariants} initial="hidden" animate="show">
-                {filtered.map(hr => (
+                {visibleHomerooms.map(hr => (
                   <motion.div key={hr.id} variants={itemVariants}>
                     {/* Row */}
                     <div className="flex items-stretch border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors">
                       <div className="w-1 flex-shrink-0 bg-[#D4D4D8]" />
-                      <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                      <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
 
                         {/* Name */}
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleExpand(hr.id)}>
@@ -642,13 +645,28 @@ export default function HomeroomsPage() {
                           transition={{ duration: 0.18 }} className="overflow-hidden"
                         >
                           <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
-                            {/* Class teacher */}
+                            {/* Class teacher — the one person the homeroom
+                                belongs to, so it leads the panel. */}
                             <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1.5">
-                                <UserCog size={12} className="text-indigo-500" /> Class Teacher
-                              </label>
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] flex items-center gap-1.5">
+                                  <UserCog size={12} className="text-indigo-500" /> Class Teacher
+                                </p>
+                                {/* The search box is a tool, not a permanent
+                                    fixture — it appears when asked for, the
+                                    same way the student search below does. */}
+                                {!classTeacherProfile && !showClassTeacherPicker && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowClassTeacherPicker(true)}
+                                    className="flex items-center gap-1 rounded-md border border-dashed border-indigo-300 px-2 py-1 text-[11px] font-semibold text-indigo-600 transition-colors hover:bg-indigo-50"
+                                  >
+                                    <Plus size={11} /> Set class teacher
+                                  </button>
+                                )}
+                              </div>
                               {classTeacherProfile ? (
-                                <div className="flex items-center gap-3 py-2 px-3 bg-white border border-[#E4E4E7]">
+                                <div className="flex items-center gap-3 py-2 px-3 bg-white border border-[#E4E4E7] rounded-lg">
                                   <Avatar avatarUrl={classTeacherProfile.avatar_url} name={classTeacherProfile.full_name} email={classTeacherProfile.email} size={28} />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-[#18181B] truncate">{classTeacherProfile.full_name}</p>
@@ -663,109 +681,46 @@ export default function HomeroomsPage() {
                                     <UserMinus size={13} />
                                   </button>
                                 </div>
+                              ) : showClassTeacherPicker ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <SmartTypeahead
+                                      query={classTeacherQuery}
+                                      onQueryChange={setClassTeacherQuery}
+                                      suggestions={classTeacherSuggestions}
+                                      onSelect={handleSetClassTeacher}
+                                      getKey={(u: UserProfile) => u.id}
+                                      placeholder={savingClassTeacher ? 'Saving…' : 'Search staff by name or email…'}
+                                      className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 rounded-lg focus-within:border-[#27272A] transition-colors"
+                                      renderSuggestion={(u: UserProfile, active: boolean) => (
+                                        <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+                                          <Avatar avatarUrl={u.avatar_url} name={u.full_name} email={u.email} size={26} />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
+                                            <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
+                                          </div>
+                                          <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize bg-[#F4F4F5] text-[#71717A]">
+                                            {u.role}
+                                          </span>
+                                        </div>
+                                      )}
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={() => { setShowClassTeacherPicker(false); setClassTeacherQuery(''); setClassTeacherSuggestions([]) }}
+                                    className="p-2 text-[#71717A] hover:text-[#27272A] hover:bg-[#EBEBEB] rounded-lg transition-colors flex-shrink-0"
+                                    title="Cancel"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
                               ) : (
-                                <SmartTypeahead
-                                  query={classTeacherQuery}
-                                  onQueryChange={setClassTeacherQuery}
-                                  suggestions={classTeacherSuggestions}
-                                  onSelect={handleSetClassTeacher}
-                                  getKey={(u: UserProfile) => u.id}
-                                  placeholder={savingClassTeacher ? 'Saving…' : 'Search staff by name or email…'}
-                                  className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
-                                  renderSuggestion={(u: UserProfile, active: boolean) => (
-                                    <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
-                                      <Avatar avatarUrl={u.avatar_url} name={u.full_name} email={u.email} size={26} />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
-                                        <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
-                                      </div>
-                                      <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize bg-[#F4F4F5] text-[#71717A]">
-                                        {u.role}
-                                      </span>
-                                    </div>
-                                  )}
-                                />
+                                <p className="text-[11px] text-[#A1A1AA]">No class teacher set for this homeroom.</p>
                               )}
                             </div>
 
-                            {/* Add student */}
-                            <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">Add Student or Smart Board</label>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <SmartTypeahead
-                                    query={addEmail}
-                                    onQueryChange={v => { setAddEmail(v); setMemberError('') }}
-                                    suggestions={addMemberSuggestions}
-                                    onSelect={u => handleAddMember(u.email)}
-                                    getKey={(u: UserProfile) => u.id}
-                                    placeholder="Search by name or email…"
-                                    className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
-                                    renderSuggestion={(u: UserProfile, active: boolean) => (
-                                      <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
-                                        <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={26} />
-                                        <div className="min-w-0 flex-1">
-                                          <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
-                                          <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
-                                        </div>
-                                        <span className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize ${u.role === 'smartboard' ? 'bg-indigo-50 text-indigo-600' : 'bg-[#F4F4F5] text-[#71717A]'}`}>
-                                          {u.role === 'smartboard' ? 'board' : 'student'}
-                                        </span>
-                                      </div>
-                                    )}
-                                  />
-                                </div>
-                                <button
-                                  onClick={() => handleAddMember()} disabled={addingMember || !addEmail.trim()}
-                                  className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
-                                >
-                                  {addingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
-                                </button>
-                              </div>
-                              {memberError && <p className="text-xs text-rose-600 mt-1">{memberError}</p>}
-                            </div>
-
-                            {/* Member list */}
-                            {loadingExpanded ? (
-                              <div className="text-center py-4">
-                                <Loader2 size={16} className="animate-spin mx-auto mb-1 text-[#A1A1AA]" />
-                                <p className="text-xs text-[#71717A]">Loading students…</p>
-                              </div>
-                            ) : expandedData?.members.length === 0 ? (
-                              <div className="text-center py-5">
-                                <Users size={24} className="mx-auto mb-1.5 text-[#D4D4D8]" />
-                                <p className="text-sm text-[#71717A]">No students in this homeroom yet</p>
-                              </div>
-                            ) : (
-                              <div className="space-y-px">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2">
-                                  Students ({expandedData?.members.length ?? 0})
-                                </p>
-                                {expandedData?.members.map(m => (
-                                  <div key={m.id} className="flex items-center gap-3 py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors group">
-                                    <Avatar avatarUrl={m.student?.avatar_url} name={m.student?.full_name ?? ''} email={m.student?.email ?? ''} size={30} />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-[#18181B] truncate">{m.student?.full_name}</p>
-                                      <p className="text-xs text-[#71717A] truncate">{m.student?.email}</p>
-                                    </div>
-                                    {m.student?.grade && (
-                                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8] flex-shrink-0">
-                                        Gr.{m.student.grade}{m.student.section}
-                                      </span>
-                                    )}
-                                    <button
-                                      onClick={() => handleRemoveMember(m.student_id)}
-                                      className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
-                                      title="Remove from homeroom"
-                                    >
-                                      <UserMinus size={13} />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Smart Board account */}
+                            {/* Smart Board account — sits with the homeroom's
+                                own accounts, above the student roll. */}
                             <div className="pt-3 border-t border-[#E4E4E7]">
                               <div className="flex items-center justify-between mb-2">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] flex items-center gap-1.5">
@@ -796,7 +751,7 @@ export default function HomeroomsPage() {
                                   <Loader2 size={13} className="animate-spin" /> Loading…
                                 </div>
                               ) : smartboard ? (
-                                <div className="flex items-center gap-3 py-2.5 px-3 bg-white border border-indigo-100 rounded-lg">
+                                <div className="flex items-center gap-3 py-2 px-3 bg-white border border-indigo-100 rounded-lg">
                                   <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
                                     <MonitorPlay size={15} className="text-white" />
                                   </div>
@@ -804,7 +759,7 @@ export default function HomeroomsPage() {
                                     <p className="text-sm font-medium text-[#18181B] truncate">{smartboard.full_name}</p>
                                     <p className="text-xs text-[#71717A] truncate">{smartboard.email}</p>
                                   </div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 flex-shrink-0">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded flex-shrink-0">
                                     Board
                                   </span>
                                 </div>
@@ -815,31 +770,31 @@ export default function HomeroomsPage() {
                                     <input
                                       type="email" value={sbEmail} onChange={e => setSbEmail(e.target.value)}
                                       placeholder="board.grade9a@school.com"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:border-[#27272A]"
                                     />
                                   </div>
                                   <input
                                     type="text" value={sbName} onChange={e => setSbName(e.target.value)}
                                     placeholder="Display name (e.g. Grade 9 A Board)"
-                                    className="w-full border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                    className="w-full border border-[#D4D4D8] bg-white px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-[#27272A]"
                                   />
                                   <div className="relative">
                                     <KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
                                     <input
                                       type="text" value={sbPassword} onChange={e => setSbPassword(e.target.value)}
                                       placeholder="Password (min 6 chars)"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:border-[#27272A]"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
                                   <div className="flex gap-2 pt-0.5">
                                     <button
                                       onClick={handleCreateSmartboard} disabled={sbCreating}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50"
+                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                                     >
                                       {sbCreating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Create Account
                                     </button>
-                                    <button onClick={() => { setShowSbForm(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">
+                                    <button onClick={() => { setShowSbForm(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm rounded-lg hover:bg-[#EBEBEB] transition-colors">
                                       Cancel
                                     </button>
                                   </div>
@@ -853,18 +808,18 @@ export default function HomeroomsPage() {
                                       onChange={e => setSbLinkEmail(e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLinkSmartboard() } }}
                                       placeholder="Existing smart board email"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:border-[#27272A]"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
                                   <div className="flex gap-2 pt-0.5">
                                     <button
                                       onClick={handleLinkSmartboard} disabled={sbLinking || !sbLinkEmail.trim()}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50"
+                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                                     >
                                       {sbLinking ? <Loader2 size={13} className="animate-spin" /> : <MonitorPlay size={13} />} Link Account
                                     </button>
-                                    <button onClick={() => { setShowSbLink(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">
+                                    <button onClick={() => { setShowSbLink(false); setSbError('') }} className="px-3 py-2 border border-[#D4D4D8] text-[#18181B] text-sm rounded-lg hover:bg-[#EBEBEB] transition-colors">
                                       Cancel
                                     </button>
                                   </div>
@@ -889,6 +844,109 @@ export default function HomeroomsPage() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Students — the long list, so it gets a fixed
+                                frame of its own and scrolls inside it rather
+                                than pushing the sections above off screen. */}
+                            <div className="pt-3 border-t border-[#E4E4E7]">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] flex items-center gap-1.5">
+                                  <Users size={12} /> Students
+                                  {!loadingExpanded && (
+                                    <span className="font-normal normal-case text-[#71717A]">({expandedData?.members.length ?? 0})</span>
+                                  )}
+                                </p>
+                                {!showAddStudent && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setShowAddStudent(true); setMemberError('') }}
+                                    className="flex items-center gap-1 rounded-md border border-dashed border-[#A1A1AA] px-2 py-1 text-[11px] font-semibold text-[#52525B] transition-colors hover:bg-[#EBEBEB]"
+                                  >
+                                    <Plus size={11} /> Add student or board
+                                  </button>
+                                )}
+                              </div>
+
+                              {showAddStudent && (
+                                <div className="mb-2">
+                                  <div className="flex gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <SmartTypeahead
+                                        query={addEmail}
+                                        onQueryChange={v => { setAddEmail(v); setMemberError('') }}
+                                        suggestions={addMemberSuggestions}
+                                        onSelect={u => handleAddMember(u.email)}
+                                        getKey={(u: UserProfile) => u.id}
+                                        placeholder="Search by name or email…"
+                                        className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 rounded-lg focus-within:border-[#27272A] transition-colors"
+                                        renderSuggestion={(u: UserProfile, active: boolean) => (
+                                          <div className={`flex items-center gap-3 px-3 py-2.5 transition-colors ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
+                                            <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={26} />
+                                            <div className="min-w-0 flex-1">
+                                              <p className="text-sm font-medium text-[#27272A] truncate">{u.full_name}</p>
+                                              <p className="text-xs text-[#A1A1AA] truncate">{u.email}</p>
+                                            </div>
+                                            <span className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 capitalize ${u.role === 'smartboard' ? 'bg-indigo-50 text-indigo-600' : 'bg-[#F4F4F5] text-[#71717A]'}`}>
+                                              {u.role === 'smartboard' ? 'board' : 'student'}
+                                            </span>
+                                          </div>
+                                        )}
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={() => handleAddMember()} disabled={addingMember || !addEmail.trim()}
+                                      className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                                    >
+                                      {addingMember ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
+                                    </button>
+                                    <button
+                                      onClick={() => { setShowAddStudent(false); setAddEmail(''); setAddMemberSuggestions([]); setMemberError('') }}
+                                      className="p-2 text-[#71717A] hover:text-[#27272A] hover:bg-[#EBEBEB] rounded-lg transition-colors flex-shrink-0"
+                                      title="Close"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                  {memberError && <p className="text-xs text-rose-600 mt-1">{memberError}</p>}
+                                </div>
+                              )}
+
+                              {loadingExpanded ? (
+                                <div className="text-center py-4">
+                                  <Loader2 size={16} className="animate-spin mx-auto mb-1 text-[#A1A1AA]" />
+                                  <p className="text-xs text-[#71717A]">Loading students…</p>
+                                </div>
+                              ) : expandedData?.members.length === 0 ? (
+                                <div className="text-center py-5 border border-dashed border-[#D4D4D8] rounded-lg bg-white">
+                                  <Users size={24} className="mx-auto mb-1.5 text-[#D4D4D8]" />
+                                  <p className="text-sm text-[#71717A]">No students in this homeroom yet</p>
+                                </div>
+                              ) : (
+                                <div className="max-h-[360px] overflow-y-auto rounded-lg border border-[#E4E4E7] bg-white divide-y divide-[#F4F4F5]">
+                                  {expandedData?.members.map(m => (
+                                    <div key={m.id} className="flex items-center gap-3 py-2 px-3 hover:bg-[#F7F7F5] transition-colors group">
+                                      <Avatar avatarUrl={m.student?.avatar_url} name={m.student?.full_name ?? ''} email={m.student?.email ?? ''} size={28} />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-[#18181B] truncate">{m.student?.full_name}</p>
+                                        <p className="text-xs text-[#71717A] truncate">{m.student?.email}</p>
+                                      </div>
+                                      {m.student?.grade && (
+                                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#F4F4F5] text-[#52525B] border border-[#D4D4D8] rounded flex-shrink-0">
+                                          Gr.{m.student.grade}{m.student.section}
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={() => handleRemoveMember(m.student_id)}
+                                        className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all flex-shrink-0"
+                                        title="Remove from homeroom"
+                                      >
+                                        <UserMinus size={13} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </motion.div>
                       )}
@@ -896,6 +954,11 @@ export default function HomeroomsPage() {
                   </motion.div>
                 ))}
               </motion.div>
+
+              <ListSentinel
+                sentinelRef={sentinelRef} hasMore={hasMore}
+                shown={shown} total={total} onLoadMore={loadMore} noun="homerooms"
+              />
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -8,6 +8,7 @@ import Avatar from '@/components/Avatar'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import PageBanner from '@/components/PageBanner'
+import PageToolbar, { ListSentinel } from '@/components/PageToolbar'
 import { useRouter } from 'next/navigation'
 import { Users, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Trash2, Save, Loader2, Search, CalendarX, Clock, Crown } from 'lucide-react'
 import { TEAMS_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -15,6 +16,8 @@ import {
   TeamWithDetails, fetchAllTeams, createTeam, updateTeam, deleteTeam,
   addTeamMemberByEmail, removeTeamMember, addTeamCoordinator, removeTeamCoordinator,
 } from '@/lib/teams'
+import { getDisplayRole } from '@/lib/supabase'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,6 +33,8 @@ const ROLE_BADGE: Record<string, string> = {
   coordinator: 'bg-blue-50 text-blue-700 border-blue-200',
   teacher:     'bg-teal-50 text-teal-700 border-teal-200',
   student:     'bg-[#F4F4F5] text-[#52525B] border-[#D4D4D8]',
+  smartboard:  'bg-indigo-50 text-indigo-700 border-indigo-200',
+  driver:      'bg-orange-50 text-orange-700 border-orange-200',
 }
 
 export default function TeacherTeamsPage() {
@@ -150,20 +155,31 @@ export default function TeacherTeamsPage() {
     await loadTeams()
   }
 
-  if (!user || !profile) return null
-
-  const today = new Date().toISOString().split('T')[0]
-  const isTeamExpired = (t: TeamWithDetails) => !!(t.end_date && t.end_date < today)
-
   const searchLower = teamSearch.trim().toLowerCase()
-  const activeTeams = teams.filter(t => !isTeamExpired(t))
-  const filteredTeams = searchLower ? activeTeams.filter(t => t.name.toLowerCase().includes(searchLower) || (t.description && t.description.toLowerCase().includes(searchLower))) : activeTeams
-
-  const expiredTeams = teams.filter(t => isTeamExpired(t)).sort((a, b) => (b.end_date! > a.end_date! ? 1 : -1))
   const expiredSearchLower = expiredSearch.trim().toLowerCase()
-  const filteredExpiredTeams = expiredSearchLower
-    ? expiredTeams.filter(t => t.name.toLowerCase().includes(expiredSearchLower) || (t.description && t.description.toLowerCase().includes(expiredSearchLower)))
-    : expiredTeams.slice(0, 5)
+
+  const { activeTeams, filteredTeams, expiredTeams, filteredExpiredTeams } = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const isTeamExpired = (t: TeamWithDetails) => !!(t.end_date && t.end_date < today)
+
+    const activeTeams = teams.filter(t => !isTeamExpired(t))
+    const expiredTeams = teams.filter(t => isTeamExpired(t)).sort((a, b) => (b.end_date! > a.end_date! ? 1 : -1))
+    return {
+      activeTeams,
+      filteredTeams: searchLower
+        ? activeTeams.filter(t => t.name.toLowerCase().includes(searchLower) || (t.description && t.description.toLowerCase().includes(searchLower)))
+        : activeTeams,
+      expiredTeams,
+      filteredExpiredTeams: expiredSearchLower
+        ? expiredTeams.filter(t => t.name.toLowerCase().includes(expiredSearchLower) || (t.description && t.description.toLowerCase().includes(expiredSearchLower)))
+        : expiredTeams.slice(0, 5),
+    }
+  }, [teams, searchLower, expiredSearchLower])
+
+  const { visible: visibleTeams, sentinelRef, hasMore, shown, total, loadMore } =
+    useInfiniteScroll(filteredTeams, { resetKey: searchLower })
+
+  if (!user || !profile) return null
 
   return (
     <ProtectedLayout adminOnly>
@@ -197,7 +213,16 @@ export default function TeacherTeamsPage() {
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+
+          <PageToolbar
+            search={teamSearch}
+            onSearchChange={setTeamSearch}
+            searchPlaceholder="Search teams by name…"
+            summary={!loading && teams.length > 0
+              ? `${activeTeams.length} active · ${expiredTeams.length} expired`
+              : undefined}
+          />
 
           {/* Create form */}
           <AnimatePresence>
@@ -252,19 +277,6 @@ export default function TeacherTeamsPage() {
             )}
           </AnimatePresence>
 
-          {/* Search bar */}
-          {!loading && teams.length > 0 && (
-            <div className="mb-3 relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-              <input
-                type="text" value={teamSearch} onChange={e => setTeamSearch(e.target.value)}
-                className="w-full border border-[#D4D4D8] bg-white pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
-                placeholder="Search teams by name…"
-              />
-              {teamSearch && <button onClick={() => setTeamSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A]"><X size={13} /></button>}
-            </div>
-          )}
-
           {/* List */}
           {loading ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] py-16 text-center">
@@ -291,7 +303,7 @@ export default function TeacherTeamsPage() {
               {(filteredTeams.length > 0 || (activeTeams.length === 0 && expiredTeams.length > 0)) && filteredTeams.length > 0 && (
                 <div className="border border-[#D4D4D8] rounded-xl overflow-hidden mb-3">
                   {/* Column headers */}
-                  <div className="bg-[#27272A] px-4 py-2.5 hidden sm:flex items-center gap-3">
+                  <div className="bg-[#27272A] px-4 py-2 hidden sm:flex items-center gap-3">
                     <span className="w-8 flex-shrink-0" />
                     <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name</span>
                     <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Coordinator</span>
@@ -301,7 +313,7 @@ export default function TeacherTeamsPage() {
                   </div>
 
                   <motion.div variants={containerVariants} initial="hidden" animate="show">
-                    {filteredTeams.map(team => (
+                    {visibleTeams.map(team => (
                       <TeamRow
                         key={team.id}
                         team={team}
@@ -324,6 +336,11 @@ export default function TeacherTeamsPage() {
                       />
                     ))}
                   </motion.div>
+
+                  <ListSentinel
+                    sentinelRef={sentinelRef} hasMore={hasMore}
+                    shown={shown} total={total} onLoadMore={loadMore} noun="teams"
+                  />
                 </div>
               )}
 
@@ -502,7 +519,7 @@ function TeamRow({
         onClick={onExpand}
       >
         <div className={`w-1 flex-shrink-0 ${expired ? 'bg-[#A1A1AA]' : 'bg-[#D4D4D8]'}`} />
-        <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+        <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
 
           {/* Initials avatar */}
           <div className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center text-white text-sm font-bold ${expired ? 'bg-[#71717A]' : 'bg-[#27272A]'}`}>
@@ -630,9 +647,9 @@ function TeamRow({
                           const isTeamCoordinator = team.coordinators.some(c => c.id === member.user_id)
                           const canRemove = isAdmin && !expired && member.user?.role !== 'principal' && member.user?.role !== 'admin'
                           return (
-                            <div key={member.id} className="flex items-center justify-between py-2.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                            <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                               <div className="flex items-center gap-3 min-w-0">
-                                <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={30} userId={member.user?.id} />
+                                <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={28} userId={member.user?.id} />
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium text-[#18181B] truncate">{member.user?.full_name || 'Unknown'}</p>
                                   <p className="text-xs text-[#71717A] truncate">{member.user?.email}</p>
@@ -642,8 +659,10 @@ function TeamRow({
                                     <Crown size={9} className="inline" /> Coordinator
                                   </span>
                                 ) : member.user?.role ? (
-                                  <span className={`hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 ${ROLE_BADGE[member.user.role] ?? ROLE_BADGE.student}`}>
-                                    {member.user.role}
+                                  // The admin-set display_role ("HM") when the
+                                  // person has one, else the standard label.
+                                  <span className={`hidden sm:inline whitespace-nowrap text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border flex-shrink-0 ${ROLE_BADGE[member.user.role] ?? ROLE_BADGE.student}`}>
+                                    {getDisplayRole(member.user)}
                                   </span>
                                 ) : null}
                               </div>

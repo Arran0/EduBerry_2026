@@ -317,6 +317,32 @@ export async function fetchAllClassrooms(): Promise<Classroom[]> {
   return (data ?? []) as Classroom[]
 }
 
+/**
+ * Member count per classroom, counted in Postgres.
+ *
+ * Deliberately an aggregate RPC rather than selecting the membership rows and
+ * counting them here: classroom_members is ~10k rows across a few hundred
+ * classrooms, and PostgREST caps a plain select at 1000, so the browser-side
+ * tally silently reported 0 for every classroom past the cap. RLS still
+ * applies (the function is SECURITY INVOKER) — see
+ * supabase-migrations/classroom_member_counts_rpc.sql.
+ */
+async function fetchMemberCounts(classroomIds: string[]): Promise<Record<string, number>> {
+  if (classroomIds.length === 0) return {}
+  const { data, error } = await supabase.rpc('classroom_member_counts', {
+    p_classroom_ids: classroomIds,
+  })
+  if (error) {
+    console.error('Failed to count classroom members:', error.message)
+    return {}
+  }
+  const counts: Record<string, number> = {}
+  for (const row of (data ?? []) as { classroom_id: string; member_count: number }[]) {
+    counts[row.classroom_id] = row.member_count
+  }
+  return counts
+}
+
 export async function fetchClassroomsForUser(
   userId: string,
   userRole: UserRole,
@@ -353,16 +379,7 @@ export async function fetchClassroomsForUser(
       return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
     }
 
-    const classroomIds = (data ?? []).map((c: Classroom) => c.id)
-    const { data: members } = await supabase
-      .from('classroom_members')
-      .select('classroom_id, user_id')
-      .in('classroom_id', classroomIds.length > 0 ? classroomIds : ['__none__'])
-
-    const countMap: Record<string, number> = {}
-    for (const m of members ?? []) {
-      countMap[m.classroom_id] = (countMap[m.classroom_id] || 0) + 1
-    }
+    const countMap = await fetchMemberCounts((data ?? []).map((c: Classroom) => c.id))
 
     return (data ?? []).map((c: Classroom) => ({
       ...c,
@@ -405,17 +422,8 @@ export async function fetchClassroomsForUser(
     return (data ?? []).map((c: Classroom) => ({ ...c, members: [], member_count: 0 }))
   }
 
-  // Fetch member counts only for the returned classroom IDs
-  const returnedIds = (data ?? []).map((c: Classroom) => c.id)
-  const { data: allMembers } = await supabase
-    .from('classroom_members')
-    .select('classroom_id, user_id')
-    .in('classroom_id', returnedIds)
-
-  const countMap: Record<string, number> = {}
-  for (const m of allMembers ?? []) {
-    countMap[m.classroom_id] = (countMap[m.classroom_id] || 0) + 1
-  }
+  // Member counts only for the returned classroom IDs
+  const countMap = await fetchMemberCounts((data ?? []).map((c: Classroom) => c.id))
 
   return (data ?? []).map((c: Classroom) => ({
     ...c,

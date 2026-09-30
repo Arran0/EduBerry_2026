@@ -5,12 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import PageBanner from '@/components/PageBanner'
+import PageToolbar, { ListSentinel, ToolbarField, toolbarSelect, toolbarSelectWithIcon } from '@/components/PageToolbar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import type { AnnouncementBannerConfig } from '@/lib/pageConfig'
 import {
   GraduationCap,
-  Search,
   X,
   Loader2,
   Check,
@@ -42,6 +42,7 @@ import {
 import { UserRole } from '@/lib/supabase'
 import { upsertStudentDetails } from '@/lib/studentDetails'
 import { GRADE_OPTIONS, gradeLabel } from '@/lib/grades'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
 const STUDENT_ROLES: UserRole[] = ['student']
 
@@ -197,6 +198,13 @@ export default function StudentProfileManagerPage() {
   const filtersActive = gradeFilter !== 'all' || sectionFilter !== 'all' || statusFilter !== 'all'
   const clearFilters = () => { setGradeFilter('all'); setSectionFilter('all'); setStatusFilter('all') }
 
+  // A thousand students is a thousand animated rows on mount — render a page
+  // at a time and let scrolling ask for the next one.
+  const { visible: visibleProfiles, sentinelRef, hasMore, shown, total, loadMore } =
+    useInfiniteScroll(filteredProfiles, {
+      resetKey: `${searchQuery}|${gradeFilter}|${sectionFilter}|${statusFilter}|${sortBy}`,
+    })
+
   const handleDeleteProfile = async (userId: string, name: string) => {
     if (!window.confirm(`Delete account for "${name}"? This cannot be undone.`)) return
     const result = await deleteUser(userId)
@@ -325,88 +333,49 @@ export default function StudentProfileManagerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.3s ease, filter 0.3s ease' }}>
 
-            {/* Search + filter & sort — one row on desktop, search then a
-                sleeker filter row underneath on a narrow phone. */}
-            <div className="mb-4 relative z-10 flex flex-col sm:flex-row sm:items-center gap-2" style={{ marginTop: '-22px' }}>
-              <div className="relative flex-1 min-w-0">
-                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full border border-[#E4E4E7] bg-white pl-10 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors placeholder:text-[#A1A1AA] rounded-xl shadow-lg"
-                  placeholder="Search by name, email, grade or section…"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#71717A] hover:text-[#27272A] p-0.5 rounded">
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
+            <PageToolbar
+              search={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search by name, email, grade or section…"
+              onClearFilters={filtersActive ? clearFilters : undefined}
+              summary={!loading ? `${shown} of ${total} shown · ${profiles.length} students on the roll` : undefined}
+              controls={
+                <>
+                  <ToolbarField icon={<Filter size={10} />} className="sm:w-32">
+                    <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} className={toolbarSelectWithIcon}>
+                      {GRADE_FILTER_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}{gradeCounts[o.value] ? ` (${gradeCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
+                        </option>
+                      ))}
+                    </select>
+                  </ToolbarField>
 
-              {/* Every control shrinks to share the row rather than wrapping
-                  or scrolling — each is flex-1 with its own text truncated,
-                  so all of them stay readable-but-tight on one line even on
-                  a narrow phone. */}
-              <div className="flex items-center gap-1 flex-nowrap w-full sm:w-auto min-w-0">
-                <div className="relative flex-1 min-w-0">
-                  <Filter size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-                  <select
-                    value={gradeFilter}
-                    onChange={e => setGradeFilter(e.target.value)}
-                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
-                  >
-                    {GRADE_FILTER_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}{gradeCounts[o.value] ? ` (${gradeCounts[o.value]})` : o.value === 'all' ? '' : ' (0)'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <ToolbarField className="sm:w-32">
+                    <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} className={toolbarSelect}>
+                      <option value="all">All Sections</option>
+                      {sectionFilterOptions.map(sec => (
+                        <option key={sec} value={sec}>Section {sec} ({sectionCounts[sec]})</option>
+                      ))}
+                    </select>
+                  </ToolbarField>
 
-                <select
-                  value={sectionFilter}
-                  onChange={e => setSectionFilter(e.target.value)}
-                  className="flex-1 min-w-0 px-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
-                >
-                  <option value="all">All Sections</option>
-                  {sectionFilterOptions.map(s => (
-                    <option key={s} value={s}>Section {s} ({sectionCounts[s]})</option>
-                  ))}
-                </select>
+                  <ToolbarField className="sm:w-32">
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} className={toolbarSelect}>
+                      <option value="all">All Statuses</option>
+                      <option value="active">Active Only</option>
+                      <option value="inactive">Banned Only</option>
+                    </select>
+                  </ToolbarField>
 
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                  className="flex-1 min-w-0 px-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="active">Active Only</option>
-                  <option value="inactive">Banned Only</option>
-                </select>
-
-                <div className="relative flex-1 min-w-0">
-                  <ArrowUpDown size={9} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-                  <select
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value as SortKey)}
-                    className="w-full pl-4 pr-1 py-1 text-[9px] sm:text-[11px] font-medium border border-[#E4E4E7] bg-white rounded-md sm:rounded-lg focus:outline-none focus:border-[#27272A] transition-colors appearance-none cursor-pointer truncate"
-                  >
-                    {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-
-                {filtersActive && (
-                  <button
-                    onClick={clearFilters}
-                    aria-label="Clear filters"
-                    className="flex-shrink-0 flex items-center gap-1 px-1.5 py-1 text-[9px] sm:text-[11px] font-medium text-[#71717A] hover:text-[#18181B] border border-transparent hover:border-[#E4E4E7] rounded-md sm:rounded-lg transition-colors"
-                  >
-                    <X size={10} /> <span className="hidden sm:inline">Clear</span>
-                  </button>
-                )}
-              </div>
-            </div>
+                  <ToolbarField icon={<ArrowUpDown size={10} />} className="sm:w-36">
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value as SortKey)} className={toolbarSelectWithIcon}>
+                      {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </ToolbarField>
+                </>
+              }
+            />
 
             {/* List */}
             {loading ? (
@@ -423,7 +392,7 @@ export default function StudentProfileManagerPage() {
             ) : (
               <div className="border border-[#E4E4E7] overflow-hidden rounded-xl">
                 {/* Column headers */}
-                <div className="bg-[#27272A] pl-1 pr-4 py-2.5 hidden sm:flex items-center gap-3">
+                <div className="bg-[#27272A] pl-1 pr-4 py-2 hidden sm:flex items-center gap-3">
                   <span className="w-9 flex-shrink-0" />
                   <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Name / Email</span>
                   <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Grade</span>
@@ -431,16 +400,16 @@ export default function StudentProfileManagerPage() {
                 </div>
 
                 <motion.div variants={containerVariants} initial="hidden" animate="show">
-                  {filteredProfiles.map(p => (
+                  {visibleProfiles.map(p => (
                     <motion.div key={p.id} variants={itemVariants}>
                       <div
                         className="flex items-stretch border-b border-[#F4F4F5] last:border-b-0 hover:bg-[#FAFAFA] transition-colors cursor-pointer group"
                         onClick={() => openProfileCard(p.id)}
                       >
                         <div className="w-1 flex-shrink-0 bg-blue-500" />
-                        <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                        <div className="flex items-center gap-3 flex-1 px-4 py-2 min-w-0">
                           <div className="flex-shrink-0">
-                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={34} userId={p.id} />
+                            <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={30} userId={p.id} />
                           </div>
 
                           <div className="flex-1 min-w-0">
@@ -482,6 +451,11 @@ export default function StudentProfileManagerPage() {
                     </motion.div>
                   ))}
                 </motion.div>
+
+                <ListSentinel
+                  sentinelRef={sentinelRef} hasMore={hasMore}
+                  shown={shown} total={total} onLoadMore={loadMore} noun="students"
+                />
               </div>
             )}
           </div>
