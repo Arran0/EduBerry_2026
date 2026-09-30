@@ -6,6 +6,7 @@ import {
   CertContext, placeholderValues, fmtDate, numberToWordsDate, resolvePlaceholders,
 } from '@/lib/certificates'
 import { CertificateShell, CertTable, Field, certStyles, CertCol } from './CertificateShell'
+import { markPercent, roundMark } from '@/lib/reportCardGrading'
 
 // One component per certificate type, each composing CertificateShell. They read
 // everything from the gathered CertContext (profile + student_details + homeroom
@@ -185,12 +186,15 @@ const MARK_COLS: CertCol[] = [
 
 function markRows(ctx: CertContext): Record<string, string>[] {
   return ctx.marks.map(m => {
-    const pct = m.marks != null && m.max_marks > 0 ? Math.round((m.marks / m.max_marks) * 100) : null
+    // A printed document quotes whole marks, and its percentage comes off the
+    // whole figures beside it — see roundMark.
+    const exact = m.marks != null ? markPercent(m.marks, m.max_marks) : null
+    const pct = exact != null ? Math.round(exact) : null
     return {
       subject: m.classroom_title,
       assessment: m.assessment_title,
-      marks: m.marks != null ? String(m.marks) : '—',
-      max: String(m.max_marks),
+      marks: m.marks != null ? String(roundMark(m.marks)) : '—',
+      max: String(roundMark(m.max_marks)),
       pct: pct != null ? `${pct}%` : '—',
     }
   })
@@ -205,7 +209,8 @@ function MarksDoc({ ctx, title }: DocProps & { title: string }) {
     },
     { got: 0, max: 0 }
   )
-  const overallPct = totals.max > 0 ? Math.round((totals.got / totals.max) * 100) : null
+  const overallExact = markPercent(totals.got, totals.max)
+  const overallPct = overallExact != null ? Math.round(overallExact) : null
   return (
     <CertificateShell {...shellProps(ctx)} title={title}>
       <Text style={certStyles.para}>
@@ -218,7 +223,7 @@ function MarksDoc({ ctx, title }: DocProps & { title: string }) {
       )}
       {overallPct != null && (
         <Text style={[certStyles.para, { marginTop: 10, fontFamily: 'Times-Bold' }]}>
-          Overall: {totals.got} / {totals.max} ({overallPct}%)
+          Overall: {roundMark(totals.got)} / {roundMark(totals.max)} ({overallPct}%)
         </Text>
       )}
     </CertificateShell>
@@ -241,7 +246,7 @@ export function SubjectAnalysisDoc({ ctx }: DocProps) {
   const rows = [...bySubject.entries()].map(([subject, s]) => ({
     subject,
     assessments: String(s.n),
-    avg: `${Math.round((s.got / s.max) * 100)}%`,
+    avg: `${Math.round(markPercent(s.got, s.max) ?? 0)}%`,
   }))
   return (
     <CertificateShell {...shellProps(ctx)} title="Subject-wise Analysis">

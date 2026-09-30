@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { gradeLetter, rescaleMark } from './reportCardGrading'
+import { gradeLetter, markPercent, rescaleMark, roundMark } from './reportCardGrading'
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -58,5 +58,46 @@ describe('gradeLetter', () => {
     expect(gradeLetter(75).letter).toBe('B1')
     expect(gradeLetter(33).letter).toBe('D')
     expect(gradeLetter(10).letter).toBe('E')
+  })
+})
+
+describe('roundMark', () => {
+  it('takes a half up, which is how marks are entered', () => {
+    expect(roundMark(17.5)).toBe(18)
+    expect(roundMark(8.5)).toBe(9)
+    expect(roundMark(0.5)).toBe(1)
+  })
+
+  it('rounds the finer fractions rescaling leaves behind', () => {
+    expect(roundMark(18.79)).toBe(19)
+    expect(roundMark(18.2)).toBe(18)
+  })
+
+  it('leaves a whole mark alone', () => {
+    expect(roundMark(20)).toBe(20)
+    expect(roundMark(0)).toBe(0)
+  })
+
+  it('passes a missing mark through rather than calling it zero', () => {
+    expect(roundMark(null)).toBeNull()
+    expect(roundMark(undefined)).toBeNull()
+    expect(roundMark(Number.NaN)).toBeNull()
+  })
+})
+
+describe('markPercent', () => {
+  it('divides the two figures the page actually shows', () => {
+    // 17.5/20 is printed as 18/20, so the percentage has to be 90, not 87.5 —
+    // otherwise dividing the numbers on the card contradicts the card.
+    expect(markPercent(17.5, 20)).toBe(90)
+  })
+
+  it('bands on the figure it printed', () => {
+    expect(gradeLetter(markPercent(17.5, 20)!).letter).toBe('A2')
+  })
+
+  it('has no answer without a maximum', () => {
+    expect(markPercent(10, 0)).toBeNull()
+    expect(markPercent(10, 0.4)).toBeNull()
   })
 })

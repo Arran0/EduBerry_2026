@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { getDisplayRole, getRoleBadgeColor, supabase } from '@/lib/supabase'
+import { roundMark } from '@/lib/reportCardGrading'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
@@ -293,9 +294,9 @@ export default function ProfilePage() {
                                     <p className="text-xs text-slate-600 truncate flex-1">{m.assessment_title}</p>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       <span className={`text-xs font-bold ${m.marks === null ? 'text-slate-400' : m.marks / m.max_marks >= 0.75 ? 'text-green-600' : m.marks / m.max_marks >= 0.5 ? 'text-amber-600' : 'text-red-600'}`}>
-                                        {m.marks ?? '—'}
+                                        {roundMark(m.marks) ?? '—'}
                                       </span>
-                                      <span className="text-[10px] text-slate-400">/ {m.max_marks}</span>
+                                      <span className="text-[10px] text-slate-400">/ {roundMark(m.max_marks)}</span>
                                     </div>
                                   </div>
                                 ))}

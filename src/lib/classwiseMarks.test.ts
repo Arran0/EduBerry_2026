@@ -327,3 +327,53 @@ describe('exportSubjects', () => {
     expect(exportSubjects(subjects, ['c-mat', 'c-phy']).map(s => s.subject)).toEqual(['Physics', 'Maths'])
   })
 })
+
+describe('buildExportTable with half marks', () => {
+  // Half marks are the commonest fraction in the marksheet, so the workbook has
+  // to state them the way a report card does: whole, with the percentage taken
+  // from the whole figures.
+  const halves = subject('c-half', 'Biology', 20, { Lab: 10, Examination: 10 })
+  const halfStudents = [ada]
+  const halfCells: Record<string, Record<string, ClasswiseCellData>> = {
+    's-ada': {
+      'c-half': cell(17.5, 20, [
+        { name: 'Lab', obtained: 8.5, max: 10 },
+        { name: 'Examination', obtained: 9, max: 10 },
+      ]),
+    },
+  }
+
+  it('states a half mark as a whole one', () => {
+    const t = buildExportTable(halfStudents, [halves], halfCells, { includeComponents: false, sort: byName })
+    expect(t.rows[0][3]).toBe('18 (90.0%)')
+  })
+
+  it('takes the percentage from the mark it printed, not the one it was given', () => {
+    const t = buildExportTable(halfStudents, [halves], halfCells, { includeComponents: false, sort: byName })
+    // 17.5/20 is 87.5%, but the sheet says 18, so it must say 90.0%.
+    expect(t.rows[0][3]).not.toContain('87.5')
+  })
+
+  it('rounds the overall and its band off the rounded total', () => {
+    const t = buildExportTable(halfStudents, [halves], halfCells, { includeComponents: false, sort: byName })
+    expect(t.rows[0].slice(4)).toEqual(['18 (90.0%)', '90.0%', 'A2'])
+  })
+
+  it('rounds each component on its own, so a split can show its parts whole', () => {
+    const t = buildExportTable(halfStudents, [halves], halfCells, { includeComponents: true, sort: byName })
+    // Lab 8.5 rounds up to 9 on its own line; the subject total stays the
+    // rounded true total (18), not the 19 its rounded parts add up to.
+    expect(t.rows[0].slice(3, 6)).toEqual(['9 (90.0%)', '9 (90.0%)', '18 (90.0%)'])
+  })
+
+  it('leaves no decimal in any mark, only in the percentages', () => {
+    for (const includeComponents of [false, true]) {
+      const t = buildExportTable(halfStudents, [halves], halfCells, { includeComponents, sort: byName })
+      // A mark cell reads "18 (90.0%)" — the figures before the bracket are
+      // the marks, and none of them may carry a fraction.
+      const markCells = t.rows[0].filter(c => c.includes('('))
+      expect(markCells.length).toBeGreaterThan(0)
+      for (const c of markCells) expect(c.split(' (')[0]).not.toContain('.')
+    }
+  })
+})

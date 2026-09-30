@@ -32,7 +32,7 @@ import { useKeyboardInset } from '@/hooks/useKeyboardInset'
 import { useProfileCard } from '@/contexts/ProfileCardContext'
 import { recordReportCardVisit, getRecentReportCardStudentIds } from '@/lib/reportCardVisits'
 import { gradeLabel } from '@/lib/grades'
-import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
+import { gradeLetter, formatShortDate, markPercent, roundMark } from '@/lib/reportCardGrading'
 import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import {
   ReportCardPublication, canPublishReportCards, fetchPublication, fetchPublishedKeys,
@@ -1263,7 +1263,7 @@ function ClasswiseMarksView({
                               <SortArrow active={isSubjectSort(s.classroomId)} dir={sort.dir} />
                             </span>
                             <span className="text-[8px] sm:text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
-                              /{num(s.maxMarks)}
+                              /{roundMark(s.maxMarks)}
                             </span>
                           </button>
                         </th>
@@ -1280,7 +1280,7 @@ function ClasswiseMarksView({
                             <SortArrow active={sort.by === 'overall'} dir={sort.dir} />
                           </span>
                           <span className="text-[8px] sm:text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
-                            /{num(overallColumnMax)}
+                            /{roundMark(overallColumnMax)}
                           </span>
                         </button>
                       </th>
@@ -1289,7 +1289,9 @@ function ClasswiseMarksView({
                   <tbody>
                     {sortedStudents.map((student, idx) => {
                       const total = overallOf(student.id, subjects, cellData)
-                      const overallPct = total.max > 0 ? (total.obtained / total.max) * 100 : null
+                      // One student's row: every figure is a whole mark, and
+                      // the percentage comes off those whole marks (roundMark).
+                      const overallPct = markPercent(total.obtained, total.max)
                       const overallGrade = overallPct != null ? gradeLetter(overallPct) : null
 
                       return (
@@ -1325,15 +1327,15 @@ function ClasswiseMarksView({
                             if (!cell?.hasAnyMark) {
                               return <td key={s.classroomId} className={`px-1.5 sm:px-3 py-1.5 text-center text-slate-300 ${isSubjectSort(s.classroomId) ? 'bg-slate-50/80' : ''}`}>—</td>
                             }
-                            const pct = cell.max > 0 ? (cell.obtained / cell.max) * 100 : 0
+                            const pct = markPercent(cell.obtained, cell.max) ?? 0
                             const g = gradeLetter(pct)
                             const short = Math.abs(cell.max - s.maxMarks) > 0.005
                             return (
                               <td key={s.classroomId} className={`px-1.5 sm:px-3 py-1.5 text-center align-top ${isSubjectSort(s.classroomId) ? 'bg-slate-50/80' : ''}`}>
                                 <div className="flex flex-col items-center leading-tight">
                                   <span className="font-bold text-slate-800 tabular-nums">
-                                    {num(cell.obtained)}
-                                    {short && <span className="font-normal text-slate-400">/{num(cell.max)}</span>}
+                                    {roundMark(cell.obtained)}
+                                    {short && <span className="font-normal text-slate-400">/{roundMark(cell.max)}</span>}
                                   </span>
                                   <span className="flex items-center gap-1 text-slate-500 tabular-nums text-[9px] sm:text-[10px]">
                                     {pct.toFixed(1)}%
@@ -1347,7 +1349,7 @@ function ClasswiseMarksView({
                                         <span key={part.name} className="flex items-baseline justify-center gap-1 text-[8px] sm:text-[9px] text-slate-400 leading-tight">
                                           <span className="truncate max-w-[52px] sm:max-w-[70px]">{part.name}</span>
                                           <span className="tabular-nums font-semibold text-slate-500">
-                                            {num(part.obtained)}/{num(part.max)}
+                                            {roundMark(part.obtained)}/{roundMark(part.max)}
                                           </span>
                                         </span>
                                       ))}
@@ -1362,9 +1364,9 @@ function ClasswiseMarksView({
                             {overallPct != null ? (
                               <div className="flex flex-col items-center leading-tight">
                                 <span className="font-bold text-slate-800 tabular-nums">
-                                  {num(total.obtained)}
+                                  {roundMark(total.obtained)}
                                   {Math.abs(total.max - overallColumnMax) > 0.005 && (
-                                    <span className="font-normal text-slate-400">/{num(total.max)}</span>
+                                    <span className="font-normal text-slate-400">/{roundMark(total.max)}</span>
                                   )}
                                 </span>
                                 <span className="flex items-center gap-1 text-slate-600 font-semibold tabular-nums text-[9px] sm:text-[10px]">
@@ -1676,7 +1678,7 @@ function ReportCard({
 
   const totalObtained = subjects.reduce((s, r) => s + r.obtained, 0)
   const totalMax = subjects.reduce((s, r) => s + r.max, 0)
-  const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
+  const overallPct = markPercent(totalObtained, totalMax) ?? 0
   const overallGrade = gradeLetter(overallPct)
 
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
@@ -1768,7 +1770,11 @@ function ReportCard({
           </thead>
           <tbody>
             {subjects.map((row, rowIdx) => {
-              const pct = row.max > 0 ? (row.obtained / row.max) * 100 : null
+              // Whole marks on the page, and a percentage taken from those
+              // same two whole numbers — see roundMark.
+              const obtained = roundMark(row.obtained) ?? 0
+              const max = roundMark(row.max) ?? 0
+              const pct = markPercent(row.obtained, row.max)
               const grade = pct != null ? gradeLetter(pct) : null
               return (
                 <tr key={row.classroomId} className={`border-b border-slate-100 transition-colors ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50`}>
@@ -1779,13 +1785,13 @@ function ReportCard({
                     <AssessmentBreakdown entries={row.assessments} />
                   </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top font-bold text-slate-800 tabular-nums">
-                    {row.hasAnyMark ? row.obtained : '—'}
+                    {row.hasAnyMark ? obtained : '—'}
                     {row.hasAnyMark && (
-                      <span className="sm:hidden font-normal text-slate-400">/{row.max}</span>
+                      <span className="sm:hidden font-normal text-slate-400">/{max}</span>
                     )}
                   </td>
                   <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center align-top text-slate-500 tabular-nums">
-                    {row.hasAnyMark ? row.max : '—'}
+                    {row.hasAnyMark ? max : '—'}
                   </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top tabular-nums font-semibold text-slate-700">
                     {pct != null ? `${pct.toFixed(1)}%` : '—'}
@@ -1805,11 +1811,11 @@ function ReportCard({
             <tr className="bg-slate-50 border-t-2 border-slate-200">
               <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-slate-700 text-[11px] sm:text-sm uppercase tracking-wide" colSpan={2}>Total</td>
               <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
-                {totalMax > 0 ? totalObtained : '—'}
-                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{totalMax}</span>}
+                {totalMax > 0 ? roundMark(totalObtained) : '—'}
+                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{roundMark(totalMax)}</span>}
               </td>
               <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
-                {totalMax > 0 ? totalMax : '—'}
+                {totalMax > 0 ? roundMark(totalMax) : '—'}
               </td>
               <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-700 tabular-nums">
                 {totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}

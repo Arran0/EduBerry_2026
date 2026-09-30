@@ -25,6 +25,38 @@ export function gradeLetter(pct: number): GradeBand {
   return               { letter: 'E',  bg: 'bg-red-100',     fg: 'text-red-700'     }
 }
 
+/**
+ * A mark as a report card states it: the nearest whole number, halves up.
+ *
+ * Marks are entered and stored in halves (17.5 is by far the commonest
+ * fraction), and rescaling a mark to a published total — see rescaleMark —
+ * produces finer fractions still. None of that belongs on a card a student
+ * reads, so every figure quoted *for one student* is rounded here before it is
+ * shown: each assessment, each component, each subject total, the overall.
+ *
+ * Each figure is rounded from its own exact value rather than from the rounded
+ * parts beneath it, so a total is always the faithful one. The cost is that a
+ * split assessment's rounded components can add up to one more (or less) than
+ * its rounded total — two halves that each round up. That is inherent to
+ * rounding a breakdown, and the alternative is a total inflated by the display.
+ *
+ * Class *averages* are deliberately not rounded this way: a mean is not one
+ * student's mark, and a whole number would throw away what it measures.
+ */
+export function roundMark(marks: number | null | undefined): number | null {
+  if (marks == null || !isFinite(marks)) return null
+  return Math.round(marks)
+}
+
+/** The percentage a card prints for a mark — computed from the *rounded*
+ *  figures, so that dividing the two numbers on the page reproduces it. */
+export function markPercent(obtained: number, max: number): number | null {
+  const o = roundMark(obtained)
+  const m = roundMark(max)
+  if (o == null || m == null || m <= 0) return null
+  return (o / m) * 100
+}
+
 /** "Mar 3, 2026" — falls back to the raw value if it will not parse. */
 export function formatShortDate(d: string): string {
   try {

@@ -8,7 +8,7 @@
 
 import { UserProfile } from './supabase'
 import { ClasswiseCellData, ClasswiseSubject } from './classrooms'
-import { gradeLetter } from './reportCardGrading'
+import { gradeLetter, markPercent, roundMark } from './reportCardGrading'
 
 /** How the matrix and the export are ordered. `subject` sorts on one column's
  *  marks; `overall` on the row total; `name` alphabetically. */
@@ -33,14 +33,21 @@ export function num(n: number): string {
  * the same for the whole column — except for a student who did not sit every
  * assessment, whose own denominator is smaller and is therefore spelled out
  * rather than silently implied.
+ *
+ * Every figure here belongs to one student, so all of them are whole marks and
+ * the percentage is taken from those whole marks — see roundMark. The workbook
+ * this writes is the same document as the card, and the two must agree.
  */
 export function markCell(obtained: number, attemptedMax: number, columnMax: number): string {
   if (attemptedMax <= 0) return '—'
-  const pct = (obtained / attemptedMax) * 100
+  const shown = roundMark(obtained) ?? 0
+  const shownMax = roundMark(attemptedMax) ?? 0
+  const pct = markPercent(obtained, attemptedMax)
+  if (pct == null) return '—'
   const shortfall = Math.abs(attemptedMax - columnMax) > 0.005
   return shortfall
-    ? `${num(obtained)}/${num(attemptedMax)} (${pct.toFixed(1)}%)`
-    : `${num(obtained)} (${pct.toFixed(1)}%)`
+    ? `${shown}/${shownMax} (${pct.toFixed(1)}%)`
+    : `${shown} (${pct.toFixed(1)}%)`
 }
 
 /** A student's row totalled across every subject. */
@@ -228,11 +235,11 @@ export function buildExportTable(
     'Section',
     ...subjects.flatMap(s => [
       ...(withComponents
-        ? keptNames(s).map(name => `${s.subject} · ${name} (out of ${num(s.componentMax[name] ?? 0)})`)
+        ? keptNames(s).map(name => `${s.subject} · ${name} (out of ${roundMark(s.componentMax[name] ?? 0)})`)
         : []),
-      `${s.subject} (out of ${num(columnMaxOf.get(s.classroomId) ?? 0)})`,
+      `${s.subject} (out of ${roundMark(columnMaxOf.get(s.classroomId) ?? 0)})`,
     ]),
-    `Overall (out of ${num(overallColumnMax)})`,
+    `Overall (out of ${roundMark(overallColumnMax)})`,
     'Overall %',
     'Grade Band',
   ]
@@ -264,7 +271,7 @@ export function buildExportTable(
 
     totalObtained = round2(totalObtained)
     totalMax = round2(totalMax)
-    const pct = totalMax > 0 ? (totalObtained / totalMax) * 100 : null
+    const pct = markPercent(totalObtained, totalMax)
     cells.push(totalMax > 0 ? markCell(totalObtained, totalMax, overallColumnMax) : '—')
     cells.push(pct != null ? `${pct.toFixed(1)}%` : '—')
     cells.push(pct != null ? gradeLetter(pct).letter : '—')

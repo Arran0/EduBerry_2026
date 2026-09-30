@@ -17,7 +17,7 @@ import {
   fetchRemarksForStudent,
 } from '@/lib/classrooms'
 import { fetchBranding, SiteBranding, BRANDING_DEFAULTS } from '@/lib/pageConfig'
-import { gradeLetter, formatShortDate } from '@/lib/reportCardGrading'
+import { gradeLetter, formatShortDate, markPercent, roundMark } from '@/lib/reportCardGrading'
 import { AssessmentBreakdown } from '@/components/academics/AssessmentBreakdown'
 import RemarksPanel from '@/components/academics/RemarksPanel'
 import PublishedPill from '@/components/academics/PublishedPill'
@@ -290,7 +290,7 @@ function ReportCardBlock({
 
   const totalObtained = subjects.reduce((s, r) => s + r.obtained, 0)
   const totalMax      = subjects.reduce((s, r) => s + r.max, 0)
-  const overallPct    = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0
+  const overallPct    = markPercent(totalObtained, totalMax) ?? 0
   const overallGrade  = gradeLetter(overallPct)
 
   const dates = entries.map(e => e.assessment.date).filter((d): d is string => !!d).sort()
@@ -368,7 +368,11 @@ function ReportCardBlock({
           </thead>
           <tbody>
             {subjects.map((row, idx) => {
-              const pct   = row.max > 0 ? (row.obtained / row.max) * 100 : null
+              // Whole marks on the page, and a percentage taken from those
+              // same two whole numbers — see roundMark.
+              const obtained = roundMark(row.obtained) ?? 0
+              const max      = roundMark(row.max) ?? 0
+              const pct   = markPercent(row.obtained, row.max)
               const grade = pct != null ? gradeLetter(pct) : null
               return (
                 <tr key={row.classroomId} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50 transition-colors`}>
@@ -379,13 +383,13 @@ function ReportCardBlock({
                     <AssessmentBreakdown entries={row.assessments} />
                   </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top font-bold text-slate-800 tabular-nums">
-                    {row.hasAnyMark ? row.obtained : '—'}
+                    {row.hasAnyMark ? obtained : '—'}
                     {row.hasAnyMark && (
-                      <span className="sm:hidden font-normal text-slate-400">/{row.max}</span>
+                      <span className="sm:hidden font-normal text-slate-400">/{max}</span>
                     )}
                   </td>
                   <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center align-top text-slate-500 tabular-nums">
-                    {row.hasAnyMark ? row.max : '—'}
+                    {row.hasAnyMark ? max : '—'}
                   </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3 text-center align-top tabular-nums font-semibold text-slate-700">
                     {pct != null ? `${pct.toFixed(1)}%` : '—'}
@@ -405,10 +409,10 @@ function ReportCardBlock({
             <tr className="bg-slate-50 border-t-2 border-slate-200">
               <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-slate-700 text-[11px] sm:text-sm uppercase tracking-wide" colSpan={2}>Total</td>
               <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">
-                {totalMax > 0 ? totalObtained : '—'}
-                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{totalMax}</span>}
+                {totalMax > 0 ? roundMark(totalObtained) : '—'}
+                {totalMax > 0 && <span className="sm:hidden font-normal text-slate-400">/{roundMark(totalMax)}</span>}
               </td>
-              <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">{totalMax > 0 ? totalMax : '—'}</td>
+              <td className="hidden sm:table-cell px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-800 tabular-nums">{totalMax > 0 ? roundMark(totalMax) : '—'}</td>
               <td className="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold text-slate-700 tabular-nums">{totalMax > 0 ? `${overallPct.toFixed(1)}%` : '—'}</td>
               <td className="px-2 py-2 sm:px-4 sm:py-3 text-center">
                 {totalMax > 0 ? (

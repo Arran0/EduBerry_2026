@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { StudentReportCardEntry } from '@/lib/classrooms'
+import { markPercent, roundMark } from '@/lib/reportCardGrading'
 
 /**
  * The "Assessments" cell of a report card: one line per assessment with its
@@ -24,10 +25,16 @@ function MarkText({
 }) {
   if (isAbsent) return <span className="text-red-500 font-semibold">AB</span>
   if (marks == null) return <span className="text-slate-400">—</span>
-  const pct = maxMarks > 0 ? Math.round((Number(marks) / Number(maxMarks)) * 100) : null
+  // Whole marks only: halves are how they are entered, not how a card reads.
+  // The percentage is taken from the same two rounded numbers on the page, so
+  // dividing what is printed reproduces what is printed.
+  const obtained = roundMark(Number(marks))
+  const max = roundMark(Number(maxMarks))
+  const exact = markPercent(Number(marks), Number(maxMarks))
+  const pct = exact != null ? Math.round(exact) : null
   return (
     <>
-      {Number(marks)}<span className="text-slate-400">/{Number(maxMarks)}</span>
+      {obtained}<span className="text-slate-400">/{max}</span>
       {showPct && pct != null && <span className="text-slate-400"> ({pct}%)</span>}
     </>
   )
