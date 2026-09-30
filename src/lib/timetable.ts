@@ -1259,9 +1259,12 @@ export function slotGroupMap(rows: SlotGroupHomeroom[]): Record<string, string |
 }
 
 /**
- * The distinct weeks a config is scheduled against, base first. Groups with no
- * teaching periods of their own are dropped — they can hold nothing, and a
- * grid built on an empty week renders as a column-less table.
+ * The distinct weeks a config is scheduled against, base first.
+ *
+ * A group with no periods yet is KEPT: the solver schedules a class assigned to
+ * it against that empty week and places nothing, so hiding the week here would
+ * quietly show the admin the base schedule instead and make the empty result
+ * look like a bug rather than a group that still needs its periods.
  */
 export function scheduleWeeks(
   config: TimetableConfig,
@@ -1284,7 +1287,8 @@ export function scheduleWeeks(
       slots: teaching(g.id),
     })
   }
-  return weeks.filter((w) => w.slots.length > 0)
+  // The base week is only worth listing when something can actually run in it.
+  return weeks.filter((w) => w.groupId !== null || w.slots.length > 0)
 }
 
 /** The week one homeroom follows, falling back to the base schedule. */

@@ -266,7 +266,7 @@ export default function DraftWeekGrid({
                             to corner buttons, so dragging the lesson never
                             toggles anything by accident. */}
                         <div className="absolute -top-0.5 -right-0.5 flex">
-                          {onTogglePin && (
+                          {onTogglePin && here.length === 1 && (
                             <button
                               onClick={(ev) => { ev.stopPropagation(); onTogglePin(here[0]) }}
                               title={here[0].isLocked

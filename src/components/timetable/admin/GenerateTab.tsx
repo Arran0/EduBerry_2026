@@ -109,7 +109,7 @@ export default function GenerateTab() {
           week: w,
           homerooms: scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === w.groupId),
         }))
-        .filter((s) => s.homerooms.length > 0),
+        .filter((s) => s.homerooms.length > 0 && s.week.slots.length > 0),
     [weeks, scheduledHomerooms, slotGroupIds],
   )
 
@@ -251,7 +251,7 @@ export default function GenerateTab() {
     )
   }
 
-  if (requirements.length === 0 || weeks.length === 0) {
+  if (requirements.length === 0 || !weeks.some((w) => w.slots.length > 0)) {
     return (
       <div className="py-12 text-center text-[#71717A] text-sm">
         Add teaching <strong>period slots</strong> (Configuration) and <strong>requirements</strong> before generating.
@@ -438,6 +438,17 @@ export default function GenerateTab() {
           <TeacherWeekView teacherId={selectedTeacherId} />
         ) : (
           <div className="space-y-5">
+            {weeks
+              .filter((w) => w.slots.length === 0 && scheduledHomerooms.some((h) => (slotGroupIds[h.id] ?? null) === w.groupId))
+              .map((w) => (
+                <p key={w.groupId ?? 'base'} className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
+                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{w.name}</strong> has classes assigned to it but no period slots yet, so nothing can be
+                    scheduled for them. Add its periods in Configuration.
+                  </span>
+                </p>
+              ))}
             {weekSections.map(({ week, homerooms }) => (
               <div key={week.groupId ?? 'base'}>
                 {weeks.length > 1 && (

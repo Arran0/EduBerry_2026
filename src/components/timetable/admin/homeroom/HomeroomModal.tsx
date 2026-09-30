@@ -222,6 +222,11 @@ function PeriodGroupPicker({ homeroom }: { homeroom: Homeroom }) {
           setSaving(true)
           await assignHomeroomToSlotGroup(draft.config.id, homeroom.id, e.target.value || null)
           await draft.reload()
+          // The class's existing lessons sit in the OLD group's periods, which
+          // do not exist in its new week. Leaving them would show lessons the
+          // class can't see and count them in clashes, so they are dropped and
+          // the class is rebuilt on the next generate.
+          draft.setEntries((prev) => prev.filter((x) => x.homeroomId !== homeroom.id))
           setSaving(false)
         }}
       >
@@ -232,6 +237,7 @@ function PeriodGroupPicker({ homeroom }: { homeroom: Homeroom }) {
     </label>
   )
 }
+
 
 // ── Class teacher — smart typeahead with a 500ms debounce ─────
 
