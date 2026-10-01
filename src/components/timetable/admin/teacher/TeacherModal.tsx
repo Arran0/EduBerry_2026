@@ -13,6 +13,7 @@ import NameLink from '../../NameLink'
 import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
+import { TeacherLoadBadge, TeacherLoadMeter } from '../../draft/TeacherLoad'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 import { teacherIdsOf } from '@/lib/timetable'
 
@@ -22,6 +23,7 @@ import { teacherIdsOf } from '@/lib/timetable'
  * limits, max periods in a row). Opened from the workspace toolbar.
  */
 export default function TeacherModal({ config }: { config: TimetableConfig | null }) {
+  const draft = useTimetableDraftOptional()
   const [teachers, setTeachers] = useState<UserProfile[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,15 +76,23 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
             <p className="text-xs text-[#A1A1AA] p-2">No staff found.</p>
           ) : filtered.map((t) => {
             const owns = homerooms.filter((h) => h.class_teacher_id === t.id).length
+            const w = draft?.workloadOf(t.id)
             return (
               <button
                 key={t.id}
                 onClick={() => setSelectedId(t.id)}
                 className={`w-full text-left px-2.5 py-2 text-sm transition-colors ${t.id === selectedId ? 'bg-[#27272A] text-white' : 'text-[#3F3F46] hover:bg-[#EBEBEB]'}`}
               >
-                <div className="font-medium truncate">{t.full_name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium truncate flex-1 min-w-0">{t.full_name}</span>
+                  {t.id !== selectedId && <TeacherLoadBadge workload={w} />}
+                </div>
                 <div className={`text-[11px] truncate ${t.id === selectedId ? 'text-white/60' : 'text-[#A1A1AA]'}`}>
-                  {owns > 0 ? `Class teacher · ${owns} homeroom${owns > 1 ? 's' : ''}` : t.email}
+                  {w && w.over > 0
+                    ? `${w.over} period${w.over === 1 ? '' : 's'} over their week`
+                    : owns > 0
+                      ? `Class teacher · ${owns} homeroom${owns > 1 ? 's' : ''}`
+                      : t.email}
                 </div>
               </button>
             )
@@ -101,6 +111,34 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
               <NameLink kind="teacher" id={selected.id} name={selected.full_name} className="font-semibold text-[#18181B]" />
             </div>
             <p className="text-xs text-[#71717A] mb-3">{selected.email}</p>
+
+            {/* What they are asked for against what their week holds — the
+                arithmetic that decides whether a timetable can exist at all. */}
+            {draft && (
+              <div className="mb-4">
+                <TeacherLoadMeter workload={draft.workloadOf(selected.id)} />
+                {(() => {
+                  const w = draft.workloadOf(selected.id)
+                  if (!w || w.over === 0) return null
+                  const byClass = new Map<string, number>()
+                  for (const i of w.items) {
+                    byClass.set(i.homeroomId, (byClass.get(i.homeroomId) ?? 0) + i.periods)
+                  }
+                  const worst = [...byClass.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
+                  return (
+                    <div className="mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+                      <p>
+                        <strong>{w.over} period{w.over === 1 ? '' : 's'} cannot be scheduled.</strong>{' '}
+                        No timetable can give them more than {w.capacity} periods a week.
+                      </p>
+                      <p className="mt-0.5 text-rose-700">
+                        Heaviest classes: {worst.map(([hr, n]) => `${homerooms.find((h) => h.id === hr)?.name ?? 'Class'} ${n}`).join(' · ')}
+                      </p>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
 
             {/* Class-teacher homerooms */}
             <div className="mb-4">

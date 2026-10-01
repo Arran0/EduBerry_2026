@@ -16,6 +16,8 @@ import type {
   ConstraintScope, ConstraintType,
 } from '@/lib/timetable'
 import { buildSchedules, detectConflicts } from '@/lib/timetable/generator'
+import { teacherWorkloads, overloadedTeachers } from '@/lib/timetable/workload'
+import type { TeacherWorkload } from '@/lib/timetable/workload'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchStaffProfiles } from '@/lib/admin'
@@ -97,6 +99,14 @@ export interface TimetableDraft {
   moveEntry: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean
 
   // Derived
+  /**
+   * Periods each teacher is asked to cover against what their week holds.
+   * Computed from requirements alone, so an impossible assignment is visible
+   * as it is typed rather than after a failed generate.
+   */
+  workloads: TeacherWorkload[]
+  workloadOf: (teacherId: string) => TeacherWorkload | undefined
+  overloaded: TeacherWorkload[]
   weekFor: (homeroomId: string) => ScheduleWeek
   slotClash: Map<string, string[]>
   groupName: (groupId: string) => string | undefined
@@ -229,6 +239,21 @@ export function TimetableDraftProvider({
         })),
     [combinedClasses],
   )
+
+  const workloads = useMemo(
+    () =>
+      teacherWorkloads({
+        config, slots, requirements, constraints,
+        combined: combinedInput, slotGroups, homeroomGroupIds: slotGroupIds,
+      }),
+    [config, slots, requirements, constraints, combinedInput, slotGroups, slotGroupIds],
+  )
+  const workloadById = useMemo(
+    () => new Map(workloads.map((w) => [w.teacherId, w])),
+    [workloads],
+  )
+  const workloadOf = useCallback((id: string) => workloadById.get(id), [workloadById])
+  const overloaded = useMemo(() => overloadedTeachers(workloads), [workloads])
 
   // Which periods of different bell schedules share a wall-clock hour. Without
   // it a teacher booked in two overlapping bands reads as free.
@@ -462,6 +487,7 @@ export function TimetableDraftProvider({
     constraints, setConstraints, isConstraintOn, toggleConstraintCell,
     timetable, setTimetable, entries, setEntries,
     setCellEntry, clearCellEntry, togglePin, moveEntry,
+    workloads, workloadOf, overloaded,
     weekFor, slotClash, groupName, liveConflicts, allConflicts, cellConflicts,
   }
 

@@ -21,6 +21,7 @@ import EditableTimetableGrid from '../EditableTimetableGrid'
 import MasterTimetableEditor from '../MasterTimetableEditor'
 import TeacherWeekView from '../TeacherWeekView'
 import { useTimetableDraft } from '../draft/TimetableDraftContext'
+import { OverloadedTeachersNotice } from '../draft/TeacherLoad'
 import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
 import type { SmartOption } from '../ui'
 
@@ -37,7 +38,7 @@ export default function GenerateTab() {
   const {
     config, loading, slots, requirements, unavailability, constraints, combinedInput,
     slotGroups, slotGroupIds, weeks, weekFor, rooms, subjects, teachers, scheduledHomerooms,
-    homeroomsLite, entries, setEntries, timetable, setTimetable, slotClash,
+    homeroomsLite, entries, setEntries, timetable, setTimetable, slotClash, overloaded,
     groupName, liveConflicts, allConflicts, cellConflicts,
     setCellEntry, clearCellEntry, togglePin, moveEntry,
   } = draft
@@ -364,6 +365,17 @@ export default function GenerateTab() {
           )}
         </div>
       </div>
+
+      {/* Before anything is generated: assignments that no timetable can
+          satisfy. The solver would simply leave these periods unplaced and the
+          cause would have to be worked backwards from the result. */}
+      {overloaded.length > 0 && (
+        <OverloadedTeachersNotice
+          overloaded={overloaded}
+          teacherName={(id) => teachers.find((t) => t.id === id)?.full_name ?? 'Teacher'}
+          className="mt-2.5"
+        />
+      )}
 
       {/* Status line */}
       <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">

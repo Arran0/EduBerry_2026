@@ -10,6 +10,7 @@ import type {
   GeneratorConflict, SlotGroup, CombinedClassInput,
 } from './types'
 import { detectConflicts, buildSchedules, scheduleFor } from './generator'
+import { teacherWorkloads, overloadedTeachers } from './workload'
 import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
 import { teacherIdsOf } from './types'
 
@@ -319,35 +320,6 @@ function classCapacity(input: HealthInput, sched: ReturnType<typeof buildSchedul
   return out
 }
 
-/**
- * Teacher load: how many periods each teacher is asked to cover against how
- * many their week actually has. A teacher booked beyond their week is the
- * other common reason periods go unplaced, and no amount of solver effort
- * fixes it.
- */
-function teacherLoad(input: HealthInput, sched: ReturnType<typeof buildSchedules>) {
-  const wanted = new Map<string, number>()
-  const weekOf = new Map<string, number>()
-  for (const r of input.requirements) {
-    for (const t of teacherIdsOf(r)) {
-      wanted.set(t, (wanted.get(t) ?? 0) + r.periods_per_week)
-      const geo = scheduleFor(sched, r.homeroom_id)
-      weekOf.set(t, Math.max(weekOf.get(t) ?? 0, geo.days.length * geo.teachingSlots.length))
-    }
-  }
-  for (const c of input.combined ?? []) {
-    for (const t of c.teacherIds) wanted.set(t, (wanted.get(t) ?? 0) + c.periodsPerWeek)
-  }
-  const out: { teacherId: string; wanted: number; available: number }[] = []
-  for (const [t, n] of wanted) {
-    const timeOff = input.constraints.filter(
-      (c) => c.type === 'time_off' && c.scope === 'teacher' && c.scope_id === t,
-    ).length
-    out.push({ teacherId: t, wanted: n, available: Math.max(0, (weekOf.get(t) ?? 0) - timeOff) })
-  }
-  return out
-}
-
 function buildSuggestions({
   input, sched, index, missing, required, hard, gaps, clusters, imbalance, components,
 }: {
@@ -402,14 +374,23 @@ function buildSuggestions({
       })
     }
 
-    const stretched = teacherLoad(input, sched).filter((t) => t.wanted > t.available)
+    // The same calculator the requirement form warns with, so the numbers
+    // here match the ones shown when the assignment was made.
+    const stretched = overloadedTeachers(teacherWorkloads({
+      config: input.config,
+      slots: input.slots,
+      requirements: input.requirements,
+      constraints: input.constraints,
+      combined: input.combined,
+      slotGroups: input.slotGroups,
+      homeroomGroupIds: input.homeroomGroupIds,
+    }))
     if (stretched.length > 0) {
-      const worst = [...stretched].sort((a, b) => (b.wanted - b.available) - (a.wanted - a.available))
       out.push({
         title: 'Spread the load of over-booked teachers',
         detail:
           `${plural(stretched.length, 'teacher')} ${stretched.length === 1 ? 'is' : 'are'} assigned more periods than their week has: ` +
-          worst.slice(0, 3).map((t) => `${tName(t.teacherId)} ${t.wanted}/${t.available}`).join(', ') +
+          stretched.slice(0, 3).map((t) => `${tName(t.teacherId)} ${t.assigned}/${t.capacity}`).join(', ') +
           '. Share those subjects with another teacher, or cut their periods.',
         where: 'Homeroom → Requirements (teachers), or Teacher → Time off',
       })

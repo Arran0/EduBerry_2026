@@ -32,6 +32,8 @@ import NameLink from '../../NameLink'
 import { ColorPicker } from '../colorPicker'
 import MultiTeacherSelect from '../../MultiTeacherSelect'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
+import { OverloadedTeachersNotice } from '../../draft/TeacherLoad'
+import { withExtraPeriods } from '@/lib/timetable/workload'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 import SlotDetailsModal from '../../SlotDetailsModal'
 
@@ -875,6 +877,34 @@ function RequirementFields({
   )
 }
 
+/**
+ * Whether the teachers on a requirement can absorb the periods it is asking
+ * for. Answered from saved requirements plus what is in the form, so an
+ * impossible assignment is refused as it is typed instead of surfacing as
+ * unplaced periods after a generate.
+ *
+ * `alreadyCounted` is what this requirement currently contributes — zero when
+ * adding, its saved periods when editing — so an edit is measured against the
+ * change rather than counted twice.
+ */
+function useTeacherOverload(
+  teacherIds: string[],
+  perWeek: string,
+  alreadyCounted: number,
+  teachers: UserProfile[],
+) {
+  const draft = useTimetableDraftOptional()
+  return useMemo(() => {
+    if (!draft || teacherIds.length === 0) return []
+    const delta = Math.max(1, parseInt(perWeek, 10) || 1) - alreadyCounted
+    const name = (id: string) => teachers.find((t) => t.id === id)?.full_name ?? 'This teacher'
+    return teacherIds
+      .map((id) => ({ id, after: withExtraPeriods(draft.workloadOf(id), delta) }))
+      .filter((x) => x.after && x.after.over > 0)
+      .map((x) => `${name(x.id)} would be ${x.after!.assigned}/${x.after!.capacity} — ${x.after!.over} over`)
+  }, [draft, teacherIds, perWeek, alreadyCounted, teachers])
+}
+
 function RequirementsPanel({
   config, homeroom, subjects, teachers, rooms, homerooms, clipboard, onCopy,
 }: {
@@ -1116,6 +1146,17 @@ function RequirementsPanel({
 
   const pasteCount = clipboard && clipboard.fromHomeroomId !== homeroom.id ? clipboard.items.length : 0
   const liveProblem = requirementProblem(form, workingDays)
+  // Adding, so nothing of this requirement is counted yet.
+  const addOverload = useTeacherOverload(form.teacherIds, form.perWeek, 0, teachers)
+  const editing = requirements.find((r) => r.id === editingId) ?? null
+  const editOverload = useTeacherOverload(
+    editDraft.teacherIds,
+    editDraft.perWeek,
+    // Only what the SAME teacher already contributes should be discounted; a
+    // teacher newly added to the requirement contributes nothing yet.
+    editing ? editing.periods_per_week : 0,
+    teachers,
+  )
   const budget = useMemo(
     () => weeklyBudget({
       homeroom, slots: week?.slots ?? slots, constraints, requirements, combined, groups, workingDays,
@@ -1218,6 +1259,21 @@ function RequirementsPanel({
             <span>{liveProblem}</span>
           </div>
         )}
+        {/* Over-booking is arithmetic, not a solver outcome — say so before the
+            requirement is saved. It does not block saving: an admin may be
+            about to free the teacher's time off or split the subject. */}
+        {addOverload.length > 0 && (
+          <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <p><strong>This would over-book a teacher.</strong> {addOverload.join('; ')}.</p>
+              <p className="text-rose-600/80 mt-0.5">
+                Those periods cannot be scheduled by any timetable — share the subject with another
+                teacher, or reduce the periods a week.
+              </p>
+            </div>
+          </div>
+        )}
         {error && error !== liveProblem && <p className="text-sm text-rose-600 mt-2">{error}</p>}
         <button onClick={handleAdd} disabled={adding || liveProblem !== null} className={`${BTN_PRIMARY} mt-3`}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
@@ -1270,6 +1326,14 @@ function RequirementsPanel({
           {note && <span className="text-[11px] text-emerald-700">{note}</span>}
         </div>
 
+        {draftCtx && draftCtx.overloaded.length > 0 && (
+          <OverloadedTeachersNotice
+            overloaded={draftCtx.overloaded}
+            teacherName={(id) => teacherName(id)}
+            className="mb-2"
+          />
+        )}
+
         {loading ? (
           <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
         ) : requirements.length === 0 && combined.length === 0 ? (
@@ -1289,6 +1353,12 @@ function RequirementsPanel({
                       groups={groups}
                       showGroup
                     />
+                    {editOverload.length > 0 && (
+                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span><strong>This would over-book a teacher.</strong> {editOverload.join('; ')}.</span>
+                      </div>
+                    )}
                     {editError && (
                       <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
                         <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
