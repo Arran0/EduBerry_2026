@@ -11,6 +11,7 @@ import { SmartSelect, Section, Field, SECTION_LABEL } from '../../ui'
 import type { SmartOption } from '../../ui'
 import NameLink from '../../NameLink'
 import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
+import LessonStatsCard from '../../LessonStatsCard'
 import { useConstraints } from '../useConstraints'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { TeacherLoadBadge, TeacherLoadMeter } from '../../draft/TeacherLoad'
@@ -232,6 +233,8 @@ function TeacherConstraintsPanel({
         ) : (
           <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('teacher', scopeId, 'time_off', d, s)} />
         )}
+        {/* What blocking a period is being weighed against. */}
+        <LessonStatsCard dimension="teacher" id={scopeId} className="mt-2.5" />
       </Section>
 
       <Section title="Load limits" hint="Leave blank for no limit. Optionally restrict per-day / per-week caps to one homeroom.">

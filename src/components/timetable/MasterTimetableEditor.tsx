@@ -38,6 +38,8 @@ interface Props {
   // Returns false when the drop is refused (a block that would run off the day,
   // or land on top of another lesson), leaving the grid untouched.
   onMove: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean
+  /** Opens the by-class timetable focused on this class, when the host offers one. */
+  onOpenClass?: (homeroomId: string) => void
 }
 
 const cellId = (hr: string, day: Weekday, slotId: string) => `${hr}__${day}__${slotId}`
@@ -87,7 +89,7 @@ function shortYear(year: string | null): string | null {
 export default function MasterTimetableEditor({
   days, slots, homerooms, entries, subjects, teachers, rooms,
   unavailability, constraints, homeroomsLite, slotClash, groupName, cellConflicts,
-  onSetCell, onClearCell, onTogglePin, onMove,
+  onSetCell, onClearCell, onTogglePin, onMove, onOpenClass,
 }: Props) {
   const teachingSlots = useMemo(() => slots.filter((s) => !s.is_break), [slots])
   const dragRef = useRef<PlacedEntry | null>(null)
@@ -103,6 +105,12 @@ export default function MasterTimetableEditor({
   const [fullscreen, setFullscreen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const labelRef = useRef<HTMLTableCellElement>(null)
+  // The day row's real rendered height. The period row sticks directly beneath
+  // it, and that offset has to be MEASURED: it comes from the font, the padding
+  // and the browser's own rounding, so any formula drifts and the day names end
+  // up sliced in half as the body scrolls under them.
+  const dayRowRef = useRef<HTMLTableRowElement>(null)
+  const [dayRowH, setDayRowH] = useState(0)
 
   const periodsWidth = days.length * teachingSlots.length * BASE_CELL
 
@@ -127,6 +135,22 @@ export default function MasterTimetableEditor({
     ro.observe(el)
     return () => ro.disconnect()
   }, [autoFit, recomputeFit, fullscreen, homerooms])
+
+  // Re-measured whenever anything that can change the header's height does —
+  // the zoom, a font load, the viewport, going full screen.
+  useLayoutEffect(() => {
+    const row = dayRowRef.current
+    if (!row) return
+    const measure = () => {
+      const h = Math.round(row.getBoundingClientRect().height)
+      setDayRowH((prev) => (prev === h ? prev : h))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(row)
+    return () => ro.disconnect()
+  }, [zoom, fullscreen, days, teachingSlots.length])
 
   useEffect(() => {
     if (!fullscreen) return
@@ -224,7 +248,7 @@ export default function MasterTimetableEditor({
     >
       <table className="border-collapse" style={{ fontSize: px(fontMain) }}>
         <thead>
-          <tr className="bg-[#FAFAF9]">
+          <tr ref={dayRowRef} className="bg-[#FAFAF9]">
             <th
               ref={labelRef}
               rowSpan={2}
@@ -251,7 +275,7 @@ export default function MasterTimetableEditor({
                   key={`${d}-${s.id}`}
                   className="sticky z-20 bg-[#FAFAF9] border-b border-l border-[#E4E4E7] px-0.5 py-0.5 text-center font-medium text-[#71717A]"
                   style={{
-                    top: px(Math.round(20 * zoom)),
+                    top: px(dayRowH),
                     width: px(cellW),
                     minWidth: px(cellW),
                     fontSize: px(fontSub),
@@ -268,11 +292,20 @@ export default function MasterTimetableEditor({
           {homerooms.map((hr) => (
             <tr key={hr.id}>
               <td
-                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] px-2 py-0.5 whitespace-nowrap leading-tight font-medium text-[#18181B] tabular-nums"
+                className="sticky left-0 z-10 bg-white border-b border-r border-[#E4E4E7] p-0 whitespace-nowrap leading-tight font-medium text-[#18181B] tabular-nums"
                 style={{ fontSize: px(LABEL_FONT) }}
-                title={hr.name}
               >
-                {classLabel(hr)}
+                {onOpenClass ? (
+                  <button
+                    onClick={() => onOpenClass(hr.id)}
+                    title={`${hr.name} — open this class's timetable`}
+                    className="w-full text-left px-2 py-0.5 hover:bg-[#F5F5F5] hover:text-[#18181B] hover:underline decoration-[#D4D4D8] underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    {classLabel(hr)}
+                  </button>
+                ) : (
+                  <span className="block px-2 py-0.5" title={hr.name}>{classLabel(hr)}</span>
+                )}
               </td>
               {days.map((day) =>
                 teachingSlots.map((slot) => {

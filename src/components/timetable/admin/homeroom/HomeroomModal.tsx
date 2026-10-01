@@ -36,6 +36,7 @@ import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../../draft/TeacherLoad'
 import { withExtraPeriods } from '@/lib/timetable/workload'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
+import LessonStatsCard from '../../LessonStatsCard'
 import SlotDetailsModal from '../../SlotDetailsModal'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
@@ -1742,6 +1743,8 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
           onTogglePin={draft.togglePin}
           onOpen={(_e, day, slot) => setOpenCell({ day, slot })}
         />
+        {/* The subjects this class is taught, and whether they all fit. */}
+        <LessonStatsCard dimension="class" id={homeroom.id} className="mt-2.5" />
       </Section>
 
       <Section

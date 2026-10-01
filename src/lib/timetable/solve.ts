@@ -45,8 +45,23 @@ function isBetter(a: GeneratorResult, b: GeneratorResult | null): boolean {
   return a.softPenalty < b.softPenalty
 }
 
-/** Lets the browser paint between passes. */
-const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+/**
+ * Hands the browser a frame.
+ *
+ * `setTimeout(0)` alone only promises another macrotask, not a painted frame, so
+ * the caller's "working…" state could still be invisible when the next pass
+ * seizes the thread. Waiting for an animation frame and then yielding again puts
+ * this after the paint that frame produces — which is what makes the button
+ * react the instant it is pressed instead of a pass later.
+ */
+const yieldToBrowser = () =>
+  new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(resolve, 0))
+    } else {
+      setTimeout(resolve, 0)
+    }
+  })
 
 export async function solveTimetable(
   input: GeneratorInput,
@@ -63,10 +78,12 @@ export async function solveTimetable(
   }
 
   for (let pass = 0; pass < MAX_PASSES; pass++) {
-    if (pass > 0) {
-      await yieldToBrowser()
-      if (shouldCancel?.()) break
-    }
+    // Before EVERY pass, the first included. Each one blocks the thread for its
+    // whole budget, so skipping the yield on pass 0 meant the caller's spinner
+    // and disabled button were queued behind seconds of solving and the UI sat
+    // there looking dead and still clickable.
+    await yieldToBrowser()
+    if (pass > 0 && shouldCancel?.()) break
     const result = generateTimetable(
       // Each pass explores from a different random start.
       { ...input, seed: baseSeed + pass * 7_919 },

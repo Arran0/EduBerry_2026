@@ -155,3 +155,42 @@ describe('health suggestions', () => {
     expect(asBlocks.suggestions.some((s) => /bunching/.test(s.title))).toBe(false)
   })
 })
+
+describe('teacher idle gaps', () => {
+  // A teacher with period 1 and period 6 and nothing between has four free
+  // periods in the middle of their day. That is spacing, not a defect.
+  const gappy: PlacedEntry[] = [
+    { homeroomId: 'hr1', day: 'monday', slotId: 's1', subjectId: 'eng', teacherId: 't1', teacherIds: ['t1'], roomId: null, isLocked: false },
+    { homeroomId: 'hr1', day: 'monday', slotId: 's6', subjectId: 'eng', teacherId: 't1', teacherIds: ['t1'], roomId: null, isLocked: false },
+  ]
+  const r = () => report({
+    entries: gappy,
+    requirements: [requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'eng', periods_per_week: 2, max_per_day: 2 })],
+  })
+
+  it('is not scored as a category', () => {
+    const keys = r().components.map((c) => c.key)
+    expect(keys).not.toContain('gaps')
+    expect(keys).toEqual(['coverage', 'clash', 'constraints', 'spread', 'balance'])
+  })
+
+  it('is not raised as an issue or a suggestion', () => {
+    const report0 = r()
+    expect(report0.issues.some((i) => /idle|gap/i.test(i.message))).toBe(false)
+    expect(report0.suggestions.some((s) => /idle|gap|stranded/i.test(s.title + s.detail))).toBe(false)
+  })
+
+  it('leaves the weights summing to one so the score still reaches 100', () => {
+    const total = r().components.reduce((n, c) => n + c.weight, 0)
+    expect(total).toBeCloseTo(1, 6)
+  })
+})
+
+describe('the breakdown footnotes', () => {
+  it('explains every category it shows', () => {
+    for (const c of report().components) {
+      expect(c.help.length).toBeGreaterThan(20)
+      expect(c.help.endsWith('.')).toBe(true)
+    }
+  })
+})

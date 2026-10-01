@@ -13,6 +13,7 @@ import { searchSubjects } from '@/lib/cbseSubjects'
 import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field, SECTION_LABEL } from '../../ui'
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
+import LessonStatsCard from '../../LessonStatsCard'
 import { useConstraints } from '../useConstraints'
 import { ColorPicker, SUBJECT_COLORS } from '../colorPicker'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
@@ -262,6 +263,8 @@ function SubjectConstraintsPanel({
         ) : (
           <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('subject', scopeId, 'time_off', d, s)} />
         )}
+        {/* Every teacher and class that carries this subject. */}
+        <LessonStatsCard dimension="subject" id={scopeId} className="mt-2.5" />
       </Section>
 
       <Section title="Per day / per week limits" hint="Leave blank for no limit. Applies to all homerooms, or restrict to a specific one.">

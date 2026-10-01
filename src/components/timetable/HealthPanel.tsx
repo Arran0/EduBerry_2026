@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Activity, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Lightbulb, ArrowRight } from 'lucide-react'
-import type { HealthReport } from '@/lib/timetable/health'
+import { Activity, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Lightbulb, ArrowRight, HelpCircle } from 'lucide-react'
+import type { HealthComponent, HealthReport } from '@/lib/timetable/health'
 
 const BAND_COLOR: Record<HealthReport['band'], string> = {
   green: '#059669',
@@ -96,14 +96,11 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
           <div className="space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Breakdown</p>
             {report.components.map((c) => (
-              <div key={c.key} className="flex items-center gap-2 text-xs">
-                <span className="w-28 flex-shrink-0 text-[#52525B]">{c.label}</span>
-                <div className="flex-1 h-2 bg-[#F0F0F0]">
-                  <div className="h-full" style={{ width: `${c.score}%`, background: c.score >= 80 ? '#059669' : c.score >= 50 ? '#d97706' : '#dc2626' }} />
-                </div>
-                <span className="w-8 text-right tabular-nums text-[#71717A]">{Math.round(c.score)}</span>
-              </div>
+              <ComponentRow key={c.key} component={c} />
             ))}
+            <p className="text-[10px] text-[#A1A1AA] pt-0.5">
+              Hover a category for what it measures and how much it counts.
+            </p>
           </div>
 
           {/* Top issues */}
@@ -128,6 +125,63 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
           </div>
         </div>
         </>
+      )}
+    </div>
+  )
+}
+
+const barColor = (score: number) => (score >= 80 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626')
+
+/**
+ * One breakdown bar, with an explainer footnote on hover.
+ *
+ * A bare score with a one-word label is not actionable — "Spread 62" says
+ * nothing about what spread is or what moves it. The footnote carries both, and
+ * it is a real popover rather than a `title` attribute so it is readable, can be
+ * styled, and appears on keyboard focus and on tap as well as on hover.
+ */
+function ComponentRow({ component: c }: { component: HealthComponent }) {
+  const [show, setShow] = useState(false)
+
+  return (
+    <div className="relative">
+      <div
+        tabIndex={0}
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        onClick={() => setShow((v) => !v)}
+        className="flex items-center gap-2 text-xs cursor-help outline-none focus-visible:ring-1 focus-visible:ring-[#A1A1AA] rounded-sm"
+        aria-describedby={show ? `help-${c.key}` : undefined}
+      >
+        <span className="w-28 flex-shrink-0 text-[#52525B] inline-flex items-center gap-1">
+          <span className="truncate">{c.label}</span>
+          <HelpCircle size={10} className={`flex-shrink-0 transition-colors ${show ? 'text-[#71717A]' : 'text-[#D4D4D8]'}`} />
+        </span>
+        <div className="flex-1 h-2 bg-[#F0F0F0]">
+          <div className="h-full transition-[width] duration-300" style={{ width: `${c.score}%`, background: barColor(c.score) }} />
+        </div>
+        <span className="w-8 text-right tabular-nums text-[#71717A]">{Math.round(c.score)}</span>
+      </div>
+
+      {show && (
+        <div
+          id={`help-${c.key}`}
+          role="tooltip"
+          className="absolute left-0 right-0 top-full mt-1 z-20 border border-[#D4D4D8] bg-[#18181B] text-white px-2.5 py-2 shadow-lg"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex items-baseline justify-between gap-2">
+            <span>{c.label}</span>
+            <span className="font-normal normal-case tracking-normal text-[#A1A1AA] tabular-nums">
+              {Math.round(c.weight * 100)}% of the score
+            </span>
+          </p>
+          <p className="text-[11px] leading-snug mt-1 text-[#E4E4E7]">{c.help}</p>
+          {c.lever && (
+            <p className="text-[11px] leading-snug mt-1.5 pt-1.5 border-t border-white/15 text-[#A1A1AA]">{c.lever}</p>
+          )}
+        </div>
       )}
     </div>
   )

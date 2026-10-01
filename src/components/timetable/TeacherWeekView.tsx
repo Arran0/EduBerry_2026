@@ -7,6 +7,7 @@ import type { PeriodSlot, PlacedEntry, Weekday } from '@/lib/timetable'
 import { useTimetableDraft } from './draft/TimetableDraftContext'
 import DraftWeekGrid from './draft/DraftWeekGrid'
 import SlotDetailsModal from './SlotDetailsModal'
+import LessonStatsCard from './LessonStatsCard'
 import { SECTION_LABEL } from './ui'
 
 // ============================================================
@@ -62,13 +63,22 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
     return used.size === 0 ? weeks : weeks.filter((w) => used.has(w.groupId))
   }, [weeks, lessons, slotGroupIds])
 
-  const periodCount = lessons.length
-  const busiestDay = useMemo(() => {
-    const byDay = new Map<string, number>()
-    for (const e of lessons) byDay.set(e.day, (byDay.get(e.day) ?? 0) + 1)
+  // Periods of TIME, not lesson rows. A combined lesson fills a row in every
+  // member class, so counting rows reads a teacher who takes three classes
+  // together as teaching three times over — on the live school that turned a
+  // 44-period week into "114 periods a week".
+  const { periodCount, busiestDay } = useMemo(() => {
+    const cells = new Set<string>()
+    const byDay = new Map<string, Set<string>>()
+    for (const e of lessons) {
+      const cell = `${e.day}|${e.slotId}`
+      cells.add(cell)
+      if (!byDay.has(e.day)) byDay.set(e.day, new Set())
+      byDay.get(e.day)!.add(cell)
+    }
     let best: [string, number] | null = null
-    for (const kv of byDay) if (!best || kv[1] > best[1]) best = kv
-    return best
+    for (const [day, set] of byDay) if (!best || set.size > best[1]) best = [day, set.size]
+    return { periodCount: cells.size, busiestDay: best }
   }, [lessons])
 
   if (!teacher) {
@@ -111,6 +121,9 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
           </div>
         ))}
       </div>
+
+      {/* The teacher's contract: what their week adds up to, class by class. */}
+      <LessonStatsCard dimension="teacher" id={teacherId} className="mt-2.5" />
 
       {open && (
         <SlotDetailsModal

@@ -19,6 +19,10 @@ export interface HealthComponent {
   label: string
   score: number // 0..100
   weight: number
+  /** What this category measures, in one sentence, for the UI's footnote. */
+  help: string
+  /** What raises it, when there is a clear answer. */
+  lever?: string
 }
 
 export interface HealthIssue {
@@ -87,14 +91,12 @@ const clamp = (n: number) => Math.max(0, Math.min(100, n))
 export function computeHealth(input: HealthInput): HealthReport {
   const { entries, requirements, constraints, slots, config, homerooms } = input
   const hrName = input.homeroomName ?? ((id) => id.slice(0, 8))
-  const tName = input.teacherName ?? ((id) => id.slice(0, 8))
+  // Teacher names are only needed by the suggestions, which resolve their own.
   const sName = input.subjectName ?? ((id) => id.slice(0, 8))
 
-  // Periods of different bell schedules are different rows, so ordering them
-  // by position alone interleaves two bands into one meaningless sequence.
-  // The solver's config-wide clock is what the gap and run maths needs.
+  // Periods of different bell schedules are different rows, so a class is
+  // always scored against the days of its own band rather than the config's.
   const sched = buildSchedules(config, slots, input.slotGroups ?? [], input.homeroomGroupIds ?? {})
-  const slotOrder = sched.clock
   const weekDays = (homeroomId: string) => scheduleFor(sched, homeroomId).days
   const index = buildConstraintIndex(constraints, homerooms)
   for (const u of input.unavailability ?? []) {
@@ -182,31 +184,10 @@ export function computeHealth(input: HealthInput): HealthReport {
   }
   const constraintScore = constraintChecks === 0 ? 100 : clamp((constraintPass / constraintChecks) * 100)
 
-  // ── 4. Teacher idle gaps ─────────────────────────────────────
-  const tSlots = new Map<string, Set<number>>()
-  for (const e of entries) {
-    for (const t of teacherIdsOf(e)) {
-      const k = `${t}|${e.day}`
-      if (!tSlots.has(k)) tSlots.set(k, new Set())
-      tSlots.get(k)!.add(slotOrder.get(e.slotId) ?? 0)
-    }
-  }
-  let gaps = 0
-  const gapByTeacher = new Map<string, number>()
-  for (const [k, set] of tSlots) {
-    const idxs = [...set].sort((a, b) => a - b)
-    const span = idxs[idxs.length - 1] - idxs[0] + 1
-    const g = span - idxs.length
-    gaps += g
-    if (g > 0) {
-      const t = k.split('|')[0]
-      gapByTeacher.set(t, (gapByTeacher.get(t) ?? 0) + g)
-    }
-  }
-  for (const [t, g] of [...gapByTeacher.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)) {
-    issues.push({ severity: 'info', message: `${tName(t)} has ${g} idle gap${g > 1 ? 's' : ''} across the week.`, teacherId: t })
-  }
-  const gapScore = clamp(100 - gaps * 5)
+  // Teacher idle gaps are deliberately NOT scored. A free period between two
+  // lessons is not a defect: teachers read it as breathing room, not as a hole
+  // to be closed, and flagging it buried the problems that do matter under a
+  // list of names with nothing wrong with them.
 
   // ── 5. Subject spread (same subject repeated in a day) ───────
   // A double or triple is one lesson occupying several periods, not a subject
@@ -244,12 +225,31 @@ export function computeHealth(input: HealthInput): HealthReport {
 
   // ── Weighted total ───────────────────────────────────────────
   const components: HealthComponent[] = [
-    { key: 'coverage', label: 'Coverage', score: coverageScore, weight: 0.30 },
-    { key: 'clash', label: 'Clash-free', score: clashScore, weight: 0.25 },
-    { key: 'constraints', label: 'Constraints met', score: constraintScore, weight: 0.20 },
-    { key: 'gaps', label: 'Teacher gaps', score: gapScore, weight: 0.10 },
-    { key: 'spread', label: 'Subject spread', score: spreadScore, weight: 0.08 },
-    { key: 'balance', label: 'Daily balance', score: balanceScore, weight: 0.07 },
+    {
+      key: 'coverage', label: 'Coverage', score: coverageScore, weight: 0.34,
+      help: 'How many of the periods your requirements ask for actually made it onto the timetable.',
+      lever: 'A shortfall is usually arithmetic: the class has fewer free periods in its week than its subjects add up to.',
+    },
+    {
+      key: 'clash', label: 'Clash-free', score: clashScore, weight: 0.28,
+      help: 'Whether anything is double-booked — a teacher in two classes at once, two lessons in one class, or a lesson sitting in a period marked off.',
+      lever: 'Every clash is a blocker: the score cannot reach the green band while one remains.',
+    },
+    {
+      key: 'constraints', label: 'Constraints met', score: constraintScore, weight: 0.22,
+      help: 'Your own rules — per-day and per-week minimums and maximums, and class-teacher pins — being honoured.',
+      lever: 'A minimum the week has no room for can never be met; check it against what the class is really taught.',
+    },
+    {
+      key: 'spread', label: 'Subject spread', score: spreadScore, weight: 0.09,
+      help: 'Whether a subject is spread across the week rather than bunched into the same day. Deliberate doubles are not counted against it.',
+      lever: 'Lowering max / day on a requirement forces the solver to spread that subject out.',
+    },
+    {
+      key: 'balance', label: 'Daily balance', score: balanceScore, weight: 0.07,
+      help: 'How evenly each class’s lessons fall across its days, so no day is far longer than the rest.',
+      lever: 'Uneven days usually follow from time off on some days, or periods that do not divide evenly into the week.',
+    },
   ]
   let total = components.reduce((s, c) => s + c.score * c.weight, 0)
 
@@ -264,7 +264,7 @@ export function computeHealth(input: HealthInput): HealthReport {
   issues.sort((a, b) => rank[a.severity] - rank[b.severity])
 
   const suggestions = buildSuggestions({
-    input, sched, index, missing, required, hard, gaps, clusters, imbalance,
+    input, sched, index, missing, required, hard, clusters, imbalance,
     components,
   })
 
@@ -321,7 +321,7 @@ function classCapacity(input: HealthInput, sched: ReturnType<typeof buildSchedul
 }
 
 function buildSuggestions({
-  input, sched, index, missing, required, hard, gaps, clusters, imbalance, components,
+  input, sched, index, missing, required, hard, clusters, imbalance, components,
 }: {
   input: HealthInput
   sched: ReturnType<typeof buildSchedules>
@@ -329,7 +329,6 @@ function buildSuggestions({
   missing: number
   required: number
   hard: GeneratorConflict[]
-  gaps: number
   clusters: number
   imbalance: number
   components: HealthComponent[]
@@ -472,15 +471,6 @@ function buildSuggestions({
           'Lowering max / day on those requirements forces the solver to spread them across the week. ' +
           '(Deliberate doubles are not counted here.)',
         where: 'Homeroom → Requirements → Max / day',
-      })
-    }
-    if (scoreOf('gaps') < 80) {
-      out.push({
-        title: 'Close the free periods stranded in teachers’ days',
-        detail:
-          `${plural(gaps, 'idle gap')} across the week. Teachers who teach only a few periods are the usual cause — ` +
-          'grouping their classes onto fewer days, or setting max periods in a row, gives the solver something to aim at.',
-        where: 'Teacher → Max periods in a row',
       })
     }
     if (scoreOf('balance') < 80) {

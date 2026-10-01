@@ -20,6 +20,7 @@ import HealthPanel from '../HealthPanel'
 import EditableTimetableGrid from '../EditableTimetableGrid'
 import MasterTimetableEditor from '../MasterTimetableEditor'
 import TeacherWeekView from '../TeacherWeekView'
+import LessonStatsCard from '../LessonStatsCard'
 import { useTimetableDraft } from '../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../draft/TeacherLoad'
 import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
@@ -122,6 +123,14 @@ export default function GenerateTab() {
   const flash = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
+  }
+
+  // Clicking a class on the master grid is a request to look at that class on
+  // its own — 34 rows of 66 cells is for spotting a problem, not for reading one
+  // class's week, so the name jumps to the view that is.
+  const openClass = (homeroomId: string) => {
+    setSelectedHomeroomId(homeroomId)
+    setView('class')
   }
 
   const handleGenerate = async () => {
@@ -292,18 +301,30 @@ export default function GenerateTab() {
       <div className="pb-3 border-b border-[#E4E4E7] space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {generating ? (
+            /* The solver holds the thread in bursts, so this button has to say
+               what it is doing on its own: a fill showing how far through the
+               passes it is, and one tap to stop and keep the best week so far. */
             <button
               onClick={() => { cancelRef.current = true }}
-              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
-              title="Stop after the current pass and keep the best result so far"
+              className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#3F3F46] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
+              title="Stop after the current pass and keep the best timetable found so far"
             >
-              <Loader2 className="animate-spin" size={15} />
-              {progress ? `Searching (${progress.pass}) — stop` : 'Working — stop'}
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 bg-[#B8983C]/30 transition-[width] duration-700 ease-out"
+                style={{ width: `${progress ? (progress.pass / progress.maxPasses) * 100 : 5}%` }}
+              />
+              <Loader2 className="animate-spin relative flex-shrink-0" size={15} />
+              <span className="relative truncate">
+                {progress ? 'Searching — stop' : 'Starting…'}
+              </span>
             </button>
           ) : (
             <button
               onClick={handleGenerate}
-              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
+              /* active: gives the press itself a frame of feedback, so the
+                 button never reads as dead while the first pass starts up. */
+              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] active:bg-[#09090B] active:scale-[0.98] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-all duration-100 w-full"
             >
               <Sparkles size={15} className="text-[#B8983C]" />
               {entries.some((e) => e.isLocked) ? 'Regenerate' : 'Generate'}
@@ -490,6 +511,8 @@ export default function GenerateTab() {
                 onTogglePin={togglePin}
                 onMove={moveEntry}
               />
+              {/* What this class's week adds up to, under the week itself. */}
+              <LessonStatsCard dimension="class" id={selectedHomeroomId} className="mt-2.5" />
             </>
           )
         ) : view === 'teacher' ? (
@@ -537,6 +560,7 @@ export default function GenerateTab() {
                   onClearCell={clearCellEntry}
                   onTogglePin={togglePin}
                   onMove={moveEntry}
+                  onOpenClass={openClass}
                 />
               </div>
             ))}
