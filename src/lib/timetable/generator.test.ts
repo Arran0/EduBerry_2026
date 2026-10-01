@@ -430,3 +430,233 @@ describe('combined lessons', () => {
     expect(result.conflicts.some((c) => /different period groups/.test(c.message))).toBe(true)
   })
 })
+
+// ── Rooms ────────────────────────────────────────────────────
+
+describe('rooms', () => {
+  const classrooms = (n: number): Room[] =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `room${i}`, name: `Room ${i}`, room_type: 'classroom' as const,
+      capacity: null, created_by: null, created_at: '', updated_at: '',
+    }))
+
+  /** `hrCount` classes, each needing `each` ordinary periods a week. */
+  const school = (hrCount: number, each: number): Requirement[] =>
+    Array.from({ length: hrCount }, (_, h) =>
+      requirement({
+        id: `r${h}`, homeroom_id: `hr${h}`, subject_id: 'eng',
+        teacher_id: `t${h}`, teacher_ids: [`t${h}`],
+        periods_per_week: each, max_per_day: each,
+      }),
+    )
+
+  it('does not make classes queue for a classroom — two classes may have a lesson at once', () => {
+    // The whole point: a school with 2 rooms on record and 10 classes still gets
+    // a full timetable. Treating the classroom list as a hard capacity would cap
+    // it at 2 lessons per period and throw the rest away.
+    const result = run({
+      slots: slots(5),
+      rooms: classrooms(2),
+      requirements: school(10, 5),
+    })
+    expect(result.unplacedCount).toBe(0)
+    expect(result.entries).toHaveLength(50)
+    // And several classes really are taught in the same period.
+    const perCell = new Map<string, number>()
+    for (const e of result.entries) {
+      const k = `${e.day}|${e.slotId}`
+      perCell.set(k, (perCell.get(k) ?? 0) + 1)
+    }
+    expect(Math.max(...perCell.values())).toBeGreaterThan(2)
+  })
+
+  it('gives a class one room for the whole week instead of moving it every period', () => {
+    const result = run({
+      slots: slots(5),
+      rooms: classrooms(4),
+      requirements: school(4, 5),
+    })
+    expect(result.unplacedCount).toBe(0)
+    const roomsPerClass = new Map<string, Set<string | null>>()
+    for (const e of result.entries) {
+      if (!roomsPerClass.has(e.homeroomId)) roomsPerClass.set(e.homeroomId, new Set())
+      roomsPerClass.get(e.homeroomId)!.add(e.roomId)
+    }
+    expect(roomsPerClass.size).toBe(4)
+    for (const set of roomsPerClass.values()) expect(set.size).toBe(1)
+    // Four classes, four rooms — each class owns a different one.
+    const owned = new Set([...roomsPerClass.values()].map((s) => [...s][0]))
+    expect(owned.size).toBe(4)
+    expect(owned.has(null)).toBe(false)
+  })
+
+  it('leaves a class roomless rather than unscheduled when the list is short', () => {
+    const result = run({
+      slots: slots(5),
+      rooms: classrooms(2),
+      requirements: school(5, 5),
+    })
+    expect(result.unplacedCount).toBe(0)
+    const roomless = result.entries.filter((e) => e.roomId === null)
+    expect(roomless.length).toBe(15) // the 3 classes past the end of the list
+    expect(result.conflicts.filter((c) => c.kind === 'room_double_booked')).toHaveLength(0)
+  })
+
+  it('still treats a lab as scarce — it is a shared resource, a classroom is not', () => {
+    const lab: Room[] = [{
+      id: 'lab1', name: 'Lab 1', room_type: 'science_lab', capacity: null,
+      created_by: null, created_at: '', updated_at: '',
+    }]
+    // Two classes, one lab, one period in the week: only one lesson can happen.
+    const result = run({
+      slots: slots(1),
+      config: config({ working_days: ['monday'] }),
+      rooms: lab,
+      requirements: [
+        requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'sci', room_type: 'science_lab' }),
+        requirement({ id: 'r2', homeroom_id: 'hr2', subject_id: 'sci', room_type: 'science_lab' }),
+      ],
+    })
+    expect(result.entries).toHaveLength(1)
+    expect(result.unplacedCount).toBe(1)
+  })
+
+  it('never double-books a room it did assign', () => {
+    const result = run({
+      slots: slots(4),
+      rooms: classrooms(3),
+      requirements: school(8, 4),
+    })
+    const seen = new Map<string, number>()
+    for (const e of result.entries) {
+      if (!e.roomId) continue
+      const k = `${e.roomId}|${e.day}|${e.slotId}`
+      seen.set(k, (seen.get(k) ?? 0) + 1)
+    }
+    expect([...seen.values()].every((n) => n === 1)).toBe(true)
+    expect(result.conflicts.filter((c) => c.kind === 'room_double_booked')).toHaveLength(0)
+  })
+})
+
+// ── Local search: the swap neighbourhood ─────────────────────
+
+describe('swapping two lessons', () => {
+  it('keeps every lesson and every block intact through a long search', () => {
+    // A dense week with nowhere free to relocate into is exactly where the
+    // search leans on swaps; nothing it does may lose a lesson, split a double,
+    // or double-book a teacher.
+    const teaching = slots(6)
+    const requirements: Requirement[] = []
+    for (let h = 0; h < 6; h++) {
+      requirements.push(requirement({
+        id: `d${h}`, homeroom_id: `hr${h}`, subject_id: 'sci',
+        teacher_id: `t${h}`, teacher_ids: [`t${h}`],
+        periods_per_week: 4, max_per_day: 2, min_block: 2, max_block: 2,
+      }))
+      for (const s of ['eng', 'mat', 'his', 'geo']) {
+        requirements.push(requirement({
+          id: `${s}${h}`, homeroom_id: `hr${h}`, subject_id: s,
+          teacher_id: `t${s}${h % 3}`, teacher_ids: [`t${s}${h % 3}`],
+          periods_per_week: 5, max_per_day: 2,
+        }))
+      }
+    }
+    const result = generateTimetable(
+      { config: config(), slots: teaching, requirements, unavailability: [], rooms: [], seed: 5 },
+      { maxRestarts: 2, minRestarts: 1, maxMoves: 40_000, budgetMs: 10_000 },
+    )
+
+    expect(result.diagnostics.moves).toBeGreaterThan(0)
+    // Nothing lost or duplicated: every class still has exactly its 24 periods.
+    for (let h = 0; h < 6; h++) {
+      expect(result.entries.filter((e) => e.homeroomId === `hr${h}`)).toHaveLength(24)
+    }
+    expect(result.conflicts.filter((c) => c.kind === 'teacher_double_booked')).toHaveLength(0)
+    expect(result.conflicts.filter((c) => c.kind === 'homeroom_double_booked')).toHaveLength(0)
+
+    // Every double is still one day, two adjacent periods.
+    const blocks = new Map<string, PlacedEntry[]>()
+    for (const e of result.entries) {
+      if (!e.blockKey) continue
+      const arr = blocks.get(e.blockKey) ?? []
+      arr.push(e)
+      blocks.set(e.blockKey, arr)
+    }
+    expect(blocks.size).toBeGreaterThan(0)
+    const pos = new Map(teaching.map((s) => [s.id, s.position]))
+    for (const arr of blocks.values()) {
+      expect(arr).toHaveLength(2)
+      expect(new Set(arr.map((e) => e.day)).size).toBe(1)
+      const [a, b] = arr.map((e) => pos.get(e.slotId)!).sort((x, y) => x - y)
+      expect(b - a).toBe(1)
+    }
+  })
+
+  it('trades two lessons when the week is full and neither can simply move', () => {
+    // Every cell of both classes is taken, so relocation has no empty cell to
+    // reach — only an exchange can change anything. The search must still finish
+    // with both weeks complete and no clash.
+    const teaching = slots(2)
+    const result = generateTimetable(
+      {
+        config: config({ working_days: ['monday'] }),
+        slots: teaching,
+        requirements: [
+          requirement({ id: 'a1', homeroom_id: 'hr1', subject_id: 'eng', teacher_id: 't1', teacher_ids: ['t1'] }),
+          requirement({ id: 'a2', homeroom_id: 'hr1', subject_id: 'mat', teacher_id: 't2', teacher_ids: ['t2'] }),
+          requirement({ id: 'b1', homeroom_id: 'hr2', subject_id: 'eng', teacher_id: 't3', teacher_ids: ['t3'] }),
+          requirement({ id: 'b2', homeroom_id: 'hr2', subject_id: 'mat', teacher_id: 't4', teacher_ids: ['t4'] }),
+        ],
+        unavailability: [], rooms: [], seed: 9,
+      },
+      { maxRestarts: 1, minRestarts: 1, maxMoves: 500, budgetMs: 5_000 },
+    )
+    expect(result.unplacedCount).toBe(0)
+    expect(result.entries).toHaveLength(4)
+    const cells = result.entries.map((e) => `${e.homeroomId}|${e.slotId}`)
+    expect(new Set(cells).size).toBe(4)
+  })
+})
+
+// ── Local search: the scoped-penalty approximation ───────────
+
+describe('the bounded search', () => {
+  it('never leaves a school worse than the construction it started from', () => {
+    // A move is accepted on a SCOPED penalty — the slice of the score it can
+    // change — rather than a full rescan, and a swap sums the slices of two
+    // lessons that may overlap. This is the test that the shortcut still agrees
+    // with the real, global score it stands in for.
+    const teaching = slots(8)
+    const requirements: Requirement[] = []
+    for (let h = 0; h < 12; h++) {
+      for (let s = 0; s < 8; s++) {
+        const double = s === 0
+        requirements.push(requirement({
+          id: `r${h}-${s}`, homeroom_id: `hr${h}`, subject_id: `sub${s}`,
+          teacher_id: `t${(h % 4) * 8 + s}`, teacher_ids: [`t${(h % 4) * 8 + s}`],
+          periods_per_week: s < 4 ? 5 : 4,
+          max_per_day: double ? 2 : 1,
+          min_block: double ? 2 : 1,
+          max_block: double ? 2 : 1,
+        }))
+      }
+    }
+    const input = {
+      config: config({ working_days: [...DAYS, 'saturday' as Weekday] }),
+      slots: teaching, requirements, unavailability: [], rooms: [],
+    }
+
+    for (const seed of [1, 2, 3]) {
+      const effort = { maxRestarts: 3, minRestarts: 3, budgetMs: 20_000 }
+      const built = generateTimetable({ ...input, seed }, { ...effort, maxMoves: 0 })
+      const searched = generateTimetable({ ...input, seed }, { ...effort, maxMoves: 60_000 })
+
+      expect(searched.softPenalty).toBeLessThanOrEqual(built.softPenalty)
+      expect(searched.unplacedCount).toBeLessThanOrEqual(built.unplacedCount)
+      // It should not merely hold the line — the search is what makes a
+      // generated timetable usable, and it has real work to do here.
+      expect(built.softPenalty).toBeGreaterThan(100)
+      expect(searched.softPenalty).toBeLessThan(built.softPenalty / 10)
+    }
+  })
+})

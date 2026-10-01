@@ -283,6 +283,57 @@ function busyKeys(sched: Schedules, day: Weekday, slotId: string): string[] {
   return ids.map((id) => cellKey(day, id))
 }
 
+// ── Rooms ────────────────────────────────────────────────────
+/**
+ * Where lessons physically sit.
+ *
+ * A school is not a pool of interchangeable rooms. A class owns a room and the
+ * teachers come to it; only special facilities — labs, computer rooms — are a
+ * shared resource that classes queue for. That is how every real timetabler
+ * (Untis, aSc, FET) models it, and scheduling ordinary lessons out of one
+ * global classroom pool instead is actively destructive: a school that entered
+ * 6 rooms for 34 classes can then place only 6 lessons in any period, so two
+ * thirds of its week cannot be built at all, and the lessons that do land get
+ * scattered across the week looking for a free room.
+ *
+ * So:
+ *   - every class is given its own classroom for the whole week, and an
+ *     ordinary whole-class lesson always goes there. A class can only be in one
+ *     lesson at a time, so its room is never contended — two classes having
+ *     maths in the same period is not a conflict, and nothing here treats it as
+ *     one;
+ *   - a class with no classroom on record gets none. Rooms the admin never
+ *     entered must not cost lessons;
+ *   - special room types keep the exclusive shared pool with full clash
+ *     checking. A lab really is scarce, and refusing a lesson when every lab is
+ *     busy is the right answer;
+ *   - parallel split groups cannot all sit in the class's room, so the groups
+ *     beyond the first take any other free classroom, and none if there is none.
+ */
+export interface RoomPlan {
+  byType: Map<RoomType, Room[]>
+  classrooms: Room[]
+  homeRoom: Map<string, string | null> // homeroomId -> the room it owns
+}
+
+/**
+ * Hands each class its own classroom. `homeroomIds` is sorted so the same
+ * school always gets the same assignment, run to run — a class that keeps
+ * changing rooms between generations is unusable to the people reading it.
+ */
+export function buildRoomPlan(rooms: Room[], homeroomIds: string[]): RoomPlan {
+  const byType = new Map<RoomType, Room[]>()
+  for (const r of rooms) {
+    if (!byType.has(r.room_type)) byType.set(r.room_type, [])
+    byType.get(r.room_type)!.push(r)
+  }
+  const classrooms = byType.get('classroom') ?? []
+  const homeRoom = new Map<string, string | null>()
+  const ordered = [...new Set(homeroomIds)].sort()
+  ordered.forEach((id, i) => homeRoom.set(id, classrooms[i]?.id ?? null))
+  return { byType, classrooms, homeRoom }
+}
+
 // ── Solver working state ─────────────────────────────────────
 
 class SolveState {
@@ -517,7 +568,7 @@ interface BuildArgs {
   combined: CombinedUnit[]
   locked: PlacedEntry[]
   index: ConstraintIndex
-  roomsByType: Map<RoomType, Room[]>
+  rooms: RoomPlan
   rng: () => number
 }
 
@@ -546,18 +597,32 @@ function longestRun(indices: Set<number>): number {
 // `keys` are the cell keys a booking would occupy — the block's own periods
 // plus, when several bell schedules overlap, the colliding periods of the other
 // bands, so one room isn't handed to two schedules running at the same hour.
-function pickRoomForBlock(
-  roomsByType: Map<RoomType, Room[]>,
+function pickRoom(
+  plan: RoomPlan,
   roomUsedAt: Map<string, Set<string>>,
+  homeroomId: string,
   type: RoomType,
   keys: string[],
 ): { ok: boolean; roomId: string | null } {
-  const list = roomsByType.get(type) ?? []
-  if (list.length === 0) return { ok: true, roomId: null } // school doesn't track this room type
-  for (const room of list) {
-    const clash = keys.some((k) => roomUsedAt.get(k)?.has(room.id))
-    if (!clash) return { ok: true, roomId: room.id }
+  const free = (id: string) => !keys.some((k) => roomUsedAt.get(k)?.has(id))
+
+  if (type === 'classroom') {
+    const home = plan.homeRoom.get(homeroomId) ?? null
+    if (home) {
+      if (free(home)) return { ok: true, roomId: home }
+      // Only a parallel split group can find the class's own room taken — the
+      // other half of the class is in it. Any free classroom will do.
+      for (const room of plan.classrooms) if (free(room.id)) return { ok: true, roomId: room.id }
+    }
+    // No classroom on record for this class, or every one of them busy. An
+    // unentered room is missing data, not a missing room: schedule the lesson
+    // without one rather than throw the lesson away.
+    return { ok: true, roomId: null }
   }
+
+  const list = plan.byType.get(type) ?? []
+  if (list.length === 0) return { ok: true, roomId: null } // school doesn't track this room type
+  for (const room of list) if (free(room.id)) return { ok: true, roomId: room.id }
   return { ok: false, roomId: null }
 }
 
@@ -572,7 +637,7 @@ function scoreBlock(
   args: BuildArgs,
   relaxMaxPerDay: boolean,
 ): { roomId: string | null; penalty: number } | null {
-  const { sched, index, roomsByType, rng } = args
+  const { sched, index, rooms, rng } = args
   const geo = scheduleFor(sched, block.homeroomId)
   const size = block.size
   if (start + size > geo.slotIds.length) return null
@@ -640,7 +705,7 @@ function scoreBlock(
     if (longestRun(union) > maxRow) return null
   }
 
-  const room = pickRoomForBlock(roomsByType, state.roomUsedAt, block.roomType, bookKeys)
+  const room = pickRoom(rooms, state.roomUsedAt, block.homeroomId, block.roomType, bookKeys)
   if (!room.ok) return null
 
   const dl = state.dayLoad.get(`${block.homeroomId}|${day}`) ?? 0
@@ -650,8 +715,7 @@ function scoreBlock(
 }
 
 function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boolean): boolean {
-  const { sched, index } = args
-  const geo = scheduleFor(sched, block.homeroomId)
+  const geo = scheduleFor(args.sched, block.homeroomId)
   let best: { day: Weekday; start: number; roomId: string | null; penalty: number } | null = null
 
   for (const day of geo.days) {
@@ -665,30 +729,47 @@ function placeBlock(state: SolveState, block: Block, args: BuildArgs, relax: boo
   }
 
   if (!best) return false
+  occupyBlockAt(state, block, best.day, best.start, best.roomId, args)
+  return true
+}
+
+/** Books a block into a known-good cell run and returns the rows it made. */
+function occupyBlockAt(
+  state: SolveState,
+  block: Block,
+  day: Weekday,
+  start: number,
+  roomId: string | null,
+  args: BuildArgs,
+): PlacedEntry[] {
+  const { sched, index } = args
+  const geo = scheduleFor(sched, block.homeroomId)
   // A double/triple is several rows that mean one lesson. They all carry the
   // same block key so the local search below, the grids, and a later reload
   // can tell the block apart from two unrelated periods of the same subject —
   // without it, anything that moves one period silently breaks the block.
   const blockKey = block.size > 1 ? `blk${++state.blockSeq}` : null
-  for (let j = best.start; j < best.start + block.size; j++) {
+  const made: PlacedEntry[] = []
+  for (let j = start; j < start + block.size; j++) {
     const slotId = geo.slotIds[j]
     const p: PlacedEntry = {
       homeroomId: block.homeroomId,
-      day: best.day,
+      day,
       slotId,
       subjectId: block.subjectId,
       teacherId: block.teacherId,
       teacherIds: block.teacherIds,
-      roomId: best.roomId,
+      roomId,
       isLocked: false,
       groupId: block.groupId,
       // Parallel group lessons in one cell share a split key.
-      splitKey: block.groupId ? `${block.homeroomId}__${best.day}__${slotId}` : null,
+      splitKey: block.groupId ? `${block.homeroomId}__${day}__${slotId}` : null,
       blockKey,
     }
     state.occupyCell(p, sched.clock.get(slotId) ?? j, index.limits)
+    made.push(p)
   }
-  return true
+  return made
 }
 
 function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } {
@@ -731,7 +812,7 @@ function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unp
 function scoreCombined(
   state: SolveState, unit: CombinedUnit, day: Weekday, start: number, args: BuildArgs,
 ): { roomId: string | null; penalty: number } | null {
-  const { sched, index, roomsByType } = args
+  const { sched, index, rooms } = args
   const geo = combinedSchedule(sched, unit)
   if (!geo) return null
   const size = unit.size
@@ -785,7 +866,12 @@ function scoreCombined(
   // lesson asks for that is free across every period of the run.
   let roomId = unit.roomId
   if (!roomId) {
-    const picked = pickRoomForBlock(roomsByType, state.roomUsedAt, unit.roomType, bookKeys)
+    // A combined lesson fills many classes at once, so "the class's own room"
+    // means the first member's — the one place every member is free by the time
+    // the lesson is booked.
+    const picked = pickRoom(
+      rooms, state.roomUsedAt, unit.members[0]?.homeroomId ?? '', unit.roomType, bookKeys,
+    )
     if (!picked.ok) return null
     roomId = picked.roomId
   }
@@ -1065,9 +1151,19 @@ function scopedPenalty(
 }
 
 // ── Bounded local search ─────────────────────────────────────
-// Relocates one unlocked lesson at a time to a better cell. A double or triple
-// period is ONE lesson here: it is lifted and re-placed whole, never picked
-// apart period by period.
+// Two neighbourhoods, which is what the school-timetabling literature settles
+// on as the minimum that actually improves a timetable:
+//
+//   RELOCATE — lift one lesson and re-place it in the best free cell.
+//   SWAP     — exchange the cells of two lessons.
+//
+// Relocation alone stalls almost immediately on a full week: once the good
+// cells are taken, the only improving move for a badly-placed lesson is to
+// trade with whatever is sitting in the cell it wants, and relocation can never
+// make that trade. Swapping is what lets the search keep going.
+//
+// A double or triple period is ONE lesson here: it is lifted and re-placed
+// whole, never picked apart period by period.
 
 function localSearch(
   state: SolveState,
@@ -1081,7 +1177,7 @@ function localSearch(
   const ctx = makePenaltyCtx(state, sched, index)
   let done = 0
 
-  // Only relocate plain whole-class lessons. Split-group lessons and
+  // Only move plain whole-class lessons. Split-group lessons and
   // combined-class lessons are structurally tied to their cell and must not be
   // moved independently (that would drop their split/combined key).
   const isMovable = (p: PlacedEntry) => !p.isLocked && !p.groupId && !p.combinedKey
@@ -1114,9 +1210,131 @@ function localSearch(
     for (const p of unit) state.removeCell(p, clockOf(p), index.limits)
   }
 
+  // The lesson a unit represents, as something placeBlock can re-place. The
+  // per-day cap is deliberately infinite: it was already honoured when the
+  // lesson was built, and the spread penalty — not a hard refusal — is what
+  // keeps a move from stacking a subject onto one day.
+  const blockOf = (unit: PlacedEntry[]): Block => ({
+    requirementId: '',
+    homeroomId: unit[0].homeroomId,
+    subjectId: unit[0].subjectId,
+    teacherId: unit[0].teacherId,
+    teacherIds: teachersOf(unit[0]),
+    roomType: roomTypeOf(unit[0], args.rooms.byType),
+    size: unit.length,
+    maxPerDay: Number.POSITIVE_INFINITY,
+    groupId: unit[0].groupId ?? null,
+  })
+
+  /**
+   * The penalty of everything the given lessons can change, counted once per
+   * distinct class/subject/teacher slice. A swap touches two lessons that may
+   * share a class or a teacher, and adding two overlapping slices would weight
+   * the shared terms double and distort the comparison.
+   */
+  const scopeOf = (heads: PlacedEntry[]): number => {
+    const seen = new Set<string>()
+    let total = 0
+    for (const h of heads) {
+      const group = h.groupId ?? null
+      const key = `${h.homeroomId}|${h.subjectId}|${group}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      total += scopedPenalty(state, ctx, h.homeroomId, h.subjectId, group, teachersOf(h))
+    }
+    return total
+  }
+
+  // Where a unit currently sits, as a day plus a start index into its own
+  // schedule — the address a swap hands to the other lesson.
+  const addressOf = (unit: PlacedEntry[]) => {
+    const geo = scheduleFor(sched, unit[0].homeroomId)
+    let start = Infinity
+    for (const p of unit) {
+      const i = geo.slotOrder.get(p.slotId)
+      if (i !== undefined && i < start) start = i
+    }
+    return { geo, day: unit[0].day, start }
+  }
+
   // The movable pool only changes when a move is accepted, so it is built once
   // and patched rather than rescanned for every iteration.
   const pool = units()
+
+  /** Relocates one lesson to the best cell it can reach. */
+  const relocate = (unit: PlacedEntry[]): boolean => {
+    const before = scopeOf([unit[0]])
+    const seqBefore = state.blockSeq
+    lift(unit)
+    const countBefore = state.placements.length
+    if (!placeBlock(state, blockOf(unit), args, true)) {
+      restore(unit)
+      state.blockSeq = seqBefore
+      return false
+    }
+    const moved = state.placements.slice(countBefore)
+    if (scopeOf([moved[0]]) > before) {
+      lift(moved)
+      state.blockSeq = seqBefore
+      restore(unit)
+      return false
+    }
+    const i = pool.indexOf(unit)
+    if (i >= 0) pool[i] = moved
+    return true
+  }
+
+  /**
+   * Exchanges the cells of two lessons. Only equal-length lessons trade, so
+   * each one lands in exactly the run the other vacated and a double never
+   * decays into two singles. Both destinations are checked against every hard
+   * constraint — with the pair already lifted, so each lesson is free to take
+   * the cell the other just left.
+   */
+  const swap = (a: PlacedEntry[], b: PlacedEntry[]): boolean => {
+    if (a === b || a.length !== b.length) return false
+    if (a[0].homeroomId === b[0].homeroomId && a[0].subjectId === b[0].subjectId) return false
+    const addrA = addressOf(a)
+    const addrB = addressOf(b)
+    if (addrA.start === Infinity || addrB.start === Infinity) return false
+    // A lesson can only take a day and a period that exist in its own week —
+    // two classes on different bell schedules have neither in common.
+    if (!addrA.geo.days.includes(addrB.day) || !addrB.geo.days.includes(addrA.day)) return false
+    if (addrB.start + a.length > addrA.geo.slotIds.length) return false
+    if (addrA.start + b.length > addrB.geo.slotIds.length) return false
+
+    const before = scopeOf([a[0], b[0]])
+    const seqBefore = state.blockSeq
+    lift(a)
+    lift(b)
+
+    const blockA = blockOf(a)
+    const blockB = blockOf(b)
+    const fitA = scoreBlock(state, blockA, addrB.day, addrB.start, args, true)
+    const fitB = fitA ? scoreBlock(state, blockB, addrA.day, addrA.start, args, true) : null
+    if (!fitA || !fitB) {
+      restore(a)
+      restore(b)
+      state.blockSeq = seqBefore
+      return false
+    }
+
+    const newA = occupyBlockAt(state, blockA, addrB.day, addrB.start, fitA.roomId, args)
+    const newB = occupyBlockAt(state, blockB, addrA.day, addrA.start, fitB.roomId, args)
+    if (scopeOf([newA[0], newB[0]]) > before) {
+      lift(newA)
+      lift(newB)
+      state.blockSeq = seqBefore
+      restore(a)
+      restore(b)
+      return false
+    }
+    const ia = pool.indexOf(a)
+    if (ia >= 0) pool[ia] = newA
+    const ib = pool.indexOf(b)
+    if (ib >= 0) pool[ib] = newB
+    return true
+  }
 
   for (let it = 0; it < iterations; it++) {
     if (pool.length === 0) break
@@ -1126,41 +1344,12 @@ function localSearch(
     done++
 
     const unit = pool[Math.floor(args.rng() * pool.length)]
-    const head = unit[0]
-    const teachers = teachersOf(head)
-    const scope = () =>
-      scopedPenalty(state, ctx, head.homeroomId, head.subjectId, head.groupId ?? null, teachers)
-
-    const before = scope()
-    const seqBefore = state.blockSeq
-    lift(unit)
-    const block: Block = {
-      requirementId: '',
-      homeroomId: head.homeroomId,
-      subjectId: head.subjectId,
-      teacherId: head.teacherId,
-      teacherIds: teachers,
-      roomType: roomTypeOf(head, args.roomsByType),
-      size: unit.length,
-      maxPerDay: Number.POSITIVE_INFINITY,
-      groupId: head.groupId ?? null,
-    }
-    const countBefore = state.placements.length
-    if (!placeBlock(state, block, args, true)) {
-      restore(unit)
-      state.blockSeq = seqBefore
-      continue
-    }
-    const moved = state.placements.slice(countBefore)
-
-    if (scope() > before) {
-      lift(moved)
-      state.blockSeq = seqBefore
-      restore(unit)
+    // Relocation is the cheaper move and finds the easy wins, so it stays the
+    // common case; swapping is what breaks the deadlock once they run out.
+    if (pool.length > 1 && args.rng() < 0.35) {
+      swap(unit, pool[Math.floor(args.rng() * pool.length)])
     } else {
-      // Accepted: the lesson now lives where it landed.
-      const i = pool.indexOf(unit)
-      if (i >= 0) pool[i] = moved
+      relocate(unit)
     }
   }
   return done
@@ -1202,15 +1391,17 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
   const index = buildConstraintIndex(input.constraints ?? [], input.homerooms ?? [])
   mergeLegacyUnavailability(index, input.unavailability)
 
-  const roomsByType = new Map<RoomType, Room[]>()
-  for (const r of input.rooms) {
-    if (!roomsByType.has(r.room_type)) roomsByType.set(r.room_type, [])
-    roomsByType.get(r.room_type)!.push(r)
-  }
-
   const locked = (input.locked ?? []).map((p) => ({ ...p, isLocked: true }))
   const blocks = expandBlocks(input.requirements, locked)
   const combined = expandCombined(input.combined ?? [], locked)
+
+  // Every class the solve touches, so each one can be handed its own room.
+  const rooms = buildRoomPlan(input.rooms, [
+    ...(input.homerooms ?? []).map((h) => h.id),
+    ...input.requirements.map((r) => r.homeroom_id),
+    ...combined.flatMap((u) => u.members.map((m) => m.homeroomId)),
+    ...locked.map((l) => l.homeroomId),
+  ])
 
   const periods =
     blocks.reduce((n, b) => n + b.size, 0) + combined.reduce((n, u) => n + u.size, 0)
@@ -1249,7 +1440,7 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
   let restarts = 0
   for (let r = 0; r < limits.maxRestarts; r++) {
     const rng = makeRng(baseSeed + r * 7919)
-    const args: BuildArgs = { sched, blocks, combined, locked, index, roomsByType, rng }
+    const args: BuildArgs = { sched, blocks, combined, locked, index, rooms, rng }
     const attempt = buildOnce(args)
     restarts++
     const un = totalUnplaced(attempt)
@@ -1270,7 +1461,7 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
   const lsRng = makeRng(baseSeed + 104729)
   const moves = localSearch(
     finalState,
-    { sched, blocks, combined, locked, index, roomsByType, rng: lsRng },
+    { sched, blocks, combined, locked, index, rooms, rng: lsRng },
     limits.maxMoves,
     outOfTime,
   )
