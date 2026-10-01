@@ -2,53 +2,30 @@
 // Driving the solver from the UI.
 //
 // generateTimetable() is synchronous and holds the main thread for as long as
-// its budget allows, which is fine for a couple of seconds and not fine for
-// twenty. Running it as a series of shorter passes, yielding to the browser in
-// between, keeps the page responsive, lets the work be cancelled, and reports
-// progress — while still spending as much total effort as the admin asked for.
+// its budget allows, which is fine for a second and not fine for ten. Running
+// it as a series of shorter passes, yielding to the browser in between, keeps
+// the page responsive, lets the work be stopped, and reports progress.
 //
-// Each pass is an independent randomized solve; the best one wins. That is the
+// Each pass is an independent randomized solve and the best one wins — the
 // same bet the restarts inside a single pass make, so nothing is wasted by
-// splitting the work up this way.
+// splitting the work this way. How many passes run is decided by whether they
+// are still finding anything better, not by a setting: a small school settles
+// in one or two, a hard one keeps going until it stops improving.
 // ============================================================
 
 import { generateTimetable } from './generator'
 import type { GeneratorInput, GeneratorResult, SolveDiagnostics } from './types'
 
-export type SolveEffortLevel = 'quick' | 'standard' | 'thorough'
-
-interface EffortPreset {
-  label: string
-  /** What it says it will do, for the button's tooltip. */
-  hint: string
-  passes: number
-  budgetMsPerPass: number
-}
-
-export const SOLVE_EFFORTS: Record<SolveEffortLevel, EffortPreset> = {
-  quick: {
-    label: 'Quick',
-    hint: 'About a second. Good while you are still adding requirements.',
-    passes: 1,
-    budgetMsPerPass: 1200,
-  },
-  standard: {
-    label: 'Standard',
-    hint: 'A few seconds. The usual choice.',
-    passes: 3,
-    budgetMsPerPass: 2000,
-  },
-  thorough: {
-    label: 'Thorough',
-    hint: 'Up to half a minute. Worth it when periods will not fit or the week looks untidy.',
-    passes: 10,
-    budgetMsPerPass: 2500,
-  },
-}
+/** Wall-clock budget per pass. Short enough that stopping feels immediate. */
+const PASS_BUDGET_MS = 2500
+/** Ceiling on passes, for the pathological case where every one improves. */
+const MAX_PASSES = 8
+/** Give up after this many passes in a row that found nothing better. */
+const PATIENCE = 2
 
 export interface SolveProgress {
   pass: number
-  passes: number
+  maxPasses: number
   /** The best result so far, so the admin sees it improving. */
   bestUnplaced: number
   bestPenalty: number
@@ -56,7 +33,6 @@ export interface SolveProgress {
 }
 
 export interface SolveOptions {
-  effort?: SolveEffortLevel
   onProgress?: (p: SolveProgress) => void
   /** Checked between passes; stops and returns the best found so far. */
   shouldCancel?: () => boolean
@@ -74,18 +50,19 @@ const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 
 
 export async function solveTimetable(
   input: GeneratorInput,
-  { effort = 'standard', onProgress, shouldCancel }: SolveOptions = {},
+  { onProgress, shouldCancel }: SolveOptions = {},
 ): Promise<GeneratorResult> {
-  const preset = SOLVE_EFFORTS[effort]
   const startedAt = Date.now()
   const baseSeed = input.seed ?? Math.floor(Math.random() * 1_000_000)
 
   let best: GeneratorResult | null = null
+  let sinceImproved = 0
+  let passes = 0
   const spent: SolveDiagnostics = {
     restarts: 0, restartCeiling: 0, moves: 0, moveCeiling: 0, elapsedMs: 0, hitBudget: false,
   }
 
-  for (let pass = 0; pass < preset.passes; pass++) {
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
     if (pass > 0) {
       await yieldToBrowser()
       if (shouldCancel?.()) break
@@ -93,33 +70,36 @@ export async function solveTimetable(
     const result = generateTimetable(
       // Each pass explores from a different random start.
       { ...input, seed: baseSeed + pass * 7_919 },
-      { budgetMs: preset.budgetMsPerPass },
+      { budgetMs: PASS_BUDGET_MS },
     )
+    passes++
     spent.restarts += result.diagnostics.restarts
     spent.restartCeiling += result.diagnostics.restartCeiling
     spent.moves += result.diagnostics.moves
     spent.moveCeiling += result.diagnostics.moveCeiling
     spent.hitBudget = spent.hitBudget || result.diagnostics.hitBudget
 
-    if (isBetter(result, best)) best = result
+    if (isBetter(result, best)) {
+      best = result
+      sinceImproved = 0
+    } else {
+      sinceImproved++
+    }
 
     onProgress?.({
-      pass: pass + 1,
-      passes: preset.passes,
+      pass: passes,
+      maxPasses: MAX_PASSES,
       bestUnplaced: best!.unplacedCount,
       bestPenalty: best!.softPenalty,
       elapsedMs: Date.now() - startedAt,
     })
 
-    // Nothing left to improve: every period placed and a flawless week.
+    // Settled: more passes of the same are not buying anything.
+    if (sinceImproved >= PATIENCE) break
+    // Nothing left to improve at all.
     if (best!.unplacedCount === 0 && best!.softPenalty === 0) break
   }
 
   spent.elapsedMs = Date.now() - startedAt
-  // Report the passes actually run, not the preset, so a cancelled solve is
-  // not described as a full one.
-  return { ...best!, diagnostics: { ...spent, restarts: spent.restarts, moves: spent.moves } }
+  return { ...best!, diagnostics: spent }
 }
-
-/** How many passes a level runs — for labelling the button before it is pressed. */
-export const effortPasses = (effort: SolveEffortLevel) => SOLVE_EFFORTS[effort].passes

@@ -366,7 +366,23 @@ function buildSuggestions({
   const hrName = input.homeroomName ?? ((id: string) => id.slice(0, 8))
   const tName = input.teacherName ?? ((id: string) => id.slice(0, 8))
 
-  // ── Blockers first: nothing else matters while periods are missing.
+  // ── Setup traps that make lessons unplaceable no matter what.
+  // A class on a week with no periods can never be scheduled, and the grid
+  // does not make that obvious on its own.
+  const emptyWeekClasses = [...new Set(input.requirements.map((r) => r.homeroom_id))]
+    .filter((hr) => scheduleFor(sched, hr).teachingSlots.length === 0)
+  if (emptyWeekClasses.length > 0) {
+    out.push({
+      title: 'Give every class a week with periods in it',
+      detail:
+        `${plural(emptyWeekClasses.length, 'class has', 'classes have')} no teaching periods at all — ` +
+        emptyWeekClasses.slice(0, 3).map(hrName).join(', ') +
+        '. Nothing can be scheduled for them until the period group they follow has period slots.',
+      where: 'Configuration → Period groups',
+    })
+  }
+
+  // ── Blockers next: nothing else matters while periods are missing.
   if (missing > 0) {
     const over = classCapacity(input, sched).filter((c) => c.wanted > c.available)
     if (over.length > 0) {
@@ -431,11 +447,12 @@ function buildSuggestions({
     }
 
     out.push({
-      title: 'Try a thorough generate',
+      title: 'Generate again',
       detail:
-        'The solver searches randomly, so a longer run finds placements a short one misses. ' +
-        'If a thorough run still leaves the same periods unplaced, the cause is one of the above, not effort.',
-      where: 'The effort selector beside Generate',
+        'The search is randomized and keeps the best week it finds, so a second run sometimes places ' +
+        'periods the first could not. If the same periods stay unplaced across runs, the cause is one ' +
+        'of the above rather than luck.',
+      where: 'Generate',
     })
   }
 

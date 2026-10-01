@@ -11,8 +11,8 @@ import {
 import type {
   TimetableEntry, Timetable, TimetableStatus, ScheduleWeek,
 } from '@/lib/timetable'
-import { solveTimetable, SOLVE_EFFORTS } from '@/lib/timetable/solve'
-import type { SolveEffortLevel, SolveProgress } from '@/lib/timetable/solve'
+import { solveTimetable } from '@/lib/timetable/solve'
+import type { SolveProgress } from '@/lib/timetable/solve'
 import { teacherIdsOf } from '@/lib/timetable'
 import { computeHealth } from '@/lib/timetable/health'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
@@ -52,7 +52,6 @@ export default function GenerateTab() {
   const [publishing, setPublishing] = useState(false)
   const [unplaced, setUnplaced] = useState<number | null>(null)
   const [toast, setToast] = useState<string>('')
-  const [effort, setEffort] = useState<SolveEffortLevel>('standard')
   const [progress, setProgress] = useState<SolveProgress | null>(null)
   const [lastRun, setLastRun] = useState<string>('')
   // Set while a solve is running; flipping it stops it between passes.
@@ -145,11 +144,7 @@ export default function GenerateTab() {
         locked,
         seed: Math.floor(Math.random() * 1_000_000),
       },
-      {
-        effort,
-        onProgress: setProgress,
-        shouldCancel: () => cancelRef.current,
-      },
+      { onProgress: setProgress, shouldCancel: () => cancelRef.current },
     )
     setEntries(result.entries)
     setUnplaced(result.unplacedCount)
@@ -161,7 +156,7 @@ export default function GenerateTab() {
     const d = result.diagnostics
     setLastRun(
       `${(d.elapsedMs / 1000).toFixed(1)}s · ${d.restarts} attempts · ` +
-      `${d.moves.toLocaleString()} improvements${d.hitBudget ? ' · stopped on time budget' : ''}`,
+      `${d.moves.toLocaleString()} improvements`,
     )
     flash(
       cancelRef.current
@@ -302,7 +297,7 @@ export default function GenerateTab() {
               title="Stop after the current pass and keep the best result so far"
             >
               <Loader2 className="animate-spin" size={15} />
-              {progress ? `Pass ${progress.pass}/${progress.passes} — stop` : 'Working — stop'}
+              {progress ? `Searching (${progress.pass}) — stop` : 'Working — stop'}
             </button>
           ) : (
             <button
@@ -333,37 +328,22 @@ export default function GenerateTab() {
             Clear unlocked
           </button>
         </div>
-        {/* How hard to search. The solve is randomized, so a longer run is a
-            better search — not a different algorithm. */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`${SECTION_LABEL} flex-shrink-0`}>Effort</span>
-          <div className="inline-flex border border-[#D4D4D8]">
-            {(Object.keys(SOLVE_EFFORTS) as SolveEffortLevel[]).map((key, i) => (
-              <button
-                key={key}
-                onClick={() => setEffort(key)}
-                disabled={generating}
-                title={SOLVE_EFFORTS[key].hint}
-                className={`px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
-                  i > 0 ? 'border-l border-[#D4D4D8]' : ''
-                } ${effort === key ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
-              >
-                {SOLVE_EFFORTS[key].label}
-              </button>
-            ))}
+        {/* The solve keeps searching while it is still finding better weeks and
+            stops when it settles, so there is nothing to choose — just what it
+            is doing now, and what the last run spent. */}
+        {(progress || lastRun) && (
+          <div className="text-[11px] text-[#71717A] tabular-nums">
+            {progress ? (
+              <>
+                searching · best so far{' '}
+                {progress.bestUnplaced === 0 ? 'all periods placed' : `${progress.bestUnplaced} unplaced`}
+                {' · '}{(progress.elapsedMs / 1000).toFixed(1)}s
+              </>
+            ) : (
+              <span className="text-[#A1A1AA]">{lastRun}</span>
+            )}
           </div>
-          {progress ? (
-            <span className="text-[11px] text-[#71717A] tabular-nums">
-              pass {progress.pass}/{progress.passes} · best so far{' '}
-              {progress.bestUnplaced === 0 ? 'all placed' : `${progress.bestUnplaced} unplaced`}
-              {' · '}{(progress.elapsedMs / 1000).toFixed(1)}s
-            </span>
-          ) : lastRun ? (
-            <span className="text-[11px] text-[#A1A1AA] tabular-nums">{lastRun}</span>
-          ) : (
-            <span className="text-[11px] text-[#A1A1AA]">{SOLVE_EFFORTS[effort].hint}</span>
-          )}
-        </div>
+        )}
 
         <div className="flex items-center gap-3 flex-wrap">
           <span className={`${SECTION_LABEL} flex-shrink-0`}>Name</span>
@@ -504,6 +484,8 @@ export default function GenerateTab() {
           <TeacherWeekView teacherId={selectedTeacherId} />
         ) : (
           <div className="space-y-5">
+            {/* A class whose period group has no slots can hold nothing. Said
+                plainly here, because an empty row reads as a solver failure. */}
             {weeks
               .filter((w) => w.slots.length === 0 && scheduledHomerooms.some((h) => (slotGroupIds[h.id] ?? null) === w.groupId))
               .map((w) => (

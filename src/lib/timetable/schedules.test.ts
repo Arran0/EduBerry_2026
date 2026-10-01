@@ -85,3 +85,70 @@ describe('weekForHomeroom', () => {
     expect(weekForHomeroom(weeks, { hrX: 'deleted-group' }, 'hrX').groupId).toBeNull()
   })
 })
+
+// ── Who a class is scheduled against ─────────────────────────
+
+import { generateTimetable } from './generator'
+import type { Requirement } from './types'
+
+const teachingSlot = (id: string, position: number, groupId: string | null): PeriodSlot => ({
+  id, config_id: 'cfg', group_id: groupId, position, label: `P${position}`,
+  start_time: null, end_time: null, is_break: false, created_at: '', updated_at: '',
+})
+
+const req = (homeroom: string, teacher: string): Requirement => ({
+  id: `${homeroom}-eng`, config_id: 'cfg', homeroom_id: homeroom, subject_id: 'eng',
+  teacher_id: teacher, teacher_ids: [teacher], periods_per_week: 5,
+  room_type: 'classroom', max_per_day: 2, min_block: 1, max_block: 1, group_id: null,
+  created_at: '', updated_at: '',
+})
+
+describe('a class that was never assigned to a period group', () => {
+  const primary = group('g1', 'Primary', DAYS, 1)
+  // The school's periods all live in the group; the base schedule has none.
+  const groupSlots = [1, 2, 3, 4, 5, 6].map((n) => teachingSlot(`g1-s${n}`, n, 'g1'))
+
+  it('is still scheduled, on the first schedule that has periods', () => {
+    // Regression: it used to fall onto the empty base week and lose every
+    // period, while the grid went on showing it a normal-looking week.
+    const result = generateTimetable({
+      config,
+      slots: groupSlots,
+      slotGroups: [primary],
+      homeroomGroupIds: { hrAssigned: 'g1' }, // hrForgotten is missing
+      requirements: [req('hrAssigned', 't1'), req('hrForgotten', 't2')],
+      constraints: [], unavailability: [], rooms: [], seed: 1,
+      homerooms: [
+        { id: 'hrAssigned', class_teacher_id: null },
+        { id: 'hrForgotten', class_teacher_id: null },
+      ],
+    })
+    expect(result.unplacedCount).toBe(0)
+    expect(result.entries.filter((e) => e.homeroomId === 'hrForgotten')).toHaveLength(5)
+  })
+
+  it('is shown the same week the solver schedules it against', () => {
+    const weeks = scheduleWeeks(config, groupSlots, [primary])
+    const shown = weekForHomeroom(weeks, { hrAssigned: 'g1' }, 'hrForgotten')
+    expect(shown.slots.length).toBeGreaterThan(0)
+    expect(shown.groupId).toBe('g1')
+  })
+
+  it('still uses the base schedule when the base has periods of its own', () => {
+    const slots = [teachingSlot('base-s1', 1, null), ...groupSlots]
+    const weeks = scheduleWeeks(config, slots, [primary])
+    expect(weekForHomeroom(weeks, { hrAssigned: 'g1' }, 'hrForgotten').groupId).toBeNull()
+
+    const result = generateTimetable({
+      config,
+      slots,
+      slotGroups: [primary],
+      homeroomGroupIds: { hrAssigned: 'g1' },
+      requirements: [req('hrForgotten', 't2')],
+      constraints: [], unavailability: [], rooms: [], seed: 1,
+      homerooms: [{ id: 'hrForgotten', class_teacher_id: null }],
+    })
+    // One base period a day, five days: all five land on the base slot.
+    for (const e of result.entries) expect(e.slotId).toBe('base-s1')
+  })
+})

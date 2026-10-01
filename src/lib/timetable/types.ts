@@ -456,6 +456,12 @@ export interface SolverEffort {
   budgetMs?: number
   /** Ceiling on construction restarts (best attempt wins). */
   maxRestarts?: number
+  /**
+   * Restarts to run before the clock is allowed to cut construction short.
+   * Construction is what decides whether a lesson gets placed at all, so it is
+   * never traded away for time — only the tidying-up phase is.
+   */
+  minRestarts?: number
   /** Ceiling on improvement moves. Defaults to a multiple of the week's size. */
   maxMoves?: number
 }

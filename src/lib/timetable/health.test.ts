@@ -97,11 +97,11 @@ describe('health suggestions', () => {
     expect(load!.detail).toContain('T1 36/30')
   })
 
-  it('always offers a thorough run when periods are missing', () => {
+  it('always offers another run when periods are missing', () => {
     const r = report({
       requirements: [requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'eng', periods_per_week: 5 })],
     })
-    expect(r.suggestions.some((s) => /thorough generate/.test(s.title))).toBe(true)
+    expect(r.suggestions.some((s) => /Generate again/.test(s.title))).toBe(true)
   })
 
   it('does not blame capacity when the totals fit', () => {

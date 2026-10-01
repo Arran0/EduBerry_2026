@@ -151,6 +151,14 @@ export interface Schedules {
   geoms: Map<string, SlotGeometry>
   order: SlotGeometry[] // stable display order
   byHomeroom: Map<string, string> // homeroomId -> groupKey
+  /**
+   * The schedule a class follows when it has not been put in a period group.
+   * Normally the base schedule — but an admin who moves the school's periods
+   * into a group leaves the base with none, and a class landing on an empty
+   * week places nothing at all. Falling back to the first real schedule keeps
+   * a forgotten class on a timetable instead of silently emptying it.
+   */
+  fallbackKey: string
   clock: Map<string, number> // slotId -> chronological ordinal
   clash: Map<string, string[]> // slotId -> overlapping slotIds, itself first
   multi: boolean // more than one schedule is in play
@@ -213,9 +221,17 @@ export function buildSchedules(
     )
   }
 
+  // Where an unassigned class goes: the base schedule when it has periods,
+  // otherwise the first group that does.
+  const baseHasSlots = (geoms.get(BASE)?.teachingSlots.length ?? 0) > 0
+  const fallbackKey = baseHasSlots
+    ? BASE
+    : groups.find((g) => (geoms.get(g.id)?.teachingSlots.length ?? 0) > 0)?.id ?? BASE
+
   const byHomeroom = new Map<string, string>()
   for (const [hr, gid] of Object.entries(homeroomGroupIds)) {
-    byHomeroom.set(hr, geoms.has(groupKey(gid)) ? groupKey(gid) : BASE)
+    const key = groupKey(gid)
+    byHomeroom.set(hr, geoms.has(key) ? key : fallbackKey)
   }
 
   // A schedule with no teaching slots can't hold anything, so it is dropped
@@ -252,12 +268,13 @@ export function buildSchedules(
     clash.set(s.id, hits)
   }
 
-  return { geoms, order, byHomeroom, clock, clash, multi }
+  return { geoms, order, byHomeroom, fallbackKey, clock, clash, multi }
 }
 
-/** The schedule a homeroom is solved against (base when unassigned). */
+/** The schedule a homeroom is solved against. */
 export const scheduleFor = (sched: Schedules, homeroomId: string): SlotGeometry =>
-  sched.geoms.get(sched.byHomeroom.get(homeroomId) ?? BASE) ?? sched.geoms.get(BASE)!
+  sched.geoms.get(sched.byHomeroom.get(homeroomId) ?? sched.fallbackKey) ??
+  sched.geoms.get(BASE)!
 
 /** Every cell key a booking at day+slot occupies, overlapping bands included. */
 function busyKeys(sched: Schedules, day: Weekday, slotId: string): string[] {
@@ -1169,6 +1186,7 @@ function resolveEffort(effort: SolverEffort | undefined, periods: number): Requi
   return {
     budgetMs: effort?.budgetMs ?? 4000,
     maxRestarts: effort?.maxRestarts ?? 24,
+    minRestarts: effort?.minRestarts ?? 4,
     maxMoves: effort?.maxMoves ?? Math.max(20_000, periods * 400),
   }
 }
@@ -1242,7 +1260,10 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
       bestUnplaced = un
       bestPenalty = pen
     }
-    if (r + 1 < limits.maxRestarts && Date.now() >= buildDeadline) break
+    // The clock may end construction, but never before it has had its floor of
+    // attempts: a school slow enough to blow the deadline on its first attempt
+    // is exactly the one that needs several.
+    if (restarts >= limits.minRestarts && r + 1 < limits.maxRestarts && Date.now() >= buildDeadline) break
   }
 
   const finalState = best!.state

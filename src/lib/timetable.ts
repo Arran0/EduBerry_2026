@@ -1374,12 +1374,24 @@ export function scheduleWeeks(
   return weeks.filter((w) => w.groupId !== null || w.slots.length > 0)
 }
 
-/** The week one homeroom follows, falling back to the base schedule. */
+/**
+ * The week one homeroom follows.
+ *
+ * An unassigned class follows the base schedule — unless the base has no
+ * periods of its own, which happens as soon as an admin moves the school's
+ * periods into a group. It then follows the first schedule that does have
+ * periods, matching what the solver does, so the grid never shows a class a
+ * week the solver is not scheduling it against.
+ */
 export function weekForHomeroom(
   weeks: ScheduleWeek[],
   groupIds: Record<string, string | null>,
   homeroomId: string,
 ): ScheduleWeek {
   const gid = groupIds[homeroomId] ?? null
-  return weeks.find((w) => w.groupId === gid) ?? weeks.find((w) => w.groupId === null) ?? weeks[0]
+  const own = weeks.find((w) => w.groupId === gid)
+  if (own) return own
+  const base = weeks.find((w) => w.groupId === null)
+  if (base && base.slots.length > 0) return base
+  return weeks.find((w) => w.slots.length > 0) ?? base ?? weeks[0]
 }
