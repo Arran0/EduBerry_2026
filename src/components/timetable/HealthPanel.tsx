@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Activity, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp } from 'lucide-react'
+import { Activity, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, Lightbulb, ArrowRight } from 'lucide-react'
 import type { HealthReport } from '@/lib/timetable/health'
 
 const BAND_COLOR: Record<HealthReport['band'], string> = {
@@ -54,10 +54,43 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
             {report.hardViolations} blocker{report.hardViolations > 1 ? 's' : ''}
           </span>
         )}
+        {/* The headline fix, so the panel is useful without opening it. */}
+        {!open && report.suggestions.length > 0 && (
+          <span className="hidden lg:inline-flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0 max-w-[22rem] truncate">
+            <Lightbulb size={12} className="text-[#B8983C] flex-shrink-0" />
+            {report.suggestions[0].title}
+          </span>
+        )}
         {open ? <ChevronUp size={15} className="text-[#A1A1AA] flex-shrink-0" /> : <ChevronDown size={15} className="text-[#A1A1AA] flex-shrink-0" />}
       </button>
 
       {open && (
+        <>
+        {/* What to do, ranked. Shown above the breakdown because it is the part
+            that changes the score. */}
+        {report.suggestions.length > 0 && (
+          <div className="border-t border-[#E4E4E7] p-3 bg-[#FAFAF9]">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1.5">
+              <Lightbulb size={12} className="text-[#B8983C]" /> What to do
+            </p>
+            <ol className="space-y-2">
+              {report.suggestions.map((sg, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="flex-shrink-0 w-4 h-4 mt-px bg-[#27272A] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#18181B]">{sg.title}</p>
+                    <p className="text-xs text-[#52525B] leading-snug mt-0.5">{sg.detail}</p>
+                    <p className="text-[11px] text-[#A1A1AA] mt-0.5 inline-flex items-center gap-1">
+                      <ArrowRight size={11} /> {sg.where}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         <div className="border-t border-[#E4E4E7] p-3 grid gap-4 md:grid-cols-2">
           {/* Component breakdown */}
           <div className="space-y-2">
@@ -84,13 +117,17 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
                 return (
                   <div key={i} className="flex items-start gap-1.5 text-xs">
                     <Icon size={13} className={`${SEVERITY_COLOR[issue.severity]} flex-shrink-0 mt-0.5`} />
-                    <span className="text-[#52525B]">{issue.message}</span>
+                    <span className="text-[#52525B]">
+                      {issue.message}
+                      {issue.fix && <span className="text-[#A1A1AA]"> {issue.fix}</span>}
+                    </span>
                   </div>
                 )
               })
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   )

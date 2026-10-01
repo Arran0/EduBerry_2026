@@ -7,7 +7,7 @@
 
 import type {
   PlacedEntry, PeriodSlot, Requirement, TimetableConstraint, HomeroomLite, TimetableConfig, Weekday,
-  GeneratorConflict, SlotGroup,
+  GeneratorConflict, SlotGroup, CombinedClassInput,
 } from './types'
 import { detectConflicts, buildSchedules, scheduleFor } from './generator'
 import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
@@ -23,11 +23,26 @@ export interface HealthComponent {
 export interface HealthIssue {
   severity: 'critical' | 'warning' | 'info'
   message: string
+  /** What to actually do about it, when there is a clear answer. */
+  fix?: string
   homeroomId?: string
   teacherId?: string
   subjectId?: string
   day?: Weekday
   slotId?: string
+}
+
+/**
+ * A ranked, concrete thing to change. Issues say what is wrong; these say what
+ * to do, in the order most likely to move the score.
+ */
+export interface HealthSuggestion {
+  /** The action, as an imperative. */
+  title: string
+  /** Why, with the numbers behind it. */
+  detail: string
+  /** Where in the workspace to do it. */
+  where: string
 }
 
 export interface HealthReport {
@@ -36,6 +51,7 @@ export interface HealthReport {
   hardViolations: number
   components: HealthComponent[]
   issues: HealthIssue[]
+  suggestions: HealthSuggestion[]
 }
 
 export interface HealthInput {
@@ -49,6 +65,8 @@ export interface HealthInput {
   // scores everything against the config's single week, as before.
   slotGroups?: SlotGroup[]
   homeroomGroupIds?: Record<string, string | null>
+  /** Combined lessons, so capacity advice counts the periods they occupy. */
+  combined?: CombinedClassInput[]
   unavailability?: { teacher_id: string; day: Weekday; slot_id: string; id: string; config_id: string; created_at: string }[]
   /**
    * detectConflicts() over the same entries, when the caller has already run it
@@ -244,5 +262,239 @@ export function computeHealth(input: HealthInput): HealthReport {
   const rank = { critical: 0, warning: 1, info: 2 }
   issues.sort((a, b) => rank[a.severity] - rank[b.severity])
 
-  return { score, band, hardViolations, components, issues: issues.slice(0, 12) }
+  const suggestions = buildSuggestions({
+    input, sched, index, missing, required, hard, gaps, clusters, imbalance,
+    components,
+  })
+
+  return { score, band, hardViolations, components, issues: issues.slice(0, 12), suggestions }
+}
+
+// ── What to do about it ──────────────────────────────────────
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * Capacity per class: the periods its week can hold against the periods its
+ * requirements ask for. Lessons that cannot be placed are usually arithmetic
+ * rather than bad luck, and this is the arithmetic.
+ *
+ * Parallel split groups share a period, so the busiest group counts once
+ * rather than every group adding up.
+ */
+function classCapacity(input: HealthInput, sched: ReturnType<typeof buildSchedules>) {
+  const out: { homeroomId: string; wanted: number; available: number; timeOff: number }[] = []
+  const homerooms = new Set(input.requirements.map((r) => r.homeroom_id))
+  for (const c of input.combined ?? []) for (const m of c.members) homerooms.add(m.homeroomId)
+
+  for (const hr of homerooms) {
+    const geo = scheduleFor(sched, hr)
+    const total = geo.days.length * geo.teachingSlots.length
+    const timeOff = input.constraints.filter(
+      (c) => c.type === 'time_off' && c.scope === 'homeroom' && c.scope_id === hr,
+    ).length
+
+    let whole = 0
+    const byGroup = new Map<string, number>()
+    for (const r of input.requirements) {
+      if (r.homeroom_id !== hr) continue
+      if (r.group_id) byGroup.set(r.group_id, (byGroup.get(r.group_id) ?? 0) + r.periods_per_week)
+      else whole += r.periods_per_week
+    }
+    for (const c of input.combined ?? []) {
+      for (const m of c.members) {
+        if (m.homeroomId !== hr) continue
+        if (m.groupId) byGroup.set(m.groupId, (byGroup.get(m.groupId) ?? 0) + c.periodsPerWeek)
+        else whole += c.periodsPerWeek
+      }
+    }
+    const groupPeak = byGroup.size > 0 ? Math.max(...byGroup.values()) : 0
+    out.push({
+      homeroomId: hr,
+      wanted: whole + groupPeak,
+      available: Math.max(0, total - timeOff),
+      timeOff,
+    })
+  }
+  return out
+}
+
+/**
+ * Teacher load: how many periods each teacher is asked to cover against how
+ * many their week actually has. A teacher booked beyond their week is the
+ * other common reason periods go unplaced, and no amount of solver effort
+ * fixes it.
+ */
+function teacherLoad(input: HealthInput, sched: ReturnType<typeof buildSchedules>) {
+  const wanted = new Map<string, number>()
+  const weekOf = new Map<string, number>()
+  for (const r of input.requirements) {
+    for (const t of teacherIdsOf(r)) {
+      wanted.set(t, (wanted.get(t) ?? 0) + r.periods_per_week)
+      const geo = scheduleFor(sched, r.homeroom_id)
+      weekOf.set(t, Math.max(weekOf.get(t) ?? 0, geo.days.length * geo.teachingSlots.length))
+    }
+  }
+  for (const c of input.combined ?? []) {
+    for (const t of c.teacherIds) wanted.set(t, (wanted.get(t) ?? 0) + c.periodsPerWeek)
+  }
+  const out: { teacherId: string; wanted: number; available: number }[] = []
+  for (const [t, n] of wanted) {
+    const timeOff = input.constraints.filter(
+      (c) => c.type === 'time_off' && c.scope === 'teacher' && c.scope_id === t,
+    ).length
+    out.push({ teacherId: t, wanted: n, available: Math.max(0, (weekOf.get(t) ?? 0) - timeOff) })
+  }
+  return out
+}
+
+function buildSuggestions({
+  input, sched, index, missing, required, hard, gaps, clusters, imbalance, components,
+}: {
+  input: HealthInput
+  sched: ReturnType<typeof buildSchedules>
+  index: ReturnType<typeof buildConstraintIndex>
+  missing: number
+  required: number
+  hard: GeneratorConflict[]
+  gaps: number
+  clusters: number
+  imbalance: number
+  components: HealthComponent[]
+}): HealthSuggestion[] {
+  const out: HealthSuggestion[] = []
+  const hrName = input.homeroomName ?? ((id: string) => id.slice(0, 8))
+  const tName = input.teacherName ?? ((id: string) => id.slice(0, 8))
+
+  // ── Blockers first: nothing else matters while periods are missing.
+  if (missing > 0) {
+    const over = classCapacity(input, sched).filter((c) => c.wanted > c.available)
+    if (over.length > 0) {
+      const worst = [...over].sort((a, b) => (b.wanted - b.available) - (a.wanted - a.available))
+      out.push({
+        title: 'Make room in the week, or ask for fewer periods',
+        detail:
+          `${plural(over.length, 'class')} ${over.length === 1 ? 'wants' : 'want'} more periods than ${
+            over.length === 1 ? 'its week holds' : 'their weeks hold'
+          } — no solver setting can fix that. ` +
+          worst.slice(0, 3).map((c) =>
+            `${hrName(c.homeroomId)} asks for ${c.wanted} and has ${c.available}${
+              c.timeOff > 0 ? ` (${c.timeOff} marked time off)` : ''
+            }`,
+          ).join('; ') + '.',
+        where: 'Configuration → Period slots, or Homeroom → Requirements',
+      })
+    }
+
+    const stretched = teacherLoad(input, sched).filter((t) => t.wanted > t.available)
+    if (stretched.length > 0) {
+      const worst = [...stretched].sort((a, b) => (b.wanted - b.available) - (a.wanted - a.available))
+      out.push({
+        title: 'Spread the load of over-booked teachers',
+        detail:
+          `${plural(stretched.length, 'teacher')} ${stretched.length === 1 ? 'is' : 'are'} assigned more periods than their week has: ` +
+          worst.slice(0, 3).map((t) => `${tName(t.teacherId)} ${t.wanted}/${t.available}`).join(', ') +
+          '. Share those subjects with another teacher, or cut their periods.',
+        where: 'Homeroom → Requirements (teachers), or Teacher → Time off',
+      })
+    }
+
+    if (over.length === 0 && stretched.length === 0) {
+      // The totals fit, so what is blocking is the shape of the week.
+      const blockReqs = input.requirements.filter((r) => (r.min_block ?? 1) > 1)
+      const tight = input.requirements.filter(
+        (r) => r.periods_per_week > r.max_per_day * Math.max(1, scheduleFor(sched, r.homeroom_id).days.length),
+      )
+      out.push({
+        title: 'Loosen what is pinning the week down',
+        detail:
+          `${plural(missing, 'period')} of ${required} could not be placed even though the totals fit, ` +
+          'so something is blocking the slots rather than filling them. ' +
+          [
+            index.pins.length > 0 ? `${plural(index.pins.length, 'class-teacher pin')}` : '',
+            blockReqs.length > 0 ? `${plural(blockReqs.length, 'double/triple requirement')}` : '',
+            tight.length > 0 ? `${plural(tight.length, 'requirement')} capped too low per day` : '',
+          ].filter(Boolean).join(', ') ||
+          'Check time off and max-per-day caps.',
+        where: 'Homeroom → Time off, Teacher → Time off, Subject → limits',
+      })
+      if (blockReqs.length > 0) {
+        out.push({
+          title: 'Check the doubles have somewhere to land',
+          detail:
+            `${plural(blockReqs.length, 'requirement')} asks for consecutive periods. A block needs that many ` +
+            'back-to-back teaching slots on one day with no break between them — if breaks split the day into ' +
+            'short runs, there may be nowhere it can go.',
+          where: 'Configuration → Period slots',
+        })
+      }
+    }
+
+    out.push({
+      title: 'Try a thorough generate',
+      detail:
+        'The solver searches randomly, so a longer run finds placements a short one misses. ' +
+        'If a thorough run still leaves the same periods unplaced, the cause is one of the above, not effort.',
+      where: 'The effort selector beside Generate',
+    })
+  }
+
+  // ── Hard clashes.
+  if (hard.length > 0) {
+    const kinds = new Set(hard.map((c) => c.kind))
+    out.push({
+      title: 'Clear the clashes highlighted in red',
+      detail:
+        `${plural(hard.length, 'cell')} ${hard.length === 1 ? 'breaks' : 'break'} a hard rule` +
+        (kinds.has('teacher_double_booked') ? ' — a teacher is in two classes at once' : '') +
+        (kinds.has('time_off_violated') ? ' — a lesson sits in a period marked off' : '') +
+        '. Drag the lesson elsewhere, or pin the one that must stay and regenerate around it.',
+      where: 'Master grid',
+    })
+  }
+
+  // ── Soft quality, worst component first, and only when it is actually weak.
+  const scoreOf = (key: string) => components.find((c) => c.key === key)?.score ?? 100
+
+  if (missing === 0 && hard.length === 0) {
+    if (scoreOf('constraints') < 80) {
+      out.push({
+        title: 'Review the limits that are not being met',
+        detail:
+          'Minimum per-day or per-week targets are going unmet, or pinned class-teacher periods are unfilled. ' +
+          'A minimum the week has no room for will never be satisfied — check it against what the class is actually taught.',
+        where: 'Teacher / Subject → limits, Homeroom → Pin class teacher',
+      })
+    }
+    if (scoreOf('spread') < 80) {
+      out.push({
+        title: 'Stop subjects bunching into the same day',
+        detail:
+          `${plural(clusters, 'extra lesson')} of a subject lands on a day that already had one. ` +
+          'Lowering max / day on those requirements forces the solver to spread them across the week. ' +
+          '(Deliberate doubles are not counted here.)',
+        where: 'Homeroom → Requirements → Max / day',
+      })
+    }
+    if (scoreOf('gaps') < 80) {
+      out.push({
+        title: 'Close the free periods stranded in teachers’ days',
+        detail:
+          `${plural(gaps, 'idle gap')} across the week. Teachers who teach only a few periods are the usual cause — ` +
+          'grouping their classes onto fewer days, or setting max periods in a row, gives the solver something to aim at.',
+        where: 'Teacher → Max periods in a row',
+      })
+    }
+    if (scoreOf('balance') < 80) {
+      out.push({
+        title: 'Even out the long and short days',
+        detail:
+          `Daily loads vary by about ${Math.round(imbalance)} periods across the week. ` +
+          'This usually follows from time off on some days, or from a class whose periods do not divide evenly into its days.',
+        where: 'Homeroom → Time off, Configuration → Period slots',
+      })
+    }
+  }
+
+  return out.slice(0, 5)
 }

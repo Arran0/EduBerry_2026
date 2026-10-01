@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, Download,
   GraduationCap, LayoutGrid, Rows3, UserCog, CalendarRange,
@@ -11,7 +11,8 @@ import {
 import type {
   TimetableEntry, Timetable, TimetableStatus, ScheduleWeek,
 } from '@/lib/timetable'
-import { generateTimetable } from '@/lib/timetable/generator'
+import { solveTimetable, SOLVE_EFFORTS } from '@/lib/timetable/solve'
+import type { SolveEffortLevel, SolveProgress } from '@/lib/timetable/solve'
 import { teacherIdsOf } from '@/lib/timetable'
 import { computeHealth } from '@/lib/timetable/health'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
@@ -51,6 +52,11 @@ export default function GenerateTab() {
   const [publishing, setPublishing] = useState(false)
   const [unplaced, setUnplaced] = useState<number | null>(null)
   const [toast, setToast] = useState<string>('')
+  const [effort, setEffort] = useState<SolveEffortLevel>('standard')
+  const [progress, setProgress] = useState<SolveProgress | null>(null)
+  const [lastRun, setLastRun] = useState<string>('')
+  // Set while a solve is running; flipping it stops it between passes.
+  const cancelRef = useRef(false)
 
   useEffect(() => {
     setTimetableName(timetable?.name ?? config.name)
@@ -83,13 +89,13 @@ export default function GenerateTab() {
     const sName = new Map(subjects.map((s) => [s.id, s.name]))
     return computeHealth({
       entries, requirements, constraints, slots, config, homerooms: homeroomsLite, unavailability,
-      slotGroups, homeroomGroupIds: slotGroupIds,
+      slotGroups, homeroomGroupIds: slotGroupIds, combined: combinedInput,
       conflicts: allConflicts,
       homeroomName: (id) => hrName.get(id) ?? 'Class',
       teacherName: (id) => tName.get(id) ?? 'Teacher',
       subjectName: (id) => sName.get(id) ?? 'Subject',
     })
-  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, slotGroups, slotGroupIds, allConflicts, draft.homerooms, teachers, subjects])
+  }, [entries, requirements, constraints, slots, config, homeroomsLite, unavailability, slotGroups, slotGroupIds, combinedInput, allConflicts, draft.homerooms, teachers, subjects])
 
   const homeroomOptions: SmartOption[] = useMemo(
     () => scheduledHomerooms.map((h) => ({ value: h.id, label: h.name })),
@@ -118,12 +124,14 @@ export default function GenerateTab() {
     setTimeout(() => setToast(''), 3000)
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setGenerating(true)
-    // Defer so the spinner paints before the (synchronous) solve runs.
-    setTimeout(() => {
-      const locked = entries.filter((e) => e.isLocked)
-      const result = generateTimetable({
+    setProgress(null)
+    setLastRun('')
+    cancelRef.current = false
+    const locked = entries.filter((e) => e.isLocked)
+    const result = await solveTimetable(
+      {
         config,
         slots,
         slotGroups,
@@ -136,16 +144,32 @@ export default function GenerateTab() {
         rooms,
         locked,
         seed: Math.floor(Math.random() * 1_000_000),
-      })
-      setEntries(result.entries)
-      setUnplaced(result.unplacedCount)
-      setGenerating(false)
-      flash(
-        result.unplacedCount === 0
+      },
+      {
+        effort,
+        onProgress: setProgress,
+        shouldCancel: () => cancelRef.current,
+      },
+    )
+    setEntries(result.entries)
+    setUnplaced(result.unplacedCount)
+    setGenerating(false)
+    setProgress(null)
+
+    // What the run actually spent, so a search cut short by its budget is
+    // visible rather than looking like the solver's best possible answer.
+    const d = result.diagnostics
+    setLastRun(
+      `${(d.elapsedMs / 1000).toFixed(1)}s · ${d.restarts} attempts · ` +
+      `${d.moves.toLocaleString()} improvements${d.hitBudget ? ' · stopped on time budget' : ''}`,
+    )
+    flash(
+      cancelRef.current
+        ? 'Stopped — keeping the best timetable found so far.'
+        : result.unplacedCount === 0
           ? 'Generated a conflict-free timetable.'
           : `Generated with ${result.unplacedCount} period(s) that couldn't be placed.`,
-      )
-    }, 30)
+    )
   }
 
   const clearUnlocked = () => setEntries((prev) => prev.filter((e) => e.isLocked))
@@ -271,14 +295,24 @@ export default function GenerateTab() {
       {/* Action bar */}
       <div className="pb-3 border-b border-[#E4E4E7] space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors w-full"
-          >
-            {generating ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} className="text-[#B8983C]" />}
-            {entries.some((e) => e.isLocked) ? 'Regenerate' : 'Generate'}
-          </button>
+          {generating ? (
+            <button
+              onClick={() => { cancelRef.current = true }}
+              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
+              title="Stop after the current pass and keep the best result so far"
+            >
+              <Loader2 className="animate-spin" size={15} />
+              {progress ? `Pass ${progress.pass}/${progress.passes} — stop` : 'Working — stop'}
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
+            >
+              <Sparkles size={15} className="text-[#B8983C]" />
+              {entries.some((e) => e.isLocked) ? 'Regenerate' : 'Generate'}
+            </button>
+          )}
           <button onClick={handleSave} disabled={saving} className={`${BTN_NEUTRAL} w-full py-2.5`}>
             {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
             Save draft
@@ -299,6 +333,38 @@ export default function GenerateTab() {
             Clear unlocked
           </button>
         </div>
+        {/* How hard to search. The solve is randomized, so a longer run is a
+            better search — not a different algorithm. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`${SECTION_LABEL} flex-shrink-0`}>Effort</span>
+          <div className="inline-flex border border-[#D4D4D8]">
+            {(Object.keys(SOLVE_EFFORTS) as SolveEffortLevel[]).map((key, i) => (
+              <button
+                key={key}
+                onClick={() => setEffort(key)}
+                disabled={generating}
+                title={SOLVE_EFFORTS[key].hint}
+                className={`px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+                  i > 0 ? 'border-l border-[#D4D4D8]' : ''
+                } ${effort === key ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
+              >
+                {SOLVE_EFFORTS[key].label}
+              </button>
+            ))}
+          </div>
+          {progress ? (
+            <span className="text-[11px] text-[#71717A] tabular-nums">
+              pass {progress.pass}/{progress.passes} · best so far{' '}
+              {progress.bestUnplaced === 0 ? 'all placed' : `${progress.bestUnplaced} unplaced`}
+              {' · '}{(progress.elapsedMs / 1000).toFixed(1)}s
+            </span>
+          ) : lastRun ? (
+            <span className="text-[11px] text-[#A1A1AA] tabular-nums">{lastRun}</span>
+          ) : (
+            <span className="text-[11px] text-[#A1A1AA]">{SOLVE_EFFORTS[effort].hint}</span>
+          )}
+        </div>
+
         <div className="flex items-center gap-3 flex-wrap">
           <span className={`${SECTION_LABEL} flex-shrink-0`}>Name</span>
           <input

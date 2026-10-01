@@ -39,6 +39,8 @@ import type {
   HomeroomLite,
   CombinedClassInput,
   SlotGroup,
+  SolverEffort,
+  SolveDiagnostics,
   TimetableConfig,
   Weekday,
 } from './types'
@@ -52,6 +54,7 @@ import {
   effectiveMaxInARow,
   type ConstraintIndex,
   type LimitRule,
+  type PinRule,
 } from './constraints'
 
 // Every teacher of a lesson-ish object, primary first and de-duped. Round 8
@@ -101,6 +104,13 @@ interface Block {
 // group lessons only block their own group (parallel groups coexist).
 const WHOLE = '__whole__'
 const hrToken = (groupId: string | null | undefined) => groupId ?? WHOLE
+
+// Identifies the LESSON a period belongs to: every period of a block shares
+// one id, a single period is its own. Used wherever "how many lessons" is the
+// question rather than "how many periods".
+const unitIdOf = (p: PlacedEntry) => (p.blockKey ? `blk:${p.blockKey}` : `one:${p.slotId}`)
+const subjectDayKey = (p: PlacedEntry) =>
+  `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
 
 // ── Slot geometry ────────────────────────────────────────────
 // Teaching slots in order, plus whether each is position-adjacent to the
@@ -267,7 +277,20 @@ class SolveState {
   dayLoad = new Map<string, number>() // `${hr}|${day}` -> count
   teacherDaySlots = new Map<string, Set<number>>() // `${teacher}|${day}` -> slot indices
   limitCounts = new Map<string, number>() // `${ruleIdx}|${bucket}` -> count
+  // `${hr}|${subj}|${group}|${day}` -> the distinct LESSONS there. A double is
+  // one lesson in two periods, so spread scoring counts this, not subjectDay.
+  // Kept as a set so a lesson's periods add and remove idempotently.
+  subjectDayUnits = new Map<string, Set<string>>()
+  // `${homeroom}__${day}__${slot}` -> the teachers in that cell, for pin checks.
+  cellTeachers = new Map<string, Set<string>>()
+  // Reference counts behind the two sets above. A set entry is only really
+  // gone once the last placement holding it leaves, and counting is what makes
+  // that an O(1) check instead of a scan of every placement in the school.
+  private cellTeacherRefs = new Map<string, number>()
+  private subjectUnitRefs = new Map<string, number>()
   placements: PlacedEntry[] = []
+  // Where each placement sits in `placements`, so removing one is O(1).
+  private placementAt = new Map<PlacedEntry, number>()
   blockSeq = 0 // names each multi-period block it places
 
   // Can a lesson with this token occupy the homeroom cell? Whole-class lessons
@@ -296,23 +319,66 @@ class SolveState {
       if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
       this.roomUsedAt.get(key)!.add(p.roomId)
     }
-    const sk = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
+    const sk = subjectDayKey(p)
     this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
+    this.addSubjectUnit(sk, unitIdOf(p))
     this.dayLoad.set(`${p.homeroomId}|${p.day}`, (this.dayLoad.get(`${p.homeroomId}|${p.day}`) ?? 0) + 1)
+    // Every rule is counted, not just the max ones: the hard check below only
+    // reads max, but min shortfalls are scored on every candidate move and a
+    // live count turns that from a scan into a lookup.
     for (let r = 0; r < limits.length; r++) {
-      const rule = limits[r]
-      if (rule.kind !== 'max') continue
-      for (const bucket of limitBucketsFor(rule, p, p.day)) {
+      for (const bucket of limitBucketsFor(limits[r], p, p.day)) {
         const bk = `${r}|${bucket}`
         this.limitCounts.set(bk, (this.limitCounts.get(bk) ?? 0) + 1)
       }
     }
+    // Who is teaching this class in this cell — what a class-teacher pin asks.
+    this.addCellTeachers(`${p.homeroomId}__${key}`, teachersOf(p))
+    this.push(p)
+  }
+
+  private push(p: PlacedEntry) {
+    this.placementAt.set(p, this.placements.length)
     this.placements.push(p)
   }
 
+  /** Swap-removes in O(1); order is not meaningful, only membership. */
+  private drop(p: PlacedEntry) {
+    const i = this.placementAt.get(p)
+    if (i === undefined) return
+    const last = this.placements[this.placements.length - 1]
+    this.placements[i] = last
+    this.placementAt.set(last, i)
+    this.placements.pop()
+    this.placementAt.delete(p)
+  }
+
+  private addCellTeachers(ck: string, teachers: string[]) {
+    if (!this.cellTeachers.has(ck)) this.cellTeachers.set(ck, new Set())
+    const set = this.cellTeachers.get(ck)!
+    for (const t of teachers) {
+      const rk = `${ck}|${t}`
+      this.cellTeacherRefs.set(rk, (this.cellTeacherRefs.get(rk) ?? 0) + 1)
+      set.add(t)
+    }
+  }
+
+  private removeCellTeachers(ck: string, teachers: string[]) {
+    const set = this.cellTeachers.get(ck)
+    if (!set) return
+    for (const t of teachers) {
+      const rk = `${ck}|${t}`
+      const n = (this.cellTeacherRefs.get(rk) ?? 0) - 1
+      if (n > 0) this.cellTeacherRefs.set(rk, n)
+      else {
+        this.cellTeacherRefs.delete(rk)
+        set.delete(t)
+      }
+    }
+  }
+
   removeCell(p: PlacedEntry, slotIdx: number, limits: LimitRule[]) {
-    const idx = this.placements.indexOf(p)
-    if (idx >= 0) this.placements.splice(idx, 1)
+    this.drop(p)
     const key = cellKey(p.day, p.slotId)
     this.homeroomBusy.get(p.homeroomId)?.get(key)?.delete(hrToken(p.groupId))
     for (const t of teachersOf(p)) {
@@ -320,17 +386,36 @@ class SolveState {
       this.teacherDaySlots.get(`${t}|${p.day}`)?.delete(slotIdx)
     }
     if (p.roomId) this.roomUsedAt.get(key)?.delete(p.roomId)
-    const sk = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}|${p.day}`
+    const sk = subjectDayKey(p)
     this.subjectDay.set(sk, Math.max(0, (this.subjectDay.get(sk) ?? 0) - 1))
+    // A block's other periods keep the lesson present, so the id only leaves
+    // the bucket once none of its periods are on that day any more.
+    this.removeSubjectUnit(sk, unitIdOf(p))
     const dk = `${p.homeroomId}|${p.day}`
     this.dayLoad.set(dk, Math.max(0, (this.dayLoad.get(dk) ?? 0) - 1))
     for (let r = 0; r < limits.length; r++) {
-      const rule = limits[r]
-      if (rule.kind !== 'max') continue
-      for (const bucket of limitBucketsFor(rule, p, p.day)) {
+      for (const bucket of limitBucketsFor(limits[r], p, p.day)) {
         const bk = `${r}|${bucket}`
         this.limitCounts.set(bk, Math.max(0, (this.limitCounts.get(bk) ?? 0) - 1))
       }
+    }
+    this.removeCellTeachers(`${p.homeroomId}__${key}`, teachersOf(p))
+  }
+
+  private addSubjectUnit(sk: string, unit: string) {
+    if (!this.subjectDayUnits.has(sk)) this.subjectDayUnits.set(sk, new Set())
+    const rk = `${sk}|${unit}`
+    this.subjectUnitRefs.set(rk, (this.subjectUnitRefs.get(rk) ?? 0) + 1)
+    this.subjectDayUnits.get(sk)!.add(unit)
+  }
+
+  private removeSubjectUnit(sk: string, unit: string) {
+    const rk = `${sk}|${unit}`
+    const n = (this.subjectUnitRefs.get(rk) ?? 0) - 1
+    if (n > 0) this.subjectUnitRefs.set(rk, n)
+    else {
+      this.subjectUnitRefs.delete(rk)
+      this.subjectDayUnits.get(sk)?.delete(unit)
     }
   }
 
@@ -368,8 +453,9 @@ class SolveState {
         cm.get(key)!.add(token)
         const sk = `${hr}|${unit.subjectId}|${token}|${day}`
         this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
+        this.addSubjectUnit(sk, unitIdOf(p))
         this.dayLoad.set(`${hr}|${day}`, (this.dayLoad.get(`${hr}|${day}`) ?? 0) + 1)
-        this.placements.push(p)
+        this.push(p)
         made.push(p)
       }
       for (const t of teachersOf(unit)) {
@@ -378,6 +464,7 @@ class SolveState {
         const tk = `${t}|${day}`
         if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
         this.teacherDaySlots.get(tk)!.add(clockIdx[i])
+        for (const m of unit.members) this.addCellTeachers(`${m.homeroomId}__${key}`, [t])
       }
       if (roomId) {
         if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
@@ -833,14 +920,149 @@ function unfilledPins(placements: PlacedEntry[], index: ConstraintIndex): number
   return n
 }
 
+// ── Scoped penalty (what one move can change) ────────────────
+//
+// softPenalty() rebuilds every term over every placement. Running that once
+// per candidate move is what forced the old move cap: at 2000 classes-worth of
+// periods a single pass is ~O(n), so a few thousand moves was all the budget
+// allowed, which came to under two attempts per lesson.
+//
+// A move only ever touches one homeroom, that lesson's teachers, and two days.
+// Scoring just those terms before and after gives the SAME accept/reject
+// decision as a full rescan, at a cost that doesn't grow with the school.
+
+interface PenaltyCtx {
+  sched: Schedules
+  index: ConstraintIndex
+  // Periods per homeroom and the days in its week — both constant while the
+  // local search runs, because a move never changes how much a class is taught.
+  hrTotal: Map<string, number>
+  hrWeek: Map<string, Weekday[]>
+  // Pins grouped by the class they belong to; most configs have none at all.
+  pinsByHomeroom: Map<string, PinRule[]>
+  minRules: { idx: number; rule: LimitRule }[]
+}
+
+function makePenaltyCtx(state: SolveState, sched: Schedules, index: ConstraintIndex): PenaltyCtx {
+  const hrTotal = new Map<string, number>()
+  for (const p of state.placements) hrTotal.set(p.homeroomId, (hrTotal.get(p.homeroomId) ?? 0) + 1)
+  const hrWeek = new Map<string, Weekday[]>()
+  for (const hr of hrTotal.keys()) hrWeek.set(hr, scheduleFor(sched, hr).days)
+  const pinsByHomeroom = new Map<string, PinRule[]>()
+  for (const pin of index.pins) {
+    const arr = pinsByHomeroom.get(pin.homeroomId)
+    if (arr) arr.push(pin)
+    else pinsByHomeroom.set(pin.homeroomId, [pin])
+  }
+  const minRules = index.limits
+    .map((rule, idx) => ({ idx, rule }))
+    .filter(({ rule }) => rule.kind === 'min')
+  return { sched, index, hrTotal, hrWeek, pinsByHomeroom, minRules }
+}
+
+/**
+ * The slice of the soft penalty that one class's week contributes, for a lesson
+ * of this subject taught by these teachers.
+ *
+ * Mirrors softPenalty() term for term over that slice. A move relocates a
+ * lesson within a single class's week, so everything outside the slice is
+ * identical before and after and cancels out of the comparison — the
+ * accept/reject decision is the same one a full rescan would make. The cost is
+ * bounded by days in a week and teachers on a lesson, not by the size of the
+ * school, which is what the old move cap was really protecting against.
+ */
+function scopedPenalty(
+  state: SolveState,
+  ctx: PenaltyCtx,
+  homeroomId: string,
+  subjectId: string,
+  groupId: string | null,
+  teachers: string[],
+): number {
+  let penalty = 0
+  const token = hrToken(groupId)
+  const days = ctx.hrWeek.get(homeroomId) ?? []
+
+  // Same subject more than once in a day — counted in LESSONS, so a double
+  // costs what one lesson costs.
+  for (const day of days) {
+    const n = state.subjectDayUnits.get(`${homeroomId}|${subjectId}|${token}|${day}`)?.size ?? 0
+    if (n > 1) penalty += (n - 1) * 6
+  }
+
+  // The class's daily load against its own weekly average. The average holds
+  // still during the search, so only the days the lesson moved between differ.
+  const avg = (ctx.hrTotal.get(homeroomId) ?? 0) / Math.max(1, days.length)
+  for (const day of days) {
+    penalty += Math.abs((state.dayLoad.get(`${homeroomId}|${day}`) ?? 0) - avg)
+  }
+
+  // Idle gaps in each teacher's day. A teacher may also teach other classes,
+  // but only the days of THIS class's week can have changed.
+  for (const t of teachers) {
+    for (const day of days) {
+      const set = state.teacherDaySlots.get(`${t}|${day}`)
+      if (!set || set.size === 0) continue
+      let lo = Infinity
+      let hi = -Infinity
+      for (const i of set) {
+        if (i < lo) lo = i
+        if (i > hi) hi = i
+      }
+      penalty += (hi - lo + 1 - set.size) * 3
+    }
+  }
+
+  // Unmet minimum targets, read off the live bucket counts.
+  if (ctx.minRules.length > 0) {
+    const probe = {
+      homeroomId, subjectId,
+      teacherId: teachers[0] ?? null, teacherIds: teachers,
+    }
+    const seen = new Set<string>()
+    for (const { idx, rule } of ctx.minRules) {
+      for (const day of rule.period === 'day' ? days : [days[0]]) {
+        for (const bucket of limitBucketsFor(rule, probe, day)) {
+          const bk = `${idx}|${bucket}`
+          if (seen.has(bk)) continue
+          seen.add(bk)
+          const count = state.limitCounts.get(bk) ?? 0
+          if (count < rule.value) penalty += (rule.value - count) * 4
+        }
+      }
+    }
+  }
+
+  // Class-teacher pins on this class.
+  const pins = ctx.pinsByHomeroom.get(homeroomId)
+  if (pins) {
+    for (const pin of pins) {
+      const filled =
+        !!pin.classTeacherId &&
+        (state.cellTeachers.get(`${homeroomId}__${pin.key}`)?.has(pin.classTeacherId) ?? false)
+      if (!filled) penalty += 8
+    }
+  }
+
+  return penalty
+}
+
 // ── Bounded local search ─────────────────────────────────────
 // Relocates one unlocked lesson at a time to a better cell. A double or triple
 // period is ONE lesson here: it is lifted and re-placed whole, never picked
 // apart period by period.
 
-function localSearch(state: SolveState, args: BuildArgs, iterations: number): void {
+function localSearch(
+  state: SolveState,
+  args: BuildArgs,
+  iterations: number,
+  // Stops early when this says so — used to hold the solve to a time budget
+  // without having to guess an iteration count up front.
+  shouldStop?: () => boolean,
+): number {
   const { sched, index } = args
-  let current = softPenalty(state.placements, sched, index)
+  const ctx = makePenaltyCtx(state, sched, index)
+  let done = 0
 
   // Only relocate plain whole-class lessons. Split-group lessons and
   // combined-class lessons are structurally tied to their cell and must not be
@@ -875,41 +1097,56 @@ function localSearch(state: SolveState, args: BuildArgs, iterations: number): vo
     for (const p of unit) state.removeCell(p, clockOf(p), index.limits)
   }
 
+  // The movable pool only changes when a move is accepted, so it is built once
+  // and patched rather than rescanned for every iteration.
+  const pool = units()
+
   for (let it = 0; it < iterations; it++) {
-    const pool = units()
-    if (pool.length === 0) return
+    if (pool.length === 0) break
+    // Reading the clock every iteration would cost more than a move does; a
+    // sample every 256 holds a budget measured in seconds closely enough.
+    if (shouldStop && (it & 255) === 0 && it > 0 && shouldStop()) break
+    done++
+
     const unit = pool[Math.floor(args.rng() * pool.length)]
     const head = unit[0]
+    const teachers = teachersOf(head)
+    const scope = () =>
+      scopedPenalty(state, ctx, head.homeroomId, head.subjectId, head.groupId ?? null, teachers)
 
+    const before = scope()
+    const seqBefore = state.blockSeq
     lift(unit)
     const block: Block = {
       requirementId: '',
       homeroomId: head.homeroomId,
       subjectId: head.subjectId,
       teacherId: head.teacherId,
-      teacherIds: teachersOf(head),
+      teacherIds: teachers,
       roomType: roomTypeOf(head, args.roomsByType),
       size: unit.length,
       maxPerDay: Number.POSITIVE_INFINITY,
       groupId: head.groupId ?? null,
     }
-    const before = current
-    const seqBefore = state.blockSeq
     const countBefore = state.placements.length
     if (!placeBlock(state, block, args, true)) {
       restore(unit)
+      state.blockSeq = seqBefore
       continue
     }
-    const after = softPenalty(state.placements, sched, index)
-    if (after > before) {
-      const moved = state.placements.slice(countBefore)
+    const moved = state.placements.slice(countBefore)
+
+    if (scope() > before) {
       lift(moved)
       state.blockSeq = seqBefore
       restore(unit)
     } else {
-      current = after
+      // Accepted: the lesson now lives where it landed.
+      const i = pool.indexOf(unit)
+      if (i >= 0) pool[i] = moved
     }
   }
+  return done
 }
 
 function roomTypeOf(p: PlacedEntry, roomsByType: Map<RoomType, Room[]>): RoomType {
@@ -920,7 +1157,23 @@ function roomTypeOf(p: PlacedEntry, roomsByType: Map<RoomType, Room[]>): RoomTyp
 
 // ── Public API ───────────────────────────────────────────────
 
-export function generateTimetable(input: GeneratorInput): GeneratorResult {
+/**
+ * Default effort, scaled to the size of the problem.
+ *
+ * Restarts are the expensive, high-value phase — they are what decides whether
+ * every lesson gets placed at all — so they get most of the budget. Moves are
+ * cheap now that each one is scored against only the class it touches, so the
+ * ceiling is generous and the clock is what actually stops it.
+ */
+function resolveEffort(effort: SolverEffort | undefined, periods: number): Required<SolverEffort> {
+  return {
+    budgetMs: effort?.budgetMs ?? 4000,
+    maxRestarts: effort?.maxRestarts ?? 24,
+    maxMoves: effort?.maxMoves ?? Math.max(20_000, periods * 400),
+  }
+}
+
+export function generateTimetable(input: GeneratorInput, effort?: SolverEffort): GeneratorResult {
   const sched = buildSchedules(
     input.config,
     input.slots,
@@ -941,6 +1194,12 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
   const blocks = expandBlocks(input.requirements, locked)
   const combined = expandCombined(input.combined ?? [], locked)
 
+  const periods =
+    blocks.reduce((n, b) => n + b.size, 0) + combined.reduce((n, u) => n + u.size, 0)
+  const limits = resolveEffort(effort, periods)
+  const startedAt = Date.now()
+  const outOfTime = () => Date.now() - startedAt >= limits.budgetMs
+
   const anyWeek = sched.order.some((g) => g.slotIds.length > 0 && g.days.length > 0)
   if (!anyWeek) {
     return {
@@ -949,39 +1208,62 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
       unplacedCount: blocks.reduce((n, b) => n + b.size, 0),
       softPenalty: 0,
       ok: false,
+      diagnostics: {
+        restarts: 0, restartCeiling: limits.maxRestarts,
+        moves: 0, moveCeiling: limits.maxMoves,
+        elapsedMs: Date.now() - startedAt, hitBudget: false,
+      },
     }
   }
 
   const baseSeed = input.seed ?? 12345
-  const RESTARTS = 8
   let best: { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } | null = null
+  let bestUnplaced = Infinity
+  let bestPenalty = Infinity
 
   const totalUnplaced = (a: { unplaced: Block[]; unplacedCombined: CombinedUnit[] }) =>
     a.unplaced.reduce((n, b) => n + b.size, 0) +
     a.unplacedCombined.reduce((n, u) => n + u.size, 0)
 
-  for (let r = 0; r < RESTARTS; r++) {
+  // Construction: keep the best of several randomized attempts. It gets at
+  // most 60% of the budget, so there is always time left to tidy the winner.
+  const buildDeadline = startedAt + limits.budgetMs * 0.6
+  let restarts = 0
+  for (let r = 0; r < limits.maxRestarts; r++) {
     const rng = makeRng(baseSeed + r * 7919)
     const args: BuildArgs = { sched, blocks, combined, locked, index, roomsByType, rng }
     const attempt = buildOnce(args)
-    if (
-      !best ||
-      totalUnplaced(attempt) < totalUnplaced(best) ||
-      (totalUnplaced(attempt) === totalUnplaced(best) &&
-        softPenalty(attempt.state.placements, sched, index) <
-          softPenalty(best.state.placements, sched, index))
-    ) {
+    restarts++
+    const un = totalUnplaced(attempt)
+    // The winner's penalty is cached rather than recomputed per comparison.
+    const pen = un <= bestUnplaced ? softPenalty(attempt.state.placements, sched, index) : Infinity
+    if (!best || un < bestUnplaced || (un === bestUnplaced && pen < bestPenalty)) {
       best = attempt
+      bestUnplaced = un
+      bestPenalty = pen
     }
+    if (r + 1 < limits.maxRestarts && Date.now() >= buildDeadline) break
   }
 
   const finalState = best!.state
   const lsRng = makeRng(baseSeed + 104729)
-  localSearch(
+  const moves = localSearch(
     finalState,
     { sched, blocks, combined, locked, index, roomsByType, rng: lsRng },
-    Math.min(2000, finalState.placements.length * 40),
+    limits.maxMoves,
+    outOfTime,
   )
+  const elapsedMs = Date.now() - startedAt
+  const diagnostics: SolveDiagnostics = {
+    restarts,
+    restartCeiling: limits.maxRestarts,
+    moves,
+    moveCeiling: limits.maxMoves,
+    elapsedMs,
+    // Capped by the clock rather than by finishing: one of the two phases
+    // stopped short of what it was allowed to do.
+    hitBudget: (restarts < limits.maxRestarts || moves < limits.maxMoves) && outOfTime(),
+  }
 
   const conflicts = detectConflicts(
     finalState.placements, input.unavailability, input.constraints, input.homerooms, sched.clash,
@@ -1031,6 +1313,7 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
     entries: finalState.placements,
     conflicts,
     unplacedCount,
+    diagnostics,
     softPenalty: softPenalty(finalState.placements, sched, index),
     ok: unplacedCount === 0 && !conflicts.some((c) => hardKinds.has(c.kind)),
   }

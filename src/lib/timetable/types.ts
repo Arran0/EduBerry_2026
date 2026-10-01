@@ -445,12 +445,39 @@ export interface GeneratorConflict {
   slotId?: string
 }
 
+/**
+ * How hard to work. The solver is a randomized search: more construction
+ * restarts mean a better chance of placing everything, and more improvement
+ * moves mean a tidier week. Both are held to a wall-clock budget so a big
+ * school doesn't hang the browser.
+ */
+export interface SolverEffort {
+  /** Wall-clock budget for the whole solve, in ms. */
+  budgetMs?: number
+  /** Ceiling on construction restarts (best attempt wins). */
+  maxRestarts?: number
+  /** Ceiling on improvement moves. Defaults to a multiple of the week's size. */
+  maxMoves?: number
+}
+
+/** What the solve actually spent — so a capped run is visible, not a mystery. */
+export interface SolveDiagnostics {
+  restarts: number
+  restartCeiling: number
+  moves: number
+  moveCeiling: number
+  elapsedMs: number
+  /** True when work stopped on the clock rather than on finishing its ceilings. */
+  hitBudget: boolean
+}
+
 export interface GeneratorResult {
   entries: PlacedEntry[]
   conflicts: GeneratorConflict[]
   unplacedCount: number
   softPenalty: number
   ok: boolean // true when every required lesson was placed with no hard conflicts
+  diagnostics: SolveDiagnostics
 }
 
 // ── Viewer bundle ────────────────────────────────────────────
