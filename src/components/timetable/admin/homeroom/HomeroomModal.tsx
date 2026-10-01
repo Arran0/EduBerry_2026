@@ -12,7 +12,7 @@ import {
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
   bulkAddGroupMembersByEmails, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
   requirementError, ROOM_TYPE_LABELS,
-  updateRequirement, copyRequirementsTo, assignHomeroomToSlotGroup,
+  updateRequirement, updateCombinedClass, copyRequirementsTo, assignHomeroomToSlotGroup,
 } from '@/lib/timetable'
 import type {
   TimetableConfig, Subject, Room, PeriodSlot, Requirement, TimetableConstraint,
@@ -770,6 +770,16 @@ const emptyDraft = (): ReqDraft => ({
   maxPerDay: '1', blockSize: '1', roomType: 'classroom',
 })
 
+const combinedDraftOf = (c: CombinedClass): ReqDraft => ({
+  subjectId: c.subject_id ?? '',
+  teacherIds: teacherIdsOf(c),
+  groupId: '',
+  perWeek: String(c.periods_per_week),
+  maxPerDay: String(Math.max(1, c.max_per_day ?? 1)),
+  blockSize: String(Math.max(1, c.min_block ?? 1)),
+  roomType: c.room_type ?? 'classroom',
+})
+
 const draftOf = (r: Requirement): ReqDraft => ({
   subjectId: r.subject_id,
   teacherIds: teacherIdsOf(r),
@@ -786,14 +796,9 @@ const draftOf = (r: Requirement): ReqDraft => ({
  * total that exceeds what the daily cap allows across the working week, or a
  * block longer than either that cap or the requirement itself.
  */
-function requirementProblem(d: ReqDraft, workingDays: number, combined: boolean): string | null {
+function requirementProblem(d: ReqDraft, workingDays: number): string | null {
   const days = Math.max(1, workingDays)
   const week = Math.max(1, parseInt(d.perWeek, 10) || 1)
-  if (combined) {
-    return week > days
-      ? `${week} periods a week needs ${week} days, but the week only has ${days}. A combined lesson runs at most once a day.`
-      : null
-  }
   const perDay = Math.max(1, parseInt(d.maxPerDay, 10) || 1)
   const block = Math.max(1, parseInt(d.blockSize, 10) || 1)
   if (block > perDay) {
@@ -809,7 +814,7 @@ function requirementProblem(d: ReqDraft, workingDays: number, combined: boolean)
 }
 
 function RequirementFields({
-  draft, onChange, subjects, teachers, groups, showGroup, showLesson,
+  draft, onChange, subjects, teachers, groups, showGroup, roomTypeHint,
 }: {
   draft: ReqDraft
   onChange: (next: ReqDraft) => void
@@ -817,8 +822,8 @@ function RequirementFields({
   teachers: UserProfile[]
   groups: HomeroomGroup[]
   showGroup: boolean
-  /** Combined lessons take their periods from the combined record, not here. */
-  showLesson: boolean
+  /** Explains what the room type means when a specific room can also be set. */
+  roomTypeHint?: string
 }) {
   const set = <K extends keyof ReqDraft>(k: K, v: ReqDraft[K]) => onChange({ ...draft, [k]: v })
   const subjectOptions: SmartOption[] = useMemo(
@@ -851,25 +856,21 @@ function RequirementFields({
       <Field label="Periods / week">
         <input className={INPUT} type="number" min={1} value={draft.perWeek} onChange={(e) => set('perWeek', e.target.value)} />
       </Field>
-      {showLesson && (
-        <>
-          <Field label="Max / day">
-            <input className={INPUT} type="number" min={1} value={draft.maxPerDay} onChange={(e) => set('maxPerDay', e.target.value)} />
-          </Field>
-          <Field label="Block size">
-            <select className={INPUT} value={draft.blockSize} onChange={(e) => set('blockSize', e.target.value)}>
-              <option value="1">Single</option>
-              <option value="2">Double (2 in a row)</option>
-              <option value="3">Triple (3 in a row)</option>
-            </select>
-          </Field>
-          <Field label="Room type">
-            <select className={INPUT} value={draft.roomType} onChange={(e) => set('roomType', e.target.value as RoomType)}>
-              {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
-            </select>
-          </Field>
-        </>
-      )}
+      <Field label="Max / day">
+        <input className={INPUT} type="number" min={1} value={draft.maxPerDay} onChange={(e) => set('maxPerDay', e.target.value)} />
+      </Field>
+      <Field label="Block size">
+        <select className={INPUT} value={draft.blockSize} onChange={(e) => set('blockSize', e.target.value)}>
+          <option value="1">Single</option>
+          <option value="2">Double (2 in a row)</option>
+          <option value="3">Triple (3 in a row)</option>
+        </select>
+      </Field>
+      <Field label="Room type" hint={roomTypeHint}>
+        <select className={INPUT} value={draft.roomType} onChange={(e) => set('roomType', e.target.value as RoomType)}>
+          {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
+        </select>
+      </Field>
     </div>
   )
 }
@@ -906,9 +907,14 @@ function RequirementsPanel({
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
 
-  // Editing an existing row in place
+  // Editing an existing row in place. `editingKind` says which list the id is
+  // in — a requirement and a combined lesson share the same field set but not
+  // the same table.
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingKind, setEditingKind] = useState<'requirement' | 'combined'>('requirement')
   const [editDraft, setEditDraft] = useState<ReqDraft>(emptyDraft())
+  const [editName, setEditName] = useState('')
+  const [editRoomId, setEditRoomId] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState('')
   const [pasting, setPasting] = useState(false)
@@ -978,12 +984,13 @@ function RequirementsPanel({
   const handleAdd = async () => {
     setError('')
     if (!form.subjectId) { setError('Pick a subject.'); return }
-    const problem = requirementProblem(form, workingDays, isCombined)
+    const problem = requirementProblem(form, workingDays)
     if (problem) { setError(problem); return }
     setAdding(true)
     if (isCombined) {
       const members = [{ homeroomId: homeroom.id, groupId: form.groupId || null }, ...extraMembers]
       if (members.length < 2) { setError('Add at least one more class for a combined lesson.'); setAdding(false); return }
+      const block = Math.max(1, parseInt(form.blockSize, 10) || 1)
       const created = await createCombinedClass({
         config_id: config.id,
         name: combinedName.trim() || `${homeroomName(homeroom.id)} ${subjectName(form.subjectId)}`,
@@ -992,6 +999,10 @@ function RequirementsPanel({
         teacher_ids: form.teacherIds,
         room_id: roomId || null,
         periods_per_week: Math.max(1, parseInt(form.perWeek, 10) || 1),
+        room_type: form.roomType,
+        max_per_day: Math.max(1, parseInt(form.maxPerDay, 10) || 1),
+        min_block: block,
+        max_block: block,
         members,
       })
       setAdding(false)
@@ -1025,14 +1036,50 @@ function RequirementsPanel({
   // ── Editing ──────────────────────────────────────────────
   const startEdit = (r: Requirement) => {
     setEditingId(r.id)
+    setEditingKind('requirement')
     setEditDraft(draftOf(r))
     setEditError('')
+  }
+
+  const startEditCombined = (c: CombinedClass) => {
+    setEditingId(c.id)
+    setEditingKind('combined')
+    setEditDraft(combinedDraftOf(c))
+    setEditName(c.name)
+    setEditRoomId(c.room_id ?? '')
+    setEditError('')
+  }
+
+  const saveEditCombined = async (c: CombinedClass) => {
+    setEditError('')
+    if (!editDraft.subjectId) { setEditError('Pick a subject.'); return }
+    const problem = requirementProblem(editDraft, workingDays)
+    if (problem) { setEditError(problem); return }
+    setSavingEdit(true)
+    const block = Math.max(1, parseInt(editDraft.blockSize, 10) || 1)
+    const updated = await updateCombinedClass(c.id, {
+      name: editName.trim() || c.name,
+      subject_id: editDraft.subjectId,
+      teacher_id: editDraft.teacherIds[0] ?? null,
+      teacher_ids: editDraft.teacherIds,
+      room_id: editRoomId || null,
+      periods_per_week: Math.max(1, parseInt(editDraft.perWeek, 10) || 1),
+      room_type: editDraft.roomType,
+      max_per_day: Math.max(1, parseInt(editDraft.maxPerDay, 10) || 1),
+      min_block: block,
+      max_block: block,
+    })
+    setSavingEdit(false)
+    if (!updated) { setEditError('Could not save this combined lesson.'); return }
+    setEditingId(null)
+    load()
+    flash('Combined lesson updated — regenerate to apply it to the timetable.')
   }
 
   const saveEdit = async (r: Requirement) => {
     setEditError('')
     if (!editDraft.subjectId) { setEditError('Pick a subject.'); return }
-    const problem = requirementProblem(editDraft, workingDays, false)
+    const problem = requirementProblem(editDraft, workingDays)
     if (problem) { setEditError(problem); return }
     setSavingEdit(true)
     const block = Math.max(1, parseInt(editDraft.blockSize, 10) || 1)
@@ -1068,7 +1115,7 @@ function RequirementsPanel({
   }
 
   const pasteCount = clipboard && clipboard.fromHomeroomId !== homeroom.id ? clipboard.items.length : 0
-  const liveProblem = requirementProblem(form, workingDays, isCombined)
+  const liveProblem = requirementProblem(form, workingDays)
   const budget = useMemo(
     () => weeklyBudget({
       homeroom, slots: week?.slots ?? slots, constraints, requirements, combined, groups, workingDays,
@@ -1096,7 +1143,7 @@ function RequirementsPanel({
           teachers={teachers}
           groups={groups}
           showGroup={!isCombined}
-          showLesson={!isCombined}
+          roomTypeHint={isCombined ? 'Used when no specific room is pinned below.' : undefined}
         />
 
         {/* Combined toggle */}
@@ -1231,7 +1278,7 @@ function RequirementsPanel({
           <div className="space-y-px">
             {requirements.map((r) => {
               const block = Math.max(1, r.min_block ?? 1)
-              if (editingId === r.id) {
+              if (editingId === r.id && editingKind === 'requirement') {
                 return (
                   <div key={r.id} className="px-3 py-3 bg-white border border-[#27272A]">
                     <RequirementFields
@@ -1241,7 +1288,6 @@ function RequirementsPanel({
                       teachers={teachers}
                       groups={groups}
                       showGroup
-                      showLesson
                     />
                     {editError && (
                       <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
@@ -1299,20 +1345,85 @@ function RequirementsPanel({
                 </div>
               )
             })}
-            {combined.map((c) => (
-              <div key={c.id} className="flex items-center gap-2.5 px-3 py-2 bg-indigo-50/50 border border-indigo-100 text-sm">
-                <Layers size={15} className="text-indigo-500 flex-shrink-0" />
-                <span className="font-medium text-[#18181B] flex-shrink-0">{c.name}</span>
-                <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">
-                  {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
-                </span>
-                <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(c))}>
-                  {teacherLabel(teacherIdsOf(c))}
-                </span>
-                <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{c.periods_per_week}/wk</span>
-                <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
-              </div>
-            ))}
+            {combined.map((c) => {
+              const block = Math.max(1, c.min_block ?? 1)
+              if (editingId === c.id && editingKind === 'combined') {
+                return (
+                  <div key={c.id} className="px-3 py-3 bg-white border border-indigo-400">
+                    <div className="flex items-center gap-1.5 mb-3 text-sm font-medium text-indigo-800">
+                      <Layers size={15} className="text-indigo-500" /> Combined lesson
+                      <span className="text-[11px] font-normal text-[#A1A1AA] ml-auto">
+                        {(c.members ?? []).length} classes — add or remove them by recreating the lesson
+                      </span>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                      <Field label="Name">
+                        <input className={INPUT} value={editName} onChange={(e) => setEditName(e.target.value)} />
+                      </Field>
+                      <Field label="Room" hint="Leave empty to let the room type above decide.">
+                        <SmartSelect options={roomOptions} value={editRoomId} onChange={setEditRoomId} placeholder="Any room" searchPlaceholder="Search rooms…" allowClear />
+                      </Field>
+                    </div>
+                    <RequirementFields
+                      draft={editDraft}
+                      onChange={setEditDraft}
+                      subjects={subjects}
+                      teachers={teachers}
+                      groups={groups}
+                      showGroup={false}
+                      roomTypeHint="Used when no specific room is set."
+                    />
+                    {editError && (
+                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span>{editError}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mt-3">
+                      <button onClick={() => saveEditCombined(c)} disabled={savingEdit} className={BTN_PRIMARY}>
+                        {savingEdit ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Save
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <span className="text-[11px] text-[#A1A1AA] ml-auto">
+                        Changes apply on the next generate.
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={c.id} className="flex items-center gap-2.5 px-3 py-2 bg-indigo-50/50 border border-indigo-100 text-sm">
+                  <Layers size={15} className="text-indigo-500 flex-shrink-0" />
+                  <span className="font-medium text-[#18181B] flex-shrink-0">{c.name}</span>
+                  <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">
+                    {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
+                  </span>
+                  {block > 1 && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 bg-[#27272A] text-white"
+                      title={`Scheduled as ${block} consecutive periods`}
+                    >
+                      {block === 2 ? 'Double' : block === 3 ? 'Triple' : `${block} in a row`}
+                    </span>
+                  )}
+                  <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(c))}>
+                    {teacherLabel(teacherIdsOf(c))}
+                  </span>
+                  <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{c.periods_per_week}/wk</span>
+                  <button
+                    onClick={() => startEditCombined(c)}
+                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
+                    title="Edit"
+                  ><Pencil size={14} /></button>
+                  <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                </div>
+              )
+            })}
           </div>
         )}
       </Section>

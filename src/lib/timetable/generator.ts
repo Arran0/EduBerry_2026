@@ -334,53 +334,74 @@ class SolveState {
     }
   }
 
-  // Occupy a combined class into one day+slot: the teacher and room are used
-  // ONCE, but every member homeroom's cell is filled. Returns the entries.
-  occupyCombined(unit: CombinedUnit, day: Weekday, slotId: string, slotIdx: number): PlacedEntry[] {
-    const key = cellKey(day, slotId)
-    const combinedKey = `${unit.combinedId}__${day}__${slotId}`
+  /**
+   * Occupies a combined lesson across `slotIds` (one period, or the run of a
+   * double/triple) on one day: the teacher and room are used ONCE per period,
+   * but every member homeroom's cell is filled. Returns the entries.
+   */
+  occupyCombined(
+    unit: CombinedUnit,
+    day: Weekday,
+    slotIds: string[],
+    clockIdx: number[],
+    roomId: string | null,
+  ): PlacedEntry[] {
     const made: PlacedEntry[] = []
-    for (const m of unit.members) {
-      const hr = m.homeroomId
-      const token = hrToken(m.groupId)
-      const p: PlacedEntry = {
-        homeroomId: hr, day, slotId, subjectId: unit.subjectId,
-        teacherId: unit.teacherId, teacherIds: unit.teacherIds,
-        roomId: unit.roomId, isLocked: false,
-        groupId: m.groupId, splitKey: null, combinedKey,
+    // Every period of a multi-period combined lesson shares one block key, so
+    // it moves and pins as a unit like any other block.
+    const blockKey = slotIds.length > 1 ? `blk${++this.blockSeq}` : null
+    slotIds.forEach((slotId, i) => {
+      const key = cellKey(day, slotId)
+      const combinedKey = `${unit.combinedId}__${day}__${slotId}`
+      for (const m of unit.members) {
+        const hr = m.homeroomId
+        const token = hrToken(m.groupId)
+        const p: PlacedEntry = {
+          homeroomId: hr, day, slotId, subjectId: unit.subjectId,
+          teacherId: unit.teacherId, teacherIds: unit.teacherIds,
+          roomId, isLocked: false,
+          groupId: m.groupId, splitKey: null, combinedKey, blockKey,
+        }
+        if (!this.homeroomBusy.has(hr)) this.homeroomBusy.set(hr, new Map())
+        const cm = this.homeroomBusy.get(hr)!
+        if (!cm.has(key)) cm.set(key, new Set())
+        cm.get(key)!.add(token)
+        const sk = `${hr}|${unit.subjectId}|${token}|${day}`
+        this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
+        this.dayLoad.set(`${hr}|${day}`, (this.dayLoad.get(`${hr}|${day}`) ?? 0) + 1)
+        this.placements.push(p)
+        made.push(p)
       }
-      if (!this.homeroomBusy.has(hr)) this.homeroomBusy.set(hr, new Map())
-      const cm = this.homeroomBusy.get(hr)!
-      if (!cm.has(key)) cm.set(key, new Set())
-      cm.get(key)!.add(token)
-      const sk = `${hr}|${unit.subjectId}|${token}|${day}`
-      this.subjectDay.set(sk, (this.subjectDay.get(sk) ?? 0) + 1)
-      this.dayLoad.set(`${hr}|${day}`, (this.dayLoad.get(`${hr}|${day}`) ?? 0) + 1)
-      this.placements.push(p)
-      made.push(p)
-    }
-    for (const t of teachersOf(unit)) {
-      if (!this.teacherBusy.has(t)) this.teacherBusy.set(t, new Set())
-      this.teacherBusy.get(t)!.add(key)
-      const tk = `${t}|${day}`
-      if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
-      this.teacherDaySlots.get(tk)!.add(slotIdx)
-    }
-    if (unit.roomId) {
-      if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
-      this.roomUsedAt.get(key)!.add(unit.roomId)
-    }
+      for (const t of teachersOf(unit)) {
+        if (!this.teacherBusy.has(t)) this.teacherBusy.set(t, new Set())
+        this.teacherBusy.get(t)!.add(key)
+        const tk = `${t}|${day}`
+        if (!this.teacherDaySlots.has(tk)) this.teacherDaySlots.set(tk, new Set())
+        this.teacherDaySlots.get(tk)!.add(clockIdx[i])
+      }
+      if (roomId) {
+        if (!this.roomUsedAt.has(key)) this.roomUsedAt.set(key, new Set())
+        this.roomUsedAt.get(key)!.add(roomId)
+      }
+    })
     return made
   }
 }
 
-// One occurrence of a combined class to place (periods_per_week → N units).
+// One occurrence of a combined class to place. A combined lesson is expanded
+// the same way an ordinary requirement is (Round 10): periods_per_week becomes
+// N units of `size` contiguous periods, so an assembly can be a double.
 interface CombinedUnit {
   combinedId: string
   subjectId: string
   teacherId: string | null
   teacherIds: string[]
+  // A pinned room, if the lesson must be somewhere specific; otherwise the
+  // solver finds a free room of `roomType`.
   roomId: string | null
+  roomType: RoomType
+  size: number
+  maxPerDay: number
   members: { homeroomId: string; groupId: string | null }[]
 }
 
@@ -597,37 +618,77 @@ function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unp
   return { state, unplaced, unplacedCombined }
 }
 
-// Scores a combined unit at day+start (size 1). Null if any hard rule blocks it.
-function scoreCombined(state: SolveState, unit: CombinedUnit, day: Weekday, start: number, args: BuildArgs): number | null {
-  const { sched, index } = args
+/**
+ * Scores a combined unit starting at `start` on `day`, over its `size`
+ * periods. Null if any hard rule blocks it. Returns the room to use, which is
+ * the pinned one when the lesson has one and otherwise a free room of the
+ * right type for the whole run.
+ */
+function scoreCombined(
+  state: SolveState, unit: CombinedUnit, day: Weekday, start: number, args: BuildArgs,
+): { roomId: string | null; penalty: number } | null {
+  const { sched, index, roomsByType } = args
   const geo = combinedSchedule(sched, unit)
   if (!geo) return null
-  const slotId = geo.slotIds[start]
-  const key = cellKey(day, slotId)
-  const booked = busyKeys(sched, day, slotId)
+  const size = unit.size
+  if (start + size > geo.slotIds.length) return null
+  // A block has to be contiguous with no break slot inside it.
+  for (let j = start; j < start + size - 1; j++) {
+    if (!geo.adjacentNext[j]) return null
+  }
+
   const unitTeachers = teachersOf(unit)
-  for (const t of unitTeachers) {
-    const busy = state.teacherBusy.get(t)
-    if (busy && booked.some((k) => busy.has(k))) return null
-    if (timeOffBlocked(index.teacherTimeOff, t, key)) return null
+  const bookKeys: string[] = []
+
+  for (let j = start; j < start + size; j++) {
+    const slotId = geo.slotIds[j]
+    const key = cellKey(day, slotId)
+    const booked = busyKeys(sched, day, slotId)
+    bookKeys.push(...booked)
+    for (const t of unitTeachers) {
+      const busy = state.teacherBusy.get(t)
+      if (busy && booked.some((k) => busy.has(k))) return null
+      if (timeOffBlocked(index.teacherTimeOff, t, key)) return null
+    }
+    if (unitTeachers.length === 0 && timeOffBlocked(index.teacherTimeOff, null, key)) return null
+    if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
+    if (unit.roomId && booked.some((k) => state.roomUsedAt.get(k)?.has(unit.roomId!))) return null
+    for (const m of unit.members) {
+      if (!state.homeroomFree(m.homeroomId, key, hrToken(m.groupId))) return null
+      if (timeOffBlocked(index.homeroomTimeOff, m.homeroomId, key)) return null
+    }
   }
-  if (unitTeachers.length === 0 && timeOffBlocked(index.teacherTimeOff, null, key)) return null
-  if (timeOffBlocked(index.subjectTimeOff, unit.subjectId, key)) return null
-  if (unit.roomId && booked.some((k) => state.roomUsedAt.get(k)?.has(unit.roomId!))) return null
+
+  // Daily cap, counted on the member class that already has the most of this
+  // subject today — one class over the cap is enough to refuse the placement.
+  let sdc = 0
   for (const m of unit.members) {
-    if (!state.homeroomFree(m.homeroomId, key, hrToken(m.groupId))) return null
-    if (timeOffBlocked(index.homeroomTimeOff, m.homeroomId, key)) return null
+    const n = state.subjectDay.get(`${m.homeroomId}|${unit.subjectId}|${hrToken(m.groupId)}|${day}`) ?? 0
+    if (n > sdc) sdc = n
   }
+  if (sdc + size > unit.maxPerDay) return null
+
+  // Max-in-a-row (hard), on the config-wide clock.
   for (const t of unitTeachers) {
     const maxRow = effectiveMaxInARow(index, t)
     if (maxRow == null) continue
     const union = new Set(state.teacherDaySlots.get(`${t}|${day}`) ?? [])
-    union.add(sched.clock.get(slotId) ?? start)
+    for (let j = start; j < start + size; j++) union.add(sched.clock.get(geo.slotIds[j]) ?? j)
     if (longestRun(union) > maxRow) return null
   }
-  let penalty = 0
+
+  // A pinned room was already checked above; otherwise find one of the type the
+  // lesson asks for that is free across every period of the run.
+  let roomId = unit.roomId
+  if (!roomId) {
+    const picked = pickRoomForBlock(roomsByType, state.roomUsedAt, unit.roomType, bookKeys)
+    if (!picked.ok) return null
+    roomId = picked.roomId
+  }
+
+  let penalty = sdc * 6
   for (const m of unit.members) penalty += state.dayLoad.get(`${m.homeroomId}|${day}`) ?? 0
-  return penalty + args.rng() * 0.5
+  return { roomId, penalty: penalty + args.rng() * 0.5 }
 }
 
 /**
@@ -649,17 +710,20 @@ function combinedSchedule(sched: Schedules, unit: CombinedUnit): SlotGeometry | 
 function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArgs): boolean {
   const geo = combinedSchedule(args.sched, unit)
   if (!geo) return false
-  let best: { day: Weekday; start: number; penalty: number } | null = null
+  let best: { day: Weekday; start: number; roomId: string | null; penalty: number } | null = null
   for (const day of geo.days) {
-    for (let start = 0; start < geo.slotIds.length; start++) {
-      const penalty = scoreCombined(state, unit, day, start, args)
-      if (penalty == null) continue
-      if (!best || penalty < best.penalty) best = { day, start, penalty }
+    for (let start = 0; start + unit.size <= geo.slotIds.length; start++) {
+      const scored = scoreCombined(state, unit, day, start, args)
+      if (!scored) continue
+      if (!best || scored.penalty < best.penalty) {
+        best = { day, start, roomId: scored.roomId, penalty: scored.penalty }
+      }
     }
   }
   if (!best) return false
-  const slotId = geo.slotIds[best.start]
-  state.occupyCombined(unit, best.day, slotId, args.sched.clock.get(slotId) ?? best.start)
+  const slotIds = geo.slotIds.slice(best.start, best.start + unit.size)
+  const clocks = slotIds.map((id, i) => args.sched.clock.get(id) ?? best!.start + i)
+  state.occupyCombined(unit, best.day, slotIds, clocks, best.roomId)
   return true
 }
 
@@ -893,7 +957,8 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
   let best: { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } | null = null
 
   const totalUnplaced = (a: { unplaced: Block[]; unplacedCombined: CombinedUnit[] }) =>
-    a.unplaced.reduce((n, b) => n + b.size, 0) + a.unplacedCombined.length
+    a.unplaced.reduce((n, b) => n + b.size, 0) +
+    a.unplacedCombined.reduce((n, u) => n + u.size, 0)
 
   for (let r = 0; r < RESTARTS; r++) {
     const rng = makeRng(baseSeed + r * 7919)
@@ -936,12 +1001,14 @@ export function generateTimetable(input: GeneratorInput): GeneratorResult {
     })
   }
   for (const u of best!.unplacedCombined) {
-    unplacedCount += 1
+    unplacedCount += u.size
     conflicts.push({
-      kind: 'unplaced_lesson',
-      message: combinedSchedule(sched, u)
-        ? 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.'
-        : 'Its classes follow different period groups, so this combined lesson has no period they all share. Put them in one period group, or split the lesson.',
+      kind: u.size > 1 ? 'block_unplaceable' : 'unplaced_lesson',
+      message: !combinedSchedule(sched, u)
+        ? 'Its classes follow different period groups, so this combined lesson has no period they all share. Put them in one period group, or split the lesson.'
+        : u.size > 1
+          ? `Could not fit a ${u.size}-period combined block — no day had ${u.size} back-to-back periods free for every member class, the teacher and the room.`
+          : 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.',
       subjectId: u.subjectId,
       teacherId: u.teacherId ?? undefined,
     })
@@ -1015,8 +1082,15 @@ function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block
   return blocks
 }
 
-// Expands combined classes into per-period units, subtracting periods already
-// satisfied by locked entries (counted by distinct combined_key per class).
+/**
+ * Expands combined classes into units to place, subtracting periods already
+ * satisfied by locked entries (counted by distinct combined_key per class).
+ *
+ * periods_per_week is split into contiguous blocks exactly as `expandBlocks`
+ * does for ordinary requirements, so min_block = max_block = 2 schedules the
+ * lesson as doubles. The default 1/1 produces one unit per period, which is
+ * what combined lessons did before Round 10.
+ */
 function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): CombinedUnit[] {
   const lockedKeys = new Map<string, Set<string>>() // combinedId -> set of combinedKeys
   for (const p of locked) {
@@ -1030,13 +1104,28 @@ function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): Comb
     if (c.members.length === 0 || !c.subjectId) continue
     const done = lockedKeys.get(c.id)?.size ?? 0
     let remaining = c.periodsPerWeek - done
-    while (remaining-- > 0) {
+    if (remaining <= 0) continue
+
+    const minB = Math.max(1, c.minBlock ?? 1)
+    const maxB = Math.max(minB, c.maxBlock ?? 1)
+    const sizes: number[] = []
+    while (remaining >= minB) {
+      const size = Math.min(maxB, remaining)
+      sizes.push(size)
+      remaining -= size
+    }
+    if (remaining > 0) sizes.push(remaining) // leftover shorter than minB
+
+    for (const size of sizes) {
       units.push({
         combinedId: c.id,
         subjectId: c.subjectId,
         teacherId: c.teacherId,
         teacherIds: teacherIdsOf({ teacherId: c.teacherId, teacherIds: c.teacherIds }),
         roomId: c.roomId,
+        roomType: c.roomType ?? 'classroom',
+        size,
+        maxPerDay: Math.max(1, c.maxPerDay ?? 1),
         members: c.members,
       })
     }

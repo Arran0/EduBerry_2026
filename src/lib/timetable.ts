@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import type { UserProfile } from './supabase'
-import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Timetable, TimetableEntry, TimetableStatus, TimetableViewData, Weekday, PlacedEntry, HomeroomGroup, TimetableConstraint, ConstraintScope, ConstraintType, CombinedClass, SlotGroup, SlotGroupHomeroom, ScheduleWeek } from './timetable/types'
+import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUnavailability, Timetable, TimetableEntry, TimetableStatus, TimetableViewData, Weekday, PlacedEntry, HomeroomGroup, TimetableConstraint, ConstraintScope, ConstraintType, CombinedClass, SlotGroup, SlotGroupHomeroom, ScheduleWeek, RoomType } from './timetable/types'
 
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'
@@ -1109,6 +1109,13 @@ export async function createCombinedClass(input: {
   teacher_ids?: string[]
   room_id: string | null
   periods_per_week: number
+  // Round 10: a combined lesson takes the same scheduling controls as an
+  // ordinary requirement. Omitted fields keep the pre-Round-10 behaviour —
+  // a single classroom period, at most one a day.
+  room_type?: RoomType
+  max_per_day?: number
+  min_block?: number
+  max_block?: number
   members: { homeroomId: string; groupId: string | null }[]
 }): Promise<CombinedClass | null> {
   const teacherIds = teacherIdsOf({ teacher_id: input.teacher_id, teacher_ids: input.teacher_ids ?? [] })
@@ -1122,6 +1129,10 @@ export async function createCombinedClass(input: {
       teacher_ids: teacherIds,
       room_id: input.room_id,
       periods_per_week: input.periods_per_week,
+      room_type: input.room_type ?? 'classroom',
+      max_per_day: input.max_per_day ?? 1,
+      min_block: input.min_block ?? 1,
+      max_block: input.max_block ?? 1,
     })
     .select()
     .single()
@@ -1136,6 +1147,33 @@ export async function createCombinedClass(input: {
       .from('timetable_combined_members')
       .insert(input.members.map((m) => ({ combined_id: data.id, homeroom_id: m.homeroomId, group_id: m.groupId })))
     if (mErr) console.error('createCombinedClass (members) error:', mErr)
+  }
+  return data as CombinedClass
+}
+
+/**
+ * Changes a combined lesson's scheduling. Its member classes are left alone —
+ * they are edited by adding or removing members, not here.
+ */
+export async function updateCombinedClass(
+  id: string,
+  patch: Partial<
+    Pick<
+      CombinedClass,
+      'name' | 'subject_id' | 'teacher_id' | 'teacher_ids' | 'room_id'
+      | 'periods_per_week' | 'room_type' | 'max_per_day' | 'min_block' | 'max_block'
+    >
+  >,
+): Promise<CombinedClass | null> {
+  const { data, error } = await supabase
+    .from('timetable_combined_classes')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    console.error('updateCombinedClass error:', error)
+    return null
   }
   return data as CombinedClass
 }
@@ -1247,6 +1285,51 @@ export async function assignHomeroomToSlotGroup(
   if (error) {
     console.error('assignHomeroomToSlotGroup error:', error)
     return false
+  }
+  return true
+}
+
+/**
+ * Points many homerooms at a slot group (or back at the base schedule) in one
+ * round trip. Assigning a whole grade is the normal case — a year group almost
+ * always rings to the same bell — so doing it one class at a time would cost a
+ * request per class.
+ */
+export async function assignHomeroomsToSlotGroup(
+  configId: string,
+  homeroomIds: string[],
+  groupId: string | null,
+): Promise<boolean> {
+  if (homeroomIds.length === 0) return true
+
+  if (!groupId) {
+    // PostgREST puts `.in()` lists in the query string, so a whole-school
+    // clear has to be chunked or the URL overruns.
+    for (const batch of chunk(homeroomIds)) {
+      const { error } = await supabase
+        .from('timetable_slot_group_homerooms')
+        .delete()
+        .eq('config_id', configId)
+        .in('homeroom_id', batch)
+      if (error) {
+        console.error('assignHomeroomsToSlotGroup (clear) error:', error)
+        return false
+      }
+    }
+    return true
+  }
+
+  for (const batch of chunk(homeroomIds)) {
+    const { error } = await supabase
+      .from('timetable_slot_group_homerooms')
+      .upsert(
+        batch.map((homeroom_id) => ({ config_id: configId, homeroom_id, group_id: groupId })),
+        { onConflict: 'config_id,homeroom_id' },
+      )
+    if (error) {
+      console.error('assignHomeroomsToSlotGroup error:', error)
+      return false
+    }
   }
   return true
 }

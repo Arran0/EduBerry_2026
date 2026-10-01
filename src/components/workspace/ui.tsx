@@ -57,11 +57,19 @@ export function Section({
   )
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({
+  label, children, hint,
+}: {
+  label: string
+  children: React.ReactNode
+  /** One line under the control, for a field whose meaning isn't obvious. */
+  hint?: string
+}) {
   return (
     <label className="block">
       <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">{label}</span>
       {children}
+      {hint && <span className="block text-[11px] text-[#A1A1AA] mt-1 leading-snug">{hint}</span>}
     </label>
   )
 }

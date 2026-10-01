@@ -3,6 +3,7 @@ import { generateTimetable } from './generator'
 import { computeHealth } from './health'
 import type {
   GeneratorInput, PeriodSlot, Requirement, TimetableConfig, SlotGroup, Weekday, PlacedEntry,
+  CombinedClassInput, Room,
 } from './types'
 
 // ── Fixtures ─────────────────────────────────────────────────
@@ -278,5 +279,154 @@ describe('health scoring', () => {
     expect(spread(health(asDouble, req))).toBe(100)
     // Two unrelated periods of the same subject on one day still read as a clump.
     expect(spread(health(asTwoSingles, req))).toBeLessThan(100)
+  })
+})
+
+// ── Combined lessons ─────────────────────────────────────────
+
+describe('combined lessons', () => {
+  const combinedInput = (
+    over: Partial<CombinedClassInput> & Pick<CombinedClassInput, 'id' | 'subjectId' | 'members'>,
+  ): CombinedClassInput => ({
+    teacherId: null, teacherIds: [], roomId: null, roomType: 'classroom',
+    periodsPerWeek: 1, maxPerDay: 1, minBlock: 1, maxBlock: 1, ...over,
+  })
+
+  const members = [
+    { homeroomId: 'hrA', groupId: null },
+    { homeroomId: 'hrB', groupId: null },
+    { homeroomId: 'hrC', groupId: null },
+  ]
+
+  it('still places a single period in every member class', () => {
+    const result = run({
+      requirements: [],
+      combined: [combinedInput({ id: 'c1', subjectId: 'assembly', members })],
+    })
+    expect(result.unplacedCount).toBe(0)
+    const placed = result.entries.filter((e) => e.subjectId === 'assembly')
+    expect(placed).toHaveLength(3)
+    // One period, shared: same day and slot for all three classes.
+    expect(new Set(placed.map((e) => `${e.day}|${e.slotId}`)).size).toBe(1)
+    expect(new Set(placed.map((e) => e.combinedKey)).size).toBe(1)
+  })
+
+  it('schedules an assembly double as two adjacent periods', () => {
+    const teaching = slots(6)
+    const result = run({
+      slots: teaching,
+      requirements: [],
+      combined: [combinedInput({
+        id: 'c1', subjectId: 'assembly', members,
+        periodsPerWeek: 2, maxPerDay: 2, minBlock: 2, maxBlock: 2,
+      })],
+    })
+
+    expect(result.unplacedCount).toBe(0)
+    const placed = result.entries.filter((e) => e.subjectId === 'assembly')
+    expect(placed).toHaveLength(6) // 2 periods × 3 classes
+
+    // One day, two back-to-back periods, and one block key across the lot.
+    expect(new Set(placed.map((e) => e.day)).size).toBe(1)
+    const runs = runsOf(result.entries.filter((e) => e.homeroomId === 'hrA'), 'assembly', teaching)
+    expect(runs).toHaveLength(1)
+    expect(runs[0][1] - runs[0][0]).toBe(1)
+    const keys = new Set(placed.map((e) => e.blockKey))
+    expect(keys.size).toBe(1)
+    expect([...keys][0]).toBeTruthy()
+  })
+
+  it('finds a room of the requested type when none is pinned', () => {
+    const hall: Room = { id: 'hall', name: 'Hall', room_type: 'other', capacity: null, created_by: null, created_at: '', updated_at: '' }
+    const lab: Room = { ...hall, id: 'lab', name: 'Lab', room_type: 'science_lab' }
+    const result = run({
+      requirements: [],
+      rooms: [hall, lab],
+      combined: [combinedInput({ id: 'c1', subjectId: 'assembly', members, roomType: 'other' })],
+    })
+    expect(result.unplacedCount).toBe(0)
+    for (const e of result.entries) expect(e.roomId).toBe('hall')
+  })
+
+  it('keeps a pinned room over the room type', () => {
+    const hall: Room = { id: 'hall', name: 'Hall', room_type: 'other', capacity: null, created_by: null, created_at: '', updated_at: '' }
+    const result = run({
+      requirements: [],
+      rooms: [hall],
+      combined: [combinedInput({ id: 'c1', subjectId: 'assembly', members, roomId: 'hall', roomType: 'classroom' })],
+    })
+    expect(result.unplacedCount).toBe(0)
+    for (const e of result.entries) expect(e.roomId).toBe('hall')
+  })
+
+  it('refuses to exceed its own max per day', () => {
+    // Two working days with plenty of free periods each. Four periods a week at
+    // one a day needs four days, so two of them cannot be placed — without the
+    // cap the solver would happily stack them into the days it has.
+    const twoDays = config({ working_days: ['monday', 'tuesday'] })
+    const capped = generateTimetable({
+      config: twoDays, slots: slots(6), requirements: [], unavailability: [], rooms: [], seed: 9,
+      combined: [combinedInput({
+        id: 'c1', subjectId: 'assembly', members, periodsPerWeek: 4, maxPerDay: 1,
+      })],
+    })
+    expect(capped.unplacedCount).toBe(2)
+    const perDay = new Map<string, number>()
+    for (const e of capped.entries.filter((x) => x.homeroomId === 'hrA')) {
+      perDay.set(e.day, (perDay.get(e.day) ?? 0) + 1)
+    }
+    expect([...perDay.values()].every((n) => n <= 1)).toBe(true)
+
+    // Raising the cap to two a day fits all four in the same two days.
+    const loose = generateTimetable({
+      config: twoDays, slots: slots(6), requirements: [], unavailability: [], rooms: [], seed: 9,
+      combined: [combinedInput({
+        id: 'c1', subjectId: 'assembly', members, periodsPerWeek: 4, maxPerDay: 2,
+      })],
+    })
+    expect(loose.unplacedCount).toBe(0)
+    expect(loose.entries.filter((e) => e.homeroomId === 'hrA')).toHaveLength(4)
+  })
+
+  it('reports a block it cannot fit, counting every period of it', () => {
+    // Two teaching periods with a break between them: no two are adjacent, so
+    // a double can never be placed.
+    const teaching: PeriodSlot[] = [
+      ...slots(1),
+      { id: 'brk', config_id: 'cfg', group_id: null, position: 2, label: 'Lunch', start_time: '10:00', end_time: '10:30', is_break: true, created_at: '', updated_at: '' },
+      { ...slots(1, null, 11)[0], id: 'base-s3', position: 3 },
+    ]
+    const result = run({
+      slots: teaching,
+      requirements: [],
+      combined: [combinedInput({
+        id: 'c1', subjectId: 'assembly', members,
+        periodsPerWeek: 2, maxPerDay: 2, minBlock: 2, maxBlock: 2,
+      })],
+    })
+    expect(result.unplacedCount).toBe(2)
+    expect(result.conflicts.some((c) => c.kind === 'block_unplaceable')).toBe(true)
+    expect(result.ok).toBe(false)
+  })
+
+  it('says so when its classes follow different period groups', () => {
+    const primary: SlotGroup = {
+      id: 'g-primary', config_id: 'cfg', name: 'Primary', working_days: DAYS,
+      position: 1, color: null, created_by: null, created_at: '', updated_at: '',
+    }
+    const result = generateTimetable({
+      config: config(),
+      slots: [...slots(4, 'g-primary', 9), ...slots(4, null, 9)],
+      slotGroups: [primary],
+      homeroomGroupIds: { hrA: 'g-primary' },
+      requirements: [],
+      combined: [combinedInput({
+        id: 'c1', subjectId: 'assembly',
+        members: [{ homeroomId: 'hrA', groupId: null }, { homeroomId: 'hrB', groupId: null }],
+      })],
+      unavailability: [], rooms: [], seed: 4,
+    })
+    expect(result.unplacedCount).toBe(1)
+    expect(result.conflicts.some((c) => /different period groups/.test(c.message))).toBe(true)
   })
 })

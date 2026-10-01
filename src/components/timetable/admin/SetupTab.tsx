@@ -3,16 +3,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle, Layers, Users, Pencil, X,
+  Search, GraduationCap,
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
   fetchPeriodSlots, createPeriodSlot, deletePeriodSlot,
-  createSlotGroup, updateSlotGroup, deleteSlotGroup,
+  createSlotGroup, updateSlotGroup, deleteSlotGroup, assignHomeroomsToSlotGroup,
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, SlotGroup, Weekday } from '@/lib/timetable'
 import { useTimetableDraftOptional } from '../draft/TimetableDraftContext'
-import { INPUT, BTN_PRIMARY, Section, Field, SECTION_LABEL } from '../ui'
+import type { Homeroom } from '@/lib/homerooms'
+import { INPUT, BTN_PRIMARY, BTN_NEUTRAL, Section, Field, SECTION_LABEL } from '../ui'
 
 const _cy = new Date().getFullYear()
 const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
@@ -361,6 +363,7 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
           onChanged={reload}
         />
         <PeriodSlotsSection config={config} group={selectedGroup} onChanged={reload} />
+        <GroupClassesSection config={config} group={selectedGroup} onChanged={reload} />
       </div>
     </>
   )
@@ -592,6 +595,254 @@ function PeriodSlotsSection({
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
           <span>{slotProblem}</span>
         </div>
+      )}
+    </Section>
+  )
+}
+
+// ── Which classes follow a schedule ──────────────────────────
+
+// A homeroom counts while it hasn't expired.
+const isActiveHomeroom = (h: Homeroom) =>
+  !h.expiry_date || h.expiry_date >= new Date().toISOString().slice(0, 10)
+
+const gradeLabel = (h: Homeroom) =>
+  h.grade != null ? `Grade ${h.grade}` : 'No grade'
+
+/**
+ * Assigns classes to a period group in bulk.
+ *
+ * A year group almost always rings to the same bell, so the useful unit is the
+ * grade, not the class: the grade chips tick every homeroom in a grade at once
+ * and untick them the same way. Classes already following another group are
+ * shown with that group's name, so moving a grade across never silently
+ * overwrites an assignment the admin can't see.
+ *
+ * Ticking for the base schedule means "no group row", which is how an
+ * unassigned class is stored.
+ */
+function GroupClassesSection({
+  config, group, onChanged,
+}: {
+  config: TimetableConfig
+  group: SlotGroup | null
+  onChanged: () => void
+}) {
+  const draft = useTimetableDraftOptional()
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState('')
+
+  const groupId = group?.id ?? null
+  const homerooms = useMemo(
+    () => (draft?.homerooms ?? []).filter(isActiveHomeroom),
+    [draft?.homerooms],
+  )
+  // Stable identity: `stored` below is memoised on this and drives an effect
+  // that resets the tick boxes. A fresh object each render would reset them on
+  // every render instead of only when the saved assignment changes.
+  const assigned = useMemo(() => draft?.slotGroupIds ?? {}, [draft?.slotGroupIds])
+  const groupNameOf = useCallback(
+    (id: string | null) => (id === null ? 'Base schedule' : draft?.slotGroups.find((g) => g.id === id)?.name ?? '—'),
+    [draft?.slotGroups],
+  )
+
+  // Reset the tick boxes to what is stored whenever the saved state or the
+  // selected group changes, so the control never shows a stale diff.
+  const stored = useMemo(
+    () => new Set(homerooms.filter((h) => (assigned[h.id] ?? null) === groupId).map((h) => h.id)),
+    [homerooms, assigned, groupId],
+  )
+  useEffect(() => { setPicked(new Set(stored)); setNote('') }, [stored])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return q
+      ? homerooms.filter((h) => h.name.toLowerCase().includes(q) || gradeLabel(h).toLowerCase().includes(q))
+      : homerooms
+  }, [homerooms, query])
+
+  // Grades in ascending order, ungraded classes last.
+  const grades = useMemo(() => {
+    const m = new Map<string, Homeroom[]>()
+    for (const h of homerooms) {
+      const k = gradeLabel(h)
+      const arr = m.get(k)
+      if (arr) arr.push(h)
+      else m.set(k, [h])
+    }
+    return [...m.entries()].sort((a, b) => {
+      const na = parseInt(a[0].replace(/\D/g, ''), 10)
+      const nb = parseInt(b[0].replace(/\D/g, ''), 10)
+      if (Number.isNaN(na)) return 1
+      if (Number.isNaN(nb)) return -1
+      return na - nb
+    })
+  }, [homerooms])
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  // One tap for a whole grade: adds every class in it, or clears them when the
+  // grade is already fully ticked.
+  const toggleGrade = (members: Homeroom[]) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      const allIn = members.every((h) => next.has(h.id))
+      for (const h of members) {
+        if (allIn) next.delete(h.id)
+        else next.add(h.id)
+      }
+      return next
+    })
+
+  const added = [...picked].filter((id) => !stored.has(id))
+  const removed = [...stored].filter((id) => !picked.has(id))
+  const dirty = added.length > 0 || removed.length > 0
+
+  const save = async () => {
+    setSaving(true)
+    // Unticking here puts a class back on the base schedule; that is the only
+    // place it can go without choosing another group for it.
+    const ok =
+      (added.length === 0 || (await assignHomeroomsToSlotGroup(config.id, added, groupId))) &&
+      (removed.length === 0 || (await assignHomeroomsToSlotGroup(config.id, removed, null)))
+    if (ok) {
+      await draft?.reload()
+      // These classes' lessons sit in their old schedule's periods, which do
+      // not exist in the new week — they would render nowhere while still
+      // counting in clash detection, so they go and are rebuilt on generate.
+      const touched = new Set([...added, ...removed])
+      draft?.setEntries((prev) => prev.filter((e) => !touched.has(e.homeroomId)))
+      onChanged()
+      setNote(
+        [
+          added.length > 0 ? `${added.length} moved in` : '',
+          removed.length > 0 ? `${removed.length} back on the base schedule` : '',
+        ].filter(Boolean).join(' · '),
+      )
+    } else {
+      setNote('Could not save the assignment — check console.')
+    }
+    setSaving(false)
+  }
+
+  if (!draft) return null
+
+  return (
+    <Section
+      title={group ? `Classes on ${group.name}` : 'Classes on the base schedule'}
+      hint={
+        group
+          ? 'Tick the classes that ring to this schedule. A grade chip ticks the whole year group at once. Unticking puts a class back on the base schedule.'
+          : 'Every class not assigned to a period group follows this schedule. Tick one here to move it back off a group.'
+      }
+      right={
+        <span className="text-sm font-semibold tabular-nums text-[#18181B]">
+          {picked.size}
+          <span className="text-[#A1A1AA] font-normal">/{homerooms.length}</span>
+        </span>
+      }
+    >
+      {homerooms.length === 0 ? (
+        <p className="text-xs text-[#A1A1AA] py-2">No active homerooms.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1 mb-2.5">
+            {grades.map(([label, members]) => {
+              const allIn = members.every((h) => picked.has(h.id))
+              const someIn = !allIn && members.some((h) => picked.has(h.id))
+              return (
+                <button
+                  key={label}
+                  onClick={() => toggleGrade(members)}
+                  title={allIn ? `Remove all of ${label}` : `Add all ${members.length} classes in ${label}`}
+                  className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium border transition-colors ${
+                    allIn
+                      ? 'bg-[#27272A] text-white border-[#27272A]'
+                      : someIn
+                        ? 'bg-white text-[#18181B] border-[#27272A]'
+                        : 'bg-[#F5F5F5] text-[#52525B] border-[#E4E4E7] hover:bg-[#EBEBEB]'
+                  }`}
+                >
+                  <GraduationCap size={12} className={allIn ? 'text-[#B8983C]' : 'text-[#71717A]'} />
+                  {label}
+                  <span className={allIn ? 'text-white/60' : 'text-[#A1A1AA]'}>{members.length}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5 mb-1.5">
+            <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search classes…"
+              className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none"
+            />
+          </div>
+
+          <div className="max-h-56 overflow-y-auto border border-[#E4E4E7] divide-y divide-[#F5F5F5]">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-[#A1A1AA] p-2.5">No classes match.</p>
+            ) : filtered.map((h) => {
+              const on = picked.has(h.id)
+              const current = assigned[h.id] ?? null
+              // Where it sits now, when that isn't the schedule being edited.
+              const elsewhere = current !== groupId ? groupNameOf(current) : null
+              return (
+                <label
+                  key={h.id}
+                  className={`flex items-center gap-2.5 px-2.5 py-1.5 text-sm cursor-pointer transition-colors ${
+                    on ? 'bg-[#FAFAF9]' : 'hover:bg-[#FAFAF9]'
+                  }`}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggle(h.id)} className="accent-[#27272A]" />
+                  <span className="flex-1 min-w-0 truncate text-[#18181B]">{h.name}</span>
+                  {elsewhere && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] flex-shrink-0"
+                      title={`Currently follows ${elsewhere}`}
+                    >
+                      {elsewhere}
+                    </span>
+                  )}
+                </label>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <button onClick={save} disabled={!dirty || saving} className={`${BTN_PRIMARY} disabled:opacity-40`}>
+              {saving ? <Loader2 className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
+              Save assignment
+            </button>
+            {dirty && (
+              <button
+                onClick={() => setPicked(new Set(stored))}
+                className={`${BTN_NEUTRAL} py-2`}
+              >
+                Reset
+              </button>
+            )}
+            {dirty && (
+              <span className="text-[11px] text-[#71717A]">
+                {added.length > 0 && `${added.length} to add`}
+                {added.length > 0 && removed.length > 0 && ' · '}
+                {removed.length > 0 && `${removed.length} to remove`}
+                {' — their current lessons are cleared and rebuilt on the next generate.'}
+              </span>
+            )}
+            {!dirty && note && <span className="text-[11px] text-emerald-700">{note}</span>}
+          </div>
+        </>
       )}
     </Section>
   )

@@ -330,8 +330,16 @@ export interface CombinedClass {
   subject_id: string | null
   teacher_id: string | null
   teacher_ids: string[] | null
+  // A specific room, when the lesson must happen somewhere in particular.
   room_id: string | null
   periods_per_week: number
+  // Round 10: a combined lesson schedules like any other — the solver finds a
+  // room of this type when no specific room is pinned, keeps to max_per_day,
+  // and honours consecutive-period blocks (an assembly double in the hall).
+  room_type: RoomType
+  max_per_day: number
+  min_block: number
+  max_block: number
   created_by: string | null
   created_at: string
   updated_at: string
@@ -360,7 +368,11 @@ export interface CombinedClassInput {
   teacherId: string | null
   teacherIds: string[]
   roomId: string | null
+  roomType: RoomType
   periodsPerWeek: number
+  maxPerDay: number
+  minBlock: number
+  maxBlock: number
   members: { homeroomId: string; groupId: string | null }[]
 }
 
