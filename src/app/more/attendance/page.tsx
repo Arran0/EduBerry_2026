@@ -8,13 +8,20 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search, MessageCircle } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
 const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
 // The whole Student OD / Leave app, hosted here in a popup. Loaded on demand —
 // its lists and form are dead weight until someone opens it.
+// Bulk WhatsApp to parents, opened from the report's toolbar. Loaded on demand:
+// its list, typeahead, template picker and automation screens are dead weight
+// for the many visits that only read the report.
+const BulkWhatsAppModal = dynamic(
+  () => import('@/components/attendance/whatsapp/BulkWhatsAppModal'),
+  { ssr: false },
+)
 const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveModal'), {
   ssr: false,
   // Covers the gap while the chunk arrives, so the button feels like it fired.
@@ -30,6 +37,7 @@ import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { Homeroom, fetchAllHomerooms, fetchHomeromsForStudent, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import { DateToggler, SmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
+import { fetchNotifyAccess } from '@/lib/attendanceWhatsApp'
 import {
   fetchAttendanceSummary,
   fetchStudentNonPresentByDate,
@@ -752,6 +760,21 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const [activeTab, setActiveTab] = useState<ReportSection>('absent')
   // Free-text filter over whatever the active view is showing.
   const [query, setQuery] = useState('')
+  // Non-null while the bulk WhatsApp popup is open. Telling the parents is what
+  // the office does with this report, so it opens from here rather than from a
+  // separate screen that would have to be told the date and class all over again.
+  const [waOpen, setWaOpen] = useState(false)
+  const [canWhatsApp, setCanWhatsApp] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchNotifyAccess()
+      .then(a => { if (!cancelled) setCanWhatsApp(a.canSend) })
+      // The report must still render if the access check fails — it just does
+      // so without the button, which is the safe way round.
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const [irregulars, setIrregulars] = useState<StudentAttendanceEntry[]>([])
   const [loadingIrregular, setLoadingIrregular] = useState(true)
@@ -984,9 +1007,10 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   }
 
   return (
-    // On phones the report is full-bleed with square corners so the lists get
-    // the whole screen; from sm up it settles back into a rounded card — the
-    // same shape the staff report takes.
+    <>
+    {/* On phones the report is full-bleed with square corners so the lists get
+        the whole screen; from sm up it settles back into a rounded card — the
+        same shape the staff report takes. */}
     <section
       id={REPORT_ANCHOR}
       className="-mx-4 sm:mx-0 border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden"
@@ -1002,6 +1026,17 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
         </h2>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {canWhatsApp && (
+            <button
+              onClick={() => setWaOpen(true)}
+              title="WhatsApp the parents of these students"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-white/95 hover:bg-white text-[#18181B] rounded-lg border border-white/40 transition-colors"
+            >
+              <MessageCircle size={12} className="text-emerald-600 flex-shrink-0" />
+              <span className="hidden sm:inline">WhatsApp</span>
+            </button>
+          )}
+
           {/* Homeroom-wise / student-wise. Labels collapse to icons on phones so
               this shares one row with the date toggler at every width. */}
           <div className="inline-flex items-stretch rounded-lg overflow-hidden border border-white/25">
@@ -1246,6 +1281,24 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
         )}
       </div>
     </section>
+
+    {/* Bulk WhatsApp. Opens on whatever the report is already showing — the
+        same date, the same class, the tab you were reading — because having to
+        re-pick all three in a popup is how a list ends up being sent for the
+        wrong day. */}
+    <AnimatePresence>
+      {waOpen && (
+        <BulkWhatsAppModal
+          date={date}
+          todayStr={todayStr}
+          homerooms={pickerHomerooms}
+          initialHomeroomId={homeroom?.id ?? null}
+          initialPreset={activeTab === 'irregular' ? 'irregular' : activeTab === 'present' ? 'late' : 'absent'}
+          onClose={() => setWaOpen(false)}
+        />
+      )}
+    </AnimatePresence>
+    </>
   )
 }
 

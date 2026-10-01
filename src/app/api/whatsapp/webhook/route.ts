@@ -129,7 +129,14 @@ async function recordStatus(
 
   await db.from('notification_outbox').update(patch).eq('id', row.id)
   if (Object.keys(logPatch).length > 0) {
-    await db.from('fee_reminder_log').update(logPatch).eq('outbox_id', row.id)
+    // One outbox row belongs to exactly one module, so only one of these
+    // matches — but both are tried rather than branching on the module, because
+    // a receipt that quietly matches nothing is a history screen that says
+    // "Sent" forever about a message the parent has already read.
+    await Promise.all([
+      db.from('fee_reminder_log').update(logPatch).eq('outbox_id', row.id),
+      db.from('attendance_message_log').update(logPatch).eq('outbox_id', row.id),
+    ])
   }
 }
 
