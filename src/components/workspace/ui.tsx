@@ -58,19 +58,27 @@ export function Section({
 }
 
 export function Field({
-  label, children, hint,
+  label, children, hint, group = false,
 }: {
   label: string
   children: React.ReactNode
   /** One line under the control, for a field whose meaning isn't obvious. */
   hint?: string
+  /**
+   * Renders a plain container instead of a <label>. A label forwards its
+   * clicks to the first control inside it, which is right for one input and
+   * wrong for a cluster of them — a colour swatch should not also focus a
+   * text box. Set this whenever the field holds more than one control.
+   */
+  group?: boolean
 }) {
+  const Tag = group ? 'div' : 'label'
   return (
-    <label className="block">
+    <Tag className="block">
       <span className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">{label}</span>
       {children}
       {hint && <span className="block text-[11px] text-[#A1A1AA] mt-1 leading-snug">{hint}</span>}
-    </label>
+    </Tag>
   )
 }
 

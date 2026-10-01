@@ -56,7 +56,19 @@ export const entryId = (e: PlacedEntry) =>
 export interface TimetableDraft {
   config: TimetableConfig
   loading: boolean
+  /** Reloads everything, INCLUDING discarding unsaved entries for the saved ones. */
   reload: () => Promise<void>
+  /**
+   * Re-reads the reference data an editor may have changed — requirements,
+   * combined lessons, subjects, rooms, split groups — and leaves the draft
+   * timetable alone.
+   *
+   * Editors live in modals over the grid, so a requirement added there has to
+   * reach the workload warnings, the class list and the next generate. Calling
+   * reload() for that would throw away an unsaved generated week, which is
+   * never what adding a requirement should do.
+   */
+  refreshReference: () => Promise<void>
 
   // Reference data
   slots: PeriodSlot[] // every slot of the config, breaks included
@@ -192,6 +204,26 @@ export function TimetableDraftProvider({
     setGroups(grps)
     setEntries(savedEntries.map(toPlaced))
     setLoading(false)
+  }, [config.id])
+
+  const refreshReference = useCallback(async () => {
+    const [reqs, cmb, subs, rms, hrs, sg, sgh] = await Promise.all([
+      fetchRequirements(config.id),
+      fetchCombinedClasses(config.id),
+      fetchSubjects(),
+      fetchRooms(),
+      fetchAllHomerooms(),
+      fetchSlotGroups(config.id),
+      fetchSlotGroupHomerooms(config.id),
+    ])
+    setRequirements(reqs)
+    setCombinedClasses(cmb)
+    setSubjects(subs)
+    setRooms(rms)
+    setHomerooms(hrs)
+    setSlotGroups(sg)
+    setSlotGroupIds(slotGroupMap(sgh))
+    setGroups(await fetchGroupsForHomerooms(hrs.map((h) => h.id)))
   }, [config.id])
 
   useEffect(() => { reload() }, [reload])
@@ -480,7 +512,7 @@ export function TimetableDraftProvider({
   )
 
   const value: TimetableDraft = {
-    config, loading, reload,
+    config, loading, reload, refreshReference,
     slots, slotGroups, slotGroupIds, weeks,
     homerooms, scheduledHomerooms, homeroomsLite, teachers, subjects, rooms, groups,
     requirements, combinedClasses, combinedInput, unavailability,

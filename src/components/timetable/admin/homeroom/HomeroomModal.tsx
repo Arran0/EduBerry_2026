@@ -11,7 +11,7 @@ import {
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
   fetchGroupsForHomeroom, createGroup, deleteGroup, removeGroupMember,
   bulkAddGroupMembersByEmails, bulkAddGroupMembersByIds, fetchClassroomStudentsInHomeroom,
-  requirementError, ROOM_TYPE_LABELS,
+  requirementError, ROOM_TYPE_LABELS, createSubject,
   updateRequirement, updateCombinedClass, copyRequirementsTo, assignHomeroomToSlotGroup,
 } from '@/lib/timetable'
 import type {
@@ -29,7 +29,8 @@ import { INPUT, BTN_PRIMARY, BTN_NEUTRAL, SECTION_LABEL, SegmentedNav, SmartSele
 import type { SegItem, SmartOption } from '../../ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import NameLink from '../../NameLink'
-import { ColorPicker } from '../colorPicker'
+import { ColorPicker, SUBJECT_COLORS } from '../colorPicker'
+import { searchSubjects } from '@/lib/cbseSubjects'
 import MultiTeacherSelect from '../../MultiTeacherSelect'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../../draft/TeacherLoad'
@@ -177,6 +178,7 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
                       rooms={rooms} homerooms={active}
                       clipboard={clipboard}
                       onCopy={(items, fromHomeroomId) => setClipboard({ fromHomeroomId, items })}
+                      onSubjectsChanged={loadRefs}
                     />
                   )
                   : <NeedConfig />
@@ -815,8 +817,158 @@ function requirementProblem(d: ReqDraft, workingDays: number): string | null {
   return null
 }
 
+/**
+ * Picks a subject, or makes one on the spot.
+ *
+ * Writing a requirement is where a missing subject is noticed, and leaving to
+ * the Subjects hub to add it means losing the half-filled form. The composer
+ * carries the same CBSE name typeahead and the same colour strip as the hub,
+ * so a subject created here is a normal subject, not a stub to tidy up later.
+ */
+function SubjectField({
+  subjects, value, onChange, onCreated,
+}: {
+  subjects: Subject[]
+  value: string
+  onChange: (id: string) => void
+  onCreated: () => Promise<void> | void
+}) {
+  const [composing, setComposing] = useState(false)
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [color, setColor] = useState(SUBJECT_COLORS[0])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  const options: SmartOption[] = useMemo(
+    () => subjects.map((s) => ({ value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined })),
+    [subjects],
+  )
+
+  const duplicate = subjects.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase())
+
+  const reset = () => {
+    setComposing(false)
+    setName(''); setCode(''); setColor(SUBJECT_COLORS[0])
+    setSuggestions([]); setShowSuggestions(false); setError('')
+  }
+
+  const create = async () => {
+    if (!name.trim() || duplicate) return
+    setSaving(true)
+    const made = await createSubject({ name: name.trim(), code: code.trim() || null, color })
+    setSaving(false)
+    if (!made) { setError('Could not create the subject.'); return }
+    await onCreated()
+    onChange(made.id) // pick it straight away — it is what the form was missing
+    reset()
+  }
+
+  return (
+    <Field label="Subject" group>
+      {composing ? (
+        <div className="border border-[#27272A] p-2 space-y-2">
+          <div className="relative">
+            <input
+              ref={nameRef}
+              autoFocus
+              className={INPUT}
+              placeholder="Subject name…"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value)
+                const results = searchSubjects(e.target.value)
+                setSuggestions(results)
+                setShowSuggestions(results.length > 0)
+              }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); create() }
+                if (e.key === 'Escape') reset()
+              }}
+              autoComplete="off"
+            />
+            {showSuggestions && (
+              <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-40 overflow-y-auto">
+                {suggestions.map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onMouseDown={() => { setName(sug); setShowSuggestions(false); nameRef.current?.focus() }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-[#18181B] hover:bg-[#F5F5F5]"
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <ColorPicker colors={SUBJECT_COLORS} value={color} onChange={setColor} ariaLabel="Subject colour" />
+
+          <div className="flex items-stretch gap-1.5">
+            <input
+              className={`${INPUT} w-24 flex-none`}
+              placeholder="Code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); create() } }}
+            />
+            <button
+              type="button"
+              onClick={create}
+              disabled={saving || !name.trim() || duplicate}
+              className={`${BTN_PRIMARY} flex-1 min-w-0 disabled:opacity-40`}
+            >
+              {saving ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
+              Create &amp; use
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              className="text-sm text-[#71717A] hover:text-[#18181B] px-2 transition-colors"
+              title="Cancel"
+            >
+              <X size={15} />
+            </button>
+          </div>
+          {duplicate && (
+            <p className="text-[11px] text-amber-700">
+              A subject called “{name.trim()}” already exists — pick it from the list instead.
+            </p>
+          )}
+          {error && <p className="text-[11px] text-rose-600">{error}</p>}
+        </div>
+      ) : (
+        <div className="flex items-stretch gap-1.5">
+          <div className="flex-1 min-w-0">
+            <SmartSelect
+              options={options}
+              value={value}
+              onChange={onChange}
+              placeholder="Select subject…"
+              searchPlaceholder="Search subjects…"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setComposing(true)}
+            title="Create a new subject without leaving this form"
+            className="inline-flex items-center gap-1 px-2 text-xs font-medium text-[#52525B] bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors flex-shrink-0"
+          >
+            <Plus size={14} /> New
+          </button>
+        </div>
+      )}
+    </Field>
+  )
+}
+
 function RequirementFields({
-  draft, onChange, subjects, teachers, groups, showGroup, roomTypeHint,
+  draft, onChange, subjects, teachers, groups, showGroup, roomTypeHint, onSubjectCreated,
 }: {
   draft: ReqDraft
   onChange: (next: ReqDraft) => void
@@ -826,18 +978,19 @@ function RequirementFields({
   showGroup: boolean
   /** Explains what the room type means when a specific room can also be set. */
   roomTypeHint?: string
+  /** Re-reads the subject list after one is made from inside the form. */
+  onSubjectCreated: () => Promise<void> | void
 }) {
   const set = <K extends keyof ReqDraft>(k: K, v: ReqDraft[K]) => onChange({ ...draft, [k]: v })
-  const subjectOptions: SmartOption[] = useMemo(
-    () => subjects.map((s) => ({ value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined })),
-    [subjects],
-  )
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Subject">
-        <SmartSelect options={subjectOptions} value={draft.subjectId} onChange={(v) => set('subjectId', v)} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
-      </Field>
+      <SubjectField
+        subjects={subjects}
+        value={draft.subjectId}
+        onChange={(v) => set('subjectId', v)}
+        onCreated={onSubjectCreated}
+      />
       <Field label="Teachers">
         <MultiTeacherSelect
           teachers={teachers}
@@ -906,7 +1059,7 @@ function useTeacherOverload(
 }
 
 function RequirementsPanel({
-  config, homeroom, subjects, teachers, rooms, homerooms, clipboard, onCopy,
+  config, homeroom, subjects, teachers, rooms, homerooms, clipboard, onCopy, onSubjectsChanged,
 }: {
   config: TimetableConfig
   homeroom: Homeroom
@@ -917,6 +1070,8 @@ function RequirementsPanel({
   /** Requirements copied from some homeroom, waiting to be pasted. */
   clipboard: { fromHomeroomId: string; items: Requirement[] } | null
   onCopy: (items: Requirement[], fromHomeroomId: string) => void
+  /** Re-reads the hub's subject list after one is created from the form. */
+  onSubjectsChanged: () => Promise<void> | void
 }) {
   const draftCtx = useTimetableDraftOptional()
   const [requirements, setRequirements] = useState<Requirement[]>([])
@@ -972,6 +1127,17 @@ function RequirementsPanel({
     setConstraints(cons)
     setLoading(false)
   }, [config.id, homeroom.id])
+
+  /**
+   * Requirements drive the master grid's class list, the teacher workload
+   * warnings and the next generate — all of which read the shared draft, not
+   * this panel. Every change here has to reach it, and reload() would discard
+   * an unsaved generated week, so only the reference data is re-read.
+   */
+  const loadAll = useCallback(async () => {
+    await Promise.all([load(), draftCtx?.refreshReference() ?? Promise.resolve()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, draftCtx?.refreshReference])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -1036,7 +1202,7 @@ function RequirementsPanel({
         members,
       })
       setAdding(false)
-      if (created) { resetForm(); load() } else setError('Could not create the combined lesson.')
+      if (created) { resetForm(); loadAll() } else setError('Could not create the combined lesson.')
     } else {
       const block = Math.max(1, parseInt(form.blockSize, 10) || 1)
       const created = await createRequirement({
@@ -1053,7 +1219,7 @@ function RequirementsPanel({
         group_id: form.groupId || null,
       })
       setAdding(false)
-      if (created) { resetForm(); load() }
+      if (created) { resetForm(); loadAll() }
       else setError(requirementError() ?? 'Could not add this requirement.')
     }
   }
@@ -1102,7 +1268,7 @@ function RequirementsPanel({
     setSavingEdit(false)
     if (!updated) { setEditError('Could not save this combined lesson.'); return }
     setEditingId(null)
-    load()
+    loadAll()
     flash('Combined lesson updated — regenerate to apply it to the timetable.')
   }
 
@@ -1127,7 +1293,7 @@ function RequirementsPanel({
     setSavingEdit(false)
     if (!updated) { setEditError(requirementError() ?? 'Could not save this requirement.'); return }
     setEditingId(null)
-    load()
+    loadAll()
     flash('Requirement updated — regenerate to apply it to the timetable.')
   }
 
@@ -1137,7 +1303,7 @@ function RequirementsPanel({
     setPasting(true)
     const res = await copyRequirementsTo(clipboard.items, homeroom.id)
     setPasting(false)
-    load()
+    loadAll()
     const parts = [`${res.copied} copied`]
     if (res.skipped > 0) parts.push(`${res.skipped} already here`)
     if (res.failed > 0) parts.push(`${res.failed} failed`)
@@ -1185,6 +1351,9 @@ function RequirementsPanel({
           groups={groups}
           showGroup={!isCombined}
           roomTypeHint={isCombined ? 'Used when no specific room is pinned below.' : undefined}
+          onSubjectCreated={async () => {
+            await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
+          }}
         />
 
         {/* Combined toggle */}
@@ -1352,6 +1521,9 @@ function RequirementsPanel({
                       teachers={teachers}
                       groups={groups}
                       showGroup
+                      onSubjectCreated={async () => {
+                        await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
+                      }}
                     />
                     {editOverload.length > 0 && (
                       <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
@@ -1411,7 +1583,7 @@ function RequirementsPanel({
                     className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
                     title="Edit"
                   ><Pencil size={14} /></button>
-                  <button onClick={async () => { await deleteRequirement(r.id); load() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                  <button onClick={async () => { await deleteRequirement(r.id); loadAll() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
                 </div>
               )
             })}
@@ -1442,6 +1614,9 @@ function RequirementsPanel({
                       groups={groups}
                       showGroup={false}
                       roomTypeHint="Used when no specific room is set."
+                      onSubjectCreated={async () => {
+                        await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
+                      }}
                     />
                     {editError && (
                       <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
@@ -1490,7 +1665,7 @@ function RequirementsPanel({
                     className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
                     title="Edit"
                   ><Pencil size={14} /></button>
-                  <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                  <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); loadAll() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
                 </div>
               )
             })}

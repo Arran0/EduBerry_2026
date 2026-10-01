@@ -14,19 +14,11 @@ import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field, 
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import { useConstraints } from '../useConstraints'
-import { ColorPicker } from '../colorPicker'
+import { ColorPicker, SUBJECT_COLORS } from '../colorPicker'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
-// A vibrant, Pantone-inspired palette (Classic Blue, Turquoise, Greenery,
-// Illuminating, Tangerine Tango, Viva Magenta, Radiant Orchid, Very Peri,
-// Emerald, Living Coral) — punchier than a flat brand palette so subjects
-// stay easy to tell apart at a glance on the grid.
-const SUBJECT_COLORS = [
-  '#0F4C81', '#45B5AA', '#88B04B', '#F2C94C', '#DD4124',
-  '#BE3455', '#B565A7', '#6667AB', '#009B77', '#FF6F61',
-]
 
 /**
  * The Subjects hub — a searchable list of subjects (with the CBSE name
@@ -34,6 +26,9 @@ const SUBJECT_COLORS = [
  * week limits (all homerooms or a specific one). A Rooms panel lives alongside.
  */
 export default function SubjectModal({ config }: { config: TimetableConfig | null }) {
+  // Subject and room changes colour the grid and feed the next generate, so
+  // the shared draft has to hear about them too.
+  const draft = useTimetableDraftOptional()
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,7 +80,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
     setAdding(false)
     if (created) {
       setName(''); setCode(''); setSuggestions([]); setShowSuggestions(false)
-      await load()
+      await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
       setSelectedId(created.id)
     }
   }
@@ -183,7 +178,12 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
               <span className="font-semibold text-[#18181B]">{selected.name}</span>
               {selected.code && <span className="text-[11px] font-mono text-[#A1A1AA]">{selected.code}</span>}
               <button
-                onClick={async () => { if (confirm(`Delete subject "${selected.name}"?`)) { await deleteSubject(selected.id); setSelectedId(''); load() } }}
+                onClick={async () => {
+                  if (!confirm(`Delete subject "${selected.name}"?`)) return
+                  await deleteSubject(selected.id)
+                  setSelectedId('')
+                  await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
+                }}
                 className="ml-auto text-[#D4D4D8] hover:text-rose-500 transition-colors"
               ><Trash2 size={15} /></button>
             </div>
@@ -286,6 +286,7 @@ function SubjectConstraintsPanel({
 // ── Rooms ─────────────────────────────────────────────────────
 
 function RoomsPanel() {
+  const draft = useTimetableDraftOptional()
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
@@ -305,7 +306,10 @@ function RoomsPanel() {
     setAdding(true)
     const created = await createRoom({ name: name.trim(), room_type: roomType, capacity: capacity ? parseInt(capacity, 10) : null })
     setAdding(false)
-    if (created) { setName(''); setCapacity(''); load() }
+    if (created) {
+      setName(''); setCapacity('')
+      await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
+    }
   }
 
   return (
@@ -319,7 +323,7 @@ function RoomsPanel() {
               <span className="text-sm font-medium text-[#18181B] flex-1 truncate">{r.name}</span>
               <span className="text-[11px] px-2 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A]">{ROOM_TYPE_LABELS[r.room_type]}</span>
               {r.capacity != null && <span className="text-[11px] text-[#A1A1AA]">{r.capacity} seats</span>}
-              <button onClick={async () => { if (confirm(`Delete room "${r.name}"?`)) { await deleteRoom(r.id); load() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
+              <button onClick={async () => { if (confirm(`Delete room "${r.name}"?`)) { await deleteRoom(r.id); await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()]) } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
             </div>
           ))}
           {rooms.length === 0 && <p className="text-xs text-[#A1A1AA] py-2">No rooms yet.</p>}
