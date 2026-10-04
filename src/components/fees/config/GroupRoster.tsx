@@ -213,26 +213,26 @@ export default function GroupRoster({
                   {/* A 13px box is not a phone control. The label beside it is
                       the real target: tapping the name picks the student. */}
                   <label className={`${CELL_LEAD.PICK} flex items-center justify-center
-                                     max-sm:w-9 max-sm:h-9 cursor-pointer`}>
+                                     w-7 h-7 cursor-pointer`}>
                     <input type="checkbox" checked={picked.has(r.student_id)}
                            onChange={() => toggle(r.student_id)}
                            aria-label={`Select ${r.full_name}`}
-                           className="max-sm:w-[17px] max-sm:h-[17px]" />
+                           className="w-[15px] h-[15px]" />
                   </label>
-                  <span className={`${CELL_LEAD.A1} text-[13px] sm:text-[12.5px] font-semibold sm:font-normal text-[#18181B] truncate`}>
+                  <span className={`${CELL_LEAD.A1} text-[12.5px] font-medium text-[#18181B] truncate`}>
                     {r.full_name}
                   </span>
-                  <span className={`${CELL_LEAD.A2} text-[11px] sm:text-[12.5px] text-[#6B675A] truncate`}>
+                  <span className={`${CELL_LEAD.A2} text-[12.5px] text-[#6B675A] truncate`}>
                     {gradeLabel(r.grade)}{r.section ?? ''}
                     <span className="sm:hidden">
                       {r.admission_no ? ` · ${r.admission_no}` : ''}
                       {r.note ? ` · ${r.note}` : ''}
                     </span>
                   </span>
-                  <span className={`${CELL.DESKTOP} font-mono text-[11px] text-[#8C8878] truncate`}>
+                  <span className={`${CELL.DESKTOP} font-mono text-[11px] text-[#6B675A] truncate`}>
                     {r.admission_no ?? '—'}
                   </span>
-                  <span className={`${CELL_LEAD.B1} text-[11.5px] sm:text-[12.5px] max-sm:text-right`}>
+                  <span className={`${CELL_LEAD.B1} text-[12.5px] max-sm:text-right`}>
                     {assigned ? (
                       <span className="inline-flex items-center gap-1.5 flex-wrap justify-end">
                         <span className="text-[#18181B] font-semibold">{assigned.name}</span>
@@ -242,7 +242,7 @@ export default function GroupRoster({
                                            border border-[#CFDAEF]">RTE</span>
                         )}
                         {r.prorate_from && (
-                          <span className="text-[10px] text-[#8C8878]">
+                          <span className="text-[11px] text-[#8C8878]">
                             from {r.prorate_from}
                           </span>
                         )}
@@ -253,7 +253,7 @@ export default function GroupRoster({
                       </span>
                     )}
                     {drifted && (
-                      <span className="block text-[10px] text-[#7A6220] mt-0.5">
+                      <span className="block text-[11px] text-[#7A6220] mt-0.5">
                         Billed as {groupsById.get(r.profile_group_id ?? '')?.name ?? 'another group'}
                         {' '}until re-priced
                       </span>

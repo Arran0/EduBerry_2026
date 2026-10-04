@@ -149,7 +149,7 @@ export default function StudentStatementsModal({ student, year: yearProp, onClos
         {receiptMode ? (
           /* ── Fee Receipt picker ── */
           <div className="p-4 overflow-y-auto">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B675A] mb-3">Fee Receipts</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B675A] mb-3">Fee Receipts</p>
             {loadingPayments ? (
               <div className="flex items-center justify-center gap-2 py-8 text-[#8C8878]">
                 <Loader2 size={18} className="animate-spin" />
@@ -193,7 +193,7 @@ export default function StudentStatementsModal({ student, year: yearProp, onClos
         ) : (
           /* ── Statement buttons ── */
           <div className="p-4 overflow-y-auto">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B675A] mb-3">Financial Statements</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B675A] mb-3">Financial Statements</p>
             {loadingFees ? (
               <div className="flex items-center justify-center gap-2 py-8 text-[#8C8878]">
                 <Loader2 size={18} className="animate-spin" />

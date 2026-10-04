@@ -124,7 +124,7 @@ export default function ConcessionsSection() {
         )}
       </div>
 
-      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
@@ -137,7 +137,7 @@ export default function ConcessionsSection() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Inbox size={14} className="text-[#B8983C]" />
-                <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">
                   Waiting for a decision · {pending.length}
                 </h2>
               </div>
@@ -149,7 +149,7 @@ export default function ConcessionsSection() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Check size={14} className="text-[#B8983C]" />
-              <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">Granted</h2>
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">Granted</h2>
             </div>
             <Granted rows={granted} names={names} types={types} scholarships={scholarships}
                      showAmounts={showAmounts} canRemove={canApprove}
@@ -266,15 +266,15 @@ function Queue({
       <div className="px-4 py-2.5 border-b border-[#F0ECE2]">
         <h3 className={ADMIN.label}>Waiting for a decision</h3>
       </div>
-      {error && <p className="px-4 py-2 text-xs text-[#A93232] bg-[#FCECEC]">{error}</p>}
+      {error && <p className="px-4 py-2 text-[11px] text-[#A93232] bg-[#FCECEC]">{error}</p>}
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
           Nothing waiting. Concessions under their type&rsquo;s threshold apply straight away and
           never reach this list.
         </p>
       ) : rows.map(r => (
         <Row key={r.id} cols={PENDING_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
             {names.get(r.student_id)?.full_name ?? 'Student'}
             <span className="font-normal text-[#8C8878]">
               {' · '}{gradeLabel(names.get(r.student_id)?.grade ?? null)}
@@ -286,18 +286,18 @@ function Queue({
             {r.reason ? ` · ${r.reason}` : ''}
             {' · asked '}{fmtDate(r.created_at.slice(0, 10))}
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
           {/* Approving or declining is the decision this list exists for, so on
               a phone the pair gets a line across the card. */}
-          <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-2 sm:justify-end`}>
+          <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center justify-end gap-1.5`}>
             {canApprove ? (
               <>
                 <button onClick={() => void decide(r, false)} disabled={busy === r.id}
-                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}><X size={13} /> Decline</button>
+                        className={ADMIN.ghostBtn}><X size={13} /> Decline</button>
                 <button onClick={() => void decide(r, true)} disabled={busy === r.id}
-                        className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                        className={ADMIN.darkBtn}>
                   {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                   Approve
                 </button>
@@ -335,27 +335,27 @@ function Granted({
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Granted this session</h3>
-        <span className="text-xs text-[#6B675A]">
+        <span className="text-[11px] text-[#6B675A]">
           {rows.length} · {inr(total, showAmounts)} given up
         </span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">No concessions granted yet.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No concessions granted yet.</p>
       ) : rows.map(r => (
         <Row key={r.id} cols={GRANTED_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
             {names.get(r.student_id)?.full_name ?? 'Student'}
           </span>
           <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
             {label(r, types, scholarships)}
             {r.approved_at ? ` · approved ${fmtDate(r.approved_at.slice(0, 10))}` : ''}
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
           <span className={`${CELL.B2} flex justify-end`}>
             {canRemove && (
-              <button onClick={() => onRemove(r)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Remove</button>
+              <button onClick={() => onRemove(r)} className={ADMIN.ghostBtn}>Remove</button>
             )}
           </span>
         </Row>
@@ -382,12 +382,12 @@ function Types({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
           No discount types. Staff can still grant a one-off waiver, which always needs approval.
         </p>
       ) : rows.map(t => (
         <Row key={t.id} cols={TYPE_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
             {t.name}
           </span>
           <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
@@ -399,7 +399,7 @@ function Types({
             {t.stackable ? ' · stacks' : ''}
           </span>
           <span className={CELL.B1}>
-            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+            <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
               t.active
                 ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                 : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
@@ -408,7 +408,7 @@ function Types({
           </span>
           <span className={`${CELL.B2} flex justify-end`}>
             {canEdit && (
-              <button onClick={() => onEdit(t)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Edit</button>
+              <button onClick={() => onEdit(t)} className={ADMIN.ghostBtn}>Edit</button>
             )}
           </span>
         </Row>
@@ -435,7 +435,7 @@ function Scholarships({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">No scholarships this session.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No scholarships this session.</p>
       ) : rows.map(s => {
         const used = Number(s.awarded ?? 0)
         const budget = s.annual_budget === null ? null : Number(s.annual_budget)
@@ -445,13 +445,13 @@ function Scholarships({
           <div key={s.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex-1 min-w-[200px]">
-                <div className="text-sm font-semibold text-[#18181B]">{s.name}</div>
+                <div className="text-[12.5px] font-semibold text-[#18181B]">{s.name}</div>
                 <p className="text-[11px] text-[#8C8878] mt-0.5">
                   {s.funder ?? 'Funded by the school'}
                   {s.seats !== null ? ` · ${s.recipients ?? 0} of ${s.seats} seats` : ''}
                 </p>
               </div>
-              <span className={`text-sm font-semibold w-40 text-right ${over ? 'text-[#A93232]' : 'text-[#18181B]'}`}>
+              <span className={`text-[12.5px] font-semibold w-40 text-right ${over ? 'text-[#A93232]' : 'text-[#18181B]'}`}>
                 {inr(used, showAmounts)}
                 {budget !== null && (
                   <span className="text-[#8C8878] font-normal"> of {inr(budget, showAmounts)}</span>
@@ -500,7 +500,7 @@ function TypeEditor({
     <ModalShell onClose={onClose} sharp size="md" title={row ? 'Edit discount type' : 'New discount type'}
                 icon={<BadgePercent size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
                 footer={
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1.5">
                     <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
                     <button
                       onClick={async () => {
@@ -569,18 +569,18 @@ function TypeEditor({
           </p>
         </label>
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-xs text-[#18181B]">
+          <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
             <input type="checkbox" checked={form.stackable ?? false}
                    onChange={e => set('stackable', e.target.checked)} />
             Can stack with another discount
           </label>
-          <label className="flex items-center gap-2 text-xs text-[#18181B]">
+          <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
             <input type="checkbox" checked={form.active ?? true}
                    onChange={e => set('active', e.target.checked)} />
             Active
           </label>
         </div>
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -607,7 +607,7 @@ function ScholarshipEditor({
     <ModalShell onClose={onClose} sharp size="sm" title={row ? 'Edit scholarship' : 'New scholarship'}
                 icon={<Award size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
                 footer={
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1.5">
                     <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
                     <button
                       onClick={async () => {
@@ -660,12 +660,12 @@ function ScholarshipEditor({
                    placeholder="No limit" className={`${ADMIN.inputPlain} mt-1`} />
           </label>
         </div>
-        <label className="flex items-center gap-2 text-xs text-[#18181B]">
+        <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
           <input type="checkbox" checked={form.active ?? true}
                  onChange={e => set('active', e.target.checked)} />
           Active
         </label>
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -686,15 +686,15 @@ function RemoveDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Remove this concession"
                 icon={<X size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
-      <p className="text-sm text-[#6B675A] leading-relaxed">
+      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
         {inr(row.amount, showAmounts)} comes off the discount and back onto the bill. The family
         will owe that much more, so make sure somebody has told them.
       </p>
       <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder="Why — this goes on the audit trail."
                 className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
-      <div className="flex items-center justify-end gap-2 mt-4">
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
+      <div className="flex items-center justify-end gap-1.5 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button
           onClick={async () => {

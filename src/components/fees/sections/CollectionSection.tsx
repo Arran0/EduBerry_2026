@@ -237,7 +237,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
   return (
     <>
       {error && (
-        <div className="mb-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3">{error}</div>
+        <div className="mb-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3">{error}</div>
       )}
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
@@ -265,16 +265,16 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
               {FILTERS.map(f => (
                 <button key={f.key} onClick={() => onFilterChange(f.key)}
                         className={filter === f.key
-                          ? 'px-2.5 py-1.5 text-xs font-semibold bg-[#27272A] text-white'
-                          : 'px-2.5 py-1.5 text-xs font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
+                          ? 'px-2.5 py-1.5 text-[11px] font-semibold bg-[#27272A] text-white'
+                          : 'px-2.5 py-1.5 text-[11px] font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
                   {f.label}
                 </button>
               ))}
             </div>
             <select value={filter} aria-label="Which bills to show"
                     onChange={e => onFilterChange(e.target.value as LedgerFilter)}
-                    className={`sm:hidden flex-shrink-0 bg-white border px-2.5 py-[7px] text-[12.5px]
-                                font-semibold text-[#18181B] focus:outline-none ${
+                    className={`sm:hidden flex-shrink-0 w-[118px] bg-white border px-2 py-[7px]
+                                text-[12.5px] font-semibold text-[#18181B] focus:outline-none ${
                       filter === 'all' ? 'border-[#E3DFD3]' : 'border-[#27272A]'}`}>
               {FILTERS.map(f => (
                 <option key={f.key} value={f.key}>
@@ -286,7 +286,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
         )}
         {perms.can('fees.invoice.generate') && (
           <button onClick={() => setGenerating(true)}
-                  className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+                  className={ADMIN.ghostBtn}>
             <Sparkles size={13} />
             {/* "Generate bills" and "Cheques" beside a search field do not fit
                 on a 360px row. The icons carry the short form. */}
@@ -294,7 +294,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             <span className="max-sm:hidden">Generate bills</span>
           </button>
         )}
-        <button onClick={() => setCheques(true)} className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+        <button onClick={() => setCheques(true)} className={ADMIN.ghostBtn}>
           <Clock size={13} /> Cheques
         </button>
       </div>
@@ -315,16 +315,16 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
                       className="w-full grid grid-cols-[minmax(0,1fr)_auto] sm:flex sm:flex-wrap
                                  items-center gap-x-3 gap-y-0.5 text-left px-3 py-2.5 sm:py-2
                                  hover:bg-[#FAF8F2]">
-                <span className="text-[13px] sm:text-sm text-[#18181B] sm:flex-1 sm:min-w-[160px] min-w-0">
-                  <span className="font-semibold sm:font-normal">{p.full_name}</span>
-                  <span className="block sm:inline text-[11px] sm:text-sm text-[#8C8878] truncate">
+                <span className="text-[12.5px] text-[#18181B] sm:flex-1 sm:min-w-[160px] min-w-0">
+                  <span className="font-medium">{p.full_name}</span>
+                  <span className="block sm:inline text-[11px] text-[#8C8878] truncate">
                     <span className="max-sm:hidden">{' · '}</span>
                     {p.grade === null ? '—' : gradeLabel(p.grade)}{p.section ?? ''}
                     {p.admission_no ? ` · ${p.admission_no}` : ''}
                   </span>
                 </span>
                 {(p.outstanding ?? 0) > 0 && (
-                  <span className="text-[13px] sm:text-sm font-semibold text-[#7A6220] tabular-nums
+                  <span className="text-[12.5px] font-semibold text-[#7A6220] tabular-nums
                                    max-sm:row-start-1 max-sm:col-start-2 max-sm:justify-self-end">
                     {inr(p.outstanding, showAmounts)} due
                   </span>
@@ -353,62 +353,65 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </div>
           ) : (
             <>
-              {/* On a laptop this is one row: who, what they owe, and the
-                  button. A phone stacks it — the figure gets its own line with
-                  the label beside it, and Collect spans the width, because it
-                  is the one thing being pressed with a parent standing there
-                  and a 96px button in the middle of a wrapped row is not it. */}
+              {/* Who, what they owe, and the button. On a laptop that is one
+                  row. A phone gives the name the first line and then puts the
+                  figure and the button on a second, hairlined off — the label
+                  on the left, the amount beside it, Collect at the right edge
+                  where the thumb already is. Nothing wraps, so the card is the
+                  same height for every family. */}
               <div className={`${ADMIN.card} p-3 sm:p-4`}>
-                <div className="flex flex-wrap items-center justify-between gap-y-2 sm:gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-[15px] sm:text-base font-bold text-[#18181B] truncate">
+                <div className="sm:flex sm:items-center sm:justify-between sm:gap-3">
+                  <div className="min-w-0 sm:flex-1">
+                    <h2 className="text-[15px] font-bold text-[#18181B] truncate">
                       {selected.full_name}
                     </h2>
-                    <p className="text-xs text-[#8C8878] truncate">
+                    <p className="text-[11px] text-[#8C8878] truncate">
                       {selected.grade === null ? '—' : gradeLabel(selected.grade)}
                       {selected.section ? ` ${selected.section}` : ''}
                       {selected.admission_no ? ` · ${selected.admission_no}` : ''}
                       {selected.is_rte ? ' · RTE' : ''}
                     </p>
                   </div>
-                  <div className="max-sm:w-full max-sm:flex max-sm:items-baseline max-sm:justify-between
-                                  max-sm:border-t max-sm:border-[#F0ECE2] max-sm:pt-2 sm:text-right">
-                    <div className={ADMIN.label}>Outstanding</div>
-                    <div className="text-xl font-bold text-[#18181B] tabular-nums">
-                      {inr(selected.outstanding, showAmounts)}
+                  <div className="flex items-center gap-2.5 mt-2 pt-2 border-t border-[#F0ECE2]
+                                  sm:mt-0 sm:pt-0 sm:border-0 sm:gap-3 flex-shrink-0">
+                    <div className="min-w-0 sm:text-right">
+                      <div className={ADMIN.label}>Outstanding</div>
+                      <div className="text-[17px] font-bold text-[#18181B] tabular-nums leading-tight">
+                        {inr(selected.outstanding, showAmounts)}
+                      </div>
                     </div>
+                    {canCollect && (
+                      <button
+                        onClick={() => setCollecting(true)}
+                        disabled={outstanding.length === 0 && !rules.allow_overpayment}
+                        className={`${ADMIN.darkBtn} ml-auto sm:ml-0`}
+                      >
+                        <Receipt size={13} /> Collect
+                      </button>
+                    )}
                   </div>
-                  {canCollect && (
-                    <button
-                      onClick={() => setCollecting(true)}
-                      disabled={outstanding.length === 0 && !rules.allow_overpayment}
-                      className={`${ADMIN.darkBtn} px-4 py-2.5 max-sm:w-full max-sm:py-3 max-sm:text-[11.5px]`}
-                    >
-                      <Receipt size={14} /> Collect
-                    </button>
-                  )}
                 </div>
                 <Link href={`/more/fees/students/${selected.student_id}`}
-                      className="text-xs text-[#6B675A] hover:text-[#18181B] hover:underline mt-3 inline-flex items-center gap-1">
+                      className="text-[11px] text-[#6B675A] hover:text-[#18181B] hover:underline mt-3 inline-flex items-center gap-1">
                   <FileText size={12} /> Open the full fee profile
                 </Link>
               </div>
 
               <Panel title="Unpaid bills" empty="Nothing outstanding — this family is fully paid up.">
                 {outstanding.map(i => (
-                  <Row key={i.id} cols={BILL_COLS} trailing>
-                    <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
+                  <Row key={i.id} cols={BILL_COLS} trailing={1}>
+                    <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
                       {i.number}
                     </span>
-                    <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] whitespace-nowrap`}>
+                    <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                       due {fmtDate(i.due_date)}
                     </span>
                     <span className={CELL.B2}>
-                      <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                      <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${INVOICE_CHIP[i.status]}`}>
                         {INVOICE_LABEL[i.status]}
                       </span>
                     </span>
-                    <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+                    <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
                       {inr(i.balance, showAmounts)}
                     </span>
                     <span className={CELL.END}>
@@ -426,16 +429,16 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
 
               <Panel title="Receipts" empty="No payments taken yet this session.">
                 {payments.map(p => (
-                  <Row key={p.id} cols={RECEIPT_COLS} trailing>
-                    <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
+                  <Row key={p.id} cols={RECEIPT_COLS} trailing={3}>
+                    <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
                       {p.receipt_no ?? '—'}
                     </span>
-                    <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] truncate`}>
+                    <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
                       {fmtDate(p.paid_on)} · {p.method}
                     </span>
                     <span className={CELL.B2}>
                       {p.status !== 'verified' && (
-                        <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+                        <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                           p.status === 'reversed'
                             ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
                             : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
@@ -444,14 +447,14 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
                         </span>
                       )}
                     </span>
-                    <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
+                    <span className={`${CELL.B1} text-[11.5px] font-semibold text-right tabular-nums ${
                       p.status === 'reversed' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
                       {inr(p.amount, showAmounts)}
                     </span>
                     {/* Print, download and reverse were three 26px squares with
                         3px between them. On a phone that is how a payment gets
                         reversed by someone reaching for the printer. */}
-                    <span className={`${CELL.END} flex items-center gap-0.5 sm:gap-1`}>
+                    <span className={`${CELL.END} flex items-center gap-1`}>
                       {perms.can('fees.receipt.print') && (
                         <>
                           <button onClick={() => void printReceipt(p, true)}
@@ -486,7 +489,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       ) : filtered.length === 0 ? (
         /* ── The ledger ───────────────────────────────────────────────── */
         <div className={`${ADMIN.card} py-16 text-center`}>
-          <p className="text-sm text-[#8C8878]">
+          <p className="text-[12.5px] text-[#8C8878]">
             {invoices.length === 0 ? 'No bills issued yet this session.' : 'No bills match that.'}
           </p>
         </div>
@@ -510,35 +513,39 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
               already says whether this one is late, and the figure that matters
               at a counter is the one about to be taken. */}
           {filtered.slice(0, 300).map(i => (
-            <Row key={i.id} cols={LEDGER_COLS} trailing>
-              <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-xs text-[#8C8878] sm:text-[#6B675A] truncate`}>
+            <Row key={i.id} cols={LEDGER_COLS} trailing={1}>
+              <span className={`${CELL.A2} font-mono text-[11px] text-[#6B675A] truncate`}>
                 {i.number}
               </span>
               <button onClick={() => openStudentById(i.student_id)}
-                      className={`${CELL.A1} text-left truncate text-[13px] font-semibold sm:text-sm sm:font-normal
+                      className={`${CELL.A1} text-left truncate text-[12.5px] font-medium
                                   text-[#18181B] hover:underline`}>
                 {nameOf(i.student_id)}
               </button>
-              <span className={`${CELL.DESKTOP} text-sm text-[#6B675A] whitespace-nowrap`}>
+              <span className={`${CELL.DESKTOP} text-[11px] text-[#6B675A] whitespace-nowrap`}>
                 {fmtDate(i.due_date)}
               </span>
               <span className={CELL.B2}>
-                <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${INVOICE_CHIP[i.status]}`}>
                   {INVOICE_LABEL[i.status]}
                 </span>
               </span>
-              <span className={`${CELL.DESKTOP} text-right text-sm text-[#6B675A] tabular-nums`}>
+              <span className={`${CELL.DESKTOP} text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
                 {inr(i.net, showAmounts)}
               </span>
-              <span className={`${CELL.B1} text-right text-[14px] sm:text-sm font-semibold tabular-nums ${
+              <span className={`${CELL.B1} text-right text-[11.5px] font-semibold tabular-nums ${
                 (i.balance ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
                 {inr(i.balance, showAmounts)}
               </span>
-              <span className={`${CELL.END} flex items-center gap-0.5 sm:gap-1 sm:justify-end`}>
+              <span className={`${CELL.END} flex items-center justify-end gap-1`}>
+                {/* Collect and the student's name open the same counter, and on
+                    a phone one way in is enough — tapping the name is the way a
+                    list is read there, and the button would be a second control
+                    competing with it for a 180px row. */}
                 {canCollect && (i.balance ?? 0) > 0 && i.status !== 'cancelled' && (
                   <button onClick={() => openStudentById(i.student_id)}
                           title="Take a payment against this bill"
-                          className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+                          className={`${ADMIN.ghostBtn} max-sm:hidden`}>
                     <Receipt size={13} /> Collect
                   </button>
                 )}
@@ -553,7 +560,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </Row>
           ))}
           {filtered.length > 300 && (
-            <p className="px-4 py-3 text-xs text-[#8C8878] border-t border-[#F0ECE2]">
+            <p className="px-4 py-3 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
               Showing the first 300 of {filtered.length}. Narrow the search to see the rest.
             </p>
           )}
@@ -646,9 +653,9 @@ function Panel({
   return (
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2]">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">{title}</h3>
+        <h3 className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">{title}</h3>
       </div>
-      {isEmpty ? <p className="px-4 py-6 text-sm text-[#8C8878]">{empty}</p> : <div>{children}</div>}
+      {isEmpty ? <p className="px-4 py-6 text-[12.5px] text-[#8C8878]">{empty}</p> : <div>{children}</div>}
     </div>
   )
 }
@@ -693,7 +700,7 @@ function GenerationPanel({
   if (rows.length === 0) {
     return (
       <div className={`${ADMIN.card} p-5`}>
-        <p className="text-sm text-[#6B675A]">
+        <p className="text-[12.5px] text-[#6B675A]">
           No published structure has an installment to bill. Build the price list in{' '}
           <Link href="/more/fees?tab=config" className="underline">Fee Configuration</Link>, then publish it.
         </p>
@@ -703,13 +710,13 @@ function GenerationPanel({
 
   return (
     <>
-      <p className="text-xs text-[#8C8878]">
+      <p className="text-[11px] text-[#8C8878]">
         Preview first — it counts exactly what a run would do without writing anything. Running
         twice never bills a family twice.
       </p>
 
       {error && (
-        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3">{error}</div>
+        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3">{error}</div>
       )}
 
       {rows.map(i => {
@@ -719,10 +726,10 @@ function GenerationPanel({
           <div key={i.id} className="bg-white border border-[#E3DFD3] p-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex-1 min-w-[200px]">
-                <div className="text-sm font-medium text-[#18181B]">
+                <div className="text-[12.5px] font-medium text-[#18181B]">
                   {i.name} <span className="text-[#8C8878] font-normal">· {structureName(i.structure_id)}</span>
                 </div>
-                <div className="text-xs text-[#8C8878]">
+                <div className="text-[11px] text-[#8C8878]">
                   due {fmtDate(i.due_date)}
                   {i.percent !== null ? ` · ${Number(i.percent)}% of the year` : ''}
                   {i.amount !== null ? ` · ${inr(i.amount, showAmounts)}` : ''}
@@ -735,7 +742,7 @@ function GenerationPanel({
                   title={i.autogen_enabled
                     ? `Generates itself ${i.autogen_days_before} days before the due date`
                     : 'Generated by hand'}
-                  className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
+                  className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-1 ${
                     i.autogen_enabled
                       ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                       : 'bg-white text-[#8C8878] border border-[#E3DFD3] hover:border-[#C9C4B4]'
@@ -760,7 +767,7 @@ function GenerationPanel({
             </div>
 
             {p && (
-              <div className="mt-2.5 pt-2.5 border-t border-[#F0ECE2] text-xs text-[#6B675A] space-y-1">
+              <div className="mt-2.5 pt-2.5 border-t border-[#F0ECE2] text-[11px] text-[#6B675A] space-y-1">
                 <p>
                   <strong className="text-[#18181B]">{p.will_create}</strong> new bill
                   {p.will_create === 1 ? '' : 's'} at {inr(p.per_student, showAmounts)} each
@@ -813,7 +820,7 @@ function ReverseDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Reverse this payment">
       <div className="space-y-4">
-        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-sm px-4 py-3 flex items-start gap-2">
+        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-[12.5px] px-4 py-3 flex items-start gap-2">
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
           <span>
             {payment.receipt_no} for {inr(payment.amount, showAmounts)} will be marked reversed.
@@ -831,12 +838,12 @@ function ReverseDialog({
             className={`${ADMIN.inputPlain} resize-none`}
             autoFocus
           />
-          <p className="text-xs text-[#8C8878] mt-1.5">
+          <p className="text-[11px] text-[#8C8878] mt-1.5">
             This goes on the permanent record with your name and the time.
           </p>
         </div>
         {error && (
-          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3">{error}</div>
         )}
         <div className="flex gap-2">
           <button onClick={() => void submit()} disabled={busy || reason.trim().length < 3}
@@ -868,7 +875,7 @@ function CancelDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title={`Cancel ${invoice.number}`}>
       <div className="space-y-4">
-        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-sm px-4 py-3 flex items-start gap-2">
+        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-[12.5px] px-4 py-3 flex items-start gap-2">
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
           <span>
             This bill for {inr(invoice.net, showAmounts)} will be marked cancelled and stop counting
@@ -882,7 +889,7 @@ function CancelDialog({
                     className={`${ADMIN.inputPlain} resize-none`} autoFocus />
         </div>
         {error && (
-          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3">{error}</div>
         )}
         <div className="flex gap-2">
           <button onClick={() => void submit()} disabled={busy || reason.trim().length < 3}

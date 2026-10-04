@@ -97,7 +97,7 @@ export default function FeeCollectionSummary({
             } ${active ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${labelCls}`}>{c.label}</span>
+              <span className={`text-[9px] font-bold uppercase tracking-widest ${labelCls}`}>{c.label}</span>
               <span className={iconCls}>{c.icon}</span>
             </div>
             <div>

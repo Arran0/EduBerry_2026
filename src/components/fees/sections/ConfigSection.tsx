@@ -72,8 +72,8 @@ export default function ConfigSection() {
     return (
       <div className="max-w-md mx-auto mt-20 text-center px-6">
         <AlertTriangle size={26} className="mx-auto text-[#C9C4B4] mb-3" />
-        <h2 className="text-base font-bold text-[#18181B]">No access to fees</h2>
-        <p className="text-sm text-[#6B675A] mt-1">
+        <h2 className="text-[15px] font-bold text-[#18181B]">No access to fees</h2>
+        <p className="text-[12.5px] text-[#6B675A] mt-1">
           Your account does not hold the &ldquo;Open the fee module&rdquo; permission. An
           administrator can grant it in Admin Space → Fee Settings → Permissions.
         </p>
@@ -84,14 +84,14 @@ export default function ConfigSection() {
   return (
     <>
       {!canEdit && (
-        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-sm px-4 py-3 ">
+        <div className="bg-[#FAF3DF] border border-[#E7D9AE] text-[#7A6220] text-[12.5px] px-4 py-3 ">
           You can see the price list but not change it — that needs the &ldquo;Edit the price
           list&rdquo; permission.
         </div>
       )}
 
       {error && (
-        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3 ">{error}</div>
       )}
 
       {perms.can('fees.config.clone_year') && years.length > 1 && year && (
@@ -111,11 +111,11 @@ export default function ConfigSection() {
       </div>
 
       {loading ? (
-        <div className={`${ADMIN.card} p-10 flex items-center justify-center gap-2 text-sm text-[#6B675A]`}>
+        <div className={`${ADMIN.card} p-10 flex items-center justify-center gap-2 text-[12.5px] text-[#6B675A]`}>
           <Loader2 size={16} className="animate-spin" /> Loading the price list…
         </div>
       ) : !year ? (
-        <div className={`${ADMIN.card} p-6 text-sm text-[#6B675A]`}>
+        <div className={`${ADMIN.card} p-6 text-[12.5px] text-[#6B675A]`}>
           No academic sessions exist yet. Add one in Admin Space → Fee Settings → Sessions.
         </div>
       ) : (
@@ -193,7 +193,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
           Clone
         </button>
-        <p className="text-xs text-[#8C8878] flex-1 min-w-[260px]">
+        <p className="text-[11px] text-[#8C8878] flex-1 min-w-[260px]">
           Copies the heads, groups, structures and installments with every due date moved on a
           year. Structures arrive as drafts and auto-generation stays off, so nothing bills itself
           before someone has looked at the prices. Running it twice adds nothing twice.
@@ -201,7 +201,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
       </div>
 
       {result && (
-        <div className="mt-3 bg-[#EAF5EE] border border-[#C6E3D2] text-[#1F6B42] text-sm px-4 py-3 ">
+        <div className="mt-3 bg-[#EAF5EE] border border-[#C6E3D2] text-[#1F6B42] text-[12.5px] px-4 py-3 ">
           Cloned {result.heads} head{result.heads === 1 ? '' : 's'}, {result.groups} group
           {result.groups === 1 ? '' : 's'}, {result.structures} structure
           {result.structures === 1 ? '' : 's'}, {result.structure_items} priced line
@@ -214,7 +214,7 @@ function CloneCard({ currentYearId, onDone }: { currentYearId: string; onDone: (
       )}
 
       {error && (
-        <div className="mt-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+        <div className="mt-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3 ">{error}</div>
       )}
     </div>
   )
@@ -268,24 +268,24 @@ function HeadsSection({
           <Col>Head</Col><Col>Code</Col><Col>Category</Col><Col right>Tax</Col><Col>&nbsp;</Col>
         </ListHead>
         {bundle.heads.map(h => (
-          <Row key={h.id} cols={HEAD_COLS} trailing>
+          <Row key={h.id} cols={HEAD_COLS} trailing={1}>
             <span className={`${CELL.A1} flex items-baseline gap-1.5 min-w-0`}>
-              <span className="font-semibold sm:font-medium text-[13px] sm:text-sm text-[#18181B] truncate">
+              <span className="font-medium text-[12.5px] text-[#18181B] truncate">
                 {h.name}
               </span>
               {h.is_transport && (
-                <span className="flex-shrink-0 text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F4F1E7] text-[#6B675A]">
+                <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#F4F1E7] text-[#6B675A]">
                   Transport
                 </span>
               )}
             </span>
-            <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-xs text-[#6B675A] truncate`}>
+            <span className={`${CELL.A2} font-mono text-[11px] text-[#6B675A] truncate`}>
               {h.code}
             </span>
-            <span className={`${CELL.B2} text-[11px] sm:text-sm text-[#6B675A] truncate`}>
+            <span className={`${CELL.B2} text-[11px] text-[#6B675A] truncate`}>
               {catName(h.category_id)}
             </span>
-            <span className={`${CELL.B1} text-[11px] sm:text-sm text-right text-[#6B675A] tabular-nums`}>
+            <span className={`${CELL.B1} text-[11px] text-right text-[#6B675A] tabular-nums`}>
               {Number(h.tax_rate) ? `${h.tax_rate}% tax` : '—'}
             </span>
             <span className={CELL.END}>
@@ -299,7 +299,7 @@ function HeadsSection({
           </Row>
         ))}
         {bundle.heads.length === 0 && (
-          <p className="px-4 py-8 text-center text-sm text-[#8C8878]">
+          <p className="px-4 py-8 text-center text-[12.5px] text-[#8C8878]">
             No fee heads yet. Add Tuition first — everything else prices against it.
           </p>
         )}
@@ -316,7 +316,7 @@ function HeadsSection({
             <div>
               <label className={`${ADMIN.label} block mb-1.5`}>Code</label>
               <input value={draft.code} onChange={e => setDraft({ ...draft, code: e.target.value })}
-                     placeholder="auto" className={`${ADMIN.inputPlain} font-mono text-xs`} />
+                     placeholder="auto" className={`${ADMIN.inputPlain} font-mono text-[11px]`} />
             </div>
             <div>
               <label className={`${ADMIN.label} block mb-1.5`}>Category</label>
@@ -333,7 +333,7 @@ function HeadsSection({
                      className={ADMIN.inputPlain} />
             </div>
           </div>
-          <p className="text-xs text-[#8C8878]">
+          <p className="text-[11px] text-[#8C8878]">
             The code is what links this head to the same head in another year, so cross-year
             reporting and the clone both follow it. Leave it blank and one is made from the name.
           </p>
@@ -391,23 +391,23 @@ function GroupsSection({
           <div key={g.id} className={`${ADMIN.card} p-4`}>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="text-sm font-bold text-[#18181B]">{g.name}</div>
-                <div className="font-mono text-[11px] text-[#8C8878]">{g.code}</div>
+                <div className="text-[12.5px] font-bold text-[#18181B]">{g.name}</div>
+                <div className="font-mono text-[11px] text-[#6B675A]">{g.code}</div>
               </div>
               <div className="flex flex-col gap-1 items-end">
                 {g.is_default && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#27272A] text-white">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#27272A] text-white">
                     Default
                   </span>
                 )}
                 {g.is_rte && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
                     RTE
                   </span>
                 )}
               </div>
             </div>
-            {g.description && <p className="text-xs text-[#6B675A] mt-2">{g.description}</p>}
+            {g.description && <p className="text-[11px] text-[#6B675A] mt-2">{g.description}</p>}
             <p className="text-[11px] text-[#8C8878] mt-2">
               {bundle.structures.filter(s => s.fee_group_id === g.id).length} structure(s)
             </p>
@@ -426,7 +426,7 @@ function GroupsSection({
             <div>
               <label className={`${ADMIN.label} block mb-1.5`}>Code</label>
               <input value={draft.code} onChange={e => setDraft({ ...draft, code: e.target.value })}
-                     placeholder="auto" className={`${ADMIN.inputPlain} font-mono text-xs`} />
+                     placeholder="auto" className={`${ADMIN.inputPlain} font-mono text-[11px]`} />
             </div>
             <div>
               <label className={`${ADMIN.label} block mb-1.5`}>Bills nothing (RTE)</label>
@@ -512,7 +512,7 @@ function StructuresSection({
       ))}
 
       {bundle.structures.length === 0 && (
-        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#8C8878]`}>
+        <div className={`${ADMIN.card} p-8 text-center text-[12.5px] text-[#8C8878]`}>
           No structures yet. A structure is the plan for one group and one grade — what is charged,
           how much, and when it falls due.
         </div>
@@ -597,23 +597,23 @@ function StructureCard({
       <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-[#18181B]">{s.name}</span>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${STRUCTURE_CHIP[s.status]}`}>
+            <span className="text-[12.5px] font-bold text-[#18181B]">{s.name}</span>
+            <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${STRUCTURE_CHIP[s.status]}`}>
               {s.status}
             </span>
             {group?.is_rte && (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
+              <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
                 Bills nothing
               </span>
             )}
           </div>
-          <div className="text-xs text-[#8C8878] mt-0.5">
+          <div className="text-[11px] text-[#8C8878] mt-0.5">
             {group?.name} · {s.grade === null ? 'every grade' : gradeLabel(s.grade)} ·
             {' '}{items.length} head{items.length === 1 ? '' : 's'} ·
             {' '}{installments.length} installment{installments.length === 1 ? '' : 's'}
           </div>
         </div>
-        <div className="text-sm font-bold text-[#18181B] flex-shrink-0">
+        <div className="text-[12.5px] font-bold text-[#18181B] flex-shrink-0">
           {inr(s.total_cached, showAmounts)}
         </div>
       </button>
@@ -634,7 +634,7 @@ function StructureCard({
               <button onClick={() => void publish()} className={ADMIN.darkBtn}>
                 {s.status === 'published' ? 'Move back to draft' : 'Publish'}
               </button>
-              <span className="text-xs text-[#8C8878]">
+              <span className="text-[11px] text-[#8C8878]">
                 {s.status === 'published'
                   ? 'Live. Bills can be generated from it.'
                   : 'A draft is never billed from — publish when the prices are right.'}
@@ -686,11 +686,11 @@ function StructureItems({
       <h4 className={`${ADMIN.label} mb-2`}>What is charged</h4>
       <div className="space-y-1">
         {items.map(i => (
-          <div key={i.id} className="flex items-center gap-3 py-1.5 px-3 bg-[#FAF8F2] rounded">
-            <span className="text-sm text-[#18181B] flex-1">
+          <div key={i.id} className="flex items-center gap-3 py-1.5 px-3 bg-[#FAF8F2]">
+            <span className="text-[12.5px] text-[#18181B] flex-1">
               {bundle.heads.find(h => h.id === i.fee_head_id)?.name ?? 'Fee head'}
             </span>
-            <span className="text-sm font-medium text-[#18181B]">{inr(i.amount, showAmounts)}</span>
+            <span className="text-[12.5px] font-medium text-[#18181B]">{inr(i.amount, showAmounts)}</span>
             {canEdit && (
               <button
                 onClick={() => void removeStructureItem(structureId, i.fee_head_id).then(onChanged)}
@@ -702,14 +702,14 @@ function StructureItems({
           </div>
         ))}
         {items.length === 0 && (
-          <p className="text-xs text-[#8C8878] py-2">Nothing priced yet.</p>
+          <p className="text-[11px] text-[#8C8878] py-2">Nothing priced yet.</p>
         )}
       </div>
 
       {items.length > 0 && (
         <div className="flex justify-between items-center mt-2 pt-2 border-t border-[#F0ECE2]">
           <span className={ADMIN.label}>Year total</span>
-          <span className="text-sm font-bold text-[#18181B]">{inr(total, showAmounts)}</span>
+          <span className="text-[12.5px] font-bold text-[#18181B]">{inr(total, showAmounts)}</span>
         </div>
       )}
 
@@ -773,11 +773,11 @@ function Installments({
         {installments.map(i => {
           const explicit = bundle.installmentItems.filter(ii => ii.installment_id === i.id)
           return (
-            <div key={i.id} className="flex flex-wrap items-center gap-3 py-2 px-3 bg-[#FAF8F2] rounded">
-              <span className="text-xs font-mono text-[#8C8878] w-6">{i.seq}</span>
-              <span className="text-sm text-[#18181B] flex-1 min-w-[100px]">{i.name}</span>
-              <span className="text-xs text-[#6B675A]">{fmtDate(i.due_date)}</span>
-              <span className="text-sm font-medium text-[#18181B] w-20 text-right">
+            <div key={i.id} className="flex flex-wrap items-center gap-3 py-2 px-3 bg-[#FAF8F2]">
+              <span className="text-[11px] font-mono text-[#8C8878] w-6">{i.seq}</span>
+              <span className="text-[12.5px] text-[#18181B] flex-1 min-w-[100px]">{i.name}</span>
+              <span className="text-[11px] text-[#6B675A]">{fmtDate(i.due_date)}</span>
+              <span className="text-[12.5px] font-medium text-[#18181B] w-20 text-right">
                 {explicit.length > 0
                   ? explicit.map(e => headName(e.fee_head_id)).join(', ')
                   : i.percent !== null ? `${Number(i.percent)}%`
@@ -790,7 +790,7 @@ function Installments({
                   title={i.autogen_enabled
                     ? `Bills generate themselves ${i.autogen_days_before} days before the due date`
                     : 'Bills are generated by hand'}
-                  className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${
+                  className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-1 transition-colors ${
                     i.autogen_enabled
                       ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                       : 'bg-white text-[#8C8878] border border-[#E3DFD3] hover:border-[#C9C4B4]'
@@ -810,14 +810,14 @@ function Installments({
           )
         })}
         {installments.length === 0 && (
-          <p className="text-xs text-[#8C8878] py-2">
+          <p className="text-[11px] text-[#8C8878] py-2">
             No installments. Without one there is nothing to bill.
           </p>
         )}
       </div>
 
       {installments.length > 0 && pctTotal > 0 && pctTotal !== 100 && (
-        <p className="text-xs text-[#7A6220] mt-2 flex items-start gap-1.5">
+        <p className="text-[11px] text-[#7A6220] mt-2 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
           The percentages come to {pctTotal}%. The bills will still add up to the year&rsquo;s fee —
           the last installment absorbs the difference — but that is probably not what was meant.

@@ -29,7 +29,7 @@ import {
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, inr } from '@/components/fees/ui'
-import { Loading } from '@/components/fees/shell'
+import { LABEL, Loading } from '@/components/fees/shell'
 import FeeToolModal from '@/components/fees/FeeToolModal'
 import type { LedgerFilter } from '@/components/fees/sections/CollectionSection'
 import { fetchYearSummary, type YearSummaryRow } from '@/lib/fees/reports'
@@ -159,7 +159,7 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
     <>
       {/* ── The money, as cards you can press ───────────────────────────── */}
       {canSeeSummary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2.5 mb-2.5 sm:mb-3 px-3 sm:px-0">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-2.5 px-3 sm:px-0">
           {cards.map(c => {
             const live = c.filter !== undefined && filter === c.filter && active === 'collection'
             const clickable = Boolean(c.onClick || c.filter)
@@ -172,14 +172,14 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
                 key={c.key}
                 onClick={c.onClick ?? (c.filter ? () => pickFilter(c.filter!) : undefined)}
                 title={c.filter ? 'Show these bills' : undefined}
-                className={`text-left border p-2.5 sm:p-3 transition-all flex flex-col justify-between
-                            min-h-[66px] sm:min-h-[82px] ${base} ${
+                className={`text-left border p-2.5 transition-all flex flex-col justify-between
+                            min-h-[70px] ${base} ${
                   clickable ? 'hover:border-[#B8983C] cursor-pointer' : ''
                 } ${live ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
               >
-                <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-                  <span className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-widest truncate ${
-                    c.tone === 'dark' ? 'text-[#8C8878]' : 'text-[#6B675A]'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`${LABEL} truncate ${
+                    c.tone === 'dark' ? '!text-[#8C8878]' : '!text-[#6B675A]'}`}>
                     {c.label}
                   </span>
                   <span className={c.tone === 'dark' ? 'text-[#B8983C]' : 'text-[#8C8878]'}>{c.icon}</span>
@@ -188,7 +188,7 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
                   {loadingSummary ? (
                     <div className="h-[22px] w-24 max-w-full bg-[#F4F1E7] animate-pulse" />
                   ) : (
-                    <p className={`text-[17px] sm:text-xl font-bold tabular-nums leading-tight truncate ${
+                    <p className={`text-[17px] font-bold tabular-nums leading-tight truncate ${
                       c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'}`}>
                       {c.value}
                     </p>
@@ -212,11 +212,12 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
             const Icon = s.icon
             return (
               <button key={s.key} onClick={() => onSectionChange(s.key)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 sm:py-1.5 text-[11px]
-                                  sm:text-[12px] font-bold uppercase tracking-[0.06em] transition-colors ${
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-1.5
+                                  text-[11px] font-bold uppercase tracking-[0.06em] transition-colors ${
                         on ? 'bg-[#27272A] text-white' : 'text-[#8C8878] hover:text-[#18181B] hover:bg-[#FAF8F2]'
                       }`}>
-                <Icon size={13} /> <span className="truncate">{s.label}</span>
+                <Icon size={13} className="flex-shrink-0" />
+                <span className="truncate">{s.label}</span>
               </button>
             )
           })}
@@ -227,7 +228,7 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
               const Icon = t.icon
               return (
                 <button key={t.key} onClick={() => onToolChange(t.key)}
-                        className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+                        className={ADMIN.ghostBtn}>
                   <Icon size={13} /> {t.label}
                 </button>
               )

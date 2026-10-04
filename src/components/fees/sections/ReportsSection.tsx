@@ -264,7 +264,7 @@ function Block({
     <section className="space-y-4">
       <div className="flex items-center gap-2 border-b border-[#E3DFD3] pb-1.5">
         <Icon size={14} className="text-[#B8983C]" />
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">{title}</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">{title}</h2>
       </div>
       {children}
     </section>
@@ -275,7 +275,7 @@ function Overview({
   summary, showAmounts, daily,
 }: { summary: YearSummaryRow | null; showAmounts: boolean; daily: CollectionDayRow[] }) {
   if (!summary) {
-    return <div className={`${ADMIN.card} p-10 text-center text-sm text-[#8C8878]`}>
+    return <div className={`${ADMIN.card} p-10 text-center text-[12.5px] text-[#8C8878]`}>
       Nothing has been billed in this session yet.
     </div>
   }
@@ -324,13 +324,13 @@ function Overview({
             <h3 className={ADMIN.label}>Money landing</h3>
           </div>
           {recent.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-[#8C8878]">Nothing collected yet.</p>
+            <p className="px-4 py-6 text-[12.5px] text-[#8C8878]">Nothing collected yet.</p>
           ) : recent.map((d, i) => (
             <div key={`${d.day}-${d.method}-${i}`}
                  className="flex items-center gap-3 px-4 py-2 border-b border-[#F0ECE2] last:border-0">
-              <span className="text-xs text-[#6B675A] flex-1">{fmtDate(d.day)}</span>
+              <span className="text-[11px] text-[#6B675A] flex-1">{fmtDate(d.day)}</span>
               <span className="text-[11px] text-[#8C8878]">{d.method}</span>
-              <span className="text-sm font-semibold text-[#18181B]">
+              <span className="text-[12.5px] font-semibold text-[#18181B]">
                 {inr(d.collected, showAmounts)}
               </span>
             </div>
@@ -339,7 +339,7 @@ function Overview({
 
         <div className={`${ADMIN.card} p-4`}>
           <div className={ADMIN.label}>Bills</div>
-          <div className="mt-2 space-y-1 text-sm">
+          <div className="mt-2 space-y-1 text-[12.5px]">
             <div className="flex justify-between">
               <span className="text-[#6B675A]">Issued</span>
               <span className="font-semibold text-[#18181B]">{summary.bills}</span>
@@ -358,7 +358,7 @@ function Overview({
         {(Number(summary.rte_claimed ?? 0) > 0 || Number(summary.rte_reimbursed ?? 0) > 0) && (
           <div className={`${ADMIN.card} p-4`}>
             <div className={ADMIN.label}>RTE</div>
-            <div className="mt-2 space-y-1 text-sm">
+            <div className="mt-2 space-y-1 text-[12.5px]">
               <div className="flex justify-between">
                 <span className="text-[#6B675A]">Claimed</span>
                 <span className="font-semibold text-[#18181B]">{inr(summary.rte_claimed, showAmounts)}</span>
@@ -387,10 +387,10 @@ function Line({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className={`text-sm ${strong ? 'font-semibold text-[#18181B]' : 'text-[#6B675A]'}`}>
+      <span className={`text-[12.5px] ${strong ? 'font-semibold text-[#18181B]' : 'text-[#6B675A]'}`}>
         {label}
       </span>
-      <span className={`text-sm tabular-nums ${
+      <span className={`text-[12.5px] tabular-nums ${
         strong ? 'font-bold' : 'font-medium'} ${
         tone === 'amber' ? 'text-[#7A6220]' : negative ? 'text-[#1F6B42]' : 'text-[#18181B]'}`}>
         {negative && showAmounts && value ? '−' : ''}{inr(value, showAmounts)}
@@ -426,13 +426,13 @@ function ByMethod({ rows, showAmounts }: { rows: CollectionDayRow[]; showAmounts
         </button>
       </div>
       {list.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing collected yet.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">Nothing collected yet.</p>
       ) : list.map(([method, v]) => (
         <div key={method} className="px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-[#18181B] capitalize">{method.replace('_', ' ')}</span>
+            <span className="text-[12.5px] text-[#18181B] capitalize">{method.replace('_', ' ')}</span>
             <span className="text-[11px] text-[#8C8878]">{v.receipts} receipts</span>
-            <span className="text-sm font-semibold text-[#18181B] w-28 text-right">
+            <span className="text-[12.5px] font-semibold text-[#18181B] w-28 text-right">
               {inr(v.collected, showAmounts)}
             </span>
           </div>
@@ -475,12 +475,12 @@ function ClassTable({
         </button>
       </div>
       {sorted.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing outstanding.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">Nothing outstanding.</p>
       ) : sorted.map(r => {
         const key = `${r.grade}-${r.section}`
         return (
           <Row key={key} cols={CLASS_COLS}>
-            <span className={`${CELL.A1} text-[13px] sm:text-sm font-semibold text-[#18181B]`}>
+            <span className={`${CELL.A1} text-[12.5px] font-semibold text-[#18181B]`}>
               {gradeLabel(r.grade)}{r.section ?? ''}
             </span>
             <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
@@ -488,13 +488,13 @@ function ClassTable({
               {r.worst_days_late !== null && r.worst_days_late > 0
                 ? ` · worst ${r.worst_days_late} days late` : ''}
             </span>
-            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.outstanding, showAmounts)}
             </span>
             <span className={`${CELL.B2} flex justify-end`}>
               {canRemind && (
                 <button onClick={() => void onRemind(r)} disabled={reminding === key}
-                        className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+                        className={ADMIN.ghostBtn}>
                   {reminding === key ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                   Remind all
                 </button>
@@ -526,14 +526,14 @@ function Pipeline({ rows, showAmounts }: { rows: InstrumentPipelineRow[]; showAm
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">No cheques or drafts this session.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No cheques or drafts this session.</p>
       ) : rows.map((r, i) => (
         <Row key={`${r.kind}-${r.status}-${i}`} cols={PIPELINE_COLS}>
-          <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] capitalize truncate`}>
+          <span className={`${CELL.A1} text-[12.5px] text-[#18181B] capitalize truncate`}>
             {r.kind === 'dd' ? 'Demand draft' : 'Cheque'}
           </span>
           <span className={CELL.B2}>
-            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+            <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
               r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
                 : r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                 : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
@@ -546,7 +546,7 @@ function Pipeline({ rows, showAmounts }: { rows: InstrumentPipelineRow[]; showAm
               {r.instruments === 1 ? 'instrument' : 'instruments'}
             </span>
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
         </Row>
@@ -565,10 +565,10 @@ function StaffTable({ rows, showAmounts }: { rows: StaffCollectionRow[]; showAmo
         </span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing collected yet.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">Nothing collected yet.</p>
       ) : rows.map((r, i) => (
         <Row key={`${r.staff_id}-${r.month}-${i}`} cols={STAFF_COLS}>
-          <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
             {r.staff_name ?? 'Not recorded'}
           </span>
           <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
@@ -584,10 +584,10 @@ function StaffTable({ rows, showAmounts }: { rows: StaffCollectionRow[]; showAmo
               <span className="text-[#A93232]"> · {r.reversed} reversed</span>
             )}
           </span>
-          <span className={`${CELL.B2} text-[11px] sm:text-sm text-right text-[#6B675A] tabular-nums`}>
+          <span className={`${CELL.B2} text-[11px] text-right text-[#6B675A] tabular-nums`}>
             cash {inr(r.cash, showAmounts)}
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.collected, showAmounts)}
           </span>
         </Row>
@@ -608,16 +608,16 @@ function ConcessionTable({
           <h3 className={ADMIN.label}>Given away on purpose</h3>
         </div>
         {rows.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-[#8C8878]">No concessions this session.</p>
+          <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No concessions this session.</p>
         ) : rows.map(r => (
           <Row key={r.kind} cols={GIVEN_COLS}>
-            <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] capitalize truncate`}>
+            <span className={`${CELL.A1} text-[12.5px] text-[#18181B] capitalize truncate`}>
               {r.kind}
             </span>
             <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
               {r.grants} grant{r.grants === 1 ? '' : 's'} to {r.students} student{r.students === 1 ? '' : 's'}
             </span>
-            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#1F6B42] text-right tabular-nums`}>
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#1F6B42] text-right tabular-nums`}>
               {inr(r.given_up, showAmounts)}
             </span>
           </Row>
@@ -676,15 +676,15 @@ function CarryForward({
 
   return (
     <div className={`${ADMIN.card} p-4`}>
-      <h3 className="text-sm font-bold text-[#18181B]">Carry unpaid dues into the next session</h3>
-      <p className="text-xs text-[#8C8878] mt-1 leading-relaxed">
+      <h3 className="text-[12.5px] font-bold text-[#18181B]">Carry unpaid dues into the next session</h3>
+      <p className="text-[11px] text-[#8C8878] mt-1 leading-relaxed">
         What a family still owes at the end of this session becomes their opening balance in the
         next, named with the session it came from. Preview it first — this writes a debt against
         real families.
       </p>
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <select value={to} onChange={e => { setTo(e.target.value); setPreview(null) }}
-                className="bg-white border border-[#E3DFD3] px-2 py-1.5 text-xs text-[#18181B]
+                className="bg-white border border-[#E3DFD3] px-2 py-1.5 text-[11px] text-[#18181B]
                            focus:outline-none focus:border-[#27272A]">
           <option value="">Carry into…</option>
           {years.filter(y => y.id !== currentId).map(y => (
@@ -700,12 +700,12 @@ function CarryForward({
         </button>
       </div>
       {preview && (
-        <p className="mt-2 text-xs text-[#18181B]">
+        <p className="mt-2 text-[11px] text-[#18181B]">
           {preview.students} student{preview.students === 1 ? '' : 's'} would carry
           {' '}{inr(preview.total, showAmounts)} forward. Nothing has been written yet.
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
     </div>
   )
 }
@@ -722,7 +722,7 @@ function AuditTrail({
   if (!canSee) {
     return (
       <div className={`${ADMIN.card} p-6 text-center`}>
-        <p className="text-sm text-[#8C8878]">
+        <p className="text-[12.5px] text-[#8C8878]">
           The audit trail needs the <code className="text-[#6B675A]">fees.audit.view</code> permission.
         </p>
       </div>
@@ -736,23 +736,23 @@ function AuditTrail({
         <span className="text-[11px] text-[#8C8878]">Newest first · append only</span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing recorded yet this session.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">Nothing recorded yet this session.</p>
       ) : rows.map(r => (
         <Row key={r.id} cols={AUDIT_COLS}>
-          <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-[11px] text-[#6B675A] truncate`}>
+          <span className={`${CELL.A2} font-mono text-[11px] text-[#6B675A] truncate`}>
             {r.action}
           </span>
-          <span className={`${CELL.A1} text-[12px] sm:text-xs text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
             {r.student_id ? names.get(r.student_id) ?? 'Student' : '—'}
             {r.reason && <span className="text-[#8C8878]"> · {r.reason}</span>}
           </span>
           <span className={`${CELL.A3} text-[11px] text-[#8C8878] truncate`}>
             {names.get(r.actor_id ?? '') ?? (r.actor_id ? 'Staff' : 'The system')}
           </span>
-          <span className={`${CELL.B2} text-[10.5px] sm:text-[11px] text-[#8C8878] text-right`}>
+          <span className={`${CELL.B2} text-[11px] text-[#8C8878] text-right`}>
             {new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
           </span>
-          <span className={`${CELL.B1} text-[12.5px] sm:text-xs font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[12.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
             {r.amount === null ? '' : inr(r.amount, showAmounts)}
           </span>
         </Row>

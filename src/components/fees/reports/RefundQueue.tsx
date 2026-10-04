@@ -78,10 +78,10 @@ export default function RefundQueue({
         </span>
       </div>
 
-      {error && <p className="px-4 py-2 text-xs text-[#A93232] bg-[#FCECEC]">{error}</p>}
+      {error && <p className="px-4 py-2 text-[11px] text-[#A93232] bg-[#FCECEC]">{error}</p>}
 
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
           No refunds this session. One is raised from a student&rsquo;s profile when they have
           overpaid or withdrawn.
         </p>
@@ -90,7 +90,7 @@ export default function RefundQueue({
         return (
           <Row key={r.id} cols={REFUND_COLS}>
             <span className={CELL.A1}>
-              <span className="block text-[13px] sm:text-sm text-[#18181B] truncate">
+              <span className="block text-[12.5px] text-[#18181B] truncate">
                 {names.get(r.student_id) ?? 'Student'}
               </span>
               <span className="block text-[11px] text-[#8C8878]">
@@ -100,17 +100,17 @@ export default function RefundQueue({
               </span>
             </span>
             <span className={CELL.B2}>
-              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${STATE_CHIP[r.status]}`}>
                 {STATE_LABEL[r.status]}
               </span>
             </span>
-            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.amount, showAmounts)}
             </span>
             {/* Decline and Approve are a decision, so on a phone they get their
                 own line across the card rather than being squeezed in beside
                 the amount. */}
-            <span className={`${CELL.A3} max-sm:col-span-2 flex items-center gap-2 sm:justify-end
+            <span className={`${CELL.A3} max-sm:col-span-2 flex items-center justify-end gap-1.5
                               ${canDecide && (r.status === 'requested' || r.status === 'approved')
                                 ? 'max-sm:mt-1.5' : ''}`}>
               {canDecide && r.status === 'requested' && (
@@ -121,11 +121,11 @@ export default function RefundQueue({
                 ) : (
                   <>
                     <button onClick={() => setDeclining(r)}
-                            className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
+                            className={ADMIN.ghostBtn}>
                       <X size={13} /> Decline
                     </button>
                     <button onClick={() => void approve(r)} disabled={busy === r.id}
-                            className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                            className={ADMIN.darkBtn}>
                       {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                       Approve
                     </button>
@@ -133,7 +133,7 @@ export default function RefundQueue({
                 )
               )}
               {canDecide && r.status === 'approved' && (
-                <button onClick={() => setPaying(r)} className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                <button onClick={() => setPaying(r)} className={ADMIN.darkBtn}>
                   <Banknote size={13} /> Pay out
                 </button>
               )}
@@ -177,7 +177,7 @@ function PayOutDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Pay out this refund"
                 icon={<Banknote size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-      <p className="text-sm text-[#6B675A] leading-relaxed">
+      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
         {inr(row.amount, showAmounts)} leaves the school. It is posted to the family&rsquo;s ledger
         as a debit, so their balance goes up by that much — which is what giving it back means.
       </p>
@@ -194,8 +194,8 @@ function PayOutDialog({
                placeholder="UTR, cheque number, or how it was handed over"
                className={`${ADMIN.inputPlain} mt-1`} />
       </label>
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
-      <div className="flex items-center justify-end gap-2 mt-4">
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
+      <div className="flex items-center justify-end gap-1.5 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button
           onClick={async () => {
@@ -227,15 +227,15 @@ function DeclineDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Decline this refund"
                 icon={<Undo2 size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
-      <p className="text-sm text-[#6B675A] leading-relaxed">
+      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
         {inr(row.amount, showAmounts)}. Whoever asked for it will read your reason, so write it for
         them rather than for the file.
       </p>
       <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
                 placeholder="Why this is not being refunded"
                 className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
-      <div className="flex items-center justify-end gap-2 mt-4">
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
+      <div className="flex items-center justify-end gap-1.5 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button
           onClick={async () => {

@@ -13,6 +13,29 @@
 export { ADMIN_GOLD, SHARP } from '@/components/salary/adminUi'
 export { LABEL, BLEED } from '@/components/salary/ui'
 
+/**
+ * The module's type scale. Eight sizes, each with one job:
+ *
+ *   9px     a state chip — uppercase, tracked
+ *   9.5px   a micro-label — `ADMIN.label` / `LABEL`
+ *   10.5px  a button — `ADMIN.darkBtn` / `ADMIN.ghostBtn`
+ *   11px    a second line: a class, a date, a method, a reason, a bill number
+ *   11.5px  a figure
+ *   12.5px  a row's subject, a form field, a sentence of prose
+ *   15px    a card or section heading
+ *   17px    the one figure a panel is about
+ *
+ * None of them changes at a breakpoint. The module used to carry twenty-five
+ * size expressions, thirteen of which were a phone size and a laptop size
+ * glued together (`text-[13px] sm:text-sm`), so a name was 13px beside a 14px
+ * date beside an 11px class and the same row read differently either side of
+ * 640px. A list is easier to read when the sizes in it mean something, and
+ * "which breakpoint am I" is not one of the things a size should mean.
+ *
+ * Above this sits one display size, the page title (`text-lg`), and below it
+ * 10px for a chart's tick labels and a card's caption.
+ */
+
 export const ADMIN = {
   /** A raised surface. Square, hairlined, no shadow. */
   card: 'bg-white border border-[#E3DFD3]',

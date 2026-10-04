@@ -35,7 +35,7 @@ export function EfficiencyBar({
     <div className={`${ADMIN.card} p-4`}>
       <div className="flex items-baseline justify-between gap-3">
         <span className={ADMIN.label}>Collection efficiency</span>
-        <span className="text-xl font-bold text-[#18181B]">
+        <span className="text-[17px] font-bold text-[#18181B]">
           {efficiency === null ? '—' : `${efficiency}%`}
         </span>
       </div>
@@ -141,7 +141,7 @@ export function DefaulterHeatmap({
   if (sorted.length === 0) {
     return (
       <div className={`${ADMIN.card} p-8 text-center`}>
-        <p className="text-sm text-[#8C8878]">Nothing outstanding in any class.</p>
+        <p className="text-[12.5px] text-[#8C8878]">Nothing outstanding in any class.</p>
       </div>
     )
   }
@@ -162,7 +162,7 @@ export function DefaulterHeatmap({
                     title={`${r.students_owing} students, ${r.bills} bills`}
                     className="p-2 text-left border border-[#E3DFD3] hover:border-[#27272A] transition-colors"
                     style={{ backgroundColor: heat(intensity) }}>
-              <div className={`text-xs font-bold ${intensity > 0.55 ? 'text-white' : 'text-[#18181B]'}`}>
+              <div className={`text-[11px] font-bold ${intensity > 0.55 ? 'text-white' : 'text-[#18181B]'}`}>
                 {gradeLabel(r.grade)}{r.section ?? ''}
               </div>
               <div className={`text-[10px] ${intensity > 0.55 ? 'text-white/80' : 'text-[#6B675A]'}`}>

@@ -81,12 +81,12 @@ export default function RteRegister({
       </div>
 
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
           Nobody on the RTE register this session.
         </p>
       ) : rows.map(r => (
         <Row key={r.id} cols={RTE_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
             {names.get(r.student_id) ?? 'Student'}
           </span>
           <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
@@ -95,19 +95,19 @@ export default function RteRegister({
             {r.reimbursed_on ? ` · received ${fmtDate(r.reimbursed_on)}` : ''}
           </span>
           <span className={CELL.A3}>
-            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
+            <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${STATE_CHIP[r.status]}`}>
               {STATE_LABEL[r.status]}
             </span>
           </span>
-          <span className={`${CELL.B2} text-[11px] sm:text-sm text-[#6B675A] text-right tabular-nums`}>
+          <span className={`${CELL.B2} text-[11px] text-[#6B675A] text-right tabular-nums`}>
             {inr(r.claimed_amount, showAmounts)}<span className="sm:hidden"> claimed</span>
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#1F6B42] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#1F6B42] text-right tabular-nums`}>
             {inr(r.reimbursed_amount, showAmounts)}
           </span>
           <span className={`${CELL.B3} flex justify-end`}>
             {canManage && (
-              <button onClick={() => setEditing(r)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Update</button>
+              <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Update</button>
             )}
           </span>
         </Row>
@@ -150,7 +150,7 @@ function RteEditor({
                 icon={<Landmark size={15} />} iconClassName="bg-[#F4F1E7] text-[#52525B]">
       <div className="space-y-3">
         {row ? (
-          <div className="bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2 text-sm text-[#18181B]">
+          <div className="bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2 text-[12.5px] text-[#18181B]">
             {names.get(row.student_id) ?? 'Student'}
           </div>
         ) : (
@@ -158,7 +158,7 @@ function RteEditor({
             <span className={ADMIN.label}>Student id</span>
             <input value={studentId} onChange={e => setStudentId(e.target.value)}
                    placeholder="Paste the student’s id from their profile page"
-                   className={`${ADMIN.inputPlain} mt-1 font-mono text-xs`} />
+                   className={`${ADMIN.inputPlain} mt-1 font-mono text-[11px]`} />
             <p className="mt-1 text-[11px] text-[#8C8878]">
               A claim is usually raised from the student&rsquo;s own fee profile, where the id is
               already known. This box is for entering a batch from a government list.
@@ -205,7 +205,7 @@ function RteEditor({
           coming from the state. Nothing here bills the family.
         </p>
 
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
 
       <div className="flex items-center justify-end gap-2 mt-4">

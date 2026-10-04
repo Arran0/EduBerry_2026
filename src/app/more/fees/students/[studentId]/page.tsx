@@ -213,7 +213,7 @@ function ProfileInner() {
       back={{ href: '/more/fees?tab=collection&section=students', label: 'Student fees' }}
       actions={<>
         {perms.can('fees.collect') && profile && (
-          <Btn tone="dark" onClick={() => setRefunding(true)} className="max-sm:py-2">
+          <Btn tone="dark" onClick={() => setRefunding(true)}>
             <Undo2 size={12} /> Refund
           </Btn>
         )}
@@ -224,7 +224,7 @@ function ProfileInner() {
         <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
       ) : !profile ? (
         <div className={`${ADMIN.card} py-14 px-6 text-center`}>
-          <p className="text-sm text-[#6B675A] max-w-md mx-auto">
+          <p className="text-[12.5px] text-[#6B675A] max-w-md mx-auto">
             This student has no fee profile for {year?.code}. Nothing can be billed or collected
             until they do — create one from the{' '}
             <Link href="/more/fees?tab=collection&section=students" className="underline">Students screen</Link>.
@@ -247,7 +247,7 @@ function ProfileInner() {
           {profile.structure_source && (
             <div className={`${ADMIN.card} px-4 py-3 flex items-start gap-2`}>
               <Scale size={14} className="mt-0.5 text-[#8C8878] flex-shrink-0" />
-              <p className="text-xs text-[#6B675A]">
+              <p className="text-[11px] text-[#6B675A]">
                 <span className="font-semibold text-[#52525B]">Why this price: </span>
                 {profile.structure_source.why}
                 {profile.prorate_from
@@ -262,7 +262,7 @@ function ProfileInner() {
               const Icon = sh.icon
               return (
                 <button key={sh.key} onClick={() => setSheet(sh.key)} title={sh.blurb}
-                        className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+                        className={ADMIN.ghostBtn}>
                   <Icon size={13} /> {sh.label}
                 </button>
               )
@@ -273,10 +273,10 @@ function ProfileInner() {
           {(
             <Panel empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
               {invoices.map(i => (
-                <Row key={i.id} cols={BILL_COLS} trailing below={<>
+                <Row key={i.id} cols={BILL_COLS} trailing={1} below={<>
                   <div className="space-y-0.5">
                     {lines.filter(l => l.invoice_id === i.id).map(l => (
-                      <div key={l.id} className="flex justify-between gap-3 text-[11px] sm:text-xs">
+                      <div key={l.id} className="flex justify-between gap-3 text-[11px]">
                         <span className={`truncate ${l.amount < 0 ? 'text-[#1F6B42]' : 'text-[#8C8878]'}`}>
                           {l.label}
                         </span>
@@ -287,21 +287,21 @@ function ProfileInner() {
                     ))}
                   </div>
                   {i.cancelled_reason && (
-                    <p className="text-[11px] sm:text-xs text-[#A93232] mt-1.5">Cancelled: {i.cancelled_reason}</p>
+                    <p className="text-[11px] text-[#A93232] mt-1.5">Cancelled: {i.cancelled_reason}</p>
                   )}
                 </>}>
-                  <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
+                  <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
                     {i.number}
                   </span>
-                  <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] whitespace-nowrap`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                     due {fmtDate(i.due_date)}
                   </span>
                   <span className={CELL.B2}>
-                    <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                    <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${INVOICE_CHIP[i.status]}`}>
                       {INVOICE_LABEL[i.status]}
                     </span>
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
                     {inr(i.net, showAmounts)}
                   </span>
                   <span className={CELL.END}>
@@ -320,19 +320,19 @@ function ProfileInner() {
           {(
             <Panel empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
               {payments.map(p => (
-                <Row key={p.id} cols={RECEIPT_COLS} trailing
+                <Row key={p.id} cols={RECEIPT_COLS} trailing={2}
                      below={p.reversal_reason ? (
-                       <p className="text-[11px] sm:text-xs text-[#A93232]">Reversed: {p.reversal_reason}</p>
+                       <p className="text-[11px] text-[#A93232]">Reversed: {p.reversal_reason}</p>
                      ) : null}>
-                  <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
+                  <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
                     {p.receipt_no ?? '—'}
                   </span>
-                  <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] truncate`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
                     {fmtDate(p.paid_on)} · {p.method}
                   </span>
                   <span className={CELL.B2}>
                     {p.status !== 'verified' && (
-                      <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+                      <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                         p.status === 'reversed'
                           ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
                           : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'}`}>
@@ -340,11 +340,11 @@ function ProfileInner() {
                       </span>
                     )}
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
+                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-right tabular-nums ${
                     p.status === 'reversed' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
                     {inr(p.amount, showAmounts)}
                   </span>
-                  <span className={`${CELL.END} flex items-center gap-0.5 sm:gap-1`}>
+                  <span className={`${CELL.END} flex items-center gap-1`}>
                     {perms.can('fees.receipt.print') && (
                       <>
                         <button onClick={() => void printReceipt(p, true)} title="Thermal print"
@@ -376,16 +376,16 @@ function ProfileInner() {
               {instruments.map(r => (
                 <Row key={r.id} cols={CHEQUE_COLS}
                      below={r.bounce_reason ? (
-                       <p className="text-[11px] sm:text-xs text-[#A93232]">
+                       <p className="text-[11px] text-[#A93232]">
                          Bounced: {r.bounce_reason}
                          {r.bounce_charge ? ` · ${inr(r.bounce_charge, showAmounts)} charge passed on` : ''}
                        </p>
                      ) : null}>
-                  <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] truncate`}>
+                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
                     {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
                     {r.bank ? <span className="text-[#8C8878]"> · {r.bank}</span> : null}
                   </span>
-                  <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878]`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
                     {r.is_postdated && r.present_on && (
                       <span className="inline-flex items-center gap-1">
                         <Clock size={11} /> present {fmtDate(r.present_on)}
@@ -393,14 +393,14 @@ function ProfileInner() {
                     )}
                   </span>
                   <span className={CELL.B2}>
-                    <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+                    <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                       r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                       : r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
                       : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
                       {r.status}
                     </span>
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
                     {inr(r.amount, showAmounts)}
                   </span>
                 </Row>
@@ -415,25 +415,25 @@ function ProfileInner() {
                 <Col right>Charged</Col><Col right>Paid</Col><Col right>Balance</Col>
               </ListHead>
               {ledger.length === 0 ? (
-                <p className="px-4 py-10 text-sm text-[#8C8878] text-center">Nothing on the ledger yet.</p>
+                <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">Nothing on the ledger yet.</p>
               ) : ledger.map(l => (
                 <Row key={l.id} cols={LEDGER_COLS}>
-                  <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] whitespace-nowrap`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                     {fmtDate(l.entry_date)}
                   </span>
-                  <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#52525B] truncate`}>
+                  <span className={`${CELL.A1} text-[12.5px] text-[#52525B] truncate`}>
                     {l.note ?? l.kind}
                   </span>
                   {/* Charged and paid are the two sides of one entry and an
                       entry is almost always one or the other, so on a phone
                       each takes a line only when it has something to say. */}
-                  <span className={`${CELL.B2} text-[11px] sm:text-sm text-right text-[#6B675A] tabular-nums`}>
+                  <span className={`${CELL.B2} text-[11px] text-right text-[#6B675A] tabular-nums`}>
                     {(l.debit ?? 0) > 0 ? <>{inr(l.debit, showAmounts)}<span className="sm:hidden"> charged</span></> : ''}
                   </span>
-                  <span className={`${CELL.B3} text-[11px] sm:text-sm text-right text-[#1F6B42] tabular-nums`}>
+                  <span className={`${CELL.B3} text-[11px] text-right text-[#1F6B42] tabular-nums`}>
                     {(l.credit ?? 0) > 0 ? <>{inr(l.credit, showAmounts)}<span className="sm:hidden"> paid</span></> : ''}
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold text-[#18181B] tabular-nums`}>
+                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold text-[#18181B] tabular-nums`}>
                     {inr(l.balance_after, showAmounts)}
                   </span>
                 </Row>
@@ -455,13 +455,13 @@ function ProfileInner() {
                   <Col>What</Col><Col>Asked</Col><Col>State</Col><Col right>Amount</Col>
                 </ListHead>
                 {concessions.length === 0 ? (
-                  <p className="px-4 py-10 text-sm text-[#8C8878] text-center">
+                  <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">
                     No concessions for this student. Each one, when granted, is a named line on the
                     bill it comes off.
                   </p>
                 ) : concessions.map(c => (
                   <Row key={c.id} cols={CONCESSION_COLS}>
-                    <span className={`${CELL.A1} min-w-0 text-[12.5px] sm:text-sm text-[#18181B]`}>
+                    <span className={`${CELL.A1} min-w-0 text-[12.5px] text-[#18181B]`}>
                       <span className="block truncate">
                         {discountTypes.find(t => t.id === c.type_id)?.name
                           ?? scholarships.find(s => s.id === c.scholarship_id)?.name
@@ -471,11 +471,11 @@ function ProfileInner() {
                         <span className="block text-[11px] text-[#8C8878] truncate">{c.reason}</span>
                       )}
                     </span>
-                    <span className={`${CELL.A2} text-[11px] sm:text-sm text-[#8C8878] sm:text-[#6B675A] whitespace-nowrap`}>
+                    <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                       {fmtDate(c.created_at.slice(0, 10))}
                     </span>
                     <span className={CELL.B2}>
-                      <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+                      <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                         c.status === 'applied'
                           ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                           : c.status === 'pending'
@@ -486,7 +486,7 @@ function ProfileInner() {
                           : c.status === 'declined' ? 'Declined' : 'Removed'}
                       </span>
                     </span>
-                    <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold text-[#1F6B42] tabular-nums`}>
+                    <span className={`${CELL.B1} text-[11.5px] text-right font-semibold text-[#1F6B42] tabular-nums`}>
                       −{inr(c.amount, showAmounts)}
                     </span>
                   </Row>
@@ -501,25 +501,25 @@ function ProfileInner() {
                 <Col>What</Col><Col>When</Col><Col>Bill</Col><Col right>Amount</Col>
               </ListHead>
               {fines.length === 0 && lateFees.length === 0 && (
-                <p className="px-4 py-10 text-sm text-[#8C8878] text-center">
+                <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">
                   Nothing has been added to this student&rsquo;s bills since they were issued.
                 </p>
               )}
               {fines.map(f => (
                 <Row key={f.id} cols={CHARGE_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B]`}>
+                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B]`}>
                     <span className="block truncate">
                       {fineCategories.find(c => c.id === f.category_id)?.name ?? 'Fine'}
                     </span>
                     {f.reason && <span className="block text-[11px] text-[#8C8878] truncate">{f.reason}</span>}
                   </span>
-                  <span className={`${CELL.A2} text-[11px] sm:text-sm text-[#8C8878] sm:text-[#6B675A] whitespace-nowrap`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                     {fmtDate(f.created_at.slice(0, 10))}
                   </span>
-                  <span className={`${CELL.B2} font-mono text-[10.5px] sm:text-[11px] text-[#8C8878] sm:text-[#6B675A] truncate`}>
+                  <span className={`${CELL.B2} font-mono text-[11px] text-[#6B675A] truncate`}>
                     {invoices.find(i => i.id === f.invoice_id)?.number ?? '—'}
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold tabular-nums ${
+                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
                     f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
                     {inr(f.amount, showAmounts)}
                   </span>
@@ -527,17 +527,17 @@ function ProfileInner() {
               ))}
               {lateFees.map(c => (
                 <Row key={c.id} cols={CHARGE_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B]`}>
+                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B]`}>
                     <span className="block">Late fee</span>
                     <span className="block text-[11px] text-[#8C8878]">{c.days_late} days past due</span>
                   </span>
-                  <span className={`${CELL.A2} text-[11px] sm:text-sm text-[#8C8878] sm:text-[#6B675A] whitespace-nowrap`}>
+                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
                     {fmtDate(c.as_of)}
                   </span>
-                  <span className={`${CELL.B2} font-mono text-[10.5px] sm:text-[11px] text-[#8C8878] sm:text-[#6B675A] truncate`}>
+                  <span className={`${CELL.B2} font-mono text-[11px] text-[#6B675A] truncate`}>
                     {invoices.find(i => i.id === c.invoice_id)?.number ?? '—'}
                   </span>
-                  <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold tabular-nums ${
+                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
                     c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
                     {inr(c.amount, showAmounts)}
                   </span>
@@ -595,7 +595,7 @@ function Heading({ icon: Icon, children }: { icon: React.ElementType; children: 
   return (
     <div className="flex items-center gap-2 border-b border-[#E3DFD3] pb-1.5 pt-1">
       <Icon size={14} className="text-[#B8983C]" />
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B675A]">{children}</h2>
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">{children}</h2>
     </div>
   )
 }
@@ -603,7 +603,7 @@ function Heading({ icon: Icon, children }: { icon: React.ElementType; children: 
 function Panel({ empty, children }: { empty: string | null; children: React.ReactNode }) {
   return (
     <div className={`${ADMIN.card} overflow-hidden`}>
-      {empty ? <p className="px-4 py-10 text-sm text-[#8C8878] text-center">{empty}</p> : children}
+      {empty ? <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">{empty}</p> : children}
     </div>
   )
 }

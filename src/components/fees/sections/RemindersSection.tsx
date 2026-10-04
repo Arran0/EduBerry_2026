@@ -216,7 +216,7 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
         </button>
       </div>
 
-      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+      {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
 
       {loading ? (
         <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
@@ -224,7 +224,7 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
         <div className={ADMIN.card}>
           <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
             <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
-                    className="bg-white border border-[#E3DFD3] px-2 py-1.5 text-xs text-[#18181B]
+                    className="bg-white border border-[#E3DFD3] px-2 py-1.5 text-[11px] text-[#18181B]
                                focus:outline-none focus:border-[#27272A]">
               <option value="">Every class</option>
               {classes.map(c => <option key={c} value={c}>{c}</option>)}
@@ -253,17 +253,17 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
           </div>
 
           {shown.length === 0 ? (
-            <p className="px-4 py-10 text-sm text-[#8C8878]">
+            <p className="px-4 py-10 text-[12.5px] text-[#8C8878]">
               Nobody owes anything{klass ? ` in ${klass}` : ''}. That is worth saying out loud.
             </p>
           ) : shown.map(f => (
             <Row key={f.student.student_id} cols={CHASE_COLS} lead>
               <label className={`${CELL_LEAD.PICK} flex items-center justify-center
-                                 max-sm:w-9 max-sm:h-9 cursor-pointer`}>
+                                 w-7 h-7 cursor-pointer`}>
                 <input type="checkbox" checked={selected.has(f.student.student_id)}
                        disabled={!f.contactable}
                        aria-label={`Select ${f.student.full_name}`}
-                       className="max-sm:w-[17px] max-sm:h-[17px]"
+                       className="w-[15px] h-[15px]"
                        onChange={e => setSelected(s => {
                          const next = new Set(s)
                          if (e.target.checked) next.add(f.student.student_id)
@@ -273,7 +273,7 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
               </label>
               <span className={CELL_LEAD.A1}>
                 <Link href={`/more/fees/students/${f.student.student_id}`}
-                      className="block text-[13px] sm:text-sm text-[#18181B] hover:underline truncate">
+                      className="block text-[12.5px] text-[#18181B] hover:underline truncate">
                   {f.student.full_name}
                 </Link>
               </span>
@@ -287,18 +287,18 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
               <span className={CELL_LEAD.A3}>
                 {!f.contactable && (
                   <span title="No number on file, or opted out"
-                        className="inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold uppercase
-                                   tracking-wider px-1.5 sm:px-2 py-0.5 bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                        className="inline-flex items-center gap-1 text-[9px] font-bold uppercase
+                                   tracking-[0.08em] px-1.5 py-[2px] bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
                     <PhoneOff size={10} /> No number
                   </span>
                 )}
               </span>
               <span className={CELL_LEAD.B2}>
-                <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${lateChip(f.daysLate)}`}>
+                <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${lateChip(f.daysLate)}`}>
                   {f.daysLate > 0 ? `${f.daysLate}d late` : f.daysLate === 0 ? 'Due today' : `In ${-f.daysLate}d`}
                 </span>
               </span>
-              <span className={`${CELL_LEAD.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+              <span className={`${CELL_LEAD.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
                 {inr(f.owed, showAmounts)}
               </span>
               <span className={`${CELL_LEAD.B3} flex justify-end`}>
@@ -306,7 +306,7 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
                   <button onClick={() => void remind([f.student.student_id])}
                           disabled={sending || !f.contactable}
                           title={f.contactable ? 'Remind this family now' : 'No number on file'}
-                          className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+                          className={ADMIN.ghostBtn}>
                     <Bell size={13} /> Remind
                   </button>
                 )}
@@ -345,14 +345,14 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
       {sent && (
         <ModalShell onClose={() => setSent(null)} sharp size="sm" title="Reminders queued"
                     icon={<MessageSquare size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-          <p className="text-sm text-[#18181B]">
+          <p className="text-[12.5px] text-[#18181B]">
             <strong>{sent.queued}</strong> message{sent.queued === 1 ? '' : 's'} queued
             out of {sent.considered} bill{sent.considered === 1 ? '' : 's'}.
           </p>
           {Object.keys(sent.skipped ?? {}).length > 0 && (
             <ul className="mt-3 space-y-1">
               {Object.entries(sent.skipped).map(([reason, count]) => (
-                <li key={reason} className="text-xs text-[#6B675A]">
+                <li key={reason} className="text-[11px] text-[#6B675A]">
                   {count} skipped — {SKIP_REASONS[reason] ?? SKIP_REASONS.unknown}
                 </li>
               ))}
@@ -417,10 +417,10 @@ function ReminderLog({
         <h3 className={ADMIN.label}>Every reminder sent</h3>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">No reminders have gone out yet.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No reminders have gone out yet.</p>
       ) : rows.map(r => (
         <Row key={r.id} cols={LOG_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
             {name(r.student_id)}
           </span>
           <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
@@ -430,7 +430,7 @@ function ReminderLog({
           </span>
           <span className={CELL.B2}>
             {r.paid_at && (
-              <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+              <span className="inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px]
                                bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
                 Paid after
               </span>
@@ -526,14 +526,14 @@ function Schedules({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
           No schedule. Reminders only go out when somebody presses Remind.
         </p>
       ) : rows.map(r => (
         <div key={r.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[220px]">
-              <div className="text-sm font-semibold text-[#18181B]">{r.name}</div>
+              <div className="text-[12.5px] font-semibold text-[#18181B]">{r.name}</div>
               <p className="text-[11px] text-[#8C8878] mt-0.5">
                 {describeOffsets(r.offsets)} · at {r.send_at.slice(0, 5)}
                 {r.quiet_days.length > 0
@@ -542,7 +542,7 @@ function Schedules({
                 {r.skip_if_paid ? ' · skips anyone who has paid' : ''}
               </p>
             </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
+            <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
               r.enabled
                 ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                 : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
@@ -596,13 +596,13 @@ function SendLaterDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Send these later"
                 icon={<CalendarClock size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]">
-      <p className="text-sm text-[#6B675A] leading-relaxed">
+      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
         {count} famil{count === 1 ? 'y' : 'ies'}. The messages are queued now and held until this
         time; anyone who pays in between is skipped when the queue runs.
       </p>
       <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
              className={`${ADMIN.inputPlain} mt-3`} />
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
       <div className="flex items-center justify-end gap-2 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button

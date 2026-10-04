@@ -126,13 +126,13 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
   return (
     <>
       {error && (
-        <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>
+        <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>
       )}
 
       <div className={`${ADMIN.card} p-4 flex flex-wrap items-start gap-3`}>
         <div className="flex-1 min-w-[240px]">
-          <h2 className="text-sm font-bold text-[#18181B]">The nightly sweep</h2>
-          <p className="text-xs text-[#8C8878] mt-1 leading-relaxed">
+          <h2 className="text-[12.5px] font-bold text-[#18181B]">The nightly sweep</h2>
+          <p className="text-[11px] text-[#8C8878] mt-1 leading-relaxed">
             Runs on its own every night. Preview it here first — the preview is the same
             calculation with committing switched off, so what it shows is what it will charge.
           </p>
@@ -157,7 +157,7 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
             {sweep.committed
               ? <CheckCircle2 size={14} className="text-[#1F6B42]" />
               : <Play size={14} className="text-[#8C8878]" />}
-            <span className="text-sm font-semibold text-[#18181B]">
+            <span className="text-[12.5px] font-semibold text-[#18181B]">
               {sweep.committed ? 'Charged' : 'Preview'} as at {fmtDate(sweep.as_of)}
             </span>
           </div>
@@ -197,12 +197,12 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
           </button>
         </div>
         {rules.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-[#8C8878]">
+          <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
             No late-fee rules. Bills fall overdue but nothing is charged.
           </p>
         ) : rules.map(r => (
           <Row key={r.id} cols={RULE_COLS}>
-            <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+            <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
               {r.name}
             </span>
             <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
@@ -210,19 +210,19 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
               {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
             </span>
             <span className={CELL.B1}>
-              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                 r.enabled
                   ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
                   : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
                 {r.enabled ? 'Live' : 'Off'}
               </span>
             </span>
-            <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
+            <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center justify-end gap-1.5`}>
               <button onClick={() => setEditing(r)}
-                      className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>Edit</button>
+                      className={ADMIN.ghostBtn}>Edit</button>
               <button onClick={() => void toggleRule(r)}
                       title={r.enabled ? 'Switch off' : 'Switch on from today'}
-                      className={`${r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                      className={`${r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn}`}>
                 <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
               </button>
             </span>

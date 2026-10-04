@@ -129,14 +129,14 @@ export default function FeeSearch({
         {question && !answer && (
           <div className="flex items-start gap-2 p-3 bg-[#FAF3DF] border border-[#E7D9AE]">
             <Sparkles size={13} className="text-[#7A6220] mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-[#7A6220] leading-relaxed">
+            <p className="text-[11px] text-[#7A6220] leading-relaxed">
               Read as: <strong>{question.label}</strong>. Press Answer to run it.
             </p>
           </div>
         )}
 
         {term.trim().length >= 4 && !question && hits.length === 0 && !busy && (
-          <p className="text-xs text-[#8C8878] leading-relaxed">
+          <p className="text-[11px] text-[#8C8878] leading-relaxed">
             Nothing matched, and that did not read as a question I know. Try one of these:{' '}
             {EXAMPLES.map((ex, i) => (
               <React.Fragment key={ex}>
@@ -148,13 +148,13 @@ export default function FeeSearch({
           </p>
         )}
 
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
-        {note && <div className="p-3 bg-[#EAF5EE] border border-[#C6E3D2] text-xs text-[#1F6B42]">{note}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
+        {note && <div className="p-3 bg-[#EAF5EE] border border-[#C6E3D2] text-[11px] text-[#1F6B42]">{note}</div>}
 
         {answer ? (
           <div className="border border-[#E3DFD3]">
             <div className="px-3 py-2 bg-[#FAF8F2] border-b border-[#E3DFD3] flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-[#18181B] flex-1">
+              <span className="text-[11px] font-semibold text-[#18181B] flex-1">
                 {answer.label} · {answer.rows.length} row{answer.rows.length === 1 ? '' : 's'}
               </span>
               {canRemind && answer.studentIds.length > 0 && (
@@ -172,7 +172,7 @@ export default function FeeSearch({
             </div>
             <div className="max-h-[22rem] overflow-auto">
               {answer.rows.length === 0 ? (
-                <p className="px-3 py-8 text-sm text-[#8C8878] text-center">Nothing matched that.</p>
+                <p className="px-3 py-8 text-[12.5px] text-[#8C8878] text-center">Nothing matched that.</p>
               ) : (
                 <>
                   {/* An answer's columns are whatever the question asked for, so
@@ -180,9 +180,9 @@ export default function FeeSearch({
                       becomes its own label-and-value list instead — the only
                       place in the module that draws a list twice, because a
                       table of unknown width cannot be folded by CSS alone. */}
-                  <table className="hidden sm:table w-full text-sm">
+                  <table className="hidden sm:table w-full text-[12.5px]">
                     <thead className="bg-white sticky top-0">
-                      <tr className="text-[10px] uppercase tracking-widest text-[#8C8878]">
+                      <tr className="text-[9px] uppercase tracking-[0.12em] text-[#8C8878]">
                         {answer.columns.map(c => (
                           <th key={c} className="text-left px-3 py-2 font-bold border-b border-[#E3DFD3]">
                             {c}
@@ -235,13 +235,13 @@ export default function FeeSearch({
                                  gap-x-3 gap-y-0.5 px-3 py-2.5 sm:py-2 border-b border-[#F0ECE2]
                                  last:border-0 hover:bg-[#FAF8F2]">
                   <Icon size={14} className="text-[#8C8878] flex-shrink-0 max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center" />
-                  <span className="text-[13px] sm:text-sm text-[#18181B] sm:flex-1 min-w-0 truncate max-sm:col-start-2 max-sm:row-start-1">
+                  <span className="text-[12.5px] text-[#18181B] sm:flex-1 min-w-0 truncate max-sm:col-start-2 max-sm:row-start-1">
                     {hit.title}
                   </span>
                   <span className="text-[11px] text-[#8C8878] truncate max-sm:col-start-2 max-sm:row-start-2">
                     {hit.subtitle}
                   </span>
-                  <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                  <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px]
                                    bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]
                                    max-sm:col-start-3 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center whitespace-nowrap">
                     {KIND_LABEL[hit.kind]}

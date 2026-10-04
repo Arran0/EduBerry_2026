@@ -118,7 +118,7 @@ export default function ApplyConcessionSheet({
     return (
       <ModalShell onClose={onDone} sharp size="sm" title={result.needsApproval ? 'Sent for approval' : 'Applied'}
                   icon={<BadgePercent size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-        <p className="text-sm text-[#6B675A] leading-relaxed">
+        <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
           {result.needsApproval
             ? `${result.label} of ${inr(effective, showAmounts)} is waiting for an approver. The bill has not changed yet — do not tell the family it has.`
             : `${result.label} of ${inr(effective, showAmounts)} is off the bill. The new balance is ${inr(after, showAmounts)}.`}
@@ -158,12 +158,12 @@ export default function ApplyConcessionSheet({
             <span className={ADMIN.label}>Student</span>
             {student ? (
               <div className="mt-1 flex items-center justify-between gap-2 bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2">
-                <span className="text-sm text-[#18181B]">
+                <span className="text-[12.5px] text-[#18181B]">
                   {student.full_name}
                   <span className="text-[#8C8878]"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
                 </span>
                 <button onClick={() => { setStudent(null); setInvoiceId('') }}
-                        className="text-xs text-[#6B675A] hover:text-[#18181B]">Change</button>
+                        className="text-[11px] text-[#6B675A] hover:text-[#18181B]">Change</button>
               </div>
             ) : (
               <>
@@ -174,7 +174,7 @@ export default function ApplyConcessionSheet({
                   <div className="mt-1 border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
                     {matches.map(p => (
                       <button key={p.student_id} onClick={() => { setStudent(p); setQuery('') }}
-                              className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#FAF8F2]">
+                              className="w-full text-left px-3 py-2 text-[12.5px] text-[#18181B] hover:bg-[#FAF8F2]">
                         {p.full_name}
                         <span className="text-[#8C8878]"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
                       </button>
@@ -277,12 +277,12 @@ export default function ApplyConcessionSheet({
         {bill && (
           <div className={`p-3 border ${tooBig ? 'bg-[#FCECEC] border-[#EFCCCC]' : 'bg-[#FAF8F2] border-[#E3DFD3]'}`}>
             {tooBig ? (
-              <p className="text-xs text-[#A93232] leading-relaxed">
+              <p className="text-[11px] text-[#A93232] leading-relaxed">
                 That is more than the {inr(bill.balance, showAmounts)} still owing on this bill. A
                 concession cannot push a bill into credit — reduce it, or split it across bills.
               </p>
             ) : (
-              <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center justify-between text-[12.5px]">
                 <span className="text-[#6B675A]">
                   {inr(bill.balance, showAmounts)} owing, less {inr(effective, showAmounts)}
                 </span>
@@ -295,7 +295,7 @@ export default function ApplyConcessionSheet({
         {willWait && bill && !tooBig && (
           <div className="flex items-start gap-2 p-3 bg-[#FAF3DF] border border-[#E7D9AE]">
             <Info size={13} className="text-[#7A6220] mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-[#7A6220] leading-relaxed">
+            <p className="text-[11px] text-[#7A6220] leading-relaxed">
               {kind === 'waiver'
                 ? 'Waivers always need a second person to sign off.'
                 : type?.approval_threshold === null || type?.approval_threshold === undefined
@@ -308,7 +308,7 @@ export default function ApplyConcessionSheet({
           </div>
         )}
 
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )

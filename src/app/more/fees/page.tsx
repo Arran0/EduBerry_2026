@@ -50,10 +50,13 @@ const FeeSettingsPanel = dynamic(() => import('@/components/settings/FeeSettings
 
 type Main = 'collection' | 'config' | 'settings'
 
+// `short` is what a phone shows. "Collection Center · Fee Configuration · Fee
+// Settings" is 380px of tab strip on a 375px screen, and a strip that has to
+// scroll hides the tab nobody has found yet.
 const MAIN_TABS: TabDef<Main>[] = [
-  { key: 'collection', label: 'Collection Center', icon: Landmark },
-  { key: 'config',     label: 'Fee Configuration', icon: Layers },
-  { key: 'settings',   label: 'Fee Settings',      icon: Settings },
+  { key: 'collection', label: 'Collection Center', short: 'Collection', icon: Landmark },
+  { key: 'config',     label: 'Fee Configuration', short: 'Pricing',    icon: Layers },
+  { key: 'settings',   label: 'Fee Settings',      short: 'Settings',   icon: Settings },
 ]
 
 const SECTIONS: CenterSection[] = ['collection', 'students', 'reports']

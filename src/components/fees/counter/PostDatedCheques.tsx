@@ -62,34 +62,34 @@ export default function PostDatedCheques({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-[#8C8878]">
+      <p className="text-[11px] text-[#8C8878]">
         A bill stays open until its cheque clears, and bouncing one reopens the bill and adds the
         bank&rsquo;s charge to it automatically.
       </p>
 
       {error && (
-        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3 ">{error}</div>
       )}
 
       <div className={ADMIN.card}>
         {rows.length === 0 ? (
-          <p className="px-4 py-10 text-sm text-[#8C8878] text-center">
+          <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">
             No cheques or drafts are being held.
           </p>
         ) : rows.map(r => (
           <Row key={r.id} cols={CHEQUE_COLS}>
             <span className={CELL.A1}>
-              <span className="block text-[13px] sm:text-sm font-medium text-[#18181B] truncate">
+              <span className="block text-[12.5px] font-medium text-[#18181B] truncate">
                 {nameOf(r.student_id)}
               </span>
-              <span className="block text-[11px] sm:text-xs text-[#8C8878] truncate">
+              <span className="block text-[11px] text-[#8C8878] truncate">
                 {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
                 {r.bank ? ` · ${r.bank}` : ''}
                 {r.is_postdated && r.present_on ? ` · present ${fmtDate(r.present_on)}` : ''}
               </span>
             </span>
             <span className={CELL.B2}>
-              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
                 r.status === 'deposited'
                   ? 'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]'
                   : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'
@@ -97,28 +97,28 @@ export default function PostDatedCheques({
                 {r.status}
               </span>
             </span>
-            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.amount, showAmounts)}
             </span>
             {/* Deposited / Cleared / Bounced is what this screen is for, so on a
                 phone the three of them get a line of their own across the card
                 rather than a 60px column at the right edge. */}
             {canManage && (
-              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
+              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center justify-end gap-1.5`}>
                 {busy === r.id ? <Loader2 size={14} className="animate-spin text-[#8C8878]" /> : (
                   <>
                     {r.status === 'received' && (
                       <button onClick={() => void move(r, 'deposited')}
-                              className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
+                              className={ADMIN.ghostBtn}>
                         Deposited
                       </button>
                     )}
                     <button onClick={() => void move(r, 'cleared')}
-                            className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                            className={ADMIN.darkBtn}>
                       Cleared
                     </button>
                     <button onClick={() => setBouncing(r)}
-                            className="inline-flex items-center justify-center gap-1.5 bg-white border border-[#EFCCCC] text-[#A93232] hover:bg-[#FCECEC] text-xs font-semibold px-3 py-2 max-sm:flex-1">
+                            className="inline-flex items-center justify-center gap-1.5 bg-white border border-[#EFCCCC] text-[#A93232] hover:bg-[#FCECEC] text-[11px] font-semibold px-3 py-2">
                       Bounced
                     </button>
                   </>
@@ -171,7 +171,7 @@ function BounceDialog({
     <ModalShell onClose={onClose} sharp size="sm"
                 title={`${instrument.kind === 'dd' ? 'Draft' : 'Cheque'} ${instrument.number} bounced`}>
       <div className="space-y-4">
-        <p className="text-sm text-[#52525B]">
+        <p className="text-[12.5px] text-[#52525B]">
           {studentName}&rsquo;s bill will reopen for the full amount, and the receipt will read
           cancelled to anyone who scans it.
         </p>
@@ -184,12 +184,12 @@ function BounceDialog({
           <input type="number" min={0} value={charge} onChange={e => setCharge(e.target.value)}
                  placeholder="Leave blank to charge nothing"
                  className={`${ADMIN.inputPlain} max-w-[200px]`} />
-          <p className="text-xs text-[#8C8878] mt-1.5">
+          <p className="text-[11px] text-[#8C8878] mt-1.5">
             Added as a named line on the bill this cheque was paying, so the family can see what it is.
           </p>
         </div>
         {error && (
-          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3 ">{error}</div>
         )}
         <div className="flex gap-2">
           <button onClick={() => void submit()} disabled={busy} className={`${ADMIN.darkBtn} flex-1 py-2.5`}>

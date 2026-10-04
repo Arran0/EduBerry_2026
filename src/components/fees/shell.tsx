@@ -60,7 +60,7 @@ export function FeeScreen({
             {icon}
           </div>
           <div className="flex-1 min-w-[150px]">
-            <h1 className="font-display text-lg sm:text-xl font-bold text-[#18181B] leading-none truncate">
+            <h1 className="font-display text-lg font-bold text-[#18181B] leading-none truncate">
               {title}
             </h1>
             {subtitle && (
@@ -139,7 +139,7 @@ export function StatStrip({ stats, loading }: { stats: Stat[]; loading?: boolean
               </>
             ) : (
               <>
-                <p className={`${s.strong ? 'text-[15px]' : 'text-[13px]'} font-bold tabular-nums truncate leading-[19px] text-[#18181B]`}
+                <p className={`${s.strong ? 'text-[15px]' : 'text-[12.5px]'} font-bold tabular-nums truncate leading-[19px] text-[#18181B]`}
                    style={s.tone ? { color: s.tone } : undefined}>
                   {s.value}
                 </p>
@@ -159,6 +159,12 @@ export function StatStrip({ stats, loading }: { stats: Stat[]; loading?: boolean
 export interface TabDef<K extends string> {
   key: K
   label: string
+  /**
+   * What the tab is called when there is not room for `label`. A phone has
+   * room for "Collection" and not for "Collection Center", and the strip is
+   * better off saying the shorter thing than scrolling to say the longer one.
+   */
+  short?: string
   icon?: React.ElementType
   /** Shown beside the label — a count of what is waiting. */
   badge?: number
@@ -166,9 +172,14 @@ export interface TabDef<K extends string> {
 
 /**
  * Underline tabs with a gold rule under the live one, the same control the
- * Salary hub uses to switch sections. Scrolls sideways rather than wrapping:
- * six tabs wrapping to a second line moves everything below them down, which
- * is a layout shift every time the window is narrowed.
+ * Salary hub uses to switch sections.
+ *
+ * The strip fits whatever width it is given. It never scrolls and never wraps:
+ * the tabs share the row (`flex-1`), each may shrink below its text (`min-w-0`)
+ * and clip rather than push, and on a phone each shows its `short` name. A
+ * sideways-scrolling tab strip on a touchscreen is the worst of the three —
+ * the tabs out of view are invisible rather than merely narrow, and the strip
+ * fights the page's own vertical scroll for the same drag.
  */
 export function TabBar<K extends string>({
   tabs, active, onChange,
@@ -178,7 +189,7 @@ export function TabBar<K extends string>({
   onChange: (key: K) => void
 }) {
   return (
-    <div className={`flex border-b border-[#E3DFD3] mb-3 overflow-x-auto scrollbar-hide ${BLEED} sm:mx-0 px-3 sm:px-0`}>
+    <div className={`flex border-b border-[#E3DFD3] mb-3 ${BLEED} sm:mx-0 px-3 sm:px-0`}>
       {tabs.map(t => {
         const on = t.key === active
         const Icon = t.icon
@@ -186,16 +197,19 @@ export function TabBar<K extends string>({
           <button
             key={t.key}
             onClick={() => onChange(t.key)}
-            className={`flex-1 min-w-max flex items-center justify-center gap-1.5 px-3 pb-1.5 text-[11px]
-                        sm:text-[12px] font-bold uppercase tracking-[0.06em] border-b-2 -mb-px
-                        transition-colors whitespace-nowrap ${
+            className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-1.5 sm:px-3 pb-1.5
+                        text-[11px] font-bold uppercase tracking-[0.06em] border-b-2 -mb-px
+                        transition-colors ${
               on ? 'border-[#B8983C] text-[#18181B]' : 'border-transparent text-[#A8A395] hover:text-[#6B675A]'
             }`}
           >
-            {Icon && <Icon size={13} />}
-            <span>{t.label}</span>
+            {Icon && <Icon size={13} className="flex-shrink-0" />}
+            <span className="truncate">
+              {t.short ? <><span className="sm:hidden">{t.short}</span>
+                           <span className="hidden sm:inline">{t.label}</span></> : t.label}
+            </span>
             {t.badge !== undefined && t.badge > 0 && (
-              <span className={`px-1 py-px text-[9px] leading-none tabular-nums ${
+              <span className={`flex-shrink-0 px-1 py-px text-[9px] leading-none tabular-nums ${
                 on ? 'bg-[#B8983C] text-white' : 'bg-[#F4F1E7] text-[#8C8878]'}`}>
                 {t.badge}
               </span>
@@ -221,7 +235,7 @@ export function Notice({
     good:  'bg-[#EAF5EE] border-[#C6E3D2] text-[#1F6B42]',
   }
   return (
-    <div className={`border px-3 py-2 text-[11.5px] leading-relaxed mb-2.5 ${BLEED} sm:mx-0 ${tones[tone]}`}>
+    <div className={`border px-3 py-2 text-[12.5px] leading-relaxed mb-2.5 ${BLEED} sm:mx-0 ${tones[tone]}`}>
       {children}
     </div>
   )
@@ -237,7 +251,7 @@ export function Loading() {
   return (
     <div className="py-16 text-center">
       <div className="spinner mx-auto mb-3" />
-      <p className="text-[12px] text-[#8C8878]">Loading…</p>
+      <p className="text-[12.5px] text-[#8C8878]">Loading…</p>
     </div>
   )
 }
@@ -350,16 +364,30 @@ export function Col({ right, className = '', children }: {
 }
 
 /**
+ * The width a trailing action column takes on a phone: one, two or three `TAP`
+ * squares and the 4px gutters between them.
+ *
+ * Fixed, not `auto`. A column sized to its contents is a different width on
+ * every row — a bill that can still be cancelled has a button, the one beside
+ * it does not — and that walks the amounts in and out by 28px down the list.
+ * Reserving the space costs 28px and buys a straight edge.
+ */
+const TRAIL = {
+  1: 'grid-cols-[minmax(0,1fr)_auto_28px]',
+  2: 'grid-cols-[minmax(0,1fr)_auto_60px]',
+  3: 'grid-cols-[minmax(0,1fr)_auto_92px]',
+} as const
+
+/**
  * One row. Two columns and as many lines as its cells ask for on a phone; from
  * `sm` up, whatever `cols` says.
  *
- * `trailing` widens the phone grid by the narrow third column `CELL.END` uses,
- * so a row with an action button has somewhere to put it that does not cost a
- * line.
+ * `trailing` is how many icon buttons the row's `CELL.END` holds, and reserves
+ * a column that wide for them.
  */
 export function Row({ cols, trailing, lead, below, className = '', children }: {
   cols: string
-  trailing?: boolean
+  trailing?: 1 | 2 | 3
   /** The row opens with a control that keeps its own column — see `CELL_LEAD`. */
   lead?: boolean
   /** Full-width content under the cells — a bill's lines, a reason, a note. */
@@ -372,24 +400,25 @@ export function Row({ cols, trailing, lead, below, className = '', children }: {
       <div className={`grid ${lead
                         ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
                         : trailing
-                        ? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+                        ? TRAIL[trailing]
                         : 'grid-cols-[minmax(0,1fr)_auto]'} ${cols}
-                       items-center gap-x-2 gap-y-[3px] sm:gap-y-0
-                       px-3 py-2.5 sm:py-[7px]`}>
+                       items-center gap-x-2 gap-y-[3px] sm:gap-y-0 px-3 py-[7px]`}>
         {children}
       </div>
-      {below && <div className="px-3 pb-2.5 sm:pb-2 -mt-0.5">{below}</div>}
+      {below && <div className="px-3 pb-2 -mt-px">{below}</div>}
     </div>
   )
 }
 
 /**
- * An icon-only button, at a size a thumb can actually hit.
+ * An icon-only button: the square version of the module's text button, exactly
+ * as tall, so a row of actions lines up whether its buttons carry words or not.
  *
- * The module's icon buttons were `p-1.5` around a 14px glyph — a 26px target,
- * where the guidance for touch is 44 and the honest floor is about 40. On a
- * phone that is a print button next to a reverse-the-payment button with 3px
- * between them, which is how the wrong one gets pressed. Phones get 38px and a
- * laptop keeps the compact square, where a pointer makes the difference moot.
+ * `ADMIN.ghostBtn` is 10.5px of leading-none text in `py-[7px]` inside a 1px
+ * border — 28px. This is 28px square, at every width. The icon buttons it
+ * replaces were a 26px target with 3px between them, which is how a payment
+ * gets reversed by somebody reaching for the printer; 28px with a 4px gutter is
+ * not a generous target, but it is the one that matches the rest of the module,
+ * and a button that is bigger than the type around it reads as a mistake.
  */
-export const TAP = 'inline-flex items-center justify-center max-sm:w-[38px] max-sm:h-[38px] p-1.5 transition-colors'
+export const TAP = 'inline-flex items-center justify-center w-7 h-7 flex-shrink-0 transition-colors'

@@ -251,14 +251,14 @@ export default function LateFeeRuleBuilder({
             <div className="flex items-center justify-between gap-2">
               <span className={ADMIN.label}>On a sample bill of</span>
               <div className="flex items-center gap-1">
-                <span className="text-sm text-[#6B675A]">₹</span>
+                <span className="text-[12.5px] text-[#6B675A]">₹</span>
                 <input type="number" min={0} value={sample}
                        onChange={e => setSample(Number(e.target.value))}
-                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-sm text-right
+                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-[12.5px] text-right
                                   text-[#18181B] focus:outline-none focus:border-[#27272A]" />
               </div>
             </div>
-            <table className="w-full mt-3 text-sm">
+            <table className="w-full mt-3 text-[12.5px]">
               <tbody>
                 {horizons.map(h => (
                   <tr key={h.days} className="border-t border-[#E3DFD3] first:border-0">
@@ -268,7 +268,7 @@ export default function LateFeeRuleBuilder({
                     <td className="py-1.5 text-right font-semibold text-[#18181B]">
                       {formatPaise(h.result.amount)}
                       {h.result.cappedBy && (
-                        <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider
+                        <span className="ml-1.5 text-[9px] font-bold uppercase tracking-[0.08em]
                                          text-[#7A6220]">capped</span>
                       )}
                     </td>
@@ -287,7 +287,7 @@ export default function LateFeeRuleBuilder({
           {warnings.length === 0 ? (
             <div className="flex items-start gap-2 p-3 bg-[#EAF5EE] border border-[#C6E3D2]">
               <Info size={13} className="text-[#1F6B42] mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-[#1F6B42] leading-relaxed">
+              <p className="text-[11px] text-[#1F6B42] leading-relaxed">
                 Nothing to flag. The sample above is what a family would actually be charged.
               </p>
             </div>
@@ -298,7 +298,7 @@ export default function LateFeeRuleBuilder({
                 : 'bg-[#FAF3DF] border-[#E7D9AE]'}`}>
               <AlertTriangle size={13} className={`mt-0.5 flex-shrink-0 ${
                 w.level === 'error' ? 'text-[#A93232]' : 'text-[#7A6220]'}`} />
-              <p className={`text-xs leading-relaxed ${
+              <p className={`text-[11px] leading-relaxed ${
                 w.level === 'error' ? 'text-[#A93232]' : 'text-[#7A6220]'}`}>
                 {w.message}
               </p>
@@ -308,7 +308,7 @@ export default function LateFeeRuleBuilder({
           {error && (
             <div className="flex items-start gap-2 p-3 bg-[#FCECEC] border border-[#EFCCCC]">
               <X size={13} className="text-[#A93232] mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-[#A93232]">{error}</p>
+              <p className="text-[11px] text-[#A93232]">{error}</p>
             </div>
           )}
         </div>

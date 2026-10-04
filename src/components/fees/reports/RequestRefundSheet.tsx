@@ -46,13 +46,13 @@ export default function RequestRefundSheet({
     return (
       <ModalShell onClose={onDone} sharp size="sm" title="Sent for approval"
                   icon={<Undo2 size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-        <p className="text-sm text-[#6B675A] leading-relaxed">
+        <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
           The request is in the refund queue on the Collection Center&rsquo;s Instruments tab.
           Nothing has left the school and the family&rsquo;s balance has not changed — that happens
           when somebody approves it and then pays it out.
         </p>
         {done.warning && (
-          <p className="mt-3 text-xs text-[#7A6220] bg-[#FAF3DF] border border-[#E7D9AE] p-3">
+          <p className="mt-3 text-[11px] text-[#7A6220] bg-[#FAF3DF] border border-[#E7D9AE] p-3">
             {done.warning}
           </p>
         )}
@@ -98,7 +98,7 @@ export default function RequestRefundSheet({
       <div className="space-y-3">
         {stillOwing > 0 && (
           <div className="p-3 bg-[#FAF3DF] border border-[#E7D9AE]">
-            <p className="text-xs text-[#7A6220] leading-relaxed">
+            <p className="text-[11px] text-[#7A6220] leading-relaxed">
               This family still owes {inr(stillOwing, showAmounts)} on other bills. Refunding while
               a bill is open is sometimes right — a withdrawn student owed a deposit, say — but
               check it is what you mean.
@@ -136,7 +136,7 @@ export default function RequestRefundSheet({
                     className={`${ADMIN.inputPlain} resize-none mt-1`} />
         </label>
 
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )

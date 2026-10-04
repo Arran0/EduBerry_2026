@@ -118,7 +118,7 @@ export default function StudentsSection() {
         <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
       ) : rows.length === 0 ? (
         <div className={`${ADMIN.card} py-16 text-center px-6`}>
-          <p className="text-sm text-[#6B675A] max-w-md mx-auto">
+          <p className="text-[12.5px] text-[#6B675A] max-w-md mx-auto">
             No fee profiles exist for {year?.code} yet. A profile is a student&rsquo;s account for
             the session — nothing can be billed or collected until they have one.
           </p>
@@ -145,39 +145,39 @@ export default function StudentsSection() {
               <Row key={r.id} cols={ROSTER_COLS}>
                 <span className={`${CELL.A1} flex flex-wrap items-baseline gap-x-1.5 gap-y-1`}>
                   <Link href={`/more/fees/students/${r.student_id}`}
-                        className="font-semibold sm:font-medium text-[13px] sm:text-sm text-[#18181B] hover:underline">
+                        className="font-medium text-[12.5px] text-[#18181B] hover:underline">
                     {r.full_name}
                   </Link>
                   {r.admission_no && (
-                    <span className="text-[11px] sm:text-xs text-[#8C8878]">{r.admission_no}</span>
+                    <span className="text-[11px] text-[#8C8878]">{r.admission_no}</span>
                   )}
                   {r.is_rte && (
-                    <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
                       RTE
                     </span>
                   )}
                   {!r.structure_id && !r.is_rte && (
-                    <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">
                       No structure
                     </span>
                   )}
                 </span>
-                <span className={`${CELL.A2} text-[11px] sm:text-sm text-[#8C8878] sm:text-[#6B675A] truncate`}>
+                <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
                   {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
                   {/* The group rides along with the class on a phone rather than
                       costing a line of its own. */}
                   <span className="sm:hidden">{group ? ` · ${group}` : ''}</span>
                 </span>
-                <span className={`${CELL.DESKTOP} text-sm text-[#6B675A] truncate`}>
+                <span className={`${CELL.DESKTOP} text-[12.5px] text-[#6B675A] truncate`}>
                   {group ?? '—'}
                 </span>
-                <span className={`${CELL.DESKTOP} text-right text-sm text-[#6B675A] tabular-nums`}>
+                <span className={`${CELL.DESKTOP} text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
                   {inr(r.billed, showAmounts)}
                 </span>
-                <span className={`${CELL.B2} text-[11px] sm:text-sm text-right text-[#8C8878] sm:text-[#6B675A] tabular-nums`}>
+                <span className={`${CELL.B2} text-[11px] text-right text-[#8C8878] tabular-nums`}>
                   {inr(r.paid, showAmounts)}<span className="sm:hidden"> paid</span>
                 </span>
-                <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold tabular-nums ${
+                <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
                   (r.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
                   {inr(r.outstanding, showAmounts)}
                 </span>
@@ -245,7 +245,7 @@ function CreateProfilesDialog({
   return (
     <ModalShell onClose={onClose} sharp size="md" title={`Create fee profiles for ${yearCode}`}>
       <div className="space-y-4">
-        <p className="text-sm text-[#52525B]">
+        <p className="text-[12.5px] text-[#52525B]">
           A profile is a student&rsquo;s fee account for the session. It pins the structure that
           prices them, so publishing a revised structure later cannot re-price bills already sent.
         </p>
@@ -280,7 +280,7 @@ function CreateProfilesDialog({
                 <option key={g.id} value={g.id}>{g.name}{g.is_default ? ' (default)' : ''}</option>
               ))}
             </select>
-            <p className="text-xs text-[#8C8878] mt-1.5">
+            <p className="text-[11px] text-[#8C8878] mt-1.5">
               A student already assigned to a group keeps it — a bulk run never sweeps someone out
               of RTE or Staff Ward.
             </p>
@@ -289,21 +289,21 @@ function CreateProfilesDialog({
 
         {preview && (
           <div className="bg-[#FAF8F2] border border-[#E3DFD3] p-4 space-y-1.5">
-            <p className="text-sm font-semibold text-[#18181B]">
+            <p className="text-[12.5px] font-semibold text-[#18181B]">
               Will create {preview.created} profile{preview.created === 1 ? '' : 's'}
             </p>
             {preview.skipped_existing > 0 && (
-              <p className="text-xs text-[#6B675A]">
+              <p className="text-[11px] text-[#6B675A]">
                 Skipping {preview.skipped_existing} who already have one for this session.
               </p>
             )}
             {preview.rte > 0 && (
-              <p className="text-xs text-[#6B675A]">
+              <p className="text-[11px] text-[#6B675A]">
                 {preview.rte} are RTE — they get a profile but will not be billed.
               </p>
             )}
             {preview.without_structure > 0 && (
-              <p className="text-xs text-[#7A6220] flex items-start gap-1.5">
+              <p className="text-[11px] text-[#7A6220] flex items-start gap-1.5">
                 <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
                 {preview.without_structure} have no published structure covering their class.
                 They can be created now, but nothing can be billed to them until one exists.
@@ -313,7 +313,7 @@ function CreateProfilesDialog({
         )}
 
         {error && (
-          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-sm px-4 py-3 ">{error}</div>
+          <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3 ">{error}</div>
         )}
 
         <div className="flex gap-2">

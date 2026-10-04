@@ -14,7 +14,7 @@ const PDFViewer = dynamic(
     loading: () => (
       <div className="h-full flex flex-col items-center justify-center text-slate-400">
         <div className="spinner mb-3" />
-        <p className="text-sm">Rendering preview…</p>
+        <p className="text-[12.5px]">Rendering preview…</p>
       </div>
     ),
   },
@@ -56,7 +56,7 @@ export default function StatementPreviewModal({ spec, title, onClose }: Props) {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={onDownload} disabled={downloading}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[12.5px] font-semibold px-4 py-2 transition-colors disabled:opacity-50">
               <Download size={15} /> {downloading ? 'Saving…' : 'Download'}
             </button>
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 ">

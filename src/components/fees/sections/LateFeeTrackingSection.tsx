@@ -98,7 +98,7 @@ export default function LateFeeTrackingSection({ onChanged }: { onChanged?: () =
   return (
     <>
       {error && (
-        <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>
+        <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>
       )}
 
       <ChargedList
@@ -155,18 +155,18 @@ function ChargedList({
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Late fees charged</h3>
-        <span className="text-xs text-[#6B675A]">
+        <span className="text-[11px] text-[#6B675A]">
           {live.length} charge{live.length === 1 ? '' : 's'} · {inr(total, showAmounts)}
         </span>
       </div>
       {charges.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing has been charged.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">Nothing has been charged.</p>
       ) : charges.map(c => {
         const inv = invoices.get(c.invoice_id)
         const who = inv ? names.get(inv.student_id) : undefined
         return (
           <Row key={c.id} cols={CHARGE_COLS}>
-            <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+            <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
               {who?.full_name ?? 'Student'}
             </span>
             <span className={`${CELL.A2} block text-[11px] text-[#8C8878] font-mono truncate`}>
@@ -174,23 +174,23 @@ function ChargedList({
             </span>
             <span className={CELL.B2}>
               {c.status !== 'charged' && (
-                <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                <span className="inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px]
                                  bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
                   {c.status === 'waived' ? 'Waived' : 'Recalculated'}
                 </span>
               )}
             </span>
-            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-right tabular-nums ${
               c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
               {inr(c.amount, showAmounts)}
             </span>
             {canManage && c.status === 'charged' && (
-              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
+              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center justify-end gap-1.5`}>
                 <button onClick={() => setWaiving(c)}
-                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>Waive</button>
+                        className={ADMIN.ghostBtn}>Waive</button>
                 <button onClick={() => void exempt(c.invoice_id)} disabled={busy === c.invoice_id}
                         title="Never charge this bill a late fee again"
-                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
+                        className={ADMIN.ghostBtn}>
                   <ShieldOff size={13} /> Exempt bill
                 </button>
               </span>
@@ -240,10 +240,10 @@ function FinesList({
         )}
       </div>
       {fines.length === 0 ? (
-        <p className="px-4 py-8 text-sm text-[#8C8878]">No fines this session.</p>
+        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No fines this session.</p>
       ) : fines.map(f => (
         <Row key={f.id} cols={FINE_COLS}>
-          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
             {names.get(f.student_id)?.full_name ?? 'Student'}
           </span>
           <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
@@ -251,19 +251,19 @@ function FinesList({
           </span>
           <span className={CELL.B2}>
             {f.status === 'waived' && (
-              <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+              <span className="inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px]
                                bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
                 Waived {f.waived_amount ? inr(f.waived_amount, showAmounts) : ''}
               </span>
             )}
           </span>
-          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-right tabular-nums ${
             f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
             {inr(f.amount, showAmounts)}
           </span>
           <span className={`${CELL.B3} flex justify-end`}>
             {canFine && f.status === 'applied' && (
-              <button onClick={() => setWaiving(f)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+              <button onClick={() => setWaiving(f)} className={ADMIN.ghostBtn}>
                 <Ban size={13} /> Waive
               </button>
             )}
@@ -348,7 +348,7 @@ function AddFineSheet({
       onClose={onClose} sharp size="md" title="Add a fine"
       icon={<Gavel size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1.5">
           <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
           <button onClick={() => void submit()} disabled={busy || !student || !amount}
                   className={`${ADMIN.darkBtn} px-4`}>
@@ -362,12 +362,12 @@ function AddFineSheet({
           <span className={ADMIN.label}>Student</span>
           {student ? (
             <div className="mt-1 flex items-center justify-between gap-2 bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2">
-              <span className="text-sm text-[#18181B]">
+              <span className="text-[12.5px] text-[#18181B]">
                 {student.full_name}
                 <span className="text-[#8C8878]"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
               </span>
               <button onClick={() => { setStudent(null); setAttachTo('') }}
-                      className="text-xs text-[#6B675A] hover:text-[#18181B]">Change</button>
+                      className="text-[11px] text-[#6B675A] hover:text-[#18181B]">Change</button>
             </div>
           ) : (
             <>
@@ -378,7 +378,7 @@ function AddFineSheet({
                 <div className="mt-1 border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
                   {matches.map(p => (
                     <button key={p.student_id} onClick={() => { setStudent(p); setQuery('') }}
-                            className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#FAF8F2]">
+                            className="w-full text-left px-3 py-2 text-[12.5px] text-[#18181B] hover:bg-[#FAF8F2]">
                       {p.full_name}
                       <span className="text-[#8C8878]"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
                     </button>
@@ -423,7 +423,7 @@ function AddFineSheet({
             <label className="flex items-start gap-2 p-2.5 border border-[#E3DFD3] cursor-pointer hover:bg-[#FAF8F2]">
               <input type="radio" checked={attachTo === ''} onChange={() => setAttachTo('')}
                      className="mt-0.5" />
-              <span className="text-xs text-[#18181B]">
+              <span className="text-[11px] text-[#18181B]">
                 Its own slip
                 <span className="block text-[11px] text-[#8C8878] mt-0.5">
                   A separate bill the family can pay on its own.
@@ -435,7 +435,7 @@ function AddFineSheet({
                      className="flex items-start gap-2 p-2.5 border border-[#E3DFD3] cursor-pointer hover:bg-[#FAF8F2]">
                 <input type="radio" checked={attachTo === i.id} onChange={() => setAttachTo(i.id)}
                        className="mt-0.5" />
-                <span className="text-xs text-[#18181B]">
+                <span className="text-[11px] text-[#18181B]">
                   Add to {i.number}
                   <span className="block text-[11px] text-[#8C8878] mt-0.5">
                     Due {fmtDate(i.due_date)} · {inr(i.balance, showAmounts)} still owing. The family
@@ -452,7 +452,7 @@ function AddFineSheet({
           </div>
         </div>
 
-        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-xs text-[#A93232]">{error}</div>}
+        {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
       </div>
     </ModalShell>
   )
@@ -475,12 +475,12 @@ function ReasonDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title={title}
                 icon={<Ban size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
-      <p className="text-sm text-[#6B675A] leading-relaxed">{body}</p>
+      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">{body}</p>
       <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
                 placeholder="Why — this goes on the audit trail."
                 className={`${ADMIN.inputPlain} mt-3 resize-none`} autoFocus />
-      {error && <p className="mt-2 text-xs text-[#A93232]">{error}</p>}
-      <div className="flex items-center justify-end gap-2 mt-4">
+      {error && <p className="mt-2 text-[11px] text-[#A93232]">{error}</p>}
+      <div className="flex items-center justify-end gap-1.5 mt-4">
         <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
         <button
           onClick={async () => {
