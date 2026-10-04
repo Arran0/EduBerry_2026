@@ -12,10 +12,14 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { CELL, Row } from '@/components/fees/shell'
 import {
   fetchInstruments, transitionInstrument,
   type InstrumentRow, type ProfileListRow,
 } from '@/lib/fees/invoices'
+
+/** The held-cheque list's columns on a laptop; a phone gets `Row`'s card. */
+const CHEQUE_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_104px_auto]'
 
 export default function PostDatedCheques({
   canManage, showAmounts, people,
@@ -73,46 +77,55 @@ export default function PostDatedCheques({
             No cheques or drafts are being held.
           </p>
         ) : rows.map(r => (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
-            <div className="flex-1 min-w-[180px]">
-              <div className="text-sm font-medium text-[#18181B]">{nameOf(r.student_id)}</div>
-              <div className="text-xs text-[#8C8878]">
+          <Row key={r.id} cols={CHEQUE_COLS}>
+            <span className={CELL.A1}>
+              <span className="block text-[13px] sm:text-sm font-medium text-[#18181B] truncate">
+                {nameOf(r.student_id)}
+              </span>
+              <span className="block text-[11px] sm:text-xs text-[#8C8878] truncate">
                 {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
                 {r.bank ? ` · ${r.bank}` : ''}
                 {r.is_postdated && r.present_on ? ` · present ${fmtDate(r.present_on)}` : ''}
-              </div>
-            </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-              r.status === 'deposited'
-                ? 'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]'
-                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'
-            }`}>
-              {r.status}
+              </span>
             </span>
-            <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+            <span className={CELL.B2}>
+              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+                r.status === 'deposited'
+                  ? 'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]'
+                  : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'
+              }`}>
+                {r.status}
+              </span>
+            </span>
+            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.amount, showAmounts)}
             </span>
+            {/* Deposited / Cleared / Bounced is what this screen is for, so on a
+                phone the three of them get a line of their own across the card
+                rather than a 60px column at the right edge. */}
             {canManage && (
-              <div className="flex gap-1.5">
+              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
                 {busy === r.id ? <Loader2 size={14} className="animate-spin text-[#8C8878]" /> : (
                   <>
                     {r.status === 'received' && (
-                      <button onClick={() => void move(r, 'deposited')} className={ADMIN.ghostBtn}>
+                      <button onClick={() => void move(r, 'deposited')}
+                              className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
                         Deposited
                       </button>
                     )}
-                    <button onClick={() => void move(r, 'cleared')} className={ADMIN.darkBtn}>
+                    <button onClick={() => void move(r, 'cleared')}
+                            className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
                       Cleared
                     </button>
                     <button onClick={() => setBouncing(r)}
-                            className="inline-flex items-center gap-1.5 bg-white border border-[#EFCCCC] text-[#A93232] hover:bg-[#FCECEC] text-xs font-semibold px-3 py-2 ">
+                            className="inline-flex items-center justify-center gap-1.5 bg-white border border-[#EFCCCC] text-[#A93232] hover:bg-[#FCECEC] text-xs font-semibold px-3 py-2 max-sm:flex-1">
                       Bounced
                     </button>
                   </>
                 )}
-              </div>
+              </span>
             )}
-          </div>
+          </Row>
         ))}
       </div>
 

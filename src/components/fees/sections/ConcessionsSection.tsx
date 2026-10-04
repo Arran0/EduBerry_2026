@@ -23,6 +23,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { CELL, Row } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
 import { gradeLabel } from '@/lib/grades'
@@ -38,6 +39,11 @@ import {
 
 /** The two reference lists behind a concession, each opened as a popup. */
 type Sheet = 'types' | 'scholarships'
+
+/** The three lists' columns on a laptop; a phone folds each row into a card. */
+const PENDING_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_auto]'
+const GRANTED_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_auto]'
+const TYPE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_84px_auto]'
 
 export default function ConcessionsSection() {
   const { year } = useAcademicYear()
@@ -267,39 +273,40 @@ function Queue({
           never reach this list.
         </p>
       ) : rows.map(r => (
-        <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold text-[#18181B]">
-              {names.get(r.student_id)?.full_name ?? 'Student'}
-              <span className="font-normal text-[#8C8878]">
-                {' · '}{gradeLabel(names.get(r.student_id)?.grade ?? null)}
-                {names.get(r.student_id)?.section ?? ''}
-              </span>
-            </div>
-            <div className="text-[11px] text-[#8C8878] mt-0.5">
-              {label(r, types, scholarships)}
-              {r.reason ? ` · ${r.reason}` : ''}
-              {' · asked '}{fmtDate(r.created_at.slice(0, 10))}
-            </div>
-          </div>
-          <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+        <Row key={r.id} cols={PENDING_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+            {names.get(r.student_id)?.full_name ?? 'Student'}
+            <span className="font-normal text-[#8C8878]">
+              {' · '}{gradeLabel(names.get(r.student_id)?.grade ?? null)}
+              {names.get(r.student_id)?.section ?? ''}
+            </span>
+          </span>
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+            {label(r, types, scholarships)}
+            {r.reason ? ` · ${r.reason}` : ''}
+            {' · asked '}{fmtDate(r.created_at.slice(0, 10))}
+          </span>
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
-          {canApprove ? (
-            <div className="flex items-center gap-2">
-              <button onClick={() => void decide(r, false)} disabled={busy === r.id}
-                      className={ADMIN.ghostBtn}><X size={13} /> Decline</button>
-              <button onClick={() => void decide(r, true)} disabled={busy === r.id}
-                      className={ADMIN.darkBtn}>
-                {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                Approve
-              </button>
-            </div>
-          ) : (
-            <span className="text-[11px] text-[#8C8878]">Waiting on an approver</span>
-          )}
-        </div>
+          {/* Approving or declining is the decision this list exists for, so on
+              a phone the pair gets a line across the card. */}
+          <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-2 sm:justify-end`}>
+            {canApprove ? (
+              <>
+                <button onClick={() => void decide(r, false)} disabled={busy === r.id}
+                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}><X size={13} /> Decline</button>
+                <button onClick={() => void decide(r, true)} disabled={busy === r.id}
+                        className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                  {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                  Approve
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-[#8C8878]">Waiting on an approver</span>
+            )}
+          </span>
+        </Row>
       ))}
       {canApprove && rows.length > 0 && (
         <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
@@ -335,22 +342,23 @@ function Granted({
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">No concessions granted yet.</p>
       ) : rows.map(r => (
-        <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#18181B]">{names.get(r.student_id)?.full_name ?? 'Student'}</div>
-            <div className="text-[11px] text-[#8C8878]">
-              {label(r, types, scholarships)}
-              {r.approved_at ? ` · approved ${fmtDate(r.approved_at.slice(0, 10))}` : ''}
-            </div>
-          </div>
-          <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+        <Row key={r.id} cols={GRANTED_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+            {names.get(r.student_id)?.full_name ?? 'Student'}
+          </span>
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+            {label(r, types, scholarships)}
+            {r.approved_at ? ` · approved ${fmtDate(r.approved_at.slice(0, 10))}` : ''}
+          </span>
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
-          {canRemove && (
-            <button onClick={() => onRemove(r)} className={ADMIN.ghostBtn}>Remove</button>
-          )}
-        </div>
+          <span className={`${CELL.B2} flex justify-end`}>
+            {canRemove && (
+              <button onClick={() => onRemove(r)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Remove</button>
+            )}
+          </span>
+        </Row>
       ))}
     </div>
   )
@@ -378,27 +386,32 @@ function Types({
           No discount types. Staff can still grant a one-off waiver, which always needs approval.
         </p>
       ) : rows.map(t => (
-        <div key={t.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold text-[#18181B]">{t.name}</div>
-            <p className="text-[11px] text-[#8C8878] mt-0.5">
-              {t.mode === 'percent' ? `${t.value}% off` : `${inr(t.value, showAmounts)} off`}
-              {t.scope === 'heads' ? ` · ${t.head_ids.length} head${t.head_ids.length === 1 ? '' : 's'} only` : ' · the whole bill'}
-              {t.approval_threshold !== null
-                ? ` · over ${inr(t.approval_threshold, showAmounts)} needs approval`
-                : ' · always needs approval'}
-              {t.stackable ? ' · stacks' : ''}
-            </p>
-          </div>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-            t.active
-              ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-              : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-            {t.active ? 'Active' : 'Off'}
+        <Row key={t.id} cols={TYPE_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+            {t.name}
           </span>
-          {canEdit && <button onClick={() => onEdit(t)} className={ADMIN.ghostBtn}>Edit</button>}
-        </div>
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
+            {t.mode === 'percent' ? `${t.value}% off` : `${inr(t.value, showAmounts)} off`}
+            {t.scope === 'heads' ? ` · ${t.head_ids.length} head${t.head_ids.length === 1 ? '' : 's'} only` : ' · the whole bill'}
+            {t.approval_threshold !== null
+              ? ` · over ${inr(t.approval_threshold, showAmounts)} needs approval`
+              : ' · always needs approval'}
+            {t.stackable ? ' · stacks' : ''}
+          </span>
+          <span className={CELL.B1}>
+            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+              t.active
+                ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+              {t.active ? 'Active' : 'Off'}
+            </span>
+          </span>
+          <span className={`${CELL.B2} flex justify-end`}>
+            {canEdit && (
+              <button onClick={() => onEdit(t)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Edit</button>
+            )}
+          </span>
+        </Row>
       ))}
     </div>
   )

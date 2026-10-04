@@ -178,7 +178,7 @@ export function TabBar<K extends string>({
   onChange: (key: K) => void
 }) {
   return (
-    <div className={`flex border-b border-[#E3DFD3] mb-3 overflow-x-auto no-scrollbar ${BLEED} sm:mx-0 px-3 sm:px-0`}>
+    <div className={`flex border-b border-[#E3DFD3] mb-3 overflow-x-auto scrollbar-hide ${BLEED} sm:mx-0 px-3 sm:px-0`}>
       {tabs.map(t => {
         const on = t.key === active
         const Icon = t.icon
@@ -241,3 +241,155 @@ export function Loading() {
     </div>
   )
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Row lists — a table on a laptop, a card on a phone
+//
+// Every list in this module was a `<table>` in an `overflow-x-auto` box. On a
+// laptop that is right. On a 375px phone a seven-column ledger becomes a
+// seven-column ledger you drag sideways through, and the two figures a clerk
+// needs at the same time — who this is and what they owe — are the two columns
+// furthest apart. You cannot see a name and its amount together, and the
+// Collect button is off the right edge entirely.
+//
+// So the same cells are laid out twice from one piece of markup: a 2-column
+// card on phones, the real column template from `sm` up. One copy of the row,
+// so the two layouts cannot drift apart — the only list in the module that
+// really is drawn twice is the search answer, whose columns are whatever the
+// question asked for and so cannot be folded by CSS at all.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Where a cell sits while the row is a card.
+ *
+ * `A1`–`A3` are the left column, top to bottom: who or what this row is.
+ * `B1`–`B3` are the right, right-aligned: the money and the state.
+ * `END` pins a cell to a third column beside the first two lines, which is
+ * where a trailing action button belongs.
+ *
+ * All of them are `max-sm:` so there is nothing to undo at the breakpoint —
+ * past `sm` the row's own template places the cells in source order, and two
+ * rules never fight over which wins. Spelled out as literals because Tailwind
+ * only emits CSS for class names it can read in the source.
+ */
+export const CELL = {
+  A1: 'max-sm:col-start-1 max-sm:row-start-1 min-w-0',
+  A2: 'max-sm:col-start-1 max-sm:row-start-2 min-w-0',
+  A3: 'max-sm:col-start-1 max-sm:row-start-3 min-w-0',
+  B1: 'max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end min-w-0',
+  B2: 'max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-self-end min-w-0',
+  B3: 'max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-self-end min-w-0',
+  /**
+   * `row-span-2`, not `row-span-full`: the card's rows are implicit (the cells
+   * above make them by asking for row 2), and a negative line index like
+   * `1 / -1` counts from the end of the *explicit* grid, which here has no rows
+   * at all. Two is the height of every card that carries a trailing action.
+   */
+  END: 'max-sm:col-start-3 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center max-sm:justify-self-end',
+  /** A fact worth a column on a laptop and not worth a line on a phone. */
+  DESKTOP: 'max-sm:hidden',
+} as const
+
+/**
+ * The same slots, shifted one column right, for a list whose first column is a
+ * control the row cannot do without — a selection checkbox. `PICK` is that
+ * control, pinned left beside the name it selects; `A`/`B` are the two columns
+ * beside it. Pass `lead` to `Row` to widen the phone grid for it.
+ */
+export const CELL_LEAD = {
+  PICK: 'max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center',
+  A1: 'max-sm:col-start-2 max-sm:row-start-1 min-w-0',
+  A2: 'max-sm:col-start-2 max-sm:row-start-2 min-w-0',
+  A3: 'max-sm:col-start-2 max-sm:row-start-3 min-w-0',
+  B1: 'max-sm:col-start-3 max-sm:row-start-1 max-sm:justify-self-end min-w-0',
+  B2: 'max-sm:col-start-3 max-sm:row-start-2 max-sm:justify-self-end min-w-0',
+  B3: 'max-sm:col-start-3 max-sm:row-start-3 max-sm:justify-self-end min-w-0',
+} as const
+
+/**
+ * The frame a row list sits in. Full-bleed on phones for the same reason the
+ * payroll sheet is: a ledger cannot spare 24px of gutter on a 360px screen.
+ */
+export function List({ className = '', children }: {
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`bg-white border-[#E3DFD3] ${BLEED} border-y sm:border ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The heading row. Phones do not get one: the rows there are cards, and a
+ * header would be naming columns that are not on the screen.
+ */
+export function ListHead({ cols, children }: {
+  /** The `sm:grid-cols-[…]` literal this list's rows use. */
+  cols: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`hidden sm:grid ${cols} items-center gap-x-2 gap-y-1 px-3 py-[7px]
+                     bg-[#FAF8F2] border-b border-[#E3DFD3]`}>
+      {children}
+    </div>
+  )
+}
+
+/** A column heading, in the one type size every column heading uses. */
+export function Col({ right, className = '', children }: {
+  right?: boolean
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <span className={`${LABEL} truncate ${right ? 'text-right' : ''} ${className}`}>{children}</span>
+  )
+}
+
+/**
+ * One row. Two columns and as many lines as its cells ask for on a phone; from
+ * `sm` up, whatever `cols` says.
+ *
+ * `trailing` widens the phone grid by the narrow third column `CELL.END` uses,
+ * so a row with an action button has somewhere to put it that does not cost a
+ * line.
+ */
+export function Row({ cols, trailing, lead, below, className = '', children }: {
+  cols: string
+  trailing?: boolean
+  /** The row opens with a control that keeps its own column — see `CELL_LEAD`. */
+  lead?: boolean
+  /** Full-width content under the cells — a bill's lines, a reason, a note. */
+  below?: React.ReactNode
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2] transition-colors ${className}`}>
+      <div className={`grid ${lead
+                        ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
+                        : trailing
+                        ? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+                        : 'grid-cols-[minmax(0,1fr)_auto]'} ${cols}
+                       items-center gap-x-2 gap-y-[3px] sm:gap-y-0
+                       px-3 py-2.5 sm:py-[7px]`}>
+        {children}
+      </div>
+      {below && <div className="px-3 pb-2.5 sm:pb-2 -mt-0.5">{below}</div>}
+    </div>
+  )
+}
+
+/**
+ * An icon-only button, at a size a thumb can actually hit.
+ *
+ * The module's icon buttons were `p-1.5` around a 14px glyph — a 26px target,
+ * where the guidance for touch is 44 and the honest floor is about 40. On a
+ * phone that is a print button next to a reverse-the-payment button with 3px
+ * between them, which is how the wrong one gets pressed. Phones get 38px and a
+ * laptop keeps the compact square, where a pointer makes the difference moot.
+ */
+export const TAP = 'inline-flex items-center justify-center max-sm:w-[38px] max-sm:h-[38px] p-1.5 transition-colors'

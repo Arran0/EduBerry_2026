@@ -17,7 +17,7 @@ import { CheckCircle2, Loader2, Play, Plus, Power } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip } from '@/components/fees/shell'
+import { CELL, Row, StatStrip } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import LateFeeRuleBuilder, { type ScopeOption } from '@/components/fees/charges/LateFeeRuleBuilder'
 import { gradeLabel } from '@/lib/grades'
@@ -27,6 +27,9 @@ import {
   fetchLateFeeRules, runLateFeeSweep, setLateFeeRuleEnabled,
   type LateFeeRuleRow, type SweepResult,
 } from '@/lib/fees/charges'
+
+/** The rule list's columns on a laptop; a phone folds each row into a card. */
+const RULE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_72px_auto]'
 
 export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
@@ -198,28 +201,32 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
             No late-fee rules. Bills fall overdue but nothing is charged.
           </p>
         ) : rules.map(r => (
-          <div key={r.id}
-               className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0">
-            <div className="flex-1 min-w-[200px]">
-              <div className="text-sm font-semibold text-[#18181B]">{r.name}</div>
-              <p className="text-[11px] text-[#8C8878] mt-0.5">
-                {describeRule(r)}
-                {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
-              </p>
-            </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-              r.enabled
-                ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-              {r.enabled ? 'Live' : 'Off'}
+          <Row key={r.id} cols={RULE_COLS}>
+            <span className={`${CELL.A1} block text-[13px] sm:text-sm font-semibold text-[#18181B] truncate`}>
+              {r.name}
             </span>
-            <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Edit</button>
-            <button onClick={() => void toggleRule(r)}
-                    title={r.enabled ? 'Switch off' : 'Switch on from today'}
-                    className={r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn}>
-              <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
-            </button>
-          </div>
+            <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
+              {describeRule(r)}
+              {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
+            </span>
+            <span className={CELL.B1}>
+              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+                r.enabled
+                  ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                  : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                {r.enabled ? 'Live' : 'Off'}
+              </span>
+            </span>
+            <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
+              <button onClick={() => setEditing(r)}
+                      className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>Edit</button>
+              <button onClick={() => void toggleRule(r)}
+                      title={r.enabled ? 'Switch off' : 'Switch on from today'}
+                      className={`${r.enabled ? ADMIN.ghostBtn : ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                <Power size={13} /> {r.enabled ? 'Switch off' : 'Switch on'}
+              </button>
+            </span>
+          </Row>
         ))}
         <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
           Switching a rule on always starts it from today. Days before that are never charged,

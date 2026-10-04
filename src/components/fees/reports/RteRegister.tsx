@@ -12,6 +12,7 @@ import React, { useMemo, useState } from 'react'
 import { Landmark, Loader2, Plus } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { CELL, Row } from '@/components/fees/shell'
 import { exportRows } from '@/lib/feeExports'
 import { recordRte, type RteRow } from '@/lib/fees/reports'
 
@@ -27,6 +28,9 @@ const STATE_CHIP: Record<RteRow['status'], string> = {
   reimbursed:      'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
   rejected:        'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]',
 }
+
+/** The register's columns on a laptop; a phone folds each row into a card. */
+const RTE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_124px_104px_112px_auto]'
 
 export default function RteRegister({
   rows, names, yearId, showAmounts, canManage, onChanged,
@@ -81,29 +85,32 @@ export default function RteRegister({
           Nobody on the RTE register this session.
         </p>
       ) : rows.map(r => (
-        <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[180px]">
-            <div className="text-sm text-[#18181B]">{names.get(r.student_id) ?? 'Student'}</div>
-            <div className="text-[11px] text-[#8C8878]">
-              {r.claim_period ?? 'Whole year'}
-              {r.government_ref ? ` · ${r.government_ref}` : ''}
-              {r.reimbursed_on ? ` · received ${fmtDate(r.reimbursed_on)}` : ''}
-            </div>
-          </div>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
-            {STATE_LABEL[r.status]}
+        <Row key={r.id} cols={RTE_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+            {names.get(r.student_id) ?? 'Student'}
           </span>
-          <span className="text-sm text-[#6B675A] w-24 text-right">
-            {inr(r.claimed_amount, showAmounts)}
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+            {r.claim_period ?? 'Whole year'}
+            {r.government_ref ? ` · ${r.government_ref}` : ''}
+            {r.reimbursed_on ? ` · received ${fmtDate(r.reimbursed_on)}` : ''}
           </span>
-          <span className="text-sm font-semibold text-[#1F6B42] w-24 text-right">
+          <span className={CELL.A3}>
+            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
+              {STATE_LABEL[r.status]}
+            </span>
+          </span>
+          <span className={`${CELL.B2} text-[11px] sm:text-sm text-[#6B675A] text-right tabular-nums`}>
+            {inr(r.claimed_amount, showAmounts)}<span className="sm:hidden"> claimed</span>
+          </span>
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#1F6B42] text-right tabular-nums`}>
             {inr(r.reimbursed_amount, showAmounts)}
           </span>
-          {canManage && (
-            <button onClick={() => setEditing(r)} className={ADMIN.ghostBtn}>Update</button>
-          )}
-        </div>
+          <span className={`${CELL.B3} flex justify-end`}>
+            {canManage && (
+              <button onClick={() => setEditing(r)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>Update</button>
+            )}
+          </span>
+        </Row>
       ))}
 
       {editing !== null && (

@@ -174,30 +174,53 @@ export default function FeeSearch({
               {answer.rows.length === 0 ? (
                 <p className="px-3 py-8 text-sm text-[#8C8878] text-center">Nothing matched that.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-white sticky top-0">
-                    <tr className="text-[10px] uppercase tracking-widest text-[#8C8878]">
-                      {answer.columns.map(c => (
-                        <th key={c} className="text-left px-3 py-2 font-bold border-b border-[#E3DFD3]">
-                          {c}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {answer.rows.map((row, i) => (
-                      <tr key={i} className="border-b border-[#F0ECE2] last:border-0">
+                <>
+                  {/* An answer's columns are whatever the question asked for, so
+                      there is no fixed layout to fold. On a phone each row
+                      becomes its own label-and-value list instead — the only
+                      place in the module that draws a list twice, because a
+                      table of unknown width cannot be folded by CSS alone. */}
+                  <table className="hidden sm:table w-full text-sm">
+                    <thead className="bg-white sticky top-0">
+                      <tr className="text-[10px] uppercase tracking-widest text-[#8C8878]">
                         {answer.columns.map(c => (
-                          <td key={c} className="px-3 py-1.5 text-[#18181B]">
-                            {typeof row[c] === 'number'
-                              ? row[c].toLocaleString('en-IN')
-                              : String(row[c] ?? '')}
-                          </td>
+                          <th key={c} className="text-left px-3 py-2 font-bold border-b border-[#E3DFD3]">
+                            {c}
+                          </th>
                         ))}
                       </tr>
+                    </thead>
+                    <tbody>
+                      {answer.rows.map((row, i) => (
+                        <tr key={i} className="border-b border-[#F0ECE2] last:border-0">
+                          {answer.columns.map(c => (
+                            <td key={c} className="px-3 py-1.5 text-[#18181B]">
+                              {typeof row[c] === 'number'
+                                ? row[c].toLocaleString('en-IN')
+                                : String(row[c] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <dl className="sm:hidden">
+                    {answer.rows.map((row, i) => (
+                      <div key={i} className="px-3 py-2 border-b border-[#F0ECE2] last:border-0 space-y-0.5">
+                        {answer.columns.map(c => (
+                          <div key={c} className="flex items-baseline justify-between gap-3">
+                            <dt className={ADMIN.label}>{c}</dt>
+                            <dd className="text-[12.5px] text-[#18181B] text-right tabular-nums">
+                              {typeof row[c] === 'number'
+                                ? row[c].toLocaleString('en-IN')
+                                : String(row[c] ?? '')}
+                            </dd>
+                          </div>
+                        ))}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </dl>
+                </>
               )}
             </div>
           </div>
@@ -208,13 +231,19 @@ export default function FeeSearch({
               const href = hit.student_id ? `/more/fees/students/${hit.student_id}` : '/more/fees'
               return (
                 <Link key={`${hit.kind}-${hit.id}`} href={href} onClick={onClose}
-                      className="flex items-center gap-3 px-3 py-2 border-b border-[#F0ECE2]
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] sm:flex items-center
+                                 gap-x-3 gap-y-0.5 px-3 py-2.5 sm:py-2 border-b border-[#F0ECE2]
                                  last:border-0 hover:bg-[#FAF8F2]">
-                  <Icon size={14} className="text-[#8C8878] flex-shrink-0" />
-                  <span className="text-sm text-[#18181B] flex-1 min-w-0 truncate">{hit.title}</span>
-                  <span className="text-[11px] text-[#8C8878]">{hit.subtitle}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                                   bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                  <Icon size={14} className="text-[#8C8878] flex-shrink-0 max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center" />
+                  <span className="text-[13px] sm:text-sm text-[#18181B] sm:flex-1 min-w-0 truncate max-sm:col-start-2 max-sm:row-start-1">
+                    {hit.title}
+                  </span>
+                  <span className="text-[11px] text-[#8C8878] truncate max-sm:col-start-2 max-sm:row-start-2">
+                    {hit.subtitle}
+                  </span>
+                  <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                                   bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]
+                                   max-sm:col-start-3 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center whitespace-nowrap">
                     {KIND_LABEL[hit.kind]}
                   </span>
                 </Link>

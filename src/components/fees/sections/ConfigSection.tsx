@@ -19,6 +19,7 @@ import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, STRUCTURE_CHIP, fmtDate, inr } from '@/components/fees/ui'
 import GroupRoster from '@/components/fees/config/GroupRoster'
+import { CELL, Col, List, ListHead, Row, TAP } from '@/components/fees/shell'
 import ModalShell from '@/components/ui/ModalShell'
 import { gradeLabel } from '@/lib/grades'
 import {
@@ -27,6 +28,9 @@ import {
   setAutogen, setStructureItem, setStructureStatus,
   type CloneResult, type FeeConfigBundle,
 } from '@/lib/fees/config'
+
+/** The fee-head list's columns on a laptop; a phone gets `Row`'s card. */
+const HEAD_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,120px)_minmax(0,160px)_88px_auto]'
 
 /** The two lists the price list is built from, each opened as a popup. */
 type Sheet = 'heads' | 'groups'
@@ -259,51 +263,47 @@ function HeadsSection({
 
   return (
     <div className="space-y-3">
-      <div className={`${ADMIN.card} overflow-hidden`}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Head</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Code</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Category</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Tax</th>
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {bundle.heads.map(h => (
-              <tr key={h.id} className="border-b border-[#F0ECE2] last:border-0">
-                <td className="px-4 py-2.5 font-medium text-[#18181B]">
-                  {h.name}
-                  {h.is_transport && (
-                    <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F4F1E7] text-[#6B675A]">
-                      Transport
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 font-mono text-xs text-[#6B675A]">{h.code}</td>
-                <td className="px-4 py-2.5 text-[#6B675A]">{catName(h.category_id)}</td>
-                <td className="px-4 py-2.5 text-right text-[#6B675A]">
-                  {Number(h.tax_rate) ? `${h.tax_rate}%` : '—'}
-                </td>
-                <td className="px-2">
-                  {canEdit && (
-                    <button onClick={() => void remove(h.id)}
-                            className="p-1.5 text-[#C9C4B4] hover:text-[#A93232] transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {bundle.heads.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-[#8C8878]">
-                No fee heads yet. Add Tuition first — everything else prices against it.
-              </td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <List>
+        <ListHead cols={HEAD_COLS}>
+          <Col>Head</Col><Col>Code</Col><Col>Category</Col><Col right>Tax</Col><Col>&nbsp;</Col>
+        </ListHead>
+        {bundle.heads.map(h => (
+          <Row key={h.id} cols={HEAD_COLS} trailing>
+            <span className={`${CELL.A1} flex items-baseline gap-1.5 min-w-0`}>
+              <span className="font-semibold sm:font-medium text-[13px] sm:text-sm text-[#18181B] truncate">
+                {h.name}
+              </span>
+              {h.is_transport && (
+                <span className="flex-shrink-0 text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F4F1E7] text-[#6B675A]">
+                  Transport
+                </span>
+              )}
+            </span>
+            <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-xs text-[#6B675A] truncate`}>
+              {h.code}
+            </span>
+            <span className={`${CELL.B2} text-[11px] sm:text-sm text-[#6B675A] truncate`}>
+              {catName(h.category_id)}
+            </span>
+            <span className={`${CELL.B1} text-[11px] sm:text-sm text-right text-[#6B675A] tabular-nums`}>
+              {Number(h.tax_rate) ? `${h.tax_rate}% tax` : '—'}
+            </span>
+            <span className={CELL.END}>
+              {canEdit && (
+                <button onClick={() => void remove(h.id)} aria-label={`Remove ${h.name}`}
+                        className={`${TAP} text-[#C9C4B4] hover:text-[#A93232]`}>
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </span>
+          </Row>
+        ))}
+        {bundle.heads.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-[#8C8878]">
+            No fee heads yet. Add Tuition first — everything else prices against it.
+          </p>
+        )}
+      </List>
 
       {canEdit && (adding ? (
         <div className={`${ADMIN.card} p-4 space-y-3`}>

@@ -15,7 +15,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, inr } from '@/components/fees/ui'
-import { StatStrip } from '@/components/fees/shell'
+import { CELL, Col, List, ListHead, Row, StatStrip } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +23,13 @@ import { fetchFeeConfig, type FeeGroupRow } from '@/lib/fees/config'
 import {
   createProfiles, fetchProfileList, type CreateProfilesResult, type ProfileListRow,
 } from '@/lib/fees/invoices'
+
+/**
+ * The roster's columns on a laptop. On a phone the billed figure and the fee
+ * group step aside — a name, a class and what is still owed is what the list is
+ * for, and the rest is one tap away on the student's own page.
+ */
+const ROSTER_COLS = 'sm:grid-cols-[minmax(0,1fr)_84px_minmax(0,132px)_100px_100px_104px]'
 
 export default function StudentsSection() {
   const { year } = useAcademicYear()
@@ -122,55 +129,62 @@ export default function StudentsSection() {
           )}
         </div>
       ) : (
-        <div className={`${ADMIN.card} overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
-                  <Th>Student</Th><Th>Class</Th><Th>Group</Th>
-                  <Th right>Billed</Th><Th right>Paid</Th><Th right>Due</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(r => (
-                  <tr key={r.id} className="border-b border-[#F0ECE2] last:border-0 hover:bg-[#FAF8F2]">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/more/fees/students/${r.student_id}`}
-                            className="font-medium text-[#18181B] hover:underline">
-                        {r.full_name}
-                      </Link>
-                      {r.admission_no && (
-                        <span className="text-xs text-[#8C8878] ml-2">{r.admission_no}</span>
-                      )}
-                      {r.is_rte && (
-                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
-                          RTE
-                        </span>
-                      )}
-                      {!r.structure_id && !r.is_rte && (
-                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">
-                          No structure
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-[#6B675A]">
-                      {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
-                    </td>
-                    <td className="px-4 py-2.5 text-[#6B675A]">
-                      {groups.find(g => g.id === r.fee_group_id)?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(r.billed, showAmounts)}</td>
-                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(r.paid, showAmounts)}</td>
-                    <td className={`px-4 py-2.5 text-right font-semibold ${
-                      (r.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
-                      {inr(r.outstanding, showAmounts)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <List>
+          <ListHead cols={ROSTER_COLS}>
+            <Col>Student</Col>
+            <Col>Class</Col>
+            <Col>Group</Col>
+            <Col right>Billed</Col>
+            <Col right>Paid</Col>
+            <Col right>Due</Col>
+          </ListHead>
+
+          {filtered.map(r => {
+            const group = groups.find(g => g.id === r.fee_group_id)?.name
+            return (
+              <Row key={r.id} cols={ROSTER_COLS}>
+                <span className={`${CELL.A1} flex flex-wrap items-baseline gap-x-1.5 gap-y-1`}>
+                  <Link href={`/more/fees/students/${r.student_id}`}
+                        className="font-semibold sm:font-medium text-[13px] sm:text-sm text-[#18181B] hover:underline">
+                    {r.full_name}
+                  </Link>
+                  {r.admission_no && (
+                    <span className="text-[11px] sm:text-xs text-[#8C8878]">{r.admission_no}</span>
+                  )}
+                  {r.is_rte && (
+                    <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
+                      RTE
+                    </span>
+                  )}
+                  {!r.structure_id && !r.is_rte && (
+                    <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">
+                      No structure
+                    </span>
+                  )}
+                </span>
+                <span className={`${CELL.A2} text-[11px] sm:text-sm text-[#8C8878] sm:text-[#6B675A] truncate`}>
+                  {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
+                  {/* The group rides along with the class on a phone rather than
+                      costing a line of its own. */}
+                  <span className="sm:hidden">{group ? ` · ${group}` : ''}</span>
+                </span>
+                <span className={`${CELL.DESKTOP} text-sm text-[#6B675A] truncate`}>
+                  {group ?? '—'}
+                </span>
+                <span className={`${CELL.DESKTOP} text-right text-sm text-[#6B675A] tabular-nums`}>
+                  {inr(r.billed, showAmounts)}
+                </span>
+                <span className={`${CELL.B2} text-[11px] sm:text-sm text-right text-[#8C8878] sm:text-[#6B675A] tabular-nums`}>
+                  {inr(r.paid, showAmounts)}<span className="sm:hidden"> paid</span>
+                </span>
+                <span className={`${CELL.B1} text-[14px] sm:text-sm text-right font-semibold tabular-nums ${
+                  (r.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
+                  {inr(r.outstanding, showAmounts)}
+                </span>
+              </Row>
+            )
+          })}
+        </List>
       )}
 
 
@@ -184,15 +198,6 @@ export default function StudentsSection() {
         />
       )}
     </>
-  )
-}
-
-function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
-  return (
-    <th className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A] ${
-      right ? 'text-right' : 'text-left'}`}>
-      {children}
-    </th>
   )
 }
 

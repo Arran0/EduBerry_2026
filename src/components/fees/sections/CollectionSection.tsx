@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import FeeToolModal from '@/components/fees/FeeToolModal'
+import { CELL, Col, List, ListHead, Row, TAP } from '@/components/fees/shell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
@@ -46,6 +47,17 @@ import {
 } from '@/lib/fees/invoices'
 
 export type LedgerFilter = InvoiceStatus | 'all'
+
+/**
+ * The ledger's columns, on a screen wide enough to have columns. Phones get the
+ * two-column card `Row` falls back to, so the name and the balance sit on the
+ * same line instead of at opposite ends of a sideways scroll.
+ */
+const LEDGER_COLS = 'sm:grid-cols-[minmax(88px,116px)_minmax(0,1fr)_100px_104px_92px_96px_minmax(0,auto)]'
+
+/** The counter's two lists: a bill, and a receipt taken against one. */
+const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_120px_104px_104px_auto]'
+const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,160px)_112px_104px_auto]'
 
 const FILTERS: { key: LedgerFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -242,24 +254,47 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </button>
           )}
         </div>
+        {/* Six chips on a laptop; the same six as one native picker on a
+            phone, where they wrapped to a second and third line and pushed
+            the ledger itself off the bottom of the screen. The picker is also
+            the control a phone is best at — it opens a full-height wheel
+            rather than asking for a 70px tap. */}
         {!selected && (
-          <div className="flex gap-1 flex-wrap">
-            {FILTERS.map(f => (
-              <button key={f.key} onClick={() => onFilterChange(f.key)}
-                      className={filter === f.key
-                        ? 'px-2.5 py-1.5 text-xs font-semibold bg-[#27272A] text-white'
-                        : 'px-2.5 py-1.5 text-xs font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="max-sm:hidden flex gap-1 flex-wrap">
+              {FILTERS.map(f => (
+                <button key={f.key} onClick={() => onFilterChange(f.key)}
+                        className={filter === f.key
+                          ? 'px-2.5 py-1.5 text-xs font-semibold bg-[#27272A] text-white'
+                          : 'px-2.5 py-1.5 text-xs font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <select value={filter} aria-label="Which bills to show"
+                    onChange={e => onFilterChange(e.target.value as LedgerFilter)}
+                    className={`sm:hidden flex-shrink-0 bg-white border px-2.5 py-[7px] text-[12.5px]
+                                font-semibold text-[#18181B] focus:outline-none ${
+                      filter === 'all' ? 'border-[#E3DFD3]' : 'border-[#27272A]'}`}>
+              {FILTERS.map(f => (
+                <option key={f.key} value={f.key}>
+                  {f.key === 'all' ? 'All bills' : f.label}
+                </option>
+              ))}
+            </select>
+          </>
         )}
         {perms.can('fees.invoice.generate') && (
-          <button onClick={() => setGenerating(true)} className={ADMIN.ghostBtn}>
-            <Sparkles size={13} /> Generate bills
+          <button onClick={() => setGenerating(true)}
+                  className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+            <Sparkles size={13} />
+            {/* "Generate bills" and "Cheques" beside a search field do not fit
+                on a 360px row. The icons carry the short form. */}
+            <span className="sm:hidden">Generate</span>
+            <span className="max-sm:hidden">Generate bills</span>
           </button>
         )}
-        <button onClick={() => setCheques(true)} className={ADMIN.ghostBtn}>
+        <button onClick={() => setCheques(true)} className={`${ADMIN.ghostBtn} max-sm:py-2`}>
           <Clock size={13} /> Cheques
         </button>
       </div>
@@ -271,22 +306,30 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             <span className={ADMIN.label}>Students</span>
           </div>
           <div className="divide-y divide-[#F0ECE2]">
+            {/* The whole row is the button, so a phone does not need the
+                "Open counter" affordance spelled out beside the name — it is a
+                third line there, under a name and an amount that already say
+                what the row is. */}
             {peopleMatches.map(p => (
               <button key={p.id} onClick={() => void openStudent(p)}
-                      className="w-full flex flex-wrap items-center gap-3 text-left px-3 py-2 hover:bg-[#FAF8F2]">
-                <span className="text-sm text-[#18181B] flex-1 min-w-[160px]">
-                  {p.full_name}
-                  <span className="text-[#8C8878]">
-                    {' · '}{p.grade === null ? '—' : gradeLabel(p.grade)}{p.section ?? ''}
+                      className="w-full grid grid-cols-[minmax(0,1fr)_auto] sm:flex sm:flex-wrap
+                                 items-center gap-x-3 gap-y-0.5 text-left px-3 py-2.5 sm:py-2
+                                 hover:bg-[#FAF8F2]">
+                <span className="text-[13px] sm:text-sm text-[#18181B] sm:flex-1 sm:min-w-[160px] min-w-0">
+                  <span className="font-semibold sm:font-normal">{p.full_name}</span>
+                  <span className="block sm:inline text-[11px] sm:text-sm text-[#8C8878] truncate">
+                    <span className="max-sm:hidden">{' · '}</span>
+                    {p.grade === null ? '—' : gradeLabel(p.grade)}{p.section ?? ''}
                     {p.admission_no ? ` · ${p.admission_no}` : ''}
                   </span>
                 </span>
                 {(p.outstanding ?? 0) > 0 && (
-                  <span className="text-sm font-semibold text-[#7A6220]">
+                  <span className="text-[13px] sm:text-sm font-semibold text-[#7A6220] tabular-nums
+                                   max-sm:row-start-1 max-sm:col-start-2 max-sm:justify-self-end">
                     {inr(p.outstanding, showAmounts)} due
                   </span>
                 )}
-                <span className={ADMIN.ghostBtn}><Receipt size={13} /> Open counter</span>
+                <span className={`${ADMIN.ghostBtn} max-sm:hidden`}><Receipt size={13} /> Open counter</span>
               </button>
             ))}
           </div>
@@ -310,20 +353,28 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </div>
           ) : (
             <>
-              <div className={`${ADMIN.card} p-4`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-bold text-[#18181B]">{selected.full_name}</h2>
-                    <p className="text-xs text-[#8C8878]">
+              {/* On a laptop this is one row: who, what they owe, and the
+                  button. A phone stacks it — the figure gets its own line with
+                  the label beside it, and Collect spans the width, because it
+                  is the one thing being pressed with a parent standing there
+                  and a 96px button in the middle of a wrapped row is not it. */}
+              <div className={`${ADMIN.card} p-3 sm:p-4`}>
+                <div className="flex flex-wrap items-center justify-between gap-y-2 sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-[15px] sm:text-base font-bold text-[#18181B] truncate">
+                      {selected.full_name}
+                    </h2>
+                    <p className="text-xs text-[#8C8878] truncate">
                       {selected.grade === null ? '—' : gradeLabel(selected.grade)}
                       {selected.section ? ` ${selected.section}` : ''}
                       {selected.admission_no ? ` · ${selected.admission_no}` : ''}
                       {selected.is_rte ? ' · RTE' : ''}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="max-sm:w-full max-sm:flex max-sm:items-baseline max-sm:justify-between
+                                  max-sm:border-t max-sm:border-[#F0ECE2] max-sm:pt-2 sm:text-right">
                     <div className={ADMIN.label}>Outstanding</div>
-                    <div className="text-xl font-bold text-[#18181B]">
+                    <div className="text-xl font-bold text-[#18181B] tabular-nums">
                       {inr(selected.outstanding, showAmounts)}
                     </div>
                   </div>
@@ -331,7 +382,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
                     <button
                       onClick={() => setCollecting(true)}
                       disabled={outstanding.length === 0 && !rules.allow_overpayment}
-                      className={`${ADMIN.darkBtn} px-4 py-2.5`}
+                      className={`${ADMIN.darkBtn} px-4 py-2.5 max-sm:w-full max-sm:py-3 max-sm:text-[11.5px]`}
                     >
                       <Receipt size={14} /> Collect
                     </button>
@@ -345,67 +396,88 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
 
               <Panel title="Unpaid bills" empty="Nothing outstanding — this family is fully paid up.">
                 {outstanding.map(i => (
-                  <div key={i.id} className="flex flex-wrap items-center gap-3 py-2.5 px-3 border-b border-[#F0ECE2] last:border-0">
-                    <span className="font-mono text-xs text-[#6B675A] flex-1 min-w-[150px]">{i.number}</span>
-                    <span className="text-xs text-[#8C8878]">due {fmtDate(i.due_date)}</span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
-                      {INVOICE_LABEL[i.status]}
+                  <Row key={i.id} cols={BILL_COLS} trailing>
+                    <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
+                      {i.number}
                     </span>
-                    <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+                    <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] whitespace-nowrap`}>
+                      due {fmtDate(i.due_date)}
+                    </span>
+                    <span className={CELL.B2}>
+                      <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                        {INVOICE_LABEL[i.status]}
+                      </span>
+                    </span>
+                    <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
                       {inr(i.balance, showAmounts)}
                     </span>
-                    {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
-                      <button onClick={() => setCancelling(i)} title="Cancel this bill"
-                              className="p-1.5 text-[#C9C4B4] hover:text-[#A93232]">
-                        <Ban size={13} />
-                      </button>
-                    )}
-                  </div>
+                    <span className={CELL.END}>
+                      {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
+                        <button onClick={() => setCancelling(i)} title="Cancel this bill"
+                                aria-label="Cancel this bill"
+                                className={`${TAP} text-[#C9C4B4] hover:text-[#A93232]`}>
+                          <Ban size={13} />
+                        </button>
+                      )}
+                    </span>
+                  </Row>
                 ))}
               </Panel>
 
               <Panel title="Receipts" empty="No payments taken yet this session.">
                 {payments.map(p => (
-                  <div key={p.id} className="flex flex-wrap items-center gap-3 py-2.5 px-3 border-b border-[#F0ECE2] last:border-0">
-                    <span className="font-mono text-xs text-[#6B675A] flex-1 min-w-[150px]">
+                  <Row key={p.id} cols={RECEIPT_COLS} trailing>
+                    <span className={`${CELL.A1} font-mono text-[11.5px] sm:text-xs text-[#6B675A] truncate`}>
                       {p.receipt_no ?? '—'}
                     </span>
-                    <span className="text-xs text-[#8C8878]">{fmtDate(p.paid_on)} · {p.method}</span>
-                    {p.status !== 'verified' && (
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                        p.status === 'reversed'
-                          ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
-                          : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
-                      }`}>
-                        {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
-                      </span>
-                    )}
-                    <span className={`text-sm font-semibold w-24 text-right ${
+                    <span className={`${CELL.A2} text-[11px] sm:text-xs text-[#8C8878] truncate`}>
+                      {fmtDate(p.paid_on)} · {p.method}
+                    </span>
+                    <span className={CELL.B2}>
+                      {p.status !== 'verified' && (
+                        <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${
+                          p.status === 'reversed'
+                            ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
+                            : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
+                        }`}>
+                          {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
                       p.status === 'reversed' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
                       {inr(p.amount, showAmounts)}
                     </span>
-                    {perms.can('fees.receipt.print') && (
-                      <>
-                        <button onClick={() => void printReceipt(p, true)}
-                                title="Print on the thermal printer"
-                                className="p-1.5 text-[#8C8878] hover:text-[#18181B]">
-                          <Printer size={14} />
+                    {/* Print, download and reverse were three 26px squares with
+                        3px between them. On a phone that is how a payment gets
+                        reversed by someone reaching for the printer. */}
+                    <span className={`${CELL.END} flex items-center gap-0.5 sm:gap-1`}>
+                      {perms.can('fees.receipt.print') && (
+                        <>
+                          <button onClick={() => void printReceipt(p, true)}
+                                  title="Print on the thermal printer"
+                                  aria-label="Print on the thermal printer"
+                                  className={`${TAP} text-[#8C8878] hover:text-[#18181B]`}>
+                            <Printer size={14} />
+                          </button>
+                          <button onClick={() => void printReceipt(p, false)}
+                                  title="Download the A4 receipt"
+                                  aria-label="Download the A4 receipt"
+                                  className={`${TAP} text-[#8C8878] hover:text-[#18181B]`}>
+                            <FileText size={14} />
+                          </button>
+                        </>
+                      )}
+                      {perms.can('fees.payment.reverse') && p.status === 'verified' && (
+                        <button onClick={() => setReversing(p)}
+                                title="Reverse this payment"
+                                aria-label="Reverse this payment"
+                                className={`${TAP} text-[#8C8878] hover:text-[#A93232]`}>
+                          <RotateCcw size={14} />
                         </button>
-                        <button onClick={() => void printReceipt(p, false)}
-                                title="Download the A4 receipt"
-                                className="p-1.5 text-[#8C8878] hover:text-[#18181B]">
-                          <FileText size={14} />
-                        </button>
-                      </>
-                    )}
-                    {perms.can('fees.payment.reverse') && p.status === 'verified' && (
-                      <button onClick={() => setReversing(p)}
-                              title="Reverse this payment"
-                              className="p-1.5 text-[#8C8878] hover:text-[#A93232]">
-                        <RotateCcw size={14} />
-                      </button>
-                    )}
-                  </div>
+                      )}
+                    </span>
+                  </Row>
                 ))}
               </Panel>
             </>
@@ -419,69 +491,73 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
           </p>
         </div>
       ) : (
-        <div className={`${ADMIN.card} overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#FAF8F2] border-b border-[#E3DFD3]">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Bill</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Student</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Due</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Status</th>
-                  <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Total</th>
-                  <th className="text-right px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#6B675A]">Owing</th>
-                  <th className="w-28" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, 300).map(i => (
-                  <tr key={i.id} className="border-b border-[#F0ECE2] last:border-0 hover:bg-[#FAF8F2]">
-                    <td className="px-4 py-2.5 font-mono text-xs text-[#6B675A]">{i.number}</td>
-                    <td className="px-4 py-2.5">
-                      <button onClick={() => openStudentById(i.student_id)}
-                              className="text-[#18181B] hover:underline text-left">
-                        {nameOf(i.student_id)}
-                      </button>
-                    </td>
-                    <td className="px-4 py-2.5 text-[#6B675A]">{fmtDate(i.due_date)}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
-                        {INVOICE_LABEL[i.status]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[#6B675A]">{inr(i.net, showAmounts)}</td>
-                    <td className={`px-4 py-2.5 text-right font-semibold ${
-                      (i.balance ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
-                      {inr(i.balance, showAmounts)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {canCollect && (i.balance ?? 0) > 0 && i.status !== 'cancelled' && (
-                          <button onClick={() => openStudentById(i.student_id)}
-                                  title="Take a payment against this bill"
-                                  className={ADMIN.ghostBtn}>
-                            <Receipt size={13} /> Collect
-                          </button>
-                        )}
-                        {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
-                          <button onClick={() => setCancelling(i)} title="Cancel this bill"
-                                  className="p-1.5 text-[#C9C4B4] hover:text-[#A93232]">
-                            <Ban size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <List>
+          <ListHead cols={LEDGER_COLS}>
+            <Col>Bill</Col>
+            <Col>Student</Col>
+            <Col>Due</Col>
+            <Col>Status</Col>
+            <Col right>Total</Col>
+            <Col right>Owing</Col>
+            <Col right>&nbsp;</Col>
+          </ListHead>
+
+          {/* Two lines on a phone, not three. The ledger is scrolled through,
+              so every line a row costs is a family the clerk cannot see: the
+              name and what they owe on the first, the bill number and its state
+              on the second, Collect down the right. The due date and the bill's
+              full total are a column on a laptop and nothing here — the chip
+              already says whether this one is late, and the figure that matters
+              at a counter is the one about to be taken. */}
+          {filtered.slice(0, 300).map(i => (
+            <Row key={i.id} cols={LEDGER_COLS} trailing>
+              <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-xs text-[#8C8878] sm:text-[#6B675A] truncate`}>
+                {i.number}
+              </span>
+              <button onClick={() => openStudentById(i.student_id)}
+                      className={`${CELL.A1} text-left truncate text-[13px] font-semibold sm:text-sm sm:font-normal
+                                  text-[#18181B] hover:underline`}>
+                {nameOf(i.student_id)}
+              </button>
+              <span className={`${CELL.DESKTOP} text-sm text-[#6B675A] whitespace-nowrap`}>
+                {fmtDate(i.due_date)}
+              </span>
+              <span className={CELL.B2}>
+                <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded ${INVOICE_CHIP[i.status]}`}>
+                  {INVOICE_LABEL[i.status]}
+                </span>
+              </span>
+              <span className={`${CELL.DESKTOP} text-right text-sm text-[#6B675A] tabular-nums`}>
+                {inr(i.net, showAmounts)}
+              </span>
+              <span className={`${CELL.B1} text-right text-[14px] sm:text-sm font-semibold tabular-nums ${
+                (i.balance ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
+                {inr(i.balance, showAmounts)}
+              </span>
+              <span className={`${CELL.END} flex items-center gap-0.5 sm:gap-1 sm:justify-end`}>
+                {canCollect && (i.balance ?? 0) > 0 && i.status !== 'cancelled' && (
+                  <button onClick={() => openStudentById(i.student_id)}
+                          title="Take a payment against this bill"
+                          className={`${ADMIN.ghostBtn} max-sm:py-2`}>
+                    <Receipt size={13} /> Collect
+                  </button>
+                )}
+                {perms.can('fees.invoice.cancel') && i.status !== 'cancelled' && (i.paid ?? 0) === 0 && (
+                  <button onClick={() => setCancelling(i)} title="Cancel this bill"
+                          aria-label="Cancel this bill"
+                          className={`${TAP} text-[#C9C4B4] hover:text-[#A93232]`}>
+                    <Ban size={13} />
+                  </button>
+                )}
+              </span>
+            </Row>
+          ))}
           {filtered.length > 300 && (
             <p className="px-4 py-3 text-xs text-[#8C8878] border-t border-[#F0ECE2]">
               Showing the first 300 of {filtered.length}. Narrow the search to see the rest.
             </p>
           )}
-        </div>
+        </List>
       )}
 
       {/* ── Popups ──────────────────────────────────────────────────────── */}

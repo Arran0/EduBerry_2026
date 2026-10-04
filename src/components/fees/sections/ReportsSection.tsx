@@ -26,7 +26,7 @@ import {
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip, Notice } from '@/components/fees/shell'
+import { CELL, Notice, Row, StatStrip } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import FeeSearch from '@/components/fees/reports/FeeSearch'
 import RefundQueue from '@/components/fees/reports/RefundQueue'
@@ -46,6 +46,16 @@ import {
   type DefaulterClassRow, type InstrumentPipelineRow, type RefundRow, type RteRow,
   type StaffCollectionRow, type YearSummaryRow,
 } from '@/lib/fees/reports'
+
+/**
+ * The report lists, column by column once there is room for columns. On a phone
+ * each row folds into a card: what it is on the left, the figure on the right.
+ */
+const CLASS_COLS = 'sm:grid-cols-[72px_minmax(0,1fr)_120px_auto]'
+const STAFF_COLS = 'sm:grid-cols-[minmax(0,1fr)_110px_100px_120px_124px]'
+const PIPELINE_COLS = 'sm:grid-cols-[132px_112px_minmax(0,1fr)_120px]'
+const GIVEN_COLS = 'sm:grid-cols-[132px_minmax(0,1fr)_120px]'
+const AUDIT_COLS = 'sm:grid-cols-[minmax(0,176px)_minmax(0,1fr)_minmax(0,140px)_136px_104px]'
 
 export default function ReportsSection() {
   const { year, years } = useAcademicYear()
@@ -469,27 +479,28 @@ function ClassTable({
       ) : sorted.map(r => {
         const key = `${r.grade}-${r.section}`
         return (
-          <div key={key}
-               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-            <span className="text-sm font-semibold text-[#18181B] w-16">
+          <Row key={key} cols={CLASS_COLS}>
+            <span className={`${CELL.A1} text-[13px] sm:text-sm font-semibold text-[#18181B]`}>
               {gradeLabel(r.grade)}{r.section ?? ''}
             </span>
-            <span className="text-[11px] text-[#8C8878] flex-1">
+            <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
               {r.students_owing} student{r.students_owing === 1 ? '' : 's'} · {r.bills} bills
               {r.worst_days_late !== null && r.worst_days_late > 0
                 ? ` · worst ${r.worst_days_late} days late` : ''}
             </span>
-            <span className="text-sm font-semibold text-[#18181B] w-28 text-right">
+            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.outstanding, showAmounts)}
             </span>
-            {canRemind && (
-              <button onClick={() => void onRemind(r)} disabled={reminding === key}
-                      className={ADMIN.ghostBtn}>
-                {reminding === key ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                Remind all
-              </button>
-            )}
-          </div>
+            <span className={`${CELL.B2} flex justify-end`}>
+              {canRemind && (
+                <button onClick={() => void onRemind(r)} disabled={reminding === key}
+                        className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+                  {reminding === key ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  Remind all
+                </button>
+              )}
+            </span>
+          </Row>
         )
       })}
     </div>
@@ -517,22 +528,28 @@ function Pipeline({ rows, showAmounts }: { rows: InstrumentPipelineRow[]; showAm
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">No cheques or drafts this session.</p>
       ) : rows.map((r, i) => (
-        <div key={`${r.kind}-${r.status}-${i}`}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <span className="text-sm text-[#18181B] w-32 capitalize">
+        <Row key={`${r.kind}-${r.status}-${i}`} cols={PIPELINE_COLS}>
+          <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] capitalize truncate`}>
             {r.kind === 'dd' ? 'Demand draft' : 'Cheque'}
           </span>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${
-            r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
-              : r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-              : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-            {INSTRUMENT_STATE[r.status] ?? r.status}
+          <span className={CELL.B2}>
+            <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${
+              r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
+                : r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
+                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+              {INSTRUMENT_STATE[r.status] ?? r.status}
+            </span>
           </span>
-          <span className="text-[11px] text-[#8C8878] flex-1">{r.instruments}</span>
-          <span className="text-sm font-semibold text-[#18181B] w-28 text-right">
+          <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
+            {r.instruments}{' '}
+            <span className="sm:hidden">
+              {r.instruments === 1 ? 'instrument' : 'instruments'}
+            </span>
+          </span>
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
-        </div>
+        </Row>
       ))}
     </div>
   )
@@ -550,23 +567,30 @@ function StaffTable({ rows, showAmounts }: { rows: StaffCollectionRow[]; showAmo
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing collected yet.</p>
       ) : rows.map((r, i) => (
-        <div key={`${r.staff_id}-${r.month}-${i}`}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <span className="text-sm text-[#18181B] flex-1 min-w-[140px]">
+        <Row key={`${r.staff_id}-${r.month}-${i}`} cols={STAFF_COLS}>
+          <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] truncate`}>
             {r.staff_name ?? 'Not recorded'}
           </span>
-          <span className="text-[11px] text-[#8C8878]">{fmtDate(r.month)}</span>
-          <span className="text-[11px] text-[#8C8878]">{r.receipts} receipts</span>
-          {r.reversed > 0 && (
-            <span className="text-[11px] text-[#A93232]">{r.reversed} reversed</span>
-          )}
-          <span className="text-sm text-[#6B675A] w-24 text-right">
+          <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
+            {fmtDate(r.month)}
+            <span className="sm:hidden"> · {r.receipts} receipts</span>
+            {r.reversed > 0 && (
+              <span className="text-[#A93232] sm:hidden"> · {r.reversed} reversed</span>
+            )}
+          </span>
+          <span className={`${CELL.DESKTOP} text-[11px] text-[#8C8878]`}>
+            {r.receipts} receipts
+            {r.reversed > 0 && (
+              <span className="text-[#A93232]"> · {r.reversed} reversed</span>
+            )}
+          </span>
+          <span className={`${CELL.B2} text-[11px] sm:text-sm text-right text-[#6B675A] tabular-nums`}>
             cash {inr(r.cash, showAmounts)}
           </span>
-          <span className="text-sm font-semibold text-[#18181B] w-28 text-right">
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
             {inr(r.collected, showAmounts)}
           </span>
-        </div>
+        </Row>
       ))}
     </div>
   )
@@ -586,16 +610,17 @@ function ConcessionTable({
         {rows.length === 0 ? (
           <p className="px-4 py-8 text-sm text-[#8C8878]">No concessions this session.</p>
         ) : rows.map(r => (
-          <div key={r.kind}
-               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-            <span className="text-sm text-[#18181B] w-32 capitalize">{r.kind}</span>
-            <span className="text-[11px] text-[#8C8878] flex-1">
+          <Row key={r.kind} cols={GIVEN_COLS}>
+            <span className={`${CELL.A1} text-[12.5px] sm:text-sm text-[#18181B] capitalize truncate`}>
+              {r.kind}
+            </span>
+            <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
               {r.grants} grant{r.grants === 1 ? '' : 's'} to {r.students} student{r.students === 1 ? '' : 's'}
             </span>
-            <span className="text-sm font-semibold text-[#1F6B42] w-28 text-right">
+            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#1F6B42] text-right tabular-nums`}>
               {inr(r.given_up, showAmounts)}
             </span>
-          </div>
+          </Row>
         ))}
       </div>
 
@@ -713,23 +738,24 @@ function AuditTrail({
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">Nothing recorded yet this session.</p>
       ) : rows.map(r => (
-        <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-[#F0ECE2] last:border-0">
-          <span className="font-mono text-[11px] text-[#6B675A] w-44">{r.action}</span>
-          <span className="text-xs text-[#18181B] flex-1 min-w-[140px]">
+        <Row key={r.id} cols={AUDIT_COLS}>
+          <span className={`${CELL.A2} font-mono text-[10.5px] sm:text-[11px] text-[#6B675A] truncate`}>
+            {r.action}
+          </span>
+          <span className={`${CELL.A1} text-[12px] sm:text-xs text-[#18181B] truncate`}>
             {r.student_id ? names.get(r.student_id) ?? 'Student' : '—'}
             {r.reason && <span className="text-[#8C8878]"> · {r.reason}</span>}
           </span>
-          <span className="text-[11px] text-[#8C8878]">
+          <span className={`${CELL.A3} text-[11px] text-[#8C8878] truncate`}>
             {names.get(r.actor_id ?? '') ?? (r.actor_id ? 'Staff' : 'The system')}
           </span>
-          <span className="text-[11px] text-[#8C8878] w-32 text-right">
+          <span className={`${CELL.B2} text-[10.5px] sm:text-[11px] text-[#8C8878] text-right`}>
             {new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
           </span>
-          <span className="text-xs font-semibold text-[#18181B] w-24 text-right">
+          <span className={`${CELL.B1} text-[12.5px] sm:text-xs font-semibold text-[#18181B] text-right tabular-nums`}>
             {r.amount === null ? '' : inr(r.amount, showAmounts)}
           </span>
-        </div>
+        </Row>
       ))}
     </div>
   )

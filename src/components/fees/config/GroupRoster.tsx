@@ -25,12 +25,21 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, Loader2, RotateCcw, Users } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN } from '@/components/fees/ui'
-import { SearchField, Btn, Empty, Notice, StatStrip } from '@/components/fees/shell'
+import {
+  Btn, CELL, CELL_LEAD, Col, Empty, List, ListHead, Notice, Row, SearchField, StatStrip,
+} from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
   clearAssignments, fetchRoster, reassignGroup,
   type FeeConfigBundle, type ReassignResult, type RosterStudent,
 } from '@/lib/fees/config'
+
+/**
+ * The roster's columns on a laptop. The note and the admission number step
+ * aside on a phone: this list is read to pick students out of, and a name, a
+ * class and the group they are on is what picking needs.
+ */
+const ROSTER_COLS = 'sm:grid-cols-[32px_minmax(0,1fr)_80px_112px_minmax(0,1fr)_minmax(0,176px)]'
 
 export default function GroupRoster({
   bundle, yearId, canEdit, onError,
@@ -183,83 +192,82 @@ export default function GroupRoster({
         )}
       </div>
 
-      <div className={`${ADMIN.card} overflow-hidden`}>
+      <List>
         {loading ? (
           <Empty>Loading the roster…</Empty>
         ) : shown.length === 0 ? (
           <Empty>No students match that.</Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
-              <thead className="bg-[#FAF8F2]">
-                <tr className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]">
-                  <th className="w-8 px-2.5 py-2" />
-                  <th className="text-left px-2.5 py-2">Student</th>
-                  <th className="text-left px-2.5 py-2 w-20">Class</th>
-                  <th className="text-left px-2.5 py-2 w-28">Admission</th>
-                  <th className="text-left px-2.5 py-2">Fee group</th>
-                  <th className="text-left px-2.5 py-2 w-44">Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map(r => {
-                  const assigned = r.assigned_group_id ? groupsById.get(r.assigned_group_id) : null
-                  const drifted = Boolean(r.profile_id && r.assigned_group_id
-                    && r.profile_group_id !== r.assigned_group_id)
-                  return (
-                    <tr key={r.student_id}
-                        className={`border-t border-[#F0ECE2] ${
-                          picked.has(r.student_id) ? 'bg-[#FAF3DF]' : 'hover:bg-[#FAF8F2]'}`}>
-                      <td className="px-2.5 py-1.5">
-                        <input type="checkbox" checked={picked.has(r.student_id)}
-                               onChange={() => toggle(r.student_id)}
-                               aria-label={`Select ${r.full_name}`} />
-                      </td>
-                      <td className="px-2.5 py-1.5 text-[#18181B]">{r.full_name}</td>
-                      <td className="px-2.5 py-1.5 text-[#6B675A]">
-                        {gradeLabel(r.grade)}{r.section ?? ''}
-                      </td>
-                      <td className="px-2.5 py-1.5 font-mono text-[11px] text-[#8C8878]">
-                        {r.admission_no ?? '—'}
-                      </td>
-                      <td className="px-2.5 py-1.5">
-                        {assigned ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="text-[#18181B] font-semibold">{assigned.name}</span>
-                            {r.assigned_is_rte && (
-                              <span className="text-[9px] font-bold uppercase tracking-[0.08em]
-                                               px-1 py-px bg-[#EEF2FB] text-[#3A5490]
-                                               border border-[#CFDAEF]">RTE</span>
-                            )}
-                            {r.prorate_from && (
-                              <span className="text-[10px] text-[#8C8878]">
-                                from {r.prorate_from}
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-[#8C8878]">
-                            {defaultGroup ? `${defaultGroup.name} (default)` : 'Nothing applies'}
+          <>
+            <ListHead cols={ROSTER_COLS}>
+              <Col>&nbsp;</Col><Col>Student</Col><Col>Class</Col>
+              <Col>Admission</Col><Col>Fee group</Col><Col>Note</Col>
+            </ListHead>
+            {shown.map(r => {
+              const assigned = r.assigned_group_id ? groupsById.get(r.assigned_group_id) : null
+              const drifted = Boolean(r.profile_id && r.assigned_group_id
+                && r.profile_group_id !== r.assigned_group_id)
+              return (
+                <Row key={r.student_id} cols={ROSTER_COLS} lead
+                     className={picked.has(r.student_id) ? 'bg-[#FAF3DF]' : ''}>
+                  {/* A 13px box is not a phone control. The label beside it is
+                      the real target: tapping the name picks the student. */}
+                  <label className={`${CELL_LEAD.PICK} flex items-center justify-center
+                                     max-sm:w-9 max-sm:h-9 cursor-pointer`}>
+                    <input type="checkbox" checked={picked.has(r.student_id)}
+                           onChange={() => toggle(r.student_id)}
+                           aria-label={`Select ${r.full_name}`}
+                           className="max-sm:w-[17px] max-sm:h-[17px]" />
+                  </label>
+                  <span className={`${CELL_LEAD.A1} text-[13px] sm:text-[12.5px] font-semibold sm:font-normal text-[#18181B] truncate`}>
+                    {r.full_name}
+                  </span>
+                  <span className={`${CELL_LEAD.A2} text-[11px] sm:text-[12.5px] text-[#6B675A] truncate`}>
+                    {gradeLabel(r.grade)}{r.section ?? ''}
+                    <span className="sm:hidden">
+                      {r.admission_no ? ` · ${r.admission_no}` : ''}
+                      {r.note ? ` · ${r.note}` : ''}
+                    </span>
+                  </span>
+                  <span className={`${CELL.DESKTOP} font-mono text-[11px] text-[#8C8878] truncate`}>
+                    {r.admission_no ?? '—'}
+                  </span>
+                  <span className={`${CELL_LEAD.B1} text-[11.5px] sm:text-[12.5px] max-sm:text-right`}>
+                    {assigned ? (
+                      <span className="inline-flex items-center gap-1.5 flex-wrap justify-end">
+                        <span className="text-[#18181B] font-semibold">{assigned.name}</span>
+                        {r.assigned_is_rte && (
+                          <span className="text-[9px] font-bold uppercase tracking-[0.08em]
+                                           px-1 py-px bg-[#EEF2FB] text-[#3A5490]
+                                           border border-[#CFDAEF]">RTE</span>
+                        )}
+                        {r.prorate_from && (
+                          <span className="text-[10px] text-[#8C8878]">
+                            from {r.prorate_from}
                           </span>
                         )}
-                        {drifted && (
-                          <span className="block text-[10px] text-[#7A6220] mt-0.5">
-                            Billed as {groupsById.get(r.profile_group_id ?? '')?.name ?? 'another group'}
-                            {' '}until re-priced
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2.5 py-1.5 text-[11px] text-[#8C8878] truncate max-w-[11rem]">
-                        {r.note ?? ''}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </span>
+                    ) : (
+                      <span className="text-[#8C8878]">
+                        {defaultGroup ? `${defaultGroup.name} (default)` : 'Nothing applies'}
+                      </span>
+                    )}
+                    {drifted && (
+                      <span className="block text-[10px] text-[#7A6220] mt-0.5">
+                        Billed as {groupsById.get(r.profile_group_id ?? '')?.name ?? 'another group'}
+                        {' '}until re-priced
+                      </span>
+                    )}
+                  </span>
+                  <span className={`${CELL.DESKTOP} text-[11px] text-[#8C8878] truncate`}>
+                    {r.note ?? ''}
+                  </span>
+                </Row>
+              )
+            })}
+          </>
         )}
-      </div>
+      </List>
 
       {assigning && (
         <AssignSheet

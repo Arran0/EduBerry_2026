@@ -33,7 +33,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
-import { StatStrip } from '@/components/fees/shell'
+import { CELL, CELL_LEAD, Row, StatStrip } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { daysBetween, todayIn } from '@/lib/fees/engine/dates'
@@ -59,6 +59,13 @@ interface Family {
   lastReminded: string | null
   contactable: boolean
 }
+
+/**
+ * The two lists here, column by column on a laptop. A phone folds each row into
+ * a card — see `Row`.
+ */
+const CHASE_COLS = 'sm:grid-cols-[32px_minmax(0,1fr)_minmax(0,230px)_124px_104px_104px_auto]'
+const LOG_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)_112px_minmax(0,96px)]'
 
 export default function RemindersSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
@@ -250,51 +257,61 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
               Nobody owes anything{klass ? ` in ${klass}` : ''}. That is worth saying out loud.
             </p>
           ) : shown.map(f => (
-            <div key={f.student.student_id}
-                 className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-              <input type="checkbox" checked={selected.has(f.student.student_id)}
-                     disabled={!f.contactable}
-                     onChange={e => setSelected(s => {
-                       const next = new Set(s)
-                       if (e.target.checked) next.add(f.student.student_id)
-                       else next.delete(f.student.student_id)
-                       return next
-                     })} />
-              <div className="flex-1 min-w-[190px]">
+            <Row key={f.student.student_id} cols={CHASE_COLS} lead>
+              <label className={`${CELL_LEAD.PICK} flex items-center justify-center
+                                 max-sm:w-9 max-sm:h-9 cursor-pointer`}>
+                <input type="checkbox" checked={selected.has(f.student.student_id)}
+                       disabled={!f.contactable}
+                       aria-label={`Select ${f.student.full_name}`}
+                       className="max-sm:w-[17px] max-sm:h-[17px]"
+                       onChange={e => setSelected(s => {
+                         const next = new Set(s)
+                         if (e.target.checked) next.add(f.student.student_id)
+                         else next.delete(f.student.student_id)
+                         return next
+                       })} />
+              </label>
+              <span className={CELL_LEAD.A1}>
                 <Link href={`/more/fees/students/${f.student.student_id}`}
-                      className="text-sm text-[#18181B] hover:underline">
+                      className="block text-[13px] sm:text-sm text-[#18181B] hover:underline truncate">
                   {f.student.full_name}
                 </Link>
-                <div className="text-[11px] text-[#8C8878]">
-                  {gradeLabel(f.student.grade)}{f.student.section ?? ''}
-                  {' · '}{f.bills.length} bill{f.bills.length === 1 ? '' : 's'}
-                  {f.lastReminded
-                    ? ` · last reminded ${fmtDate(f.lastReminded.slice(0, 10))}`
-                    : ' · never reminded'}
-                </div>
-              </div>
-              {!f.contactable && (
-                <span title="No number on file, or opted out"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase
-                                 tracking-wider px-2 py-0.5 bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
-                  <PhoneOff size={10} /> No number
-                </span>
-              )}
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${lateChip(f.daysLate)}`}>
-                {f.daysLate > 0 ? `${f.daysLate}d late` : f.daysLate === 0 ? 'Due today' : `In ${-f.daysLate}d`}
               </span>
-              <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+              <span className={`${CELL_LEAD.A2} block text-[11px] text-[#8C8878] truncate`}>
+                {gradeLabel(f.student.grade)}{f.student.section ?? ''}
+                {' · '}{f.bills.length} bill{f.bills.length === 1 ? '' : 's'}
+                {f.lastReminded
+                  ? ` · last reminded ${fmtDate(f.lastReminded.slice(0, 10))}`
+                  : ' · never reminded'}
+              </span>
+              <span className={CELL_LEAD.A3}>
+                {!f.contactable && (
+                  <span title="No number on file, or opted out"
+                        className="inline-flex items-center gap-1 text-[9.5px] sm:text-[10px] font-bold uppercase
+                                   tracking-wider px-1.5 sm:px-2 py-0.5 bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                    <PhoneOff size={10} /> No number
+                  </span>
+                )}
+              </span>
+              <span className={CELL_LEAD.B2}>
+                <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${lateChip(f.daysLate)}`}>
+                  {f.daysLate > 0 ? `${f.daysLate}d late` : f.daysLate === 0 ? 'Due today' : `In ${-f.daysLate}d`}
+                </span>
+              </span>
+              <span className={`${CELL_LEAD.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
                 {inr(f.owed, showAmounts)}
               </span>
-              {canRemind && (
-                <button onClick={() => void remind([f.student.student_id])}
-                        disabled={sending || !f.contactable}
-                        title={f.contactable ? 'Remind this family now' : 'No number on file'}
-                        className={ADMIN.ghostBtn}>
-                  <Bell size={13} /> Remind
-                </button>
-              )}
-            </div>
+              <span className={`${CELL_LEAD.B3} flex justify-end`}>
+                {canRemind && (
+                  <button onClick={() => void remind([f.student.student_id])}
+                          disabled={sending || !f.contactable}
+                          title={f.contactable ? 'Remind this family now' : 'No number on file'}
+                          className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+                    <Bell size={13} /> Remind
+                  </button>
+                )}
+              </span>
+            </Row>
           ))}
         </div>
       )}
@@ -402,24 +419,25 @@ function ReminderLog({
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">No reminders have gone out yet.</p>
       ) : rows.map(r => (
-        <div key={r.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#18181B]">{name(r.student_id)}</div>
-            <div className="text-[11px] text-[#8C8878]">
-              {fmtDate((r.sent_at ?? r.created_at).slice(0, 10))}
-              {r.msisdn ? ` · ${maskNumber(r.msisdn)}` : ''}
-              {r.balance_then !== null ? ` · owed ${inr(r.balance_then, showAmounts)} then` : ''}
-            </div>
-          </div>
-          {r.paid_at && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                             bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
-              Paid after
-            </span>
-          )}
-          <DeliveryState row={r} />
-        </div>
+        <Row key={r.id} cols={LOG_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+            {name(r.student_id)}
+          </span>
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+            {fmtDate((r.sent_at ?? r.created_at).slice(0, 10))}
+            {r.msisdn ? ` · ${maskNumber(r.msisdn)}` : ''}
+            {r.balance_then !== null ? ` · owed ${inr(r.balance_then, showAmounts)} then` : ''}
+          </span>
+          <span className={CELL.B2}>
+            {r.paid_at && (
+              <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                               bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
+                Paid after
+              </span>
+            )}
+          </span>
+          <span className={`${CELL.B1} flex justify-end`}><DeliveryState row={r} /></span>
+        </Row>
       ))}
     </div>
   )

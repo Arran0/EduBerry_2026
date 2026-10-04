@@ -11,8 +11,12 @@ import React, { useState } from 'react'
 import { Banknote, Check, Loader2, Undo2, X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { CELL, Row } from '@/components/fees/shell'
 import { useAuth } from '@/contexts/AuthContext'
 import { decideRefund, payRefund, type RefundRow } from '@/lib/fees/reports'
+
+/** The queue's columns on a laptop; a phone gets `Row`'s card. */
+const REFUND_COLS = 'sm:grid-cols-[minmax(0,1fr)_132px_104px_auto]'
 
 const STATE_CHIP: Record<RefundRow['status'], string> = {
   requested: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',
@@ -84,50 +88,57 @@ export default function RefundQueue({
       ) : rows.map(r => {
         const mine = r.requested_by !== null && r.requested_by === user?.id
         return (
-          <div key={r.id}
-               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-            <div className="flex-1 min-w-[190px]">
-              <div className="text-sm text-[#18181B]">
+          <Row key={r.id} cols={REFUND_COLS}>
+            <span className={CELL.A1}>
+              <span className="block text-[13px] sm:text-sm text-[#18181B] truncate">
                 {names.get(r.student_id) ?? 'Student'}
-              </div>
-              <div className="text-[11px] text-[#8C8878]">
+              </span>
+              <span className="block text-[11px] text-[#8C8878]">
                 {r.reason}
                 {' · asked '}{fmtDate(r.requested_at.slice(0, 10))}
                 {r.paid_on ? ` · paid ${fmtDate(r.paid_on)}${r.reference ? ` · ${r.reference}` : ''}` : ''}
-              </div>
-            </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
-              {STATE_LABEL[r.status]}
+              </span>
             </span>
-            <span className="text-sm font-semibold text-[#18181B] w-24 text-right">
+            <span className={CELL.B2}>
+              <span className={`inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 ${STATE_CHIP[r.status]}`}>
+                {STATE_LABEL[r.status]}
+              </span>
+            </span>
+            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-[#18181B] text-right tabular-nums`}>
               {inr(r.amount, showAmounts)}
             </span>
-
-            {canDecide && r.status === 'requested' && (
-              mine ? (
-                <span className="text-[11px] text-[#8C8878]">
-                  Yours — somebody else signs this off
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setDeclining(r)} className={ADMIN.ghostBtn}>
-                    <X size={13} /> Decline
-                  </button>
-                  <button onClick={() => void approve(r)} disabled={busy === r.id}
-                          className={ADMIN.darkBtn}>
-                    {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                    Approve
-                  </button>
-                </div>
-              )
-            )}
-
-            {canDecide && r.status === 'approved' && (
-              <button onClick={() => setPaying(r)} className={ADMIN.darkBtn}>
-                <Banknote size={13} /> Pay out
-              </button>
-            )}
-          </div>
+            {/* Decline and Approve are a decision, so on a phone they get their
+                own line across the card rather than being squeezed in beside
+                the amount. */}
+            <span className={`${CELL.A3} max-sm:col-span-2 flex items-center gap-2 sm:justify-end
+                              ${canDecide && (r.status === 'requested' || r.status === 'approved')
+                                ? 'max-sm:mt-1.5' : ''}`}>
+              {canDecide && r.status === 'requested' && (
+                mine ? (
+                  <span className="text-[11px] text-[#8C8878]">
+                    Yours — somebody else signs this off
+                  </span>
+                ) : (
+                  <>
+                    <button onClick={() => setDeclining(r)}
+                            className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
+                      <X size={13} /> Decline
+                    </button>
+                    <button onClick={() => void approve(r)} disabled={busy === r.id}
+                            className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                      {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      Approve
+                    </button>
+                  </>
+                )
+              )}
+              {canDecide && r.status === 'approved' && (
+                <button onClick={() => setPaying(r)} className={`${ADMIN.darkBtn} max-sm:flex-1 max-sm:py-2`}>
+                  <Banknote size={13} /> Pay out
+                </button>
+              )}
+            </span>
+          </Row>
         )
       })}
 

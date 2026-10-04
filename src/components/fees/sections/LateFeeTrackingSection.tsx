@@ -18,6 +18,7 @@ import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { CELL, Row } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import {
@@ -29,6 +30,10 @@ import {
   setLateFeeExemption, waiveFine, waiveLateFee,
   type FineCategoryRow, type FineRow, type LateFeeChargeRow,
 } from '@/lib/fees/charges'
+
+/** The two lists' columns on a laptop; a phone folds each row into a card. */
+const CHARGE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)_120px_104px_auto]'
+const FINE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_minmax(0,160px)_104px_auto]'
 
 export default function LateFeeTrackingSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()
@@ -160,35 +165,37 @@ function ChargedList({
         const inv = invoices.get(c.invoice_id)
         const who = inv ? names.get(inv.student_id) : undefined
         return (
-          <div key={c.id}
-               className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-            <div className="flex-1 min-w-[190px]">
-              <div className="text-sm text-[#18181B]">{who?.full_name ?? 'Student'}</div>
-              <div className="text-[11px] text-[#8C8878] font-mono">
-                {inv?.number ?? '—'} · {c.days_late} days late at {fmtDate(c.as_of)}
-              </div>
-            </div>
-            {c.status !== 'charged' && (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                               bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
-                {c.status === 'waived' ? 'Waived' : 'Recalculated'}
-              </span>
-            )}
-            <span className={`text-sm font-semibold w-24 text-right ${
+          <Row key={c.id} cols={CHARGE_COLS}>
+            <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+              {who?.full_name ?? 'Student'}
+            </span>
+            <span className={`${CELL.A2} block text-[11px] text-[#8C8878] font-mono truncate`}>
+              {inv?.number ?? '—'} · {c.days_late} days late at {fmtDate(c.as_of)}
+            </span>
+            <span className={CELL.B2}>
+              {c.status !== 'charged' && (
+                <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                                 bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                  {c.status === 'waived' ? 'Waived' : 'Recalculated'}
+                </span>
+              )}
+            </span>
+            <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
               c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
               {inr(c.amount, showAmounts)}
             </span>
             {canManage && c.status === 'charged' && (
-              <>
-                <button onClick={() => setWaiving(c)} className={ADMIN.ghostBtn}>Waive</button>
+              <span className={`${CELL.A3} max-sm:col-span-2 max-sm:mt-1.5 flex items-center gap-1.5 sm:justify-end`}>
+                <button onClick={() => setWaiving(c)}
+                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>Waive</button>
                 <button onClick={() => void exempt(c.invoice_id)} disabled={busy === c.invoice_id}
                         title="Never charge this bill a late fee again"
-                        className={ADMIN.ghostBtn}>
+                        className={`${ADMIN.ghostBtn} max-sm:flex-1 max-sm:py-2`}>
                   <ShieldOff size={13} /> Exempt bill
                 </button>
-              </>
+              </span>
             )}
-          </div>
+          </Row>
         )
       })}
 
@@ -235,30 +242,33 @@ function FinesList({
       {fines.length === 0 ? (
         <p className="px-4 py-8 text-sm text-[#8C8878]">No fines this session.</p>
       ) : fines.map(f => (
-        <div key={f.id}
-             className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#F0ECE2] last:border-0">
-          <div className="flex-1 min-w-[190px]">
-            <div className="text-sm text-[#18181B]">{names.get(f.student_id)?.full_name ?? 'Student'}</div>
-            <div className="text-[11px] text-[#8C8878]">
-              {cat(f.category_id)}{f.reason ? ` · ${f.reason}` : ''}
-            </div>
-          </div>
-          {f.status === 'waived' && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
-                             bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
-              Waived {f.waived_amount ? inr(f.waived_amount, showAmounts) : ''}
-            </span>
-          )}
-          <span className={`text-sm font-semibold w-24 text-right ${
+        <Row key={f.id} cols={FINE_COLS}>
+          <span className={`${CELL.A1} block text-[13px] sm:text-sm text-[#18181B] truncate`}>
+            {names.get(f.student_id)?.full_name ?? 'Student'}
+          </span>
+          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+            {cat(f.category_id)}{f.reason ? ` · ${f.reason}` : ''}
+          </span>
+          <span className={CELL.B2}>
+            {f.status === 'waived' && (
+              <span className="inline-block text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5
+                               bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]">
+                Waived {f.waived_amount ? inr(f.waived_amount, showAmounts) : ''}
+              </span>
+            )}
+          </span>
+          <span className={`${CELL.B1} text-[14px] sm:text-sm font-semibold text-right tabular-nums ${
             f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
             {inr(f.amount, showAmounts)}
           </span>
-          {canFine && f.status === 'applied' && (
-            <button onClick={() => setWaiving(f)} className={ADMIN.ghostBtn}>
-              <Ban size={13} /> Waive
-            </button>
-          )}
-        </div>
+          <span className={`${CELL.B3} flex justify-end`}>
+            {canFine && f.status === 'applied' && (
+              <button onClick={() => setWaiving(f)} className={`${ADMIN.ghostBtn} max-sm:py-1.5`}>
+                <Ban size={13} /> Waive
+              </button>
+            )}
+          </span>
+        </Row>
       ))}
 
       {waiving && (
