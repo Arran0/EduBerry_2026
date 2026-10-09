@@ -19,7 +19,10 @@ import { requireAdmin } from '@/lib/payroll/serverGuard'
  * the loading code that could disagree with the grid the admin can see.
  */
 
-export const maxDuration = 300
+// Vercel's Hobby plan stops a function at 60s whatever this says. Raise it
+// together with SOLVER_MAX_BUDGET_S and the solver's own maxDuration if the
+// deployment's plan allows longer.
+export const maxDuration = 60
 
 /** A whole-school problem is ~450KB. Past this, something is wrong. */
 const MAX_BODY_BYTES = 8 * 1024 * 1024
@@ -61,10 +64,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'No problem supplied' }, { status: 400 })
   }
 
-  // The platform cuts the function off at maxDuration, so the solver is given
-  // a budget that ends before that — a result it has found is worth far more
-  // than a connection that died mid-search.
-  const budgetSeconds = Math.min(Math.max(body.budgetSeconds ?? 45, 5), 240)
+  // The platform cuts this function off at maxDuration, so the solver is given
+  // a budget that ends well before that — a result it has found is worth far
+  // more than a connection that died mid-search. The solver clamps this again
+  // on its own side, where its cold-start cost is known.
+  const budgetSeconds = Math.min(Math.max(body.budgetSeconds ?? 30, 5), 35)
 
   try {
     const upstream = await fetch(new URL(`/${mode}`, solverUrl), {
@@ -75,7 +79,9 @@ export async function POST(request: NextRequest) {
         hint: body.hint ?? null,
         budgetSeconds,
       }),
-      signal: AbortSignal.timeout((budgetSeconds + 30) * 1000),
+      // Long enough for the solver's own budget plus its cold start, short
+      // enough to answer before the platform kills this function.
+      signal: AbortSignal.timeout(Math.min(budgetSeconds + 20, 55) * 1000),
     })
     if (!upstream.ok) {
       const detail = await upstream.text()

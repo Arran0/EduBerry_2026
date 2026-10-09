@@ -22,13 +22,20 @@ from solver.solve import optimise, prove
 
 app = FastAPI(title="Timetable solver", docs_url=None, redoc_url=None)
 
-#: Vercel functions get 300s; leave room for transport and JSON on both sides.
-MAX_BUDGET_S = 240.0
+#: How long a solve may run, in seconds.
+#:
+#: The ceiling is the platform's function timeout, not this service's
+#: preference: Vercel's Hobby plan stops a function at 60s, and importing
+#: ortools costs ~10s of that before any solving starts. 35s leaves room for
+#: the import, a 450KB problem in, and a result out. Raise
+#: SOLVER_MAX_BUDGET_S alongside the function's maxDuration on a plan with a
+#: longer timeout — conflict extraction genuinely finds more with more time.
+MAX_BUDGET_S = float(os.environ.get("SOLVER_MAX_BUDGET_S", "35"))
 
 
 class SolveRequest(BaseModel):
     problem: dict[str, Any]
-    budgetSeconds: float = Field(default=50.0, gt=0)
+    budgetSeconds: float = Field(default=30.0, gt=0)
     #: lesson id -> [day, start], a week the browser already found.
     hint: dict[str, list[int]] | None = None
 

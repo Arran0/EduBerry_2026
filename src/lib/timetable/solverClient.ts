@@ -93,7 +93,7 @@ async function call(
  */
 export function proveFeasible(
   input: GeneratorInput,
-  budgetSeconds = 45,
+  budgetSeconds = 30,
 ): Promise<SolverOutcome> {
   const payload = buildSolverPayload(input)
   return call('prove', payload, null, budgetSeconds)
@@ -111,7 +111,7 @@ export function proveFeasible(
 export function improveWeek(
   input: GeneratorInput,
   entries: PlacedEntry[],
-  budgetSeconds = 60,
+  budgetSeconds = 30,
 ): Promise<SolverOutcome> {
   const payload = buildSolverPayload(input)
   const hint = buildSolverHint(payload, entries)
