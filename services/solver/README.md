@@ -160,7 +160,16 @@ and becomes the only control. Put Deployment Protection in front of it as well.
 ## Running locally
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/pip install pytest && .venv/bin/python -m pytest tests -q
-SOLVER_SHARED_SECRET=dev .venv/bin/python -m uvicorn main:app --port 8099
+./services/solver/dev.sh          # creates the venv on first run, then serves
+.venv/bin/python -m pytest tests -q
 ```
+
+`dev.sh` sources `.env.local`, so add both variables there:
+
+```
+SOLVER_INTERNAL_URL=http://127.0.0.1:8099
+SOLVER_SHARED_SECRET=<any long random string>
+```
+
+Next.js reads `.env.local` once at startup, so restart `npm run dev` after
+adding them or the route will keep returning its 503.
