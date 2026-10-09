@@ -88,7 +88,7 @@ function shuffle<T>(arr: T[], rng: () => number): T[] {
 
 // A contiguous block of `size` periods to place (a requirement of
 // periods_per_week = 4 with min_block = 2 → two blocks of size 2).
-interface Block {
+export interface Block {
   requirementId: string
   homeroomId: string
   subjectId: string
@@ -546,7 +546,7 @@ class SolveState {
 // One occurrence of a combined class to place. A combined lesson is expanded
 // the same way an ordinary requirement is (Round 10): periods_per_week becomes
 // N units of `size` contiguous periods, so an assembly can be a double.
-interface CombinedUnit {
+export interface CombinedUnit {
   combinedId: string
   subjectId: string
   teacherId: string | null
@@ -1713,7 +1713,7 @@ function mergeLegacyUnavailability(index: ConstraintIndex, unavail: TeacherUnava
 
 // Expands requirements into contiguous blocks, subtracting periods already
 // satisfied by locked placements (same homeroom + subject).
-function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block[] {
+export function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block[] {
   const lockedCount = new Map<string, number>()
   for (const p of locked) {
     const k = `${p.homeroomId}|${p.subjectId}|${hrToken(p.groupId)}`
@@ -1759,7 +1759,7 @@ function expandBlocks(requirements: Requirement[], locked: PlacedEntry[]): Block
  * lesson as doubles. The default 1/1 produces one unit per period, which is
  * what combined lessons did before Round 10.
  */
-function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): CombinedUnit[] {
+export function expandCombined(list: CombinedClassInput[], locked: PlacedEntry[]): CombinedUnit[] {
   const lockedKeys = new Map<string, Set<string>>() // combinedId -> set of combinedKeys
   for (const p of locked) {
     if (!p.combinedKey) continue

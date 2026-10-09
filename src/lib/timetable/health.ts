@@ -331,11 +331,19 @@ export interface ImpossibleLesson {
   wanted: number
   /** Periods per consecutive block; 1 for ordinary single periods. */
   size: number
+  /** Periods of this subject the class may have in one day. */
+  maxPerDay: number
   /** Cells the time-off rules leave open to this lesson. */
   open: number
+  /** Days on which it has at least one open cell. */
+  openDays: number
   /** The longest back-to-back run among those cells. */
   longestRun: number
-  reason: 'none_open' | 'no_run_long_enough' | 'fewer_cells_than_periods'
+  reason:
+    | 'none_open'
+    | 'no_run_long_enough'
+    | 'fewer_cells_than_periods'
+    | 'fewer_days_than_periods'
 }
 
 /**
@@ -350,11 +358,13 @@ function openCells(
   subjectId: string,
   homeroomIds: string[],
   teacherIds: string[],
-): { open: number; longestRun: number } {
+): { open: number; openDays: number; longestRun: number } {
   let open = 0
+  let openDays = 0
   let longestRun = 0
   for (const day of geo.days) {
     let run = 0
+    let openHere = 0
     for (let i = 0; i < geo.slotIds.length; i++) {
       const key = cellKey(day, geo.slotIds[i])
       const blocked =
@@ -368,13 +378,15 @@ function openCells(
         continue
       }
       open++
+      openHere++
       // A run only continues through periods that are actually consecutive —
       // a break between them makes the next cell the start of a new run.
       run = i > 0 && geo.adjacentNext[i - 1] ? run + 1 : 1
       if (run > longestRun) longestRun = run
     }
+    if (openHere > 0) openDays++
   }
-  return { open, longestRun }
+  return { open, openDays, longestRun }
 }
 
 export function impossibleLessons(
@@ -390,21 +402,37 @@ export function impossibleLessons(
     teacherIds: string[],
     wanted: number,
     size: number,
+    maxPerDay: number,
   ) => {
     if (homeroomIds.length === 0 || wanted <= 0) return
     const geo = scheduleFor(sched, homeroomIds[0])
     if (geo.slotIds.length === 0 || geo.days.length === 0) return // reported separately
-    const { open, longestRun } = openCells(geo, index, subjectId, homeroomIds, teacherIds)
+    const { open, openDays, longestRun } = openCells(
+      geo, index, subjectId, homeroomIds, teacherIds,
+    )
     const reason: ImpossibleLesson['reason'] | null =
       open === 0 ? 'none_open'
       : size > 1 && longestRun < size ? 'no_run_long_enough'
       : open < wanted ? 'fewer_cells_than_periods'
+      // A per-day cap turns the question from "are there enough periods" into
+      // "are there enough DAYS". A subject wanted six times a week at one a
+      // day needs six usable days, and a class with a day entirely marked off
+      // has five — which the cell count alone never notices.
+      : wanted > openDays * Math.max(1, maxPerDay) ? 'fewer_days_than_periods'
       : null
-    if (reason) out.push({ subjectId, homeroomIds, wanted, size, open, longestRun, reason })
+    if (reason) {
+      out.push({
+        subjectId, homeroomIds, wanted, size,
+        maxPerDay: Math.max(1, maxPerDay), open, openDays, longestRun, reason,
+      })
+    }
   }
 
   for (const r of input.requirements) {
-    check(r.subject_id, [r.homeroom_id], teacherIdsOf(r), r.periods_per_week, Math.max(1, r.min_block ?? 1))
+    check(
+      r.subject_id, [r.homeroom_id], teacherIdsOf(r), r.periods_per_week,
+      Math.max(1, r.min_block ?? 1), r.max_per_day,
+    )
   }
   for (const c of input.combined ?? []) {
     check(
@@ -413,6 +441,7 @@ export function impossibleLessons(
       c.teacherIds?.length ? c.teacherIds : c.teacherId ? [c.teacherId] : [],
       c.periodsPerWeek,
       Math.max(1, c.minBlock ?? 1),
+      c.maxPerDay ?? 1,
     )
   }
   return out
@@ -512,6 +541,11 @@ function buildSuggestions({
         return `${who} is set to run as ${l.size} back-to-back periods, but time off leaves it ` +
           `only ${plural(l.open, 'period')} in the week and never more than ${l.longestRun} ` +
           'of them in a row'
+      }
+      if (l.reason === 'fewer_days_than_periods') {
+        return `${who} asks for ${plural(l.wanted, 'period')} at no more than ` +
+          `${plural(l.maxPerDay, 'a day', 'a day')}, but time off leaves it only ` +
+          `${plural(l.openDays, 'day')} it can use`
       }
       return `${who} asks for ${plural(l.wanted, 'period')} but time off leaves it only ` +
         `${l.open} to use`

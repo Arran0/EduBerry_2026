@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, Download,
-  GraduationCap, LayoutGrid, Rows3, UserCog, CalendarRange,
+  GraduationCap, LayoutGrid, Rows3, UserCog, CalendarRange, ShieldQuestion, Wand2,
 } from 'lucide-react'
 import {
   createTimetable, replaceEntries, publishTimetable, updateTimetableMeta,
@@ -21,6 +21,10 @@ import EditableTimetableGrid from '../EditableTimetableGrid'
 import MasterTimetableEditor from '../MasterTimetableEditor'
 import TeacherWeekView from '../TeacherWeekView'
 import LessonStatsCard from '../LessonStatsCard'
+import {
+  proveFeasible, improveWeek, entriesFromResult, conflictGroups, describeConflictRule,
+} from '@/lib/timetable/solverClient'
+import type { SolverResult } from '@/lib/timetable/solverClient'
 import { useTimetableDraft } from '../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../draft/TeacherLoad'
 import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
@@ -58,6 +62,13 @@ export default function GenerateTab() {
   const [lastRun, setLastRun] = useState<string>('')
   // Set while a solve is running; flipping it stops it between passes.
   const cancelRef = useRef(false)
+
+  // The constraint solver, which answers the two questions a search cannot:
+  // is this possible at all, and how much better can this week be.
+  const [proving, setProving] = useState(false)
+  const [improving, setImproving] = useState(false)
+  const [proof, setProof] = useState<SolverResult | null>(null)
+  const [solverError, setSolverError] = useState('')
 
   useEffect(() => {
     setTimetableName(timetable?.name ?? config.name)
@@ -178,6 +189,97 @@ export default function GenerateTab() {
   }
 
   const clearUnlocked = () => setEntries((prev) => prev.filter((e) => e.isLocked))
+
+  // ── Constraint solver ─────────────────────────────────────
+  // The problem exactly as the in-browser solver is given it, so a proof is a
+  // proof about the timetable the admin is actually asking for.
+  const solverInput = () => ({
+    config,
+    slots,
+    slotGroups,
+    homeroomGroupIds: slotGroupIds,
+    requirements,
+    unavailability,
+    constraints,
+    homerooms: homeroomsLite,
+    combined: combinedInput,
+    rooms,
+    locked: entries.filter((e) => e.isLocked),
+  })
+
+  const handleProve = async () => {
+    setProving(true)
+    setProof(null)
+    setSolverError('')
+    const outcome = await proveFeasible(solverInput())
+    if (!outcome.ok) setSolverError(outcome.error)
+    else {
+      setProof(outcome.result)
+      flash(
+        outcome.result.status === 'feasible'
+          ? 'A complete timetable is possible — proved, not guessed.'
+          : outcome.result.status === 'impossible'
+            ? 'No complete timetable exists for these rules. See below.'
+            : 'The solver ran out of time before it could decide.',
+      )
+    }
+    setProving(false)
+  }
+
+  const handleImprove = async () => {
+    if (entries.length === 0) {
+      flash('Generate a week first — this improves the one on screen.')
+      return
+    }
+    setImproving(true)
+    setSolverError('')
+    const before = Math.round(health.score)
+    const outcome = await improveWeek(solverInput(), entries)
+    if (!outcome.ok) {
+      setSolverError(outcome.error)
+      setImproving(false)
+      return
+    }
+    const { result, payload } = outcome
+    if (result.placements.length === 0) {
+      setSolverError('The solver returned no timetable.')
+      setImproving(false)
+      return
+    }
+    const improved = entriesFromResult(
+      payload, result, rooms,
+      [...homeroomsLite.map((h) => h.id), ...requirements.map((r) => r.homeroom_id)],
+    )
+    // Pinned cells are given to the solver as fixed, so they come back where
+    // they were; keeping the originals would double them up.
+    setEntries(improved)
+    setUnplaced(result.unplacedPeriods)
+    flash(
+      `Improved — quality score ${result.penalty ?? '?'}, ` +
+      `${result.unplacedPeriods} unplaced (was health ${before}).` +
+      (result.overCapPeriods > 0
+        ? ` ${result.overCapPeriods} period(s) over a per-day cap.`
+        : ''),
+    )
+    setImproving(false)
+  }
+
+  const conflictNames = useMemo(() => ({
+    homeroom: (id: string) => draft.homerooms.find((h) => h.id === id)?.name ?? 'a class',
+    teacher: (id: string) => teachers.find((t) => t.id === id)?.full_name ?? 'a teacher',
+    subject: (id: string) => subjects.find((s) => s.id === id)?.name ?? 'a subject',
+    combinedSubject: (id: string) => {
+      const c = draft.combinedClasses.find((x) => x.id === id)
+      return c?.subject_id ? subjects.find((s) => s.id === c.subject_id)?.name : undefined
+    },
+    requirement: (id: string) => {
+      const r = requirements.find((x) => x.id === id)
+      if (!r) return undefined
+      const hr = draft.homerooms.find((h) => h.id === r.homeroom_id)?.name ?? 'a class'
+      const sub = subjects.find((s) => s.id === r.subject_id)?.name ?? 'a subject'
+      return `${sub} for ${hr}`
+    },
+  }), [draft.homerooms, draft.combinedClasses, teachers, subjects, requirements])
 
   // ── Persistence ───────────────────────────────────────────
   const resolvedName = () => timetableName.trim() || config.name
@@ -370,6 +472,31 @@ export default function GenerateTab() {
             Clear unlocked
           </button>
         </div>
+
+        {/* The constraint solver. Generate searches and keeps the best week it
+            finds; these two ask the questions a search cannot answer about its
+            own result — whether a complete week exists at all, and how much
+            better the one on screen could be. */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={handleProve}
+            disabled={proving || improving}
+            className={`${BTN_NEUTRAL} w-full py-2.5 disabled:opacity-50`}
+            title="Proves whether every required period can be placed, and names the rules that collide if not"
+          >
+            {proving ? <Loader2 className="animate-spin" size={15} /> : <ShieldQuestion size={15} />}
+            {proving ? 'Checking…' : 'Can this be built?'}
+          </button>
+          <button
+            onClick={handleImprove}
+            disabled={improving || proving || entries.length === 0}
+            className={`${BTN_NEUTRAL} w-full py-2.5 disabled:opacity-50`}
+            title="Rearranges this week for a better spread and fewer stranded periods, without losing any lesson it already places"
+          >
+            {improving ? <Loader2 className="animate-spin" size={15} /> : <Wand2 size={15} />}
+            {improving ? 'Improving…' : 'Improve this week'}
+          </button>
+        </div>
         {/* The solve keeps searching while it is still finding better weeks and
             stops when it settles, so there is nothing to choose — just what it
             is doing now, and what the last run spent. */}
@@ -441,6 +568,75 @@ export default function GenerateTab() {
         )}
         {toast && <span className="text-[#71717A] italic">{toast}</span>}
       </div>
+
+      {/* What the constraint solver proved. Kept separate from the health score:
+          health is a judgement about a week, this is a fact about the rules. */}
+      {solverError && (
+        <p className="mt-2.5 flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+          <span>{solverError}</span>
+        </p>
+      )}
+      {proof && (
+        <div className="mt-2.5 border border-[#E4E4E7]">
+          <div className="flex items-baseline gap-2 px-3 py-2 bg-[#FAFAFA] border-b border-[#E4E4E7]">
+            <span className={SECTION_LABEL}>
+              {proof.status === 'feasible' ? 'Proved possible' : 'Proved impossible'}
+            </span>
+            <span className="text-[11px] text-[#A1A1AA] tabular-nums">
+              {(proof.wallTimeMs / 1000).toFixed(1)}s · {proof.variables.toLocaleString()} variables
+            </span>
+            <button
+              onClick={() => setProof(null)}
+              className="ml-auto text-[11px] text-[#71717A] hover:text-[#18181B]"
+            >
+              Dismiss
+            </button>
+          </div>
+          {proof.status === 'feasible' ? (
+            <p className="px-3 py-2.5 text-xs text-emerald-700 flex items-start gap-2">
+              <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
+              <span>
+                Every required period can be placed under these rules. If Generate leaves
+                periods out, that is the search falling short rather than the rules — run it
+                again, or use <strong>Improve this week</strong>.
+              </span>
+            </p>
+          ) : proof.status === 'impossible' ? (
+            <div className="px-3 py-2.5 space-y-2.5">
+              <p className="text-xs text-[#52525B]">
+                No timetable can satisfy all of these rules at once. Each group below is
+                independent, and relaxing any <em>one</em> rule in a group resolves it.
+              </p>
+              {conflictGroups(proof.conflicts).map((group, i) => (
+                <div key={i} className="border-l-2 border-rose-300 pl-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-rose-700">
+                    Conflict {i + 1} — these cannot all hold
+                  </p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {group.map((c) => (
+                      <li key={c.tag} className="text-xs text-[#18181B] flex gap-1.5">
+                        <span className="text-[#A1A1AA]">·</span>
+                        <span>{describeConflictRule(c, conflictNames)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {proof.conflictsTruncated && (
+                <p className="text-[11px] text-[#71717A] italic">
+                  The search stopped on its time limit, so there may be more conflicts than
+                  these. Fix these and check again.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="px-3 py-2.5 text-xs text-[#71717A]">
+              The solver ran out of time before it could decide either way.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Health score */}
       <div className="mt-3">
