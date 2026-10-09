@@ -660,3 +660,88 @@ describe('the bounded search', () => {
     }
   })
 })
+
+// ── Ejection repair ──────────────────────────────────────────
+// The phase that goes back for the periods greedy construction had nowhere to
+// put. Without it, whatever construction dropped stayed dropped: a school whose
+// week is comfortably feasible still came out with lessons missing from it,
+// because a lesson dealt with late can find every cell it is allowed to use
+// taken by lessons dealt with earlier.
+
+describe('periods construction could not place', () => {
+  /**
+   * A tight week: every class needs every teacher exactly once, over one day
+   * with a single period to spare. Every teacher is then busy for all but one
+   * period, so a greedy pass that takes the best-looking cell for each lesson
+   * in turn runs out of legal cells for the last few and has to displace
+   * earlier lessons to finish. Construction alone leaves three or four periods
+   * unplaced here, every seed.
+   *
+   * `spare` is what the repair has to work with: one lesson is displaced into
+   * a free cell at a time, so the week needs somewhere for it to go. A week
+   * with no free cell at all could only be completed by a chain of lessons
+   * moving at once, which this does not attempt.
+   */
+  const tightWeek = (size: number, spare = 1) => {
+    const teaching = slots(size + spare)
+    const requirements: Requirement[] = []
+    for (let h = 0; h < size; h++) {
+      for (let t = 0; t < size; t++) {
+        requirements.push(requirement({
+          id: `r${h}-${t}`, homeroom_id: `hr${h}`, subject_id: `sub${t}`,
+          teacher_id: `t${t}`, teacher_ids: [`t${t}`], periods_per_week: 1,
+        }))
+      }
+    }
+    return {
+      config: config({ working_days: ['monday'] }),
+      slots: teaching, requirements, unavailability: [], rooms: [],
+    }
+  }
+
+  it('fills a week that is almost out of room', () => {
+    const input = tightWeek(10)
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const r = generateTimetable({ ...input, seed }, { budgetMs: 8000 })
+      expect(r.unplacedCount).toBe(0)
+      expect(r.entries).toHaveLength(100)
+    }
+  })
+
+  it('does not break the week it repairs', () => {
+    const r = generateTimetable({ ...tightWeek(10), seed: 42 }, { budgetMs: 8000 })
+    // Displacing a lesson to seat another must leave both properly booked:
+    // one lesson per class per period, one period per teacher at a time.
+    const cells = new Set<string>()
+    const teacherCells = new Set<string>()
+    for (const e of r.entries) {
+      const cell = `${e.homeroomId}|${e.day}|${e.slotId}`
+      expect(cells.has(cell)).toBe(false)
+      cells.add(cell)
+      const tc = `${e.teacherId}|${e.day}|${e.slotId}`
+      expect(teacherCells.has(tc)).toBe(false)
+      teacherCells.add(tc)
+    }
+    expect(r.conflicts.filter((c) => c.kind === 'teacher_double_booked')).toHaveLength(0)
+    expect(r.conflicts.filter((c) => c.kind === 'homeroom_double_booked')).toHaveLength(0)
+  })
+
+  it('never displaces a pinned lesson to make room', () => {
+    const input = tightWeek(10)
+    // Pin one lesson where the admin put it. Repair may move anything else.
+    const pinned: PlacedEntry = {
+      homeroomId: 'hr0', day: 'monday', slotId: input.slots[2].id, subjectId: 'sub0',
+      teacherId: 't0', teacherIds: ['t0'], roomId: null, isLocked: true,
+    }
+    for (const seed of [11, 12, 13]) {
+      const r = generateTimetable({ ...input, locked: [pinned], seed }, { budgetMs: 8000 })
+      const still = r.entries.find(
+        (e) => e.homeroomId === 'hr0' && e.subjectId === 'sub0' && e.isLocked,
+      )
+      expect(still).toBeDefined()
+      expect(still!.slotId).toBe(input.slots[2].id)
+      expect(still!.day).toBe('monday')
+      expect(r.unplacedCount).toBe(0)
+    }
+  })
+})

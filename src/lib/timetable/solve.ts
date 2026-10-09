@@ -20,8 +20,18 @@ import type { GeneratorInput, GeneratorResult, SolveDiagnostics } from './types'
 const PASS_BUDGET_MS = 2500
 /** Ceiling on passes, for the pathological case where every one improves. */
 const MAX_PASSES = 8
-/** Give up after this many passes in a row that found nothing better. */
-const PATIENCE = 2
+/**
+ * Give up after this many passes in a row that found nothing better.
+ *
+ * Higher while periods are still unplaced. A tidier week is a nice-to-have and
+ * two flat passes are a fair sign there is no more of it to find; a week with
+ * lessons missing from it is not usable at all, and settling for one after two
+ * flat passes was giving up with most of the budget unspent. Each pass is an
+ * independent randomized solve, so another one is a real chance at the periods
+ * this one could not seat.
+ */
+const PATIENCE_COMPLETE = 2
+const PATIENCE_UNPLACED = 4
 
 export interface SolveProgress {
   pass: number
@@ -112,7 +122,8 @@ export async function solveTimetable(
     })
 
     // Settled: more passes of the same are not buying anything.
-    if (sinceImproved >= PATIENCE) break
+    const patience = best!.unplacedCount > 0 ? PATIENCE_UNPLACED : PATIENCE_COMPLETE
+    if (sinceImproved >= patience) break
     // Nothing left to improve at all.
     if (best!.unplacedCount === 0 && best!.softPenalty === 0) break
   }

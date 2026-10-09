@@ -198,7 +198,22 @@ export default function GenerateTab() {
     return created
   }
 
+  /**
+   * Saving an empty week over a saved one wipes it, and a blank grid is much
+   * more often a draft that hasn't been generated yet than a week the admin
+   * means to erase. The save is destructive by design, so this is the one
+   * shape of it worth asking about.
+   */
+  const emptyOverwriteRefused = () =>
+    entries.length === 0 &&
+    timetable !== null &&
+    !confirm(
+      'This draft has no lessons in it. Saving will erase every period stored for ' +
+      `"${timetable.name}". Save anyway?`,
+    )
+
   const handleSave = async () => {
+    if (emptyOverwriteRefused()) return
     setSaving(true)
     const tt = await ensureTimetable()
     if (!tt) {
@@ -206,13 +221,18 @@ export default function GenerateTab() {
       setSaving(false)
       return
     }
-    const ok = await replaceEntries(tt.id, entries)
-    flash(ok ? 'Draft saved.' : 'Could not save entries — check console.')
+    const written = await replaceEntries(tt.id, entries)
+    flash(
+      written === null
+        ? 'Could not save — nothing was changed. Check console.'
+        : `Draft saved — ${written} period(s) stored.`,
+    )
     setSaving(false)
   }
 
   const handlePublish = async () => {
     if (liveConflicts.length > 0 && !confirm('There are unresolved conflicts. Publish anyway?')) return
+    if (emptyOverwriteRefused()) return
     setPublishing(true)
     const tt = await ensureTimetable()
     if (!tt) {
@@ -220,9 +240,9 @@ export default function GenerateTab() {
       setPublishing(false)
       return
     }
-    const saved = await replaceEntries(tt.id, entries)
-    if (!saved) {
-      flash('Could not save entries — check console.')
+    // null, not falsy: an empty week is a legitimate save, zero rows and all.
+    if ((await replaceEntries(tt.id, entries)) === null) {
+      flash('Could not save — nothing was changed, so nothing was published. Check console.')
       setPublishing(false)
       return
     }

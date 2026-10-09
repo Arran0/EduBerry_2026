@@ -570,6 +570,8 @@ interface BuildArgs {
   index: ConstraintIndex
   rooms: RoomPlan
   rng: () => number
+  /** Lets the repair phase stop mid-way instead of overrunning the budget. */
+  outOfTime?: () => boolean
 }
 
 function rank(b: Block): number {
@@ -772,6 +774,187 @@ function occupyBlockAt(
   return made
 }
 
+/**
+ * The lesson a run of placed periods represents, as something placeBlock can
+ * re-place. The per-day cap is deliberately infinite: it was honoured when the
+ * lesson was first built, and the spread penalty — not a hard refusal — is what
+ * keeps a move from stacking a subject onto one day.
+ */
+function blockFromUnit(unit: PlacedEntry[], roomsByType: Map<RoomType, Room[]>): Block {
+  return {
+    requirementId: '',
+    homeroomId: unit[0].homeroomId,
+    subjectId: unit[0].subjectId,
+    teacherId: unit[0].teacherId,
+    teacherIds: teachersOf(unit[0]),
+    roomType: roomTypeOf(unit[0], roomsByType),
+    size: unit.length,
+    maxPerDay: Number.POSITIVE_INFINITY,
+    groupId: unit[0].groupId ?? null,
+  }
+}
+
+/** A lesson the repair phase is allowed to push out of the way. */
+const isEvictable = (p: PlacedEntry) => !p.isLocked && !p.groupId && !p.combinedKey
+
+/**
+ * Ejection repair — the phase that actually gets the last periods placed.
+ *
+ * Construction is greedy: each lesson takes the best cell free at the moment
+ * it is dealt with, and a lesson dealt with late can find every cell it is
+ * allowed to use already taken. Nothing afterwards used to rescue it. The
+ * local search below only shuffles lessons that are already placed to tidy the
+ * week, so whatever construction dropped stayed dropped for the whole run, and
+ * the only hope of a complete timetable was a restart that happened to deal
+ * the lessons in a luckier order. On a school whose week is 55% full and
+ * comfortably feasible that still left two or three periods unplaced on every
+ * single run — which is not a timetable anyone can use.
+ *
+ * So: for a period with nowhere to go, find the cells where the ONLY thing in
+ * the way is another lesson that could itself sit somewhere else, move that
+ * lesson out, and take its place. Cheapest first — the fewest lessons
+ * displaced — and the whole exchange is rolled back unless every displaced
+ * lesson finds a new home, so a repair can never make the week worse than it
+ * was. This is the standard ejection move from the timetabling literature, and
+ * it is what separates a greedy pass from a solver.
+ */
+function repairUnplaced(state: SolveState, unplaced: Block[], args: BuildArgs): Block[] {
+  if (unplaced.length === 0) return unplaced
+  const { sched, index, rooms, rng, outOfTime } = args
+
+  /** cellKey -> the periods sitting in it, across every class. */
+  let atCell = new Map<string, PlacedEntry[]>()
+  const reindex = () => {
+    atCell = new Map()
+    for (const p of state.placements) push(atCell, cellKey(p.day, p.slotId), p)
+  }
+  reindex()
+
+  // Every period of a block has to move with it, so a blocker is a whole run.
+  const unitOf = (p: PlacedEntry): PlacedEntry[] =>
+    p.blockKey ? state.placements.filter((q) => q.blockKey === p.blockKey) : [p]
+
+  /** How many periods per lesson we are willing to displace to seat one. */
+  const MAX_EVICTIONS = 3
+  /** Candidate cells tried per unplaced lesson, cheapest first. */
+  const MAX_CANDIDATES = 24
+
+  const stillUnplaced: Block[] = []
+
+  for (const block of unplaced) {
+    if (outOfTime?.()) {
+      stillUnplaced.push(block)
+      continue
+    }
+    const geo = scheduleFor(sched, block.homeroomId)
+    const token = hrToken(block.groupId)
+    const mine = new Set(teachersOf(block))
+
+    // Which lessons stand between this one and each cell run it could occupy.
+    const candidates: { day: Weekday; start: number; evict: PlacedEntry[][] }[] = []
+    for (const day of geo.days) {
+      position: for (let start = 0; start + block.size <= geo.slotIds.length; start++) {
+        for (let j = start; j < start + block.size - 1; j++) {
+          if (!geo.adjacentNext[j]) continue position // a break splits the run
+        }
+        const evict = new Map<PlacedEntry[], true>()
+        const byKey = new Map<string, PlacedEntry[]>() // de-dupes a block hit twice
+        for (let j = start; j < start + block.size; j++) {
+          const slotId = geo.slotIds[j]
+          const here = cellKey(day, slotId)
+          for (const k of busyKeys(sched, day, slotId)) {
+            for (const p of atCell.get(k) ?? []) {
+              // Two ways a placed period stands in the way: it holds this
+              // class's cell, or it has one of this lesson's teachers in a
+              // period that overlaps.
+              const takesMyCell =
+                p.homeroomId === block.homeroomId &&
+                cellKey(p.day, p.slotId) === here &&
+                !state.homeroomFree(block.homeroomId, here, token)
+              const takesMyTeacher = teachersOf(p).some((t) => mine.has(t))
+              if (!takesMyCell && !takesMyTeacher) continue
+              // A pinned lesson, a split group or a combined lesson is not
+              // ours to move, so this cell run is simply not available.
+              if (!isEvictable(p)) continue position
+              const id = p.blockKey ?? `${p.homeroomId}__${cellKey(p.day, p.slotId)}`
+              if (byKey.has(id)) continue
+              const unit = unitOf(p)
+              byKey.set(id, unit)
+              evict.set(unit, true)
+            }
+          }
+        }
+        // Nothing in the way means construction already tried and refused this
+        // cell on a rule no amount of moving can change.
+        const units = [...evict.keys()]
+        if (units.length === 0) continue
+        if (units.reduce((n, u) => n + u.length, 0) > MAX_EVICTIONS) continue
+        candidates.push({ day, start, evict: units })
+      }
+    }
+
+    // Fewest periods displaced first; ties broken randomly so restarts of the
+    // same deadlock try different exchanges.
+    const cost = (c: { evict: PlacedEntry[][] }) => c.evict.reduce((n, u) => n + u.length, 0)
+    const shuffled = shuffle(candidates, rng).sort((a, b) => cost(a) - cost(b))
+
+    let seated = false
+    for (const cand of shuffled.slice(0, MAX_CANDIDATES)) {
+      const seqBefore = state.blockSeq
+      const clockOf = (p: PlacedEntry) => sched.clock.get(p.slotId) ?? 0
+      const lift = (unit: PlacedEntry[]) => {
+        for (const p of unit) state.removeCell(p, clockOf(p), index.limits)
+      }
+      const restore = (unit: PlacedEntry[]) => {
+        for (const p of unit) state.occupyCell(p, clockOf(p), index.limits)
+      }
+
+      for (const unit of cand.evict) lift(unit)
+
+      // With the blockers gone, scoreBlock is the arbiter: time off, pins,
+      // max-per-day, the round-3 limits, max-in-a-row and rooms are all its
+      // business, and re-deriving any of them here would only drift from it.
+      const fit = scoreBlock(state, block, cand.day, cand.start, args, true)
+      if (!fit) {
+        for (const unit of cand.evict) restore(unit)
+        state.blockSeq = seqBefore
+        continue
+      }
+
+      const seatedRows = occupyBlockAt(state, block, cand.day, cand.start, fit.roomId, args)
+      // Each displaced lesson now has to find a home of its own. Rooms it used
+      // are free again, and the cell it came from is taken by the lesson we
+      // just seated, so this is a genuine re-placement.
+      const rehomed: PlacedEntry[][] = []
+      let allRehomed = true
+      for (const unit of cand.evict) {
+        const at = state.placements.length
+        if (!placeBlock(state, blockFromUnit(unit, rooms.byType), args, true)) {
+          allRehomed = false
+          break
+        }
+        rehomed.push(state.placements.slice(at))
+      }
+
+      if (allRehomed) {
+        seated = true
+        reindex()
+        break
+      }
+
+      // Put everything back exactly as it was.
+      for (const unit of rehomed) lift(unit)
+      lift(seatedRows)
+      for (const unit of cand.evict) restore(unit)
+      state.blockSeq = seqBefore
+    }
+
+    if (!seated) stillUnplaced.push(block)
+  }
+
+  return stillUnplaced
+}
+
 function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unplacedCombined: CombinedUnit[] } {
   const { blocks, locked, sched, index } = args
   const state = new SolveState()
@@ -800,7 +983,11 @@ function buildOnce(args: BuildArgs): { state: SolveState; unplaced: Block[]; unp
       if (!placeBlock(state, block, args, true)) unplaced.push(block)
     }
   }
-  return { state, unplaced, unplacedCombined }
+  // Greedy placement is done; now go back for the lessons it had nowhere to
+  // put. Repairing inside the attempt rather than only on the winner is what
+  // makes the restart comparison honest — attempts are chosen on their
+  // unplaced count, and an unrepaired count is not the count that matters.
+  return { state, unplaced: repairUnplaced(state, unplaced, args), unplacedCombined }
 }
 
 /**
@@ -1210,21 +1397,7 @@ function localSearch(
     for (const p of unit) state.removeCell(p, clockOf(p), index.limits)
   }
 
-  // The lesson a unit represents, as something placeBlock can re-place. The
-  // per-day cap is deliberately infinite: it was already honoured when the
-  // lesson was built, and the spread penalty — not a hard refusal — is what
-  // keeps a move from stacking a subject onto one day.
-  const blockOf = (unit: PlacedEntry[]): Block => ({
-    requirementId: '',
-    homeroomId: unit[0].homeroomId,
-    subjectId: unit[0].subjectId,
-    teacherId: unit[0].teacherId,
-    teacherIds: teachersOf(unit[0]),
-    roomType: roomTypeOf(unit[0], args.rooms.byType),
-    size: unit.length,
-    maxPerDay: Number.POSITIVE_INFINITY,
-    groupId: unit[0].groupId ?? null,
-  })
+  const blockOf = (unit: PlacedEntry[]) => blockFromUnit(unit, args.rooms.byType)
 
   /**
    * The penalty of everything the given lessons can change, counted once per
@@ -1440,7 +1613,7 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
   let restarts = 0
   for (let r = 0; r < limits.maxRestarts; r++) {
     const rng = makeRng(baseSeed + r * 7919)
-    const args: BuildArgs = { sched, blocks, combined, locked, index, rooms, rng }
+    const args: BuildArgs = { sched, blocks, combined, locked, index, rooms, rng, outOfTime }
     const attempt = buildOnce(args)
     restarts++
     const un = totalUnplaced(attempt)
@@ -1461,7 +1634,7 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
   const lsRng = makeRng(baseSeed + 104729)
   const moves = localSearch(
     finalState,
-    { sched, blocks, combined, locked, index, rooms, rng: lsRng },
+    { sched, blocks, combined, locked, index, rooms, rng: lsRng, outOfTime },
     limits.maxMoves,
     outOfTime,
   )
@@ -1501,8 +1674,8 @@ export function generateTimetable(input: GeneratorInput, effort?: SolverEffort):
       message: !combinedSchedule(sched, u)
         ? 'Its classes follow different period groups, so this combined lesson has no period they all share. Put them in one period group, or split the lesson.'
         : u.size > 1
-          ? `Could not fit a ${u.size}-period combined block — no day had ${u.size} back-to-back periods free for every member class, the teacher and the room.`
-          : 'Could not fit a combined-class period — a member class, the teacher, or the room was busy every slot.',
+          ? `Could not fit a ${u.size}-period combined block — no day had ${u.size} back-to-back periods that every member class, the teacher and the room were free for and allowed to use. Time off for the subject or any member class counts: see the health panel for which.`
+          : 'Could not fit a combined-class period — every period was either taken or marked time off for a member class, the teacher or the subject.',
       subjectId: u.subjectId,
       teacherId: u.teacherId ?? undefined,
     })

@@ -10,8 +10,9 @@ import type {
   GeneratorConflict, SlotGroup, CombinedClassInput,
 } from './types'
 import { detectConflicts, buildSchedules, scheduleFor } from './generator'
+import type { SlotGeometry } from './generator'
 import { teacherWorkloads, overloadedTeachers } from './workload'
-import { buildConstraintIndex, cellKey, limitBucketsFor } from './constraints'
+import { buildConstraintIndex, cellKey, limitBucketsFor, timeOffBlocked } from './constraints'
 import { teacherIdsOf } from './types'
 
 export interface HealthComponent {
@@ -119,8 +120,12 @@ export function computeHealth(input: HealthInput): HealthReport {
   const clashScore = clamp(100 - hard.length * 20)
 
   // ── 2. Coverage (placed required periods vs needed) ──────────
+  // A combined lesson's periods belong to the combined lesson, not to a
+  // same-subject requirement that happens to share the class — counting them
+  // for both would report a requirement as covered by somebody else's lesson.
   const placedByKey = new Map<string, number>()
   for (const e of entries) {
+    if (e.combinedKey) continue
     const k = `${e.homeroomId}|${e.subjectId}|${e.groupId ?? ''}`
     placedByKey.set(k, (placedByKey.get(k) ?? 0) + 1)
   }
@@ -136,6 +141,33 @@ export function computeHealth(input: HealthInput): HealthReport {
         severity: 'critical',
         message: `${hrName(r.homeroom_id)}: ${sName(r.subject_id)} short by ${short} period${short > 1 ? 's' : ''} (${got}/${r.periods_per_week}).`,
         homeroomId: r.homeroom_id, subjectId: r.subject_id,
+      })
+    }
+  }
+  // Combined lessons count towards coverage too. Scoring only
+  // timetable_requirements meant a school whose assembly could not be placed
+  // was told its week was complete, which is how two unplaced periods survived
+  // next to a green health score. The periods are shared by every member
+  // class, so each one counts once rather than once per class.
+  for (const c of input.combined ?? []) {
+    required += c.periodsPerWeek
+    const placed = new Set<string>()
+    for (const e of entries) {
+      if (e.combinedKey?.startsWith(`${c.id}__`)) placed.add(`${e.day}__${e.slotId}`)
+    }
+    const short = Math.max(0, c.periodsPerWeek - placed.size)
+    missing += short
+    if (short > 0) {
+      const where = c.members.length === 1
+        ? hrName(c.members[0].homeroomId)
+        : `${c.members.length} classes together`
+      issues.push({
+        severity: 'critical',
+        message:
+          `${sName(c.subjectId)} (${where}): short by ${short} period${short > 1 ? 's' : ''} ` +
+          `(${placed.size}/${c.periodsPerWeek}).`,
+        subjectId: c.subjectId,
+        homeroomId: c.members[0]?.homeroomId,
       })
     }
   }
@@ -283,6 +315,109 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * Parallel split groups share a period, so the busiest group counts once
  * rather than every group adding up.
  */
+/**
+ * A lesson that no timetable can contain, and why.
+ *
+ * Separate from the capacity arithmetic above because the cause is different
+ * in kind: these are not weeks that are too full, they are lessons whose time
+ * off leaves them nowhere legal to sit at all. The solver can only report them
+ * afterwards, as "could not fit", which sends the admin looking for a clash
+ * that does not exist — the periods were never available to begin with.
+ */
+export interface ImpossibleLesson {
+  subjectId: string
+  homeroomIds: string[]
+  /** Periods asked for per week. */
+  wanted: number
+  /** Periods per consecutive block; 1 for ordinary single periods. */
+  size: number
+  /** Cells the time-off rules leave open to this lesson. */
+  open: number
+  /** The longest back-to-back run among those cells. */
+  longestRun: number
+  reason: 'none_open' | 'no_run_long_enough' | 'fewer_cells_than_periods'
+}
+
+/**
+ * The cells a lesson is permitted to use, and the longest unbroken run of them
+ * on any one day. Counts only the rules that are fixed before the solve —
+ * subject, class and teacher time off — so the answer is "where could this
+ * EVER go", not "where is it free right now".
+ */
+function openCells(
+  geo: SlotGeometry,
+  index: ReturnType<typeof buildConstraintIndex>,
+  subjectId: string,
+  homeroomIds: string[],
+  teacherIds: string[],
+): { open: number; longestRun: number } {
+  let open = 0
+  let longestRun = 0
+  for (const day of geo.days) {
+    let run = 0
+    for (let i = 0; i < geo.slotIds.length; i++) {
+      const key = cellKey(day, geo.slotIds[i])
+      const blocked =
+        timeOffBlocked(index.subjectTimeOff, subjectId, key) ||
+        homeroomIds.some((h) => timeOffBlocked(index.homeroomTimeOff, h, key)) ||
+        (teacherIds.length === 0
+          ? timeOffBlocked(index.teacherTimeOff, null, key)
+          : teacherIds.some((t) => timeOffBlocked(index.teacherTimeOff, t, key)))
+      if (blocked) {
+        run = 0
+        continue
+      }
+      open++
+      // A run only continues through periods that are actually consecutive —
+      // a break between them makes the next cell the start of a new run.
+      run = i > 0 && geo.adjacentNext[i - 1] ? run + 1 : 1
+      if (run > longestRun) longestRun = run
+    }
+  }
+  return { open, longestRun }
+}
+
+export function impossibleLessons(
+  input: HealthInput,
+  sched: ReturnType<typeof buildSchedules>,
+  index: ReturnType<typeof buildConstraintIndex>,
+): ImpossibleLesson[] {
+  const out: ImpossibleLesson[] = []
+
+  const check = (
+    subjectId: string,
+    homeroomIds: string[],
+    teacherIds: string[],
+    wanted: number,
+    size: number,
+  ) => {
+    if (homeroomIds.length === 0 || wanted <= 0) return
+    const geo = scheduleFor(sched, homeroomIds[0])
+    if (geo.slotIds.length === 0 || geo.days.length === 0) return // reported separately
+    const { open, longestRun } = openCells(geo, index, subjectId, homeroomIds, teacherIds)
+    const reason: ImpossibleLesson['reason'] | null =
+      open === 0 ? 'none_open'
+      : size > 1 && longestRun < size ? 'no_run_long_enough'
+      : open < wanted ? 'fewer_cells_than_periods'
+      : null
+    if (reason) out.push({ subjectId, homeroomIds, wanted, size, open, longestRun, reason })
+  }
+
+  for (const r of input.requirements) {
+    check(r.subject_id, [r.homeroom_id], teacherIdsOf(r), r.periods_per_week, Math.max(1, r.min_block ?? 1))
+  }
+  for (const c of input.combined ?? []) {
+    check(
+      c.subjectId,
+      c.members.map((m) => m.homeroomId),
+      c.teacherIds?.length ? c.teacherIds : c.teacherId ? [c.teacherId] : [],
+      c.periodsPerWeek,
+      Math.max(1, c.minBlock ?? 1),
+    )
+  }
+  return out
+}
+
 function classCapacity(input: HealthInput, sched: ReturnType<typeof buildSchedules>) {
   const out: { homeroomId: string; wanted: number; available: number; timeOff: number }[] = []
   const homerooms = new Set(input.requirements.map((r) => r.homeroom_id))
@@ -336,6 +471,7 @@ function buildSuggestions({
   const out: HealthSuggestion[] = []
   const hrName = input.homeroomName ?? ((id: string) => id.slice(0, 8))
   const tName = input.teacherName ?? ((id: string) => id.slice(0, 8))
+  const sName = input.subjectName ?? ((id: string) => id.slice(0, 8))
 
   // ── Setup traps that make lessons unplaceable no matter what.
   // A class on a week with no periods can never be scheduled, and the grid
@@ -350,6 +486,45 @@ function buildSuggestions({
         emptyWeekClasses.slice(0, 3).map(hrName).join(', ') +
         '. Nothing can be scheduled for them until the period group they follow has period slots.',
       where: 'Configuration → Period groups',
+    })
+  }
+
+  // ── Lessons time off has left nowhere to sit.
+  // Deliberately NOT gated on `missing`: these are knowable before a single
+  // period is placed, and the solver can only ever report them afterwards as
+  // "could not fit", which reads as bad luck and sends the admin to Generate
+  // again. Said here, the admin is told the one thing that would fix it.
+  const impossible = impossibleLessons(input, sched, index)
+  if (impossible.length > 0) {
+    const where = (l: ImpossibleLesson) =>
+      l.homeroomIds.length === 1
+        ? hrName(l.homeroomIds[0])
+        : `${hrName(l.homeroomIds[0])} and ${l.homeroomIds.length - 1} other ${
+            l.homeroomIds.length === 2 ? 'class' : 'classes'
+          }`
+    const line = (l: ImpossibleLesson) => {
+      const who = `${sName(l.subjectId)} for ${where(l)}`
+      if (l.reason === 'none_open') {
+        return `${who} is marked time off in every period of the week, so none of its ` +
+          `${plural(l.wanted, 'period')} can be placed`
+      }
+      if (l.reason === 'no_run_long_enough') {
+        return `${who} is set to run as ${l.size} back-to-back periods, but time off leaves it ` +
+          `only ${plural(l.open, 'period')} in the week and never more than ${l.longestRun} ` +
+          'of them in a row'
+      }
+      return `${who} asks for ${plural(l.wanted, 'period')} but time off leaves it only ` +
+        `${l.open} to use`
+    }
+    out.push({
+      title: 'Give these lessons a period they are allowed to use',
+      detail:
+        `${plural(impossible.length, 'lesson')} can never be placed, whatever the solver does: ` +
+        impossible.slice(0, 3).map(line).join('; ') +
+        (impossible.length > 3 ? `, and ${impossible.length - 3} more` : '') +
+        '. Clear time off for them, or ask for fewer periods — a double can also be entered as ' +
+        'two single periods.',
+      where: 'Subject → Time off, Homeroom → Time off, Teacher → Time off',
     })
   }
 
@@ -404,7 +579,13 @@ function buildSuggestions({
       out.push({
         title: 'Loosen what is pinning the week down',
         detail:
-          `${plural(missing, 'period')} of ${required} could not be placed even though the totals fit, ` +
+          // An empty draft is short of every period it needs, which is not the
+          // same thing as a solve that failed to place them. Saying "1287 of
+          // 1287 could not be placed" before a generate was advice about a run
+          // that never happened.
+          (input.entries.length === 0
+            ? `${plural(missing, 'period')} of ${required} is still to be placed, and the totals fit, `
+            : `${plural(missing, 'period')} of ${required} could not be placed even though the totals fit, `) +
           'so something is blocking the slots rather than filling them. ' +
           [
             index.pins.length > 0 ? `${plural(index.pins.length, 'class-teacher pin')}` : '',

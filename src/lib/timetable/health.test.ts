@@ -194,3 +194,95 @@ describe('the breakdown footnotes', () => {
     }
   })
 })
+
+// ── Lessons that can never be placed ─────────────────────────
+// Time off can leave a lesson with nowhere legal to sit at all. The solver can
+// only report that afterwards, as "could not fit", which reads as bad luck and
+// sends the admin back to Generate. Knowable before a single period is placed,
+// so it is said up front and by name.
+
+describe('lessons time off has left nowhere to sit', () => {
+  /** Time off for a subject in every cell except the ones listed. */
+  const subjectOffExcept = (
+    subjectId: string, keep: { day: Weekday; slot: string }[], slotList: PeriodSlot[],
+  ) => {
+    const kept = new Set(keep.map((k) => `${k.day}__${k.slot}`))
+    const out = []
+    for (const day of DAYS) {
+      for (const s of slotList) {
+        if (kept.has(`${day}__${s.id}`)) continue
+        out.push({
+          id: `off-${day}-${s.id}`, config_id: 'cfg', scope: 'subject' as const,
+          scope_id: subjectId, homeroom_id: null, type: 'time_off' as const,
+          value: null, day, slot_id: s.id, created_at: '', updated_at: '',
+        })
+      }
+    }
+    return out
+  }
+
+  it('names a double whose only free periods are never back-to-back', () => {
+    const slotList = slots(6)
+    // Assembly is allowed in exactly two periods all week, on different days,
+    // so it can never run as the double it is set up as.
+    const r = report({
+      slots: slotList,
+      constraints: subjectOffExcept('assembly', [
+        { day: 'monday', slot: slotList[0].id },
+        { day: 'friday', slot: slotList[0].id },
+      ], slotList),
+      requirements: [
+        requirement({
+          id: 'r1', homeroom_id: 'hr1', subject_id: 'assembly',
+          periods_per_week: 2, max_per_day: 2, min_block: 2, max_block: 2,
+        }),
+      ],
+    })
+    const s = r.suggestions.find((x) => /period they are allowed to use/.test(x.title))
+    expect(s).toBeDefined()
+    expect(s!.detail).toContain('assembly')
+    expect(s!.detail).toContain('HR1')
+    expect(s!.detail).toContain('2 back-to-back periods')
+    expect(s!.detail).toContain('never more than 1 of them in a row')
+  })
+
+  it('names a lesson with more periods to place than cells to put them in', () => {
+    const slotList = slots(6)
+    const r = report({
+      slots: slotList,
+      constraints: subjectOffExcept('music', [
+        { day: 'monday', slot: slotList[0].id },
+        { day: 'tuesday', slot: slotList[1].id },
+      ], slotList),
+      requirements: [
+        requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'music', periods_per_week: 5 }),
+      ],
+    })
+    const s = r.suggestions.find((x) => /period they are allowed to use/.test(x.title))
+    expect(s!.detail).toContain('asks for 5 periods but time off leaves it only 2')
+  })
+
+  it('says nothing when every lesson has somewhere it could go', () => {
+    const r = report({
+      requirements: [
+        requirement({ id: 'r1', homeroom_id: 'hr1', subject_id: 'eng', periods_per_week: 5 }),
+      ],
+    })
+    expect(r.suggestions.some((x) => /period they are allowed to use/.test(x.title))).toBe(false)
+  })
+
+  it('counts an unplaced combined lesson as missing coverage', () => {
+    const slotList = slots(6)
+    const combined = [{
+      id: 'cmb1', subjectId: 'assembly', teacherId: null, teacherIds: [], roomId: null,
+      roomType: 'classroom' as const, periodsPerWeek: 2, maxPerDay: 2, minBlock: 2, maxBlock: 2,
+      members: [{ homeroomId: 'hr1', groupId: null }, { homeroomId: 'hr2', groupId: null }],
+    }]
+    // Nothing placed for it: scoring only timetable_requirements used to call
+    // this a perfect week.
+    const r = report({ slots: slotList, combined, requirements: [] })
+    expect(r.issues.some((i) => /assembly/.test(i.message) && /short by 2/.test(i.message))).toBe(true)
+    const coverage = r.components.find((c) => c.key === 'coverage')
+    expect(coverage!.score).toBe(0)
+  })
+})

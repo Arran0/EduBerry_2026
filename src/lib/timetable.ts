@@ -527,75 +527,97 @@ export async function updateTimetableMeta(id: string, patch: { name?: string }):
 const ENTRY_SELECT =
   '*, subject:timetable_subjects(*), teacher:profiles(id, full_name, avatar_url, role), room:timetable_rooms(*), group:timetable_homeroom_groups(*)'
 
-export async function fetchEntries(timetableId: string): Promise<TimetableEntry[]> {
-  const { data, error } = await supabase
-    .from('timetable_entries')
-    .select(ENTRY_SELECT)
-    .eq('timetable_id', timetableId)
+/** PostgREST caps a plain select at 1000 rows, so entries are read in pages. */
+const ENTRY_PAGE_SIZE = 1000
 
-  if (error) {
-    console.error('fetchEntries error:', error)
-    return []
+/**
+ * Every entry of one timetable version.
+ *
+ * Paged deliberately. A whole-school week is far more than 1000 rows — 34
+ * classes over a 6-day week of 11 periods is ~1450 — and PostgREST truncates a
+ * plain select at 1000 without saying so. The admin workspace loads this into
+ * the draft it then saves back, so a silent truncation here did not just show a
+ * partial week: the next "Save draft" wrote the truncated week over the
+ * complete one and several hundred periods were gone for good.
+ */
+export async function fetchEntries(timetableId: string): Promise<TimetableEntry[]> {
+  const rows: TimetableEntry[] = []
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('timetable_entries')
+      .select(ENTRY_SELECT)
+      .eq('timetable_id', timetableId)
+      // A stable order is what makes paging meaningful — without one, two
+      // pages can repeat a row and leave another out.
+      .order('id', { ascending: true })
+      .range(page * ENTRY_PAGE_SIZE, page * ENTRY_PAGE_SIZE + ENTRY_PAGE_SIZE - 1)
+
+    if (error) {
+      console.error('fetchEntries error:', error)
+      // A half-read week must never reach the draft the admin then saves back.
+      return []
+    }
+    const batch = (data ?? []) as TimetableEntry[]
+    rows.push(...batch)
+    if (batch.length < ENTRY_PAGE_SIZE) return rows
   }
-  return (data ?? []) as TimetableEntry[]
 }
 
-// Replaces all entries for a timetable with a freshly generated set
-// (used when persisting a draft from the generator). Locked cells are
-// expected to already be present in `entries`.
+/**
+ * Replaces every entry of a timetable with the draft the admin is looking at.
+ * Pinned cells are expected to already be present in `entries`.
+ *
+ * Returns the number of periods the database now holds, or null if nothing was
+ * written. Handed to one Postgres function rather than done as a delete
+ * followed by an insert: the two-round-trip version had no transaction around
+ * it, so an insert that failed — a bad row, a dropped connection, a closed tab
+ * — left the week deleted and nothing in its place, while reporting only that
+ * the save had failed. A count that disagrees with what was sent is reported as
+ * a failure too, so "Draft saved" is never shown over a save that didn't land.
+ */
 export async function replaceEntries(
   timetableId: string,
   entries: PlacedEntry[],
-): Promise<boolean> {
-  // Resolve teacher display names (the caller — an admin — can read profiles)
-  // so students who cannot read staff profiles still see the teacher per period.
-  // Co-taught periods carry every teacher in teacher_ids / teacher_names, with
-  // the primary duplicated into the legacy singular columns. The name lookup
-  // doesn't depend on the delete, so the two round trips go out together.
-  const teacherIds = [...new Set(entries.flatMap((e) => teacherIdsOf(e)))]
-  const [del, profileRows] = await Promise.all([
-    supabase.from('timetable_entries').delete().eq('timetable_id', timetableId),
-    teacherIds.length > 0
-      ? supabase.from('profiles').select('id, full_name').in('id', teacherIds)
-      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
-  ])
-  if (del.error) {
-    console.error('replaceEntries (delete) error:', del.error)
-    return false
-  }
-  if (entries.length === 0) return true
-
-  const nameById = new Map<string, string>()
-  for (const p of profileRows.data ?? []) nameById.set(p.id, p.full_name)
-
+): Promise<number | null> {
   const rows = entries.map((e) => {
     const ids = teacherIdsOf(e)
     return {
-    timetable_id: timetableId,
-    homeroom_id: e.homeroomId,
-    day: e.day,
-    slot_id: e.slotId,
-    subject_id: e.subjectId || null,  // '' is not a valid UUID; coerce to null
-    teacher_id: ids[0] ?? null,
-    teacher_ids: ids,
-    teacher_name: ids[0] ? nameById.get(ids[0]) ?? null : null,
-    teacher_names: ids.map((id) => nameById.get(id) ?? '').filter(Boolean),
-    room_id: e.roomId,
-    is_locked: e.isLocked,
-    group_id: e.groupId ?? null,
-    split_key: e.splitKey ?? null,
-    combined_key: e.combinedKey ?? null,
-    // Every period of a double/triple carries the same key, so a reloaded
-    // draft still knows which rows are one lesson.
-    block_key: e.blockKey ?? null,
+      homeroom_id: e.homeroomId,
+      day: e.day,
+      slot_id: e.slotId,
+      subject_id: e.subjectId || null, // '' is not a valid UUID; coerce to null
+      // The primary teacher, the display names and the legacy singular columns
+      // are all derived from this list inside the function, against the
+      // profiles table rather than against whatever the browser last loaded.
+      teacher_ids: ids,
+      room_id: e.roomId,
+      is_locked: e.isLocked,
+      group_id: e.groupId ?? null,
+      split_key: e.splitKey ?? null,
+      combined_key: e.combinedKey ?? null,
+      // Every period of a double/triple carries the same key, so a reloaded
+      // draft still knows which rows are one lesson.
+      block_key: e.blockKey ?? null,
     }
   })
-  const { error } = await supabase.from('timetable_entries').insert(rows)
+
+  const { data, error } = await supabase.rpc('replace_timetable_entries', {
+    p_timetable_id: timetableId,
+    p_rows: rows,
+  })
   if (error) {
-    console.error('replaceEntries (insert) error:', error.code, error.message, error.details, error.hint)
-    return false
+    console.error('replaceEntries error:', error.code, error.message, error.details, error.hint)
+    return null
   }
-  return true
+
+  // The function counts the stored rows, so a mismatch means the save did not
+  // do what the admin was about to be told it did.
+  const written = typeof data === 'number' ? data : Number(data)
+  if (!Number.isFinite(written) || written !== rows.length) {
+    console.error(`replaceEntries: asked to store ${rows.length} rows, database holds ${data}`)
+    return null
+  }
+  return written
 }
 
 // Publishes a timetable, demotes any other published timetable for the
