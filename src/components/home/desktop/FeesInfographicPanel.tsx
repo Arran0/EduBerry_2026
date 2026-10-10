@@ -68,7 +68,7 @@ export default function FeesInfographicPanel({
         />
 
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
             Billed this year · {fmtINR(billed)}
           </p>
           <MetricBars
@@ -101,12 +101,12 @@ export default function FeesInfographicPanel({
           className="flex items-center gap-2.5 px-4 py-3 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
           title={`Today's collection: ${fmtINRExact(summary?.todayCollection ?? 0)}`}
         >
-          <CalendarCheck size={15} className="text-slate-400 flex-shrink-0" />
+          <CalendarCheck size={15} className="text-slate-500 flex-shrink-0" />
           <span className="min-w-0">
             <span className="block text-sm font-bold text-slate-800 tabular-nums leading-none">
               {fmtINR(summary?.todayCollection ?? 0)}
             </span>
-            <span className="block text-[11px] font-medium text-slate-400 mt-1 truncate">
+            <span className="block text-[11px] font-medium text-slate-500 mt-1 truncate">
               Today&apos;s collection
             </span>
           </span>
@@ -115,12 +115,12 @@ export default function FeesInfographicPanel({
           href={outstandingHref}
           className="flex items-center gap-2.5 px-4 py-3 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
         >
-          <Users size={15} className="text-slate-400 flex-shrink-0" />
+          <Users size={15} className="text-slate-500 flex-shrink-0" />
           <span className="min-w-0">
             <span className="block text-sm font-bold text-slate-800 tabular-nums leading-none">
               {summary?.studentsWithDues ?? '—'}
             </span>
-            <span className="block text-[11px] font-medium text-slate-400 mt-1 truncate">
+            <span className="block text-[11px] font-medium text-slate-500 mt-1 truncate">
               {duesLabel}
             </span>
           </span>

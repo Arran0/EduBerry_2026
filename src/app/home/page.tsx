@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMe
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
-import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import {
   Bell,
@@ -37,6 +37,8 @@ import {
   CalendarClock,
   FileSpreadsheet,
   ClipboardCheck,
+  Pause,
+  Play,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -98,7 +100,7 @@ import AttendanceInfographicPanel, {
   HomeAttendanceCounts,
 } from '@/components/home/desktop/AttendanceInfographicPanel'
 import { fmtINR } from '@/lib/formatMoney'
-import { useIsDesktop } from '@/hooks/useMediaQuery'
+import { useIsDesktop, useHasHover } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
@@ -136,6 +138,21 @@ const containerVariants = {
     opacity: 1,
     transition: { staggerChildren: 0.09, delayChildren: 0.04 }
   }
+}
+
+/* Reduced-motion counterparts. The CSS @media block only reaches .pressable
+   and .sheen-animate; every framer-motion animation on this page (the 2 s
+   banner reveal, the 9 s Ken Burns drift, these staggered springs, the strip's
+   autoplay) ran regardless of the OS setting. These keep the same end state
+   and drop the travel. */
+const staticContainerVariants = {
+  hidden: { opacity: 1 },
+  visible: { opacity: 1, transition: { staggerChildren: 0, delayChildren: 0 } },
+}
+
+const staticItemVariants = {
+  hidden: { opacity: 1, y: 0 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0 } },
 }
 
 const itemVariants = {
@@ -185,7 +202,7 @@ function SectionHeading({
         <div className="min-w-0">
           {eyebrow && (
             <p
-              className={`eyebrow mb-1.5 lg:mb-1 ${dark ? 'text-white/70' : 'text-slate-400'}`}
+              className={`eyebrow mb-1.5 lg:mb-1 ${dark ? 'text-white/80' : 'text-slate-500'}`}
               style={dark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
             >
               {eyebrow}
@@ -197,7 +214,7 @@ function SectionHeading({
           >
             {title}
           </h2>
-          {subtitle && <p className={`text-[10px] lg:text-[11px] leading-none mt-1.5 truncate ${dark ? 'text-white/60' : 'text-slate-400'}`}>{subtitle}</p>}
+          {subtitle && <p className={`text-[10px] lg:text-[11px] leading-none mt-1.5 truncate ${dark ? 'text-white/80' : 'text-slate-500'}`}>{subtitle}</p>}
         </div>
       </div>
       {action}
@@ -267,10 +284,10 @@ const DOT_COLORS: Record<AdminCardView, string> = {
  * the card rather than the strip's full height.
  */
 function CarouselArrows({ onPrev, onNext }: { onPrev: () => void; onNext: () => void }) {
-  const arrowClass = `pointer-events-auto absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center
-    bg-white/80 backdrop-blur-sm border border-white/70 shadow-sm text-slate-500
+  const arrowClass = `pointer-events-auto absolute top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center
+    bg-white/80 backdrop-blur-sm border border-white/70 shadow-sm text-slate-600
     opacity-0 group-hover/carousel:opacity-100 focus-visible:opacity-100
-    hover:bg-white hover:text-slate-800 transition-all duration-200
+    hover:bg-white hover:text-slate-900 transition-all duration-200
     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 bottom-10 z-10 max-w-7xl mx-auto">
@@ -310,7 +327,7 @@ function FeeTilesCard({
         <Link href={todayHref} className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
           <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
           <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(summary?.todayCollection ?? 0)}</p>
-          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Today&apos;s Collection</p>
+          <p className="text-[10px] font-semibold text-[#52525B] mt-0.5">Today&apos;s Collection</p>
         </Link>
         <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
           <Users size={15} className="text-[#A1A1AA] mb-1.5" />
@@ -345,25 +362,30 @@ function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }
                 <Icon size={12} className="text-slate-500" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{scope.title}</span>
               </div>
-              <Link href={scope.base} className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+              <Link href={scope.base} className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
                 View report <ChevronRight size={11} />
               </Link>
             </div>
+            {/* Tints stay, but the ink on them steps down to the 700 ramp: the
+                400/500 tones these used read at 1.6–2.5:1 on their own 50-level
+                tint — the headline number on an admin's home page was below
+                even the 3:1 large-text floor. The 700s hold the same semantic
+                hue at 4.8–5.9:1. */}
             <div className="grid grid-cols-3 gap-2">
               <Link href={`${scope.base}#${scope.anchors[0]}`} className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                <CheckCircle2 size={13} className="text-emerald-500 mb-1" />
-                <span className="text-xl font-black text-emerald-600 leading-none">{scope.tally?.present ?? '—'}</span>
-                <span className="text-[9.5px] font-semibold text-emerald-500 mt-1">Present</span>
+                <CheckCircle2 size={13} className="text-emerald-600 mb-1" />
+                <span className="text-xl font-black text-emerald-700 leading-none">{scope.tally?.present ?? '—'}</span>
+                <span className="text-[10.5px] font-semibold text-emerald-700 mt-1">Present</span>
               </Link>
               <Link href={`${scope.base}#${scope.anchors[1]}`} className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                <XCircle size={13} className="text-red-400 mb-1" />
-                <span className="text-xl font-black text-red-500 leading-none">{scope.tally?.absent ?? '—'}</span>
-                <span className="text-[9.5px] font-semibold text-red-400 mt-1">Absent</span>
+                <XCircle size={13} className="text-red-600 mb-1" />
+                <span className="text-xl font-black text-red-700 leading-none">{scope.tally?.absent ?? '—'}</span>
+                <span className="text-[10.5px] font-semibold text-red-700 mt-1">Absent</span>
               </Link>
               <Link href={`${scope.base}#${scope.anchors[2]}`} className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                <AlertTriangle size={12} className="text-amber-400 mb-1" />
-                <span className="text-xl font-black text-amber-500 leading-none">{scope.tally?.exception ?? '—'}</span>
-                <span className="text-[9.5px] font-semibold text-amber-400 mt-1">Irregular</span>
+                <AlertTriangle size={12} className="text-amber-700 mb-1" />
+                <span className="text-xl font-black text-amber-700 leading-none">{scope.tally?.exception ?? '—'}</span>
+                <span className="text-[10.5px] font-semibold text-amber-700 mt-1">Irregular</span>
               </Link>
             </div>
           </div>
@@ -372,6 +394,18 @@ function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }
     </div>
   )
 }
+
+/**
+ * `inert` on an offscreen carousel slide, spelled so React 18 actually emits it.
+ * React 18 doesn't carry `inert` in its known-property list, so a boolean value
+ * is dropped with a "Received `true` for a non-boolean attribute" warning and
+ * never reaches the DOM; an empty string is the HTML spelling of a *present*
+ * boolean attribute and passes straight through as an unknown attribute. The
+ * cast is only to satisfy @types/react, which already types `inert` the React 19
+ * way (boolean) — drop both the constant and the cast on the React 19 upgrade
+ * and write `inert={!active}`.
+ */
+const INERT_ATTR = { inert: '' } as unknown as { inert?: boolean }
 
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
@@ -470,6 +504,29 @@ export default function HomePage() {
     setStripNode(node)
   }, [])
   const [autoplayResetKey, setAutoplayResetKey] = useState(0)
+  // OS-level "reduce motion". Drives both the entrance animations and whether
+  // the strip rotates on its own at all.
+  const reduceMotion = useReducedMotion()
+  // WCAG 2.2.2 (Pause, Stop, Hide): content that moves on its own for more
+  // than five seconds needs a way to stop it. `userPausedAutoplay` is the
+  // explicit control below the dots; `autoplayHeld` is the implicit pause
+  // while a pointer is over the strip or focus is inside it, so the card can't
+  // slide out from under someone mid-read.
+  const [userPausedAutoplay, setUserPausedAutoplay] = useState(false)
+  const [autoplayHeld, setAutoplayHeld] = useState(false)
+  // The implicit hold is for pointer devices only — see useHasHover: a tap on
+  // a phone leaves a phantom hover behind, which would latch the hold on and
+  // stop the strip rotating for the rest of the session. Touch already resets
+  // the autoplay clock on every swipe and tap (autoplayResetKey), and has the
+  // pause button for a deliberate stop.
+  const hasHover = useHasHover()
+  const holdAutoplay = useCallback((held: boolean) => {
+    if (hasHover) setAutoplayHeld(held)
+  }, [hasHover])
+  // Resolved once here rather than branching at each of the dozen motion.div
+  // call sites below.
+  const pageVariants = reduceMotion ? staticContainerVariants : containerVariants
+  const cardVariants = reduceMotion ? staticItemVariants : itemVariants
 
   useEffect(() => {
     const checkMobile = () => setIsMobileBanner(window.innerWidth < 640)
@@ -947,7 +1004,7 @@ export default function HomePage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-emerald-700">Live</span>
               </div>
-              <span className="text-xs font-medium text-slate-400">{today}</span>
+              <span className="text-xs font-medium text-slate-500">{today}</span>
             </div>
           }
         />
@@ -967,7 +1024,7 @@ export default function HomePage() {
           chipClass="bg-gradient-to-br from-emerald-400 to-teal-500"
           eyebrow="Today"
           title="Attendance"
-          action={<span className="text-xs font-medium text-slate-400">{today}</span>}
+          action={<span className="text-xs font-medium text-slate-500">{today}</span>}
         />
       ),
       body: <TeacherAttendanceCard key={dayKey} userId={user.id} />,
@@ -1212,7 +1269,14 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!showCardCarousel || CARD_VIEWS.length < 2) return
+    // Reduced motion, the explicit pause button, and a pointer or focus inside
+    // the strip each stop the clock entirely — the user still has the dots,
+    // the arrows and the swipe to move through the deck themselves.
+    if (reduceMotion || userPausedAutoplay || autoplayHeld) return
     const t = setInterval(() => {
+      // A background tab shouldn't burn through the deck: the user would come
+      // back several cards on from the one they left open.
+      if (typeof document !== 'undefined' && document.hidden) return
       const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
       const currentIdx = Math.round(-dragX.get() / W)
       const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
@@ -1220,7 +1284,7 @@ export default function HomePage() {
       animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
     }, 7000)
     return () => clearInterval(t)
-  }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey])
+  }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey, reduceMotion, userPausedAutoplay, autoplayHeld])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -1469,24 +1533,29 @@ export default function HomePage() {
   return (
     <ProtectedLayout>
       <div data-page-theme="home">
-        <motion.div variants={containerVariants} initial="hidden" animate="visible">
+        <motion.div variants={pageVariants} initial="hidden" animate="visible">
 
-          {/* ── Immersive full-width welcome banner ── */}
+          {/* ── Immersive full-width welcome banner ──
+              The reveal animates `height`, which relays out everything below it
+              on every frame for two full seconds — the whole page slides down
+              under the pointer while it settles. Under reduced motion it opens
+              at its final height instead, and the Ken Burns drift and the sheen
+              sweep sit out too. */}
           <AnimatePresence>
             {bannerReady && (
               <motion.div
                 key="home-banner"
-                initial={{ height: 0 }}
+                initial={reduceMotion ? false : { height: 0 }}
                 animate={{ height: bannerHeight }}
                 exit={{ height: 0 }}
-                transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
-                className="relative w-full overflow-hidden sheen sheen-animate"
+                transition={reduceMotion ? { duration: 0 } : { duration: 2, ease: [0.22, 1, 0.36, 1] }}
+                className={`relative w-full overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
               >
                 <motion.div
-                  initial={{ opacity: 0, scale: 1.04 }}
+                  initial={reduceMotion ? false : { opacity: 0, scale: 1.04 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
+                  transition={reduceMotion ? { duration: 0 } : { duration: 2, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute inset-x-0 top-0"
                   style={{ height: bannerHeight, willChange: 'transform, opacity' }}
                 >
@@ -1497,9 +1566,9 @@ export default function HomePage() {
                   src={welcomeBanner}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
-                  initial={{ scale: 1.12 }}
+                  initial={reduceMotion ? false : { scale: 1.12 }}
                   animate={{ scale: 1 }}
-                  transition={{ duration: 9, ease: 'easeOut' }}
+                  transition={reduceMotion ? { duration: 0 } : { duration: 9, ease: 'easeOut' }}
                   style={{ willChange: 'transform' }}
                 />
               ) : (
@@ -1518,14 +1587,30 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* Admin: small pencil icon pinned to top-right corner */}
+              {/* Admin: small pencil icon pinned to top-right corner.
+                  The file input used to be `hidden` (display:none), which takes
+                  it out of the tab order — and a <label> isn't focusable in its
+                  own right, so the only way to change the banner was a mouse.
+                  `sr-only` keeps it invisible but focusable, focus-within draws
+                  the ring on the chip, and the input carries the accessible
+                  name the icon alone didn't give it. 44 px target, like the
+                  other controls on the page. */}
               {isAdmin && (
-                <label className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all">
-                  <Pencil size={13} className="text-white" />
-                  <input type="file" accept="image/*" className="hidden" onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) handleBannerUpload(f)
-                  }} />
+                <label
+                  title="Change welcome banner"
+                  className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all focus-within:ring-2 focus-within:ring-white/90 focus-within:bg-black/45"
+                >
+                  <Pencil size={14} className="text-white" aria-hidden="true" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    aria-label="Change welcome banner image"
+                    className="sr-only"
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f) handleBannerUpload(f)
+                    }}
+                  />
                 </label>
               )}
 
@@ -1618,22 +1703,51 @@ export default function HomePage() {
               than stacked tiles. ── */}
           {carouselSlots.length > 0 && (
           <div className="w-full px-2 pt-6">
-            <motion.div variants={itemVariants} className="mb-0">
+            <motion.div variants={cardVariants} className="mb-0">
               <div
                   ref={attachStrip}
+                  role="group"
+                  aria-roledescription="carousel"
+                  aria-label="Today at a glance"
                   className="group/carousel strip-compact relative overflow-hidden min-h-[330px] pb-6"
                   style={{ touchAction: 'pan-y' }}
+                  // Hold the rotation while the strip is being read or used.
+                  // Focus is tracked with the capture phase so it fires for a
+                  // link *inside* a card, not just the strip itself.
+                  onMouseEnter={() => holdAutoplay(true)}
+                  onMouseLeave={() => holdAutoplay(false)}
+                  onFocusCapture={() => holdAutoplay(true)}
+                  onBlurCapture={() => holdAutoplay(false)}
                 >
                   {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
                   <motion.div style={{ x: dragX, display: 'flex' }}>
-                    {carouselSlots.map(slot => (
-                      <div key={slot.key} style={{ width: containerW || '100%', flexShrink: 0 }}>
+                    {carouselSlots.map((slot, idx) => {
+                      const active = slot.key === adminCardView
+                      return (
+                      /* The strip is `overflow-hidden`, so the slides either
+                         side are invisible but were still in the tab order —
+                         tabbing off the active card dropped focus onto links
+                         no one could see and dragged the strip sideways. `inert`
+                         takes the whole offscreen subtree out of the tab order
+                         and out of the a11y tree in one go (and, unlike
+                         `tabIndex={-1}`, it reaches descendants); aria-hidden
+                         covers the browsers that don't support it yet. */
+                      <div
+                        key={slot.key}
+                        role="group"
+                        aria-roledescription="slide"
+                        aria-label={`${idx + 1} of ${carouselSlots.length}: ${slot.key.replace(/-/g, ' ')}`}
+                        aria-hidden={!active}
+                        {...(active ? {} : INERT_ATTR)}
+                        style={{ width: containerW || '100%', flexShrink: 0 }}
+                      >
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                           {slot.heading}
                           <div className="mx-2 sm:mx-4">{slot.body}</div>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </motion.div>
 
                   {/* Desktop has no swipe, so the strip grows pointer and
@@ -1646,17 +1760,43 @@ export default function HomePage() {
                     />
                   )}
 
-                  {/* Slide indicator dots */}
-                  <div className="flex justify-center gap-1.5 mt-3">
+                  {/* Slide indicator dots, plus the autoplay stop control.
+                      The dots keep their 6 px look but each one now sits in a
+                      44 px-tall tap target (a transparent padded button with
+                      the dot drawn inside) — at their old size they were a
+                      6 px target, well under the 44 px floor, and on a phone
+                      they sit right where a thumb lands. */}
+                  <div className="flex justify-center items-center gap-0.5 mt-1">
                     {CARD_VIEWS.map((v: AdminCardView) => (
                       <button
                         key={v}
+                        type="button"
                         onClick={() => { if (v !== adminCardView) snapToView(v) }}
                         aria-label={`Show ${v.replace(/-/g, ' ')}`}
                         aria-current={adminCardView === v}
-                        className={`rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${adminCardView === v ? `w-4 h-1.5 ${DOT_COLORS[v]}` : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'}`}
-                      />
+                        className="group/dot h-11 px-1.5 flex items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+                      >
+                        <span
+                          className={`block rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${DOT_COLORS[v]}` : 'w-1.5 h-1.5 bg-slate-300 group-hover/dot:bg-slate-400'}`}
+                        />
+                      </button>
                     ))}
+
+                    {/* WCAG 2.2.2 — the deck advances itself every 7 s, so
+                        there has to be a way to stop it that doesn't depend on
+                        hovering. Hidden when the OS already asks for reduced
+                        motion, since nothing is rotating to stop. */}
+                    {CARD_VIEWS.length > 1 && !reduceMotion && (
+                      <button
+                        type="button"
+                        onClick={() => setUserPausedAutoplay(p => !p)}
+                        aria-label={userPausedAutoplay ? 'Resume automatic card rotation' : 'Stop automatic card rotation'}
+                        aria-pressed={userPausedAutoplay}
+                        className="ml-1 w-11 h-11 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+                      >
+                        {userPausedAutoplay ? <Play size={12} /> : <Pause size={12} />}
+                      </button>
+                    )}
                   </div>
                 </div>
             </motion.div>
@@ -1669,14 +1809,14 @@ export default function HomePage() {
           {isDesktop && (attendanceSlot || feeSlots.length > 0) && (
             <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2 space-y-6 ${carouselSlots.length === 0 ? 'pt-6' : ''}`}>
               {attendanceSlot && (
-                <motion.section variants={itemVariants}>
+                <motion.section variants={cardVariants}>
                   {attendanceSlot.heading}
                   {attendanceSlot.desktopBody ?? attendanceSlot.body}
                 </motion.section>
               )}
               {feeSlots.length > 0 && (
                 <motion.div
-                  variants={itemVariants}
+                  variants={cardVariants}
                   className={`grid gap-5 items-stretch ${feeSlots.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}
                 >
                   {feeSlots.map(slot => (
@@ -1700,7 +1840,7 @@ export default function HomePage() {
               and shift the page below it. ── */}
           {showClassroomsOnHome && (classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-              <motion.div variants={itemVariants}>
+              <motion.div variants={cardVariants}>
                 <SectionHeading
                   icon={GraduationCap}
                   chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
@@ -1766,7 +1906,7 @@ export default function HomePage() {
 
           {/* ── More Apps (full-bleed). Background is a fixed white, matching
               the sticky footer below — no custom background image here. ── */}
-          <motion.div variants={itemVariants}>
+          <motion.div variants={cardVariants}>
             <div className="relative w-full overflow-hidden bg-white">
               {/* Content */}
               <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">

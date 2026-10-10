@@ -26,3 +26,18 @@ export function useMediaQuery(query: string): boolean {
 export function useIsDesktop(): boolean {
   return useMediaQuery('(min-width: 1024px)')
 }
+
+/**
+ * A real pointing device — a mouse or trackpad, not a finger.
+ *
+ * For behaviour that keys off *hover* rather than width. A touch tap on iOS
+ * Safari synthesises `mouseenter` and leaves the element "hovered" until
+ * something else is tapped, so hover-driven state (pausing a carousel while
+ * the pointer rests on it, say) latches on and never releases on a phone.
+ * Gating those handlers on this keeps them to the devices that can actually
+ * hover; `(min-width: 1024px)` is the wrong test for it — a touchscreen laptop
+ * matches it and a mouse-driven small window doesn't.
+ */
+export function useHasHover(): boolean {
+  return useMediaQuery('(hover: hover) and (pointer: fine)')
+}
