@@ -21,7 +21,13 @@ const PRESENT = '#10b981'
 const ABSENT = '#ef4444'
 const IRREGULAR = '#f59e0b'
 
-function ScopeBlock({
+/**
+ * One attendance scope — students or staff — as a donut with the rate in the
+ * hole and the counts read off beside it. Exported because the combined
+ * School Overview panel composes the same two blocks inside its own box
+ * rather than reimplementing them.
+ */
+export function ScopeBlock({
   icon: Icon, title, tally, reportHref, hrefs,
 }: {
   icon: React.ElementType

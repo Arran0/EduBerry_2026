@@ -99,6 +99,7 @@ import AttendanceInfographicPanel, {
   AttendanceTally,
   HomeAttendanceCounts,
 } from '@/components/home/desktop/AttendanceInfographicPanel'
+import SchoolOverviewPanel from '@/components/home/desktop/SchoolOverviewPanel'
 import { fmtINR } from '@/lib/formatMoney'
 import { useIsDesktop, useIsTabletUp, useHasHover } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
@@ -701,7 +702,13 @@ export default function HomePage() {
     () => [...taskItemsByDay.values()].some(list => list.length > 0),
     [taskItemsByDay],
   )
-  const showTaskCalendar = hasTasks && (!isAdmin || showTaskCalendarOnHome)
+  /* A week calendar is a fixture, not a feed: the week itself is the content,
+     and a week with nothing due says "nothing due" — which is information, not
+     an empty card. So on the dashboard it keeps its place whether or not it has
+     entries. In the phone strip it still drops when empty, because there an
+     empty slide is a wasted swipe and seven wasted seconds. The admin's
+     show-on-home preference is untouched either way. */
+  const showTaskCalendar = (gridLayout || hasTasks) && (!isAdmin || showTaskCalendarOnHome)
 
   // Whether the notifications slot belongs in the strip at all: reserved
   // (with a skeleton) while its fetch is still in flight, since we don't yet
@@ -713,7 +720,7 @@ export default function HomePage() {
 
   // Student-only mini cards: shown until their own fetch reports back empty
   // (see the onEmptyChange props wired up below).
-  const showSchoolWork = !schoolWorkEmpty
+  const showSchoolWork = gridLayout || !schoolWorkEmpty
   const showAssessments = !assessmentsEmpty
   const showReportCards = !reportCardsEmpty
   const showTimetable = !timetableEmpty
@@ -949,6 +956,13 @@ export default function HomePage() {
      relaxes "has content", never "should this user see it". */
   const showEmptyStatCards = gridLayout
 
+  /* The three standing statistics, as one set of gates. The mobile slot list
+     and the desktop School Overview panel both read these, so "who is entitled
+     to see this ledger" is decided in exactly one place. */
+  const showAttendanceStat = isStaff && isAttendanceViewer && (showEmptyStatCards || showAttendanceViewerCard)
+  const showFeesStat = isAdmin && (showEmptyStatCards || showFees)
+  const showBusFeesStat = isAdmin && (showEmptyStatCards || showBusFees)
+
   const slots: HomeSlot[] = []
 
   if (isStudent && hasOverdueFees) {
@@ -1000,7 +1014,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && isAttendanceViewer && (showEmptyStatCards || showAttendanceViewerCard)) {
+  if (showAttendanceStat) {
     slots.push({
       key: 'attendance',
       // Two scopes of donuts side by side — this one earns the full width.
@@ -1163,7 +1177,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && (showEmptyStatCards || showFees)) {
+  if (showFeesStat) {
     slots.push({
       key: 'fees',
       span: 'half',
@@ -1197,7 +1211,7 @@ export default function HomePage() {
     })
   }
 
-  if (isAdmin && (showEmptyStatCards || showBusFees)) {
+  if (showBusFeesStat) {
     slots.push({
       key: 'bus-fees',
       span: 'half',
@@ -1255,15 +1269,33 @@ export default function HomePage() {
   const attendanceSlot = gridLayout ? slots.find(s => s.key === 'attendance') : undefined
   const feeSlots = gridLayout ? slots.filter(s => s.key === 'fees' || s.key === 'bus-fees') : []
 
-  /* A slot's desktop width. `half` is the default — two up at `md:`, three at
-     `xl:` where a 1600px container has the room. `wide` is for the cards that
-     read side-by-side internally (a week calendar, the two-scope attendance
-     panel): full width at `md:`, two thirds at `xl:` so a `half` can sit
-     beside it. */
-  const SPAN_CLASS: Record<HomeSlot['span'], string> = {
-    half: 'md:col-span-6 xl:col-span-4',
-    wide: 'md:col-span-12 xl:col-span-8',
+  /* A slot's width in the 12-column grid.
+
+     `half` is the default — two up at `md:`, three at `xl:` where a 1600px
+     container has the room. `wide` is for the cards that read side-by-side
+     internally (a week calendar, the two-scope attendance panel): full width
+     at `md:`, two thirds at `xl:` so a `half` can sit beside it.
+
+     The count overrides both when the deck is nearly empty. A student whose
+     cards have all resolved to empty but one was left with that one card at a
+     third of a 1280px page and two thirds of nothing beside it — the span is
+     only a *share* of a full row, and it needs a row to share. One card takes
+     the width; two split it. */
+  const spanClassFor = (slot: HomeSlot) => {
+    if (gridSlots.length === 1) return 'md:col-span-12'
+    if (gridSlots.length === 2) return 'md:col-span-6'
+    return slot.span === 'wide' ? 'md:col-span-12 xl:col-span-8' : 'md:col-span-6 xl:col-span-4'
   }
+
+  /* The combined statistics panel stands in for the separate stat rows at
+     `lg:`, so it appears whenever this account is entitled to any of them. */
+  const showOverviewPanel = showAttendanceStat || showFeesStat || showBusFeesStat
+
+  /* A coordinator's attendance is scoped to their own teams; the panel says
+     which, the same way the standalone attendance heading did. */
+  const coordinatorSubtitle = isCoordinator
+    ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team')
+    : undefined
 
   // The carousel's index space — the strip's own slots, so the dots and the
   // drag maths stay in step with what is actually in the strip at this width.
@@ -1855,59 +1887,78 @@ export default function HomePage() {
               order that disagrees with the page is not.
               `items-stretch` plus `.home-grid`'s `height: 100%` gives every
               card in a row a shared bottom edge. ── */}
-          {gridSlots.length > 0 && (
-            <div className="home-container pt-6">
-              <motion.div
-                variants={cardVariants}
-                className="home-grid grid grid-cols-1 md:grid-cols-12 items-stretch gap-4 lg:gap-5"
-              >
-                {gridSlots.map(slot => (
-                  <section
-                    key={slot.key}
-                    className={`flex flex-col min-w-0 ${SPAN_CLASS[slot.span]}`}
-                    aria-label={slot.key.replace(/-/g, ' ')}
-                  >
-                    {slot.heading}
-                    {/* min-h-0 lets an overflow-y-auto card inside actually
-                        scroll instead of growing the row; the min-height is the
-                        floor a short card holds so a row of one list and one
-                        near-empty card doesn't collapse to nothing. */}
-                    <div className="flex-1 min-h-0 md:min-h-[230px]">
-                      {slot.desktopBody ?? slot.body}
-                    </div>
-                  </section>
-                ))}
-              </motion.div>
-            </div>
-          )}
+          {/* The dashboard is one region with one rhythm — the feed grid and
+              the statistics below it, separated by a single `space-y-6` step
+              and closed by its own bottom padding. Two sibling containers each
+              with their own padding is what left the last card butted against
+              the white More Apps band with nothing between them. */}
+          {gridLayout && (gridSlots.length > 0 || showOverviewPanel || attendanceSlot || feeSlots.length > 0) && (
+            <div className="home-container pt-6 pb-6 space-y-6">
 
-          {/* ── md: and up, rows 2 and 3 — the standing statistics, never behind
-              a gesture. Attendance takes the full width (it carries two scopes
-              side by side), then the fee ledgers sit as peers.
-              At `lg:` each one swaps its stacked 2×2 tiles for the chart-plus-
-              rows infographic panel (`desktopBody`); between 768 and 1024 the
-              tiles stay, because a donut beside its metric rows needs more than
-              a half of 900px. Same container as every other region on the page,
-              so they all share one left edge. ── */}
-          {gridLayout && (attendanceSlot || feeSlots.length > 0) && (
-            <div className="home-container pt-6 pb-2 space-y-6">
-              {attendanceSlot && (
-                <motion.section variants={cardVariants}>
-                  {attendanceSlot.heading}
-                  {isDesktop ? (attendanceSlot.desktopBody ?? attendanceSlot.body) : attendanceSlot.body}
-                </motion.section>
-              )}
-              {feeSlots.length > 0 && (
+              {gridSlots.length > 0 && (
                 <motion.div
                   variants={cardVariants}
-                  className={`grid gap-4 lg:gap-5 items-stretch ${feeSlots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}
+                  className="home-grid grid grid-cols-1 md:grid-cols-12 items-stretch gap-4 lg:gap-5"
+                >
+                  {gridSlots.map(slot => (
+                    <section
+                      key={slot.key}
+                      className={`flex flex-col min-w-0 ${spanClassFor(slot)}`}
+                      aria-label={slot.key.replace(/-/g, ' ')}
+                    >
+                      {slot.heading}
+                      {/* min-h-0 lets an overflow-y-auto card inside actually
+                          scroll instead of growing the row; the min-height is
+                          the floor a short card holds so a row of one list and
+                          one near-empty card doesn't collapse to nothing. */}
+                      <div className="flex-1 min-h-0 md:min-h-[230px]">
+                        {slot.desktopBody ?? slot.body}
+                      </div>
+                    </section>
+                  ))}
+                </motion.div>
+              )}
+
+              {/* The standing statistics, never behind a gesture.
+                  At `lg:` they are one panel: attendance, school fees and bus
+                  fees are the same question asked of three ledgers, so they
+                  share a surface, a header and a footer strip instead of
+                  sitting in three cards with three headings and three borders
+                  between them.
+                  Between 768 and 1024 they stay as separate tile cards — a
+                  donut beside its metric rows needs more than a half of
+                  900px. */}
+              {isDesktop && showOverviewPanel && (
+                <motion.div variants={cardVariants}>
+                  <SchoolOverviewPanel
+                    attendance={showAttendanceStat
+                      ? { counts: attendanceCounts, subtitle: coordinatorSubtitle }
+                      : null}
+                    schoolFees={schoolFeesSummary}
+                    busFees={busFeesSummary}
+                    showAttendance={showAttendanceStat}
+                    showSchoolFees={showFeesStat}
+                    showBusFees={showBusFeesStat}
+                    today={today}
+                  />
+                </motion.div>
+              )}
+
+              {!isDesktop && attendanceSlot && (
+                <motion.section variants={cardVariants}>
+                  {attendanceSlot.heading}
+                  {attendanceSlot.body}
+                </motion.section>
+              )}
+              {!isDesktop && feeSlots.length > 0 && (
+                <motion.div
+                  variants={cardVariants}
+                  className={`grid gap-4 items-stretch ${feeSlots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}
                 >
                   {feeSlots.map(slot => (
                     <section key={slot.key} className="flex flex-col min-w-0">
                       {slot.heading}
-                      <div className="flex-1">
-                        {isDesktop ? (slot.desktopBody ?? slot.body) : slot.body}
-                      </div>
+                      <div className="flex-1">{slot.body}</div>
                     </section>
                   ))}
                 </motion.div>
@@ -2007,7 +2058,7 @@ export default function HomePage() {
                     with legible (11px) labels rather than the 9.5px ones that
                     only work at arm's length on a phone. */}
                 <div className="overflow-x-auto lg:overflow-visible scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                  <div className="flex gap-2 lg:grid lg:grid-cols-8 2xl:grid-cols-10 lg:gap-3">
+                  <div className="flex gap-2 lg:grid lg:grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] lg:gap-3">
                     {moreApps.map((app, idx) => {
                       const Icon = app.icon
                       return (
