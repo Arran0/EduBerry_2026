@@ -1,34 +1,29 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { UserCog, CalendarOff, Gauge } from 'lucide-react'
 import { teacherIdsOf } from '@/lib/timetable'
-import type { PeriodSlot, PlacedEntry, Weekday } from '@/lib/timetable'
 import { useTimetableDraft } from './draft/TimetableDraftContext'
 import DraftWeekGrid from './draft/DraftWeekGrid'
-import SlotDetailsModal from './SlotDetailsModal'
 import LessonStatsCard from './LessonStatsCard'
-import { SECTION_LABEL } from './ui'
+import PeriodGroupSwitch, { usePeriodGroupSwitch } from './PeriodGroupSwitch'
 
 // ============================================================
 // One teacher's week, laid out like the by-class view: periods down the side,
 // days across the top, one tile per lesson labelled with the class it belongs
-// to. Lessons drag and pin exactly as they do on the master grid, and the same
-// calendar doubles as the teacher's time-off sheet.
+// to. Lessons drag exactly as they do on the master grid, clicking one opens
+// the same slot box, and the calendar doubles as the teacher's time-off sheet.
 //
-// A teacher can teach across bell schedules, so one calendar is drawn per
-// period group they appear in — the periods of two bands are different rows
-// and can't share a grid.
+// A teacher can teach across bell schedules, whose periods are different rows
+// and cannot share a grid. Rather than stacking one calendar per band down the
+// page, the bands they actually work in become a switch above the grid.
 // ============================================================
 
 export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
   const {
-    weeks, slotGroupIds, entries, homerooms, subjects, teachers, rooms, constraints,
-    isConstraintOn, toggleConstraintCell, moveEntry, togglePin, setCellEntry, clearCellEntry,
-    groupName, cellConflicts, liveConflicts,
+    weeks, slotGroupIds, entries, homerooms, subjects, teachers, rooms,
+    isConstraintOn, toggleConstraintCell, moveEntry, liveConflicts, overrideToday,
   } = useTimetableDraft()
-
-  const [open, setOpen] = useState<{ entry: PlacedEntry; day: Weekday; slot: PeriodSlot } | null>(null)
 
   const teacher = teachers.find((t) => t.id === teacherId) ?? null
 
@@ -54,14 +49,11 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
     return keys
   }, [liveConflicts, lessons])
 
-  // The bands this teacher actually appears in, plus any band they are timed
-  // off in — a teacher with no lessons yet still needs a sheet to mark.
-  const relevantWeeks = useMemo(() => {
-    if (weeks.length <= 1) return weeks
-    const used = new Set<string | null>()
-    for (const e of lessons) used.add(slotGroupIds[e.homeroomId] ?? null)
-    return used.size === 0 ? weeks : weeks.filter((w) => used.has(w.groupId))
-  }, [weeks, lessons, slotGroupIds])
+  const lessonBands = useMemo(
+    () => lessons.map((e) => slotGroupIds[e.homeroomId] ?? null),
+    [lessons, slotGroupIds],
+  )
+  const { groupId, setGroupId, present, counts, week } = usePeriodGroupSwitch(weeks, lessonBands)
 
   // Periods of TIME, not lesson rows. A combined lesson fills a row in every
   // member class, so counting rows reads a teacher who takes three classes
@@ -87,76 +79,45 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2">
         <span className="inline-flex items-center gap-1.5 font-semibold text-[#18181B]">
           <UserCog size={15} className="text-[#71717A]" /> {teacher.full_name}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-[#71717A]">
-          <Gauge size={13} /> {periodCount} period{periodCount === 1 ? '' : 's'} a week
-          {busiestDay && ` · busiest ${busiestDay[0]} (${busiestDay[1]})`}
+        <span className="inline-flex items-center gap-1 text-xs text-[#71717A] tabular-nums">
+          <Gauge size={13} /> {periodCount} period{periodCount === 1 ? '' : 's'}/week
+          {busiestDay && ` · busiest ${busiestDay[0].slice(0, 3)} (${busiestDay[1]})`}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-[#71717A]">
-          <CalendarOff size={13} /> Tap an empty period to block it for this teacher
+        <span className="inline-flex items-center gap-1 text-xs text-[#A1A1AA]">
+          <CalendarOff size={13} /> Tap a free period to block it
         </span>
+        <PeriodGroupSwitch
+          weeks={weeks}
+          present={present}
+          counts={counts}
+          value={groupId}
+          onChange={setGroupId}
+          className="ml-auto"
+        />
       </div>
 
-      <div className="space-y-4">
-        {relevantWeeks.map((week) => (
-          <div key={week.groupId ?? 'base'}>
-            {weeks.length > 1 && <div className={`${SECTION_LABEL} mb-1.5`}>{week.name}</div>}
-            <DraftWeekGrid
-              week={week}
-              lessons={lessons.filter((e) => (slotGroupIds[e.homeroomId] ?? null) === week.groupId)}
-              isOff={(day, slotId) => isConstraintOn('teacher', teacherId, 'time_off', day, slotId)}
-              onToggleOff={(day, slotId) => toggleConstraintCell('teacher', teacherId, 'time_off', day, slotId)}
-              subjects={subjects}
-              teachers={teachers}
-              rooms={rooms}
-              classLabel={homeroomName}
-              conflicts={conflictCells}
-              onMove={moveEntry}
-              onTogglePin={togglePin}
-              onOpen={(entry, day, slot) => setOpen({ entry, day, slot })}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* The teacher's contract: what their week adds up to, class by class. */}
-      <LessonStatsCard dimension="teacher" id={teacherId} className="mt-2.5" />
-
-      {open && (
-        <SlotDetailsModal
-          target={{
-            homeroomId: open.entry.homeroomId,
-            homeroomName: homeroomName(open.entry.homeroomId),
-            day: open.day,
-            slot: open.slot,
-          }}
-          entries={entries.filter(
-            (e) => e.homeroomId === open.entry.homeroomId && e.day === open.day && e.slotId === open.slot.id,
-          )}
+      {week && (
+        <DraftWeekGrid
+          week={week}
+          lessons={lessons.filter((e) => (slotGroupIds[e.homeroomId] ?? null) === week.groupId)}
+          isOff={(day, slotId) => isConstraintOn('teacher', teacherId, 'time_off', day, slotId)}
+          onToggleOff={(day, slotId) => toggleConstraintCell('teacher', teacherId, 'time_off', day, slotId)}
           subjects={subjects}
           teachers={teachers}
           rooms={rooms}
-          groupName={groupName}
-          conflicts={cellConflicts(open.entry.homeroomId, open.day, open.slot.id)}
-          timeOff={constraints.some(
-            (c) => c.type === 'time_off' && c.scope === 'homeroom' &&
-              c.scope_id === open.entry.homeroomId && c.day === open.day && c.slot_id === open.slot.id,
-          )}
-          onClose={() => setOpen(null)}
-          onTogglePin={togglePin}
-          onSave={(groupId, subjectId, teacherIds, roomId) => {
-            setCellEntry(open.entry.homeroomId, open.day, open.slot.id, groupId, subjectId, teacherIds, roomId)
-            setOpen(null)
-          }}
-          onClear={(entry) => {
-            clearCellEntry(open.entry.homeroomId, open.day, open.slot.id, entry.groupId ?? null)
-            setOpen(null)
-          }}
+          classLabel={homeroomName}
+          conflicts={conflictCells}
+          hasOverride={(hr, day, slotId) => overrideToday(hr, day, slotId, null) !== null}
+          onMove={moveEntry}
         />
       )}
+
+      {/* The teacher's contract: what their week adds up to, class by class. */}
+      <LessonStatsCard dimension="teacher" id={teacherId} className="mt-2.5" />
     </div>
   )
 }

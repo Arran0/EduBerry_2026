@@ -15,6 +15,10 @@ import type {
   CombinedClass, CombinedClassInput, HomeroomGroup, SlotGroup, ScheduleWeek, Weekday,
   ConstraintScope, ConstraintType,
 } from '@/lib/timetable'
+import {
+  fetchOverrides, createOverride, deleteOverride, overridesForCell, activeOverride, todayISO,
+} from '@/lib/timetable/overrides'
+import type { EntryOverride, OverrideKind, OverrideSpan } from '@/lib/timetable/overrides'
 import { buildSchedules, detectConflicts } from '@/lib/timetable/generator'
 import { teacherWorkloads, overloadedTeachers } from '@/lib/timetable/workload'
 import type { TeacherWorkload } from '@/lib/timetable/workload'
@@ -125,6 +129,44 @@ export interface TimetableDraft {
   liveConflicts: ReturnType<typeof detectConflicts>
   allConflicts: ReturnType<typeof detectConflicts>
   cellConflicts: (homeroomId: string, day: Weekday, slotId: string) => string[]
+
+  /** How many periods a lesson's double/triple runs for. 1 = a single period. */
+  blockSpanOf: (entry: PlacedEntry) => number
+  /** The classes a combined lesson gathers, resolved from its `combinedKey`. */
+  combinedInfoFor: (combinedKey: string) => CombinedInfo | null
+
+  // ── Per-date overrides ───────────────────────────────────
+  // The weekly template says what happens every week; these amend one cell of
+  // it for one date or from one date onwards. See lib/timetable/overrides.ts.
+  overrides: EntryOverride[]
+  overridesFor: (
+    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+  ) => EntryOverride[]
+  /** The override in force today for a cell layer, if any — for grid badges. */
+  overrideToday: (
+    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
+  ) => EntryOverride | null
+  addOverride: (input: {
+    homeroomId: string
+    day: Weekday
+    slotId: string
+    groupId: string | null
+    kind: OverrideKind
+    span: OverrideSpan
+    date: string
+    subjectId: string | null
+    teacherIds: string[]
+    roomId: string | null
+    note?: string
+  }) => Promise<boolean>
+  removeOverride: (id: string) => Promise<boolean>
+}
+
+/** Which classes a combined lesson gathers — the slot box's combined read-out. */
+export interface CombinedInfo {
+  name: string
+  subjectName?: string
+  members: { homeroomName: string; groupName?: string }[]
 }
 
 const Ctx = createContext<TimetableDraft | null>(null)
@@ -161,10 +203,11 @@ export function TimetableDraftProvider({
   const [groups, setGroups] = useState<HomeroomGroup[]>([])
   const [timetable, setTimetable] = useState<Timetable | null>(null)
   const [entries, setEntries] = useState<PlacedEntry[]>([])
+  const [overrides, setOverrides] = useState<EntryOverride[]>([])
 
   const reload = useCallback(async () => {
     setLoading(true)
-    const [sl, sg, sgh, reqs, unavail, cons, cmb, rms, subs, hrs, profiles, timetables] =
+    const [sl, sg, sgh, reqs, unavail, cons, cmb, rms, subs, hrs, profiles, timetables, ovr] =
       await Promise.all([
         fetchPeriodSlots(config.id),
         fetchSlotGroups(config.id),
@@ -178,7 +221,9 @@ export function TimetableDraftProvider({
         fetchAllHomerooms(),
         fetchStaffProfiles(),
         fetchTimetables(config.id),
+        fetchOverrides(config.id),
       ])
+    setOverrides(ovr)
     setSlots(sl)
     setSlotGroups(sg)
     setSlotGroupIds(slotGroupMap(sgh))
@@ -511,6 +556,101 @@ export function TimetableDraftProvider({
     [groups],
   )
 
+  // ── Shapes the slot box needs ────────────────────────────
+  // Both are derived once here rather than recomputed by each grid: the master
+  // grid, the class week and three time-off calendars all open the same box,
+  // and a double that reads as a double in one of them and a single in another
+  // is exactly the inconsistency the box exists to remove.
+
+  const blockSizes = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of entries) {
+      if (e.blockKey) m.set(e.blockKey, (m.get(e.blockKey) ?? 0) + 1)
+    }
+    return m
+  }, [entries])
+
+  const blockSpanOf = useCallback(
+    (entry: PlacedEntry) => {
+      if (!entry.blockKey) return 1
+      // A combined lesson has one row per member class in each period of the
+      // block, so counting rows would read a double taught to three classes as
+      // a six-period block. The distinct periods are the block's length.
+      if (entry.combinedKey) {
+        const cells = new Set<string>()
+        for (const e of entries) {
+          if (e.blockKey === entry.blockKey) cells.add(`${e.day}__${e.slotId}`)
+        }
+        return cells.size
+      }
+      return blockSizes.get(entry.blockKey) ?? 1
+    },
+    [entries, blockSizes],
+  )
+
+  const combinedInfoFor = useCallback(
+    (combinedKey: string): CombinedInfo | null => {
+      const combined = combinedClasses.find((c) => c.id === combinedKey.split('__')[0])
+      if (!combined) return null
+      return {
+        name: combined.name,
+        subjectName: combined.subject_id
+          ? subjects.find((s) => s.id === combined.subject_id)?.name
+          : undefined,
+        members: (combined.members ?? []).map((m) => ({
+          homeroomName: homerooms.find((h) => h.id === m.homeroom_id)?.name ?? 'Class',
+          groupName: m.group_id
+            ? groups.find((g) => g.id === m.group_id)?.name ?? 'Group'
+            : undefined,
+        })),
+      }
+    },
+    [combinedClasses, subjects, homerooms, groups],
+  )
+
+  // ── Per-date overrides ───────────────────────────────────
+
+  const overridesFor = useCallback(
+    (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) =>
+      overridesForCell(overrides, homeroomId, day, slotId, groupId),
+    [overrides],
+  )
+
+  const overrideToday = useCallback(
+    (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) =>
+      activeOverride(overrides, homeroomId, day, slotId, groupId, todayISO()),
+    [overrides],
+  )
+
+  const addOverride = useCallback<TimetableDraft['addOverride']>(async (input) => {
+    const created = await createOverride({
+      config_id: config.id,
+      // Pinned to the version on screen when there is one, so an override made
+      // against this draft does not silently attach itself to a later publish.
+      timetable_id: timetable?.id ?? null,
+      homeroom_id: input.homeroomId,
+      day: input.day,
+      slot_id: input.slotId,
+      group_id: input.groupId,
+      effective_from: input.date,
+      effective_to: input.span === 'date' ? input.date : null,
+      kind: input.kind,
+      subject_id: input.subjectId,
+      teacher_ids: input.teacherIds,
+      room_id: input.roomId,
+      note: input.note ?? null,
+    })
+    if (!created) return false
+    setOverrides((prev) => [created, ...prev])
+    return true
+  }, [config.id, timetable?.id])
+
+  const removeOverride = useCallback(async (id: string) => {
+    const ok = await deleteOverride(id)
+    if (ok) setOverrides((prev) => prev.filter((o) => o.id !== id))
+    return ok
+  }, [])
+
   const value: TimetableDraft = {
     config, loading, reload, refreshReference,
     slots, slotGroups, slotGroupIds, weeks,
@@ -521,6 +661,8 @@ export function TimetableDraftProvider({
     setCellEntry, clearCellEntry, togglePin, moveEntry,
     workloads, workloadOf, overloaded,
     weekFor, slotClash, groupName, liveConflicts, allConflicts, cellConflicts,
+    blockSpanOf, combinedInfoFor,
+    overrides, overridesFor, overrideToday, addOverride, removeOverride,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

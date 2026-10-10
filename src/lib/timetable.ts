@@ -673,7 +673,7 @@ async function buildViewData(
 
   const involvedConfigIds = [...new Set(publishedTimetables.map((t) => t.config_id))]
 
-  const [{ data: allSlots }, { data: allGroups }] = await Promise.all([
+  const [{ data: allSlots }, { data: allGroups }, { data: allOverrides }] = await Promise.all([
     supabase
       .from('timetable_period_slots')
       .select('*')
@@ -683,7 +683,23 @@ async function buildViewData(
       .from('timetable_slot_groups')
       .select('*')
       .in('config_id', involvedConfigIds),
+    // Per-date amendments. RLS already narrows a student to their own
+    // homeroom and their own split groups, so no filter is needed here beyond
+    // the configs in play.
+    supabase
+      .from('timetable_entry_overrides')
+      .select('*, subject:timetable_subjects(*), room:timetable_rooms(*)')
+      .in('config_id', involvedConfigIds)
+      .order('effective_from', { ascending: false }),
   ])
+
+  type ViewOverride = TimetableViewData['overrides'][number]
+  const overridesByConfig = new Map<string, ViewOverride[]>()
+  for (const o of (allOverrides ?? []) as ViewOverride[]) {
+    const arr = overridesByConfig.get(o.config_id) ?? []
+    arr.push(o)
+    overridesByConfig.set(o.config_id, arr)
+  }
 
   const slotsMap = new Map<string, PeriodSlot[]>()
   for (const s of (allSlots ?? []) as PeriodSlot[]) {
@@ -743,6 +759,7 @@ async function buildViewData(
         slots,
         timetable: tt,
         entries: ttEntries,
+        overrides: overridesByConfig.get(cfg.id) ?? [],
       }
     })
     .filter((v): v is TimetableViewData => v !== null)

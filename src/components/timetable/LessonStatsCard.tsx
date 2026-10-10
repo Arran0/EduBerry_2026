@@ -102,8 +102,13 @@ export default function LessonStatsCard({ dimension, id, defaultOpen = false, cl
 
   // Periods the plan asks for that have nothing at all on the grid, plus the
   // rows that are simply short. Both are the same problem to whoever is reading.
+  //
+  // Measured against `plannedPlaced`, not `placed`: rows with no requirement
+  // behind them (combined lessons, hand-placed periods) are not part of the
+  // plan, so counting them here reported a full week as massively over and a
+  // short one as fine.
   const shortfall =
-    (totals.planned != null ? Math.max(0, totals.planned - totals.placed) : 0) +
+    (totals.planned != null ? Math.max(0, totals.planned - totals.plannedPlaced) : 0) +
     missing.reduce((n, r) => n + (r.planned ?? 0), 0)
 
   const Icon = DIMENSION_ICON[dimension]
@@ -133,13 +138,13 @@ export default function LessonStatsCard({ dimension, id, defaultOpen = false, cl
           <Stat
             value={totals.periods}
             label={totals.periods === 1 ? 'period' : 'periods'}
-            title="Periods of time on the timetable. A lesson taught to several classes at once counts once."
+            title="Distinct day + period cells. A lesson taught to several classes at once counts once."
           />
           {totals.placed !== totals.periods && (
             <Stat
               value={totals.placed}
               label="class-periods"
-              title={`Periods × classes taught${totals.combined > 0 ? ` — ${totals.combined} of these are combined lessons taking more than one class at a time` : ''}.`}
+              title={`Periods × classes taught${totals.combined > 0 ? ` · ${totals.combined} combined` : ''}`}
             />
           )}
           {showSubject && <Stat value={totals.subjects} label={totals.subjects === 1 ? 'subject' : 'subjects'} />}
@@ -149,11 +154,11 @@ export default function LessonStatsCard({ dimension, id, defaultOpen = false, cl
             <Stat
               value={totals.blocks}
               label={totals.blocks === 1 ? 'double+' : 'doubles+'}
-              title="Lessons running two or more periods back to back."
+              title="Lessons running two or more periods back to back"
             />
           )}
           {totals.byDay[0] && (
-            <span className="text-[#A1A1AA]" title="The day with the most periods on it">
+            <span className="text-[#A1A1AA]" title="Busiest day">
               busiest {WEEKDAY_LABELS[totals.byDay[0].day].slice(0, 3)} ({totals.byDay[0].count})
             </span>
           )}
@@ -177,10 +182,10 @@ export default function LessonStatsCard({ dimension, id, defaultOpen = false, cl
                 {showSubject && <Th>Subject</Th>}
                 {showTeacher && <Th>Teacher</Th>}
                 {showClass && <Th>Class</Th>}
-                <Th align="right" title="Periods on the timetable, and what the requirement asks for">Count</Th>
-                <Th align="right" title="How many periods the lesson runs back to back — 1 is a single, 2 a double">Length</Th>
-                <Th title="Distinct rooms used across the week">Rooms</Th>
-                <Th align="right" title="Distinct days the lesson falls on">Days</Th>
+                <Th align="right" title="Periods on the grid / what the requirement asks for">Count</Th>
+                <Th align="right" title="Periods back to back — 1 single, 2 double">Length</Th>
+                <Th title="Rooms used across the week">Rooms</Th>
+                <Th align="right" title="Days it falls on">Days</Th>
               </tr>
             </thead>
             <tbody>
@@ -269,29 +274,45 @@ export default function LessonStatsCard({ dimension, id, defaultOpen = false, cl
                   <Td align="right">{r.lengths.join(', ')}</Td>
                   <Td colSpan={2}>
                     <span className="inline-flex items-center gap-1 text-amber-700">
-                      <AlertTriangle size={11} className="flex-shrink-0" /> nothing scheduled yet
+                      <AlertTriangle size={11} className="flex-shrink-0" /> not scheduled
                     </span>
                   </Td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
+              {/* Two different things get added up here, and mixing them is
+                  what produced the old "114 / 12": 114 was every row on the
+                  grid, 12 was the plan for the handful of rows that have one.
+                  The plan total now sits next to the periods placed against
+                  THAT plan, and the grid total stands on its own. */}
               <tr className="border-t border-[#D4D4D8] bg-[#FAFAF9] font-semibold text-[#18181B]">
                 <Td colSpan={[showSubject, showTeacher, showClass].filter(Boolean).length || 1}>
                   Total — {scopeName}
                 </Td>
                 <Td align="right">
-                  {totals.placed}
-                  {totals.planned != null && totals.planned !== totals.placed && (
-                    <span className="text-[#A1A1AA] font-normal"> / {totals.planned}</span>
-                  )}
+                  <span title="Every row above added up. A lesson taught to several classes at once counts once per class.">
+                    {totals.placed}
+                  </span>
                 </Td>
                 <Td colSpan={3}>
-                  {totals.placed !== totals.periods && (
-                    <span className="font-normal text-[#71717A]">
-                      {totals.periods} period{totals.periods === 1 ? '' : 's'} of time
-                    </span>
-                  )}
+                  <span className="font-normal text-[#52525B]">
+                    <strong className="text-[#18181B]">{totals.periods}</strong> period
+                    {totals.periods === 1 ? '' : 's'} of time
+                    {totals.planned != null && (
+                      <>
+                        {' · plan '}
+                        <strong className={shortfall > 0 ? 'text-amber-700' : 'text-[#18181B]'}>
+                          {totals.plannedPlaced}/{totals.planned}
+                        </strong>
+                        {totals.unplannedRows > 0 && (
+                          <span className="text-[#A1A1AA]">
+                            {' '}({totals.unplannedRows} row{totals.unplannedRows === 1 ? '' : 's'} outside the plan)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
                 </Td>
               </tr>
             </tfoot>

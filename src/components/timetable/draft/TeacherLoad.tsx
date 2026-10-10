@@ -118,15 +118,14 @@ export function OverloadedTeachersNotice({
             {overloaded.length === 1
               ? '1 teacher is assigned more periods than their week has'
               : `${overloaded.length} teachers are assigned more periods than their weeks have`}
-          </strong>{' '}
-          — those periods cannot be scheduled by any timetable.
+          </strong>
         </p>
         <p className="mt-0.5 text-rose-700">
           {shown.map((w) => `${teacherName(w.teacherId)} ${w.assigned}/${w.capacity}`).join(' · ')}
           {rest > 0 && ` · and ${rest} more`}
         </p>
         <p className="mt-0.5 text-rose-600/80">
-          Share those subjects with another teacher, cut their periods per week, or free up their time off.
+          Share the subject, cut its periods, or free up their time off.
         </p>
       </div>
     </div>

@@ -46,7 +46,7 @@ export default function TimetablePage() {
         />
 
         <div
-          className={`${MAX_W} mx-auto px-2 sm:px-4 lg:px-6 py-4 sm:py-5 transition-all duration-200 ${
+          className={`${MAX_W} mx-auto px-1.5 sm:px-3 lg:px-5 py-3 sm:py-4 transition-all duration-200 ${
             bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
           }`}
           aria-hidden={bannerEditing}

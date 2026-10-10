@@ -7,7 +7,7 @@ import type { Homeroom } from '@/lib/homerooms'
 import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import type { TimetableConfig, Weekday } from '@/lib/timetable'
-import { SmartSelect, Section, Field, SECTION_LABEL } from '../../ui'
+import { SmartSelect, Section, Field } from '../../ui'
 import type { SmartOption } from '../../ui'
 import NameLink from '../../NameLink'
 import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
@@ -16,6 +16,7 @@ import { useConstraints } from '../useConstraints'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { TeacherLoadBadge, TeacherLoadMeter } from '../../draft/TeacherLoad'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
+import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../../PeriodGroupSwitch'
 import { teacherIdsOf } from '@/lib/timetable'
 
 /**
@@ -200,6 +201,17 @@ function TeacherConstraintsPanel({
     return (id: string) => m.get(id) ?? 'Class'
   }, [homerooms])
 
+  // The bell schedules this teacher actually works in become a switch above
+  // the calendar, rather than one calendar per band stacked down the panel.
+  const bandsWeeks = useMemo(() => draft?.weeks ?? [], [draft?.weeks])
+  const bands = usePeriodGroupSwitch(
+    bandsWeeks,
+    useMemo(
+      () => lessons.map((e) => draft?.slotGroupIds[e.homeroomId] ?? null),
+      [lessons, draft?.slotGroupIds],
+    ),
+  )
+
   if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
   if (slots.length === 0) return <p className="text-sm text-[#71717A] py-4">Add teaching period slots first (Configuration).</p>
 
@@ -207,29 +219,31 @@ function TeacherConstraintsPanel({
     <div>
       <Section
         title="Time off"
-        hint="Tap a free period to block it — the generator never schedules this teacher there. The draft is drawn in, so a lesson in the way can be dragged to another period or pinned in place."
+        hint="Tap a free period to block it. The draft is drawn in — click a lesson to open it."
         first
+        right={
+          <PeriodGroupSwitch
+            weeks={bandsWeeks}
+            present={bands.present}
+            counts={bands.counts}
+            value={bands.groupId}
+            onChange={bands.setGroupId}
+          />
+        }
       >
-        {draft ? (
-          <div className="space-y-4">
-            {draft.weeks.map((week) => (
-              <div key={week.groupId ?? 'base'}>
-                {draft.weeks.length > 1 && <div className={`${SECTION_LABEL} mb-1.5`}>{week.name}</div>}
-                <DraftWeekGrid
-                  week={week}
-                  lessons={lessons.filter((e) => (draft.slotGroupIds[e.homeroomId] ?? null) === week.groupId)}
-                  isOff={(d, s) => draft.isConstraintOn('teacher', scopeId, 'time_off', d, s)}
-                  onToggleOff={(d, s) => draft.toggleConstraintCell('teacher', scopeId, 'time_off', d, s)}
-                  subjects={draft.subjects}
-                  teachers={draft.teachers}
-                  rooms={draft.rooms}
-                  classLabel={homeroomName}
-                  onMove={draft.moveEntry}
-                  onTogglePin={draft.togglePin}
-                />
-              </div>
-            ))}
-          </div>
+        {draft && bands.week ? (
+          <DraftWeekGrid
+            week={bands.week}
+            lessons={lessons.filter((e) => (draft.slotGroupIds[e.homeroomId] ?? null) === bands.week!.groupId)}
+            isOff={(d, s) => draft.isConstraintOn('teacher', scopeId, 'time_off', d, s)}
+            onToggleOff={(d, s) => draft.toggleConstraintCell('teacher', scopeId, 'time_off', d, s)}
+            subjects={draft.subjects}
+            teachers={draft.teachers}
+            rooms={draft.rooms}
+            classLabel={homeroomName}
+            hasOverride={(hr, d, sl) => draft.overrideToday(hr, d, sl, null) !== null}
+            onMove={draft.moveEntry}
+          />
         ) : (
           <TimeOffGrid days={config.working_days} slots={slots} isOn={isOff} onToggle={(d, s) => toggleSlot('teacher', scopeId, 'time_off', d, s)} />
         )}

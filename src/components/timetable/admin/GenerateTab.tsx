@@ -1,15 +1,15 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, Download,
-  GraduationCap, LayoutGrid, Rows3, UserCog, CalendarRange, ShieldQuestion, Wand2,
+  GraduationCap, LayoutGrid, Rows3, UserCog, ShieldQuestion, Wand2, X,
 } from 'lucide-react'
 import {
   createTimetable, replaceEntries, publishTimetable, updateTimetableMeta,
 } from '@/lib/timetable'
 import type {
-  TimetableEntry, Timetable, TimetableStatus, ScheduleWeek,
+  TimetableEntry, Timetable, TimetableStatus, ScheduleWeek, Weekday,
 } from '@/lib/timetable'
 import { solveTimetable } from '@/lib/timetable/solve'
 import type { SolveProgress } from '@/lib/timetable/solve'
@@ -27,7 +27,10 @@ import {
 import type { SolverResult } from '@/lib/timetable/solverClient'
 import { useTimetableDraft } from '../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../draft/TeacherLoad'
-import { BTN_NEUTRAL, SmartSelect, SECTION_LABEL, INPUT } from '../ui'
+import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../PeriodGroupSwitch'
+import {
+  BTN_PRIMARY, BTN_NEUTRAL, BTN_GO, BTN_SM, SmartSelect, SECTION_LABEL, INPUT, TAP, FOCUS,
+} from '../ui'
 import type { SmartOption } from '../ui'
 
 type View = 'class' | 'teacher' | 'master'
@@ -44,8 +47,7 @@ export default function GenerateTab() {
     config, loading, slots, requirements, unavailability, constraints, combinedInput,
     slotGroups, slotGroupIds, weeks, weekFor, rooms, subjects, teachers, scheduledHomerooms,
     homeroomsLite, entries, setEntries, timetable, setTimetable, slotClash, overloaded,
-    groupName, liveConflicts, allConflicts, cellConflicts,
-    setCellEntry, clearCellEntry, togglePin, moveEntry,
+    liveConflicts, allConflicts, overrideToday, moveEntry,
   } = draft
 
   const [selectedHomeroomId, setSelectedHomeroomId] = useState<string>('')
@@ -60,8 +62,6 @@ export default function GenerateTab() {
   const [toast, setToast] = useState<string>('')
   const [progress, setProgress] = useState<SolveProgress | null>(null)
   const [lastRun, setLastRun] = useState<string>('')
-  // Set while a solve is running; flipping it stops it between passes.
-  const cancelRef = useRef(false)
 
   // The constraint solver, which answers the two questions a search cannot:
   // is this possible at all, and how much better can this week be.
@@ -118,18 +118,28 @@ export default function GenerateTab() {
     [scheduledTeachers],
   )
 
-  // Homerooms split by the bell schedule they follow. With no slot groups this
-  // is a single section and the master grid looks exactly as it did.
-  const weekSections = useMemo(
-    () =>
-      weeks
-        .map((w) => ({
-          week: w,
-          homerooms: scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === w.groupId),
-        }))
-        .filter((s) => s.homerooms.length > 0 && s.week.slots.length > 0),
+  // Which band the master grid and the class picker are showing. One grid at a
+  // time rather than one per band stacked down the page: two 30-column grids
+  // above each other is two scroll lengths and no way to compare them.
+  const masterBands = useMemo(
+    () => scheduledHomerooms.map((h) => slotGroupIds[h.id] ?? null),
+    [scheduledHomerooms, slotGroupIds],
+  )
+  const master = usePeriodGroupSwitch(weeks, masterBands)
+  const masterHomerooms = useMemo(
+    () => scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === master.groupId),
+    [scheduledHomerooms, slotGroupIds, master.groupId],
+  )
+  const bandClassCounts = useMemo(
+    () => new Map(
+      weeks.map((w) => [
+        w.groupId,
+        scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === w.groupId).length,
+      ]),
+    ),
     [weeks, scheduledHomerooms, slotGroupIds],
   )
+
 
   const flash = (msg: string) => {
     setToast(msg)
@@ -148,7 +158,6 @@ export default function GenerateTab() {
     setGenerating(true)
     setProgress(null)
     setLastRun('')
-    cancelRef.current = false
     const locked = entries.filter((e) => e.isLocked)
     const result = await solveTimetable(
       {
@@ -165,7 +174,7 @@ export default function GenerateTab() {
         locked,
         seed: Math.floor(Math.random() * 1_000_000),
       },
-      { onProgress: setProgress, shouldCancel: () => cancelRef.current },
+      { onProgress: setProgress },
     )
     setEntries(result.entries)
     setUnplaced(result.unplacedCount)
@@ -180,11 +189,9 @@ export default function GenerateTab() {
       `${d.moves.toLocaleString()} improvements`,
     )
     flash(
-      cancelRef.current
-        ? 'Stopped — keeping the best timetable found so far.'
-        : result.unplacedCount === 0
-          ? 'Generated a conflict-free timetable.'
-          : `Generated with ${result.unplacedCount} period(s) that couldn't be placed.`,
+      result.unplacedCount === 0
+        ? 'Generated — every period placed.'
+        : `Generated — ${result.unplacedCount} period(s) could not be placed.`,
     )
   }
 
@@ -217,10 +224,10 @@ export default function GenerateTab() {
       setProof(outcome.result)
       flash(
         outcome.result.status === 'feasible'
-          ? 'A complete timetable is possible — proved, not guessed.'
+          ? 'Proved: a complete timetable is possible.'
           : outcome.result.status === 'impossible'
-            ? 'No complete timetable exists for these rules. See below.'
-            : 'The solver ran out of time before it could decide.',
+            ? 'Proved: these rules cannot all hold. See below.'
+            : 'Ran out of time before it could decide.',
       )
     }
     setProving(false)
@@ -228,7 +235,7 @@ export default function GenerateTab() {
 
   const handleImprove = async () => {
     if (entries.length === 0) {
-      flash('Generate a week first — this improves the one on screen.')
+      flash('Generate a week first — this tidies the one on screen.')
       return
     }
     setImproving(true)
@@ -255,11 +262,8 @@ export default function GenerateTab() {
     setEntries(improved)
     setUnplaced(result.unplacedPeriods)
     flash(
-      `Improved — quality score ${result.penalty ?? '?'}, ` +
-      `${result.unplacedPeriods} unplaced (was health ${before}).` +
-      (result.overCapPeriods > 0
-        ? ` ${result.overCapPeriods} period(s) over a per-day cap.`
-        : ''),
+      `Tidied — ${result.unplacedPeriods} unplaced, was health ${before}.` +
+      (result.overCapPeriods > 0 ? ` ${result.overCapPeriods} over a per-day cap.` : ''),
     )
     setImproving(false)
   }
@@ -417,203 +421,207 @@ export default function GenerateTab() {
     .filter((s) => (s.group_id ?? null) === selectedWeek.groupId)
     .sort((a, b) => a.position - b.position)
 
+  // Bands that hold classes but have no periods yet. An empty grid reads as a
+  // solver failure, so it is said plainly instead.
+  const emptyBands = weeks.filter(
+    (w) => w.slots.length === 0 && scheduledHomerooms.some((h) => (slotGroupIds[h.id] ?? null) === w.groupId),
+  )
+
+  const hasOverride = (homeroomId: string, day: Weekday, slotId: string) =>
+    overrideToday(homeroomId, day, slotId, null) !== null
+
   return (
-    <div>
-      {/* Action bar */}
-      <div className="pb-3 border-b border-[#E4E4E7] space-y-2">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div className="space-y-3">
+      {/* ── Controls ──────────────────────────────────────────
+          Everything above the grid is kept to one compact block so the grid
+          itself is what the page is about. Three buttons carry the workflow;
+          the solver's two questions and the housekeeping actions sit in a
+          quieter row beneath them. */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-stretch gap-1.5">
           {generating ? (
-            /* The solver holds the thread in bursts, so this button has to say
-               what it is doing on its own: a fill showing how far through the
-               passes it is, and one tap to stop and keep the best week so far. */
-            <button
-              onClick={() => { cancelRef.current = true }}
-              className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#3F3F46] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-colors w-full"
-              title="Stop after the current pass and keep the best timetable found so far"
+            /* No stop button: a pass is 2.5 seconds and the whole search
+               settles on its own, so the only thing worth showing is how far
+               through it is. A button whose only job is to abandon work the
+               user just asked for is a button pressed by mistake. */
+            <div
+              role="status"
+              aria-live="polite"
+              className="relative overflow-hidden flex-1 min-w-[10rem] sm:flex-none sm:w-44 inline-flex items-center justify-center gap-1.5 bg-[#27272A] text-[#F5F5F5] px-3 min-h-[2.75rem] sm:min-h-0 sm:py-1.5 text-sm sm:text-[13px] font-medium"
             >
               <span
                 aria-hidden
-                className="absolute inset-y-0 left-0 bg-[#B8983C]/30 transition-[width] duration-700 ease-out"
-                style={{ width: `${progress ? (progress.pass / progress.maxPasses) * 100 : 5}%` }}
+                className="absolute inset-y-0 left-0 bg-[#B8983C]/35 transition-[width] duration-700 ease-out motion-reduce:transition-none"
+                style={{ width: `${progress ? (progress.pass / progress.maxPasses) * 100 : 6}%` }}
               />
-              <Loader2 className="animate-spin relative flex-shrink-0" size={15} />
-              <span className="relative truncate">
-                {progress ? 'Searching — stop' : 'Starting…'}
+              <Loader2 className="animate-spin relative flex-shrink-0" size={14} />
+              <span className="relative truncate tabular-nums">
+                {progress
+                  ? `Searching · ${(progress.elapsedMs / 1000).toFixed(0)}s`
+                  : 'Starting…'}
               </span>
-            </button>
+            </div>
           ) : (
             <button
               onClick={handleGenerate}
-              /* active: gives the press itself a frame of feedback, so the
-                 button never reads as dead while the first pass starts up. */
-              className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] active:bg-[#09090B] active:scale-[0.98] text-[#F5F5F5] px-4 py-2.5 text-sm font-medium transition-all duration-100 w-full"
+              className={`${BTN_PRIMARY} flex-1 min-w-[10rem] sm:flex-none sm:w-44`}
             >
-              <Sparkles size={15} className="text-[#B8983C]" />
+              <Sparkles size={14} className="text-[#B8983C]" />
               {entries.some((e) => e.isLocked) ? 'Regenerate' : 'Generate'}
             </button>
           )}
-          <button onClick={handleSave} disabled={saving} className={`${BTN_NEUTRAL} w-full py-2.5`}>
-            {saving ? <Loader2 className="animate-spin" size={15} /> : <Save size={15} />}
+          <button onClick={handleSave} disabled={saving} className={`${BTN_NEUTRAL} flex-1 min-w-[8rem] sm:flex-none`}>
+            {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
             Save draft
           </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing}
-            className="inline-flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors w-full"
-          >
-            {publishing ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
+          <button onClick={handlePublish} disabled={publishing} className={`${BTN_GO} flex-1 min-w-[8rem] sm:flex-none`}>
+            {publishing ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
             Publish
           </button>
-          <button
-            onClick={clearUnlocked}
-            className="inline-flex items-center justify-center gap-1.5 text-[#71717A] px-3 py-2.5 text-sm font-medium hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border border-[#D4D4D8] w-full"
-          >
-            <Trash2 size={15} />
-            Clear unlocked
-          </button>
+
+          {/* Name + status, on the same line from lg up — it is one field and
+              one word, and giving it its own row cost the grid a row of height. */}
+          <div className="flex items-center gap-2 w-full lg:w-auto lg:flex-1 lg:min-w-[14rem]">
+            <input
+              className={`${INPUT} lg:flex-1`}
+              placeholder={`Name — e.g. ${config.name} Term 1`}
+              aria-label="Timetable name"
+              value={timetableName}
+              onChange={(e) => setTimetableName(e.target.value)}
+            />
+            {isPublished ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700 px-2 py-1 bg-emerald-50 border border-emerald-200 flex-shrink-0">
+                <CheckCircle2 size={12} /> Live
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] px-2 py-1 bg-[#F5F5F5] border border-[#E4E4E7] flex-shrink-0">
+                Draft
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* The constraint solver. Generate searches and keeps the best week it
-            finds; these two ask the questions a search cannot answer about its
-            own result — whether a complete week exists at all, and how much
-            better the one on screen could be. */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Secondary actions. Quieter on purpose — these are answers to
+            questions about the week, not steps in building one. */}
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[#71717A]">
           <button
             onClick={handleProve}
             disabled={proving || improving}
-            className={`${BTN_NEUTRAL} w-full py-2.5 disabled:opacity-50`}
+            className={`${BTN_SM} text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B]`}
             title="Proves whether every required period can be placed, and names the rules that collide if not"
           >
-            {proving ? <Loader2 className="animate-spin" size={15} /> : <ShieldQuestion size={15} />}
+            {proving ? <Loader2 className="animate-spin" size={12} /> : <ShieldQuestion size={12} />}
             {proving ? 'Checking…' : 'Can this be built?'}
           </button>
+          <Sep />
           <button
             onClick={handleImprove}
             disabled={improving || proving || entries.length === 0}
-            className={`${BTN_NEUTRAL} w-full py-2.5 disabled:opacity-50`}
-            title="Rearranges this week for a better spread and fewer stranded periods, without losing any lesson it already places"
+            className={`${BTN_SM} text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B]`}
+            title="Rearranges this week for a better spread without losing a lesson. Regenerate searches from scratch and can come back worse; this one never does."
           >
-            {improving ? <Loader2 className="animate-spin" size={15} /> : <Wand2 size={15} />}
-            {improving ? 'Improving…' : 'Improve this week'}
+            {improving ? <Loader2 className="animate-spin" size={12} /> : <Wand2 size={12} />}
+            {improving ? 'Tidying…' : 'Tidy up this week'}
           </button>
-        </div>
-        {/* The solve keeps searching while it is still finding better weeks and
-            stops when it settles, so there is nothing to choose — just what it
-            is doing now, and what the last run spent. */}
-        {(progress || lastRun) && (
-          <div className="text-[11px] text-[#71717A] tabular-nums">
-            {progress ? (
-              <>
-                searching · best so far{' '}
-                {progress.bestUnplaced === 0 ? 'all periods placed' : `${progress.bestUnplaced} unplaced`}
-                {' · '}{(progress.elapsedMs / 1000).toFixed(1)}s
-              </>
-            ) : (
-              <span className="text-[#A1A1AA]">{lastRun}</span>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className={`${SECTION_LABEL} flex-shrink-0`}>Name</span>
-          <input
-            className={`${INPUT} flex-1 min-w-[12rem]`}
-            placeholder={`e.g. ${config.name} — Term 1`}
-            value={timetableName}
-            onChange={(e) => setTimetableName(e.target.value)}
-          />
-          {isPublished ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-emerald-700 px-2.5 py-1 bg-emerald-50 border border-emerald-200 flex-shrink-0">
-              <CheckCircle2 size={13} /> Published &amp; Active
-            </span>
-          ) : (
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#71717A] px-2.5 py-1 bg-[#F5F5F5] border border-[#E4E4E7] flex-shrink-0">
-              Draft
-            </span>
+          <Sep />
+          <button
+            onClick={clearUnlocked}
+            className={`${BTN_SM} text-[#52525B] hover:bg-rose-50 hover:text-rose-700`}
+            title="Empties every period that is not pinned"
+          >
+            <Trash2 size={12} /> Clear unpinned
+          </button>
+          {view === 'class' && (
+            <>
+              <Sep />
+              <button onClick={handleExport} className={`${BTN_SM} text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B]`}>
+                <Download size={12} /> Export class
+              </button>
+            </>
           )}
+
+          {/* Status, inline with the actions rather than on a row of its own. */}
+          <span className="ml-auto flex items-center gap-x-3 gap-y-1 flex-wrap text-xs tabular-nums">
+            {liveConflicts.length > 0 ? (
+              <span className="inline-flex items-center gap-1 text-rose-600 font-semibold">
+                <AlertTriangle size={13} /> {liveConflicts.length} conflict{liveConflicts.length === 1 ? '' : 's'}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                <CheckCircle2 size={13} /> No conflicts
+              </span>
+            )}
+            {unplaced != null && unplaced > 0 && (
+              <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                <AlertTriangle size={13} /> {unplaced} unplaced
+              </span>
+            )}
+            {progress ? (
+              <span className="text-[#71717A]">
+                best so far{' '}
+                {progress.bestUnplaced === 0 ? 'all placed' : `${progress.bestUnplaced} unplaced`}
+              </span>
+            ) : lastRun ? (
+              <span className="text-[#A1A1AA] hidden sm:inline">{lastRun}</span>
+            ) : null}
+            {toast && <span className="text-[#18181B] font-medium">{toast}</span>}
+          </span>
         </div>
       </div>
 
-      {/* Before anything is generated: assignments that no timetable can
-          satisfy. The solver would simply leave these periods unplaced and the
-          cause would have to be worked backwards from the result. */}
+      {/* Assignments no timetable can satisfy, before anything is generated. */}
       {overloaded.length > 0 && (
         <OverloadedTeachersNotice
           overloaded={overloaded}
           teacherName={(id) => teachers.find((t) => t.id === id)?.full_name ?? 'Teacher'}
-          className="mt-2.5"
         />
       )}
 
-      {/* Status line */}
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-        {liveConflicts.length > 0 ? (
-          <span className="inline-flex items-center gap-1 text-rose-600 font-medium">
-            <AlertTriangle size={13} /> {liveConflicts.length} conflict(s) — see highlighted cells
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
-            <CheckCircle2 size={13} /> No hard conflicts
-          </span>
-        )}
-        {unplaced != null && unplaced > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
-            <AlertTriangle size={13} /> {unplaced} unplaced period(s)
-          </span>
-        )}
-        {weeks.length > 1 && (
-          <span className="inline-flex items-center gap-1 text-[#71717A]">
-            <CalendarRange size={13} /> {weeks.length} period groups
-          </span>
-        )}
-        {toast && <span className="text-[#71717A] italic">{toast}</span>}
-      </div>
-
-      {/* What the constraint solver proved. Kept separate from the health score:
-          health is a judgement about a week, this is a fact about the rules. */}
       {solverError && (
-        <p className="mt-2.5 flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
+        <p className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
           <span>{solverError}</span>
         </p>
       )}
+
+      {/* What the solver proved. Kept apart from the health score: health is a
+          judgement about a week, this is a fact about the rules. */}
       {proof && (
-        <div className="mt-2.5 border border-[#E4E4E7]">
-          <div className="flex items-baseline gap-2 px-3 py-2 bg-[#FAFAFA] border-b border-[#E4E4E7]">
+        <div className="border border-[#E4E4E7]">
+          <div className="flex items-baseline gap-2 px-3 py-1.5 bg-[#FAFAFA] border-b border-[#E4E4E7]">
             <span className={SECTION_LABEL}>
-              {proof.status === 'feasible' ? 'Proved possible' : 'Proved impossible'}
+              {proof.status === 'feasible' ? 'Proved possible' : proof.status === 'impossible' ? 'Proved impossible' : 'Undecided'}
             </span>
             <span className="text-[11px] text-[#A1A1AA] tabular-nums">
               {(proof.wallTimeMs / 1000).toFixed(1)}s · {proof.variables.toLocaleString()} variables
             </span>
             <button
               onClick={() => setProof(null)}
-              className="ml-auto text-[11px] text-[#71717A] hover:text-[#18181B]"
+              aria-label="Dismiss"
+              className={`ml-auto p-0.5 text-[#A1A1AA] hover:text-[#18181B] ${TAP} ${FOCUS}`}
             >
-              Dismiss
+              <X size={13} />
             </button>
           </div>
           {proof.status === 'feasible' ? (
-            <p className="px-3 py-2.5 text-xs text-emerald-700 flex items-start gap-2">
+            <p className="px-3 py-2 text-xs text-emerald-700 flex items-start gap-2">
               <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
               <span>
-                Every required period can be placed under these rules. If Generate leaves
-                periods out, that is the search falling short rather than the rules — run it
-                again, or use <strong>Improve this week</strong>.
+                Every required period can be placed. If Generate still leaves periods out, that is
+                the search falling short rather than the rules — run it again, or Tidy up.
               </span>
             </p>
           ) : proof.status === 'impossible' ? (
-            <div className="px-3 py-2.5 space-y-2.5">
+            <div className="px-3 py-2 space-y-2">
               <p className="text-xs text-[#52525B]">
-                No timetable can satisfy all of these rules at once. Each group below is
-                independent, and relaxing any <em>one</em> rule in a group resolves it.
+                Each group below is independent. Relaxing any <em>one</em> rule in a group resolves it.
               </p>
               {conflictGroups(proof.conflicts).map((group, i) => (
                 <div key={i} className="border-l-2 border-rose-300 pl-2.5">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-rose-700">
-                    Conflict {i + 1} — these cannot all hold
+                    Conflict {i + 1}
                   </p>
-                  <ul className="mt-0.5 space-y-0.5">
+                  <ul className="mt-0.5">
                     {group.map((c) => (
                       <li key={c.tag} className="text-xs text-[#18181B] flex gap-1.5">
                         <span className="text-[#A1A1AA]">·</span>
@@ -625,164 +633,155 @@ export default function GenerateTab() {
               ))}
               {proof.conflictsTruncated && (
                 <p className="text-[11px] text-[#71717A] italic">
-                  The search stopped on its time limit, so there may be more conflicts than
-                  these. Fix these and check again.
+                  Stopped on its time limit — there may be more. Fix these and check again.
                 </p>
               )}
             </div>
           ) : (
-            <p className="px-3 py-2.5 text-xs text-[#71717A]">
-              The solver ran out of time before it could decide either way.
+            <p className="px-3 py-2 text-xs text-[#71717A]">
+              Ran out of time before it could decide either way.
             </p>
           )}
         </div>
       )}
 
-      {/* Health score */}
-      <div className="mt-3">
-        <HealthPanel report={health} />
-      </div>
+      <HealthPanel report={health} />
 
-      {/* View switcher */}
-      <div className="mt-5 pt-5 border-t border-[#E4E4E7]">
-        <div className="flex items-center gap-2 sm:gap-3 mb-3">
-          <div className="inline-flex border border-[#D4D4D8] flex-shrink-0">
+      {/* ── The grid ──────────────────────────────────────────
+          Its own framed panel with its own header bar, so it reads as the
+          subject of the page rather than as the last thing on it. */}
+      <section className="border border-[#A1A1AA] bg-white">
+        <div className="flex flex-wrap items-center gap-2 px-2 py-2 border-b border-[#E4E4E7] bg-[#FAFAF9]">
+          <div className="inline-flex border border-[#D4D4D8] bg-white flex-shrink-0">
             {VIEWS.map((v, i) => {
               const Icon = v.icon
+              const active = view === v.key
               return (
                 <button
                   key={v.key}
                   onClick={() => setView(v.key)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium ${
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-1.5 px-2.5 min-h-[2.25rem] sm:min-h-0 sm:py-1.5 text-[13px] sm:text-xs font-medium ${TAP} ${FOCUS} ${
                     i > 0 ? 'border-l border-[#D4D4D8]' : ''
-                  } ${view === v.key ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
+                  } ${active ? 'bg-[#27272A] text-white' : 'text-[#52525B] hover:bg-[#F5F5F5]'}`}
                   title={v.label}
                 >
-                  <Icon size={14} /> <span className="hidden sm:inline">{v.label}</span>
+                  <Icon size={13} className={active ? 'text-[#B8983C]' : undefined} />
+                  <span className="hidden sm:inline">{v.label}</span>
                 </button>
               )
             })}
           </div>
+
           {view === 'class' && (
-            <>
-              <div className="flex-1 min-w-0">
-                <SmartSelect
-                  options={homeroomOptions}
-                  value={selectedHomeroomId}
-                  onChange={setSelectedHomeroomId}
-                  placeholder="Select class…"
-                  searchPlaceholder="Search classes…"
-                  leadingIcon={<GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />}
-                />
-              </div>
-              <button onClick={handleExport} className={`${BTN_NEUTRAL} py-1.5 flex-shrink-0`}>
-                <Download size={14} /> <span className="hidden sm:inline">Export</span>
-              </button>
-            </>
+            <div className="flex-1 min-w-[10rem]">
+              <SmartSelect
+                options={homeroomOptions}
+                value={selectedHomeroomId}
+                onChange={setSelectedHomeroomId}
+                placeholder="Select class…"
+                searchPlaceholder="Search classes…"
+                leadingIcon={<GraduationCap size={14} className="text-[#71717A] flex-shrink-0" />}
+              />
+            </div>
           )}
           {view === 'teacher' && (
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-[10rem]">
               <SmartSelect
                 options={teacherOptions}
                 value={selectedTeacherId}
                 onChange={setSelectedTeacherId}
                 placeholder="Select teacher…"
                 searchPlaceholder="Search staff…"
-                leadingIcon={<UserCog size={15} className="text-[#71717A] flex-shrink-0" />}
+                leadingIcon={<UserCog size={14} className="text-[#71717A] flex-shrink-0" />}
               />
             </div>
           )}
           {view === 'master' && (
-            <p className="text-xs text-[#71717A] flex-1">
-              Drag a lesson to another period, click one for details or to pin it. Doubles, split &amp; combined lessons move as units; conflicts highlight in red.
-            </p>
+            <>
+              <PeriodGroupSwitch
+                weeks={weeks}
+                present={master.present}
+                counts={bandClassCounts}
+                value={master.groupId}
+                onChange={master.setGroupId}
+              />
+              <p className="text-[11px] text-[#A1A1AA] ml-auto hidden md:block">
+                Drag to move · click to open · red = clash
+              </p>
+            </>
+          )}
+          {view === 'class' && weeks.length > 1 && (
+            <span className="text-[11px] text-[#71717A] flex-shrink-0">
+              {selectedWeek.name}
+            </span>
           )}
         </div>
 
-        {view === 'class' ? (
-          selectedHomeroomId && (
-            <>
-              {weeks.length > 1 && (
-                <p className="text-[11px] text-[#71717A] mb-1.5">
-                  Period group: <strong className="text-[#18181B]">{selectedWeek.name}</strong>
-                </p>
-              )}
-              <EditableTimetableGrid
-                days={selectedWeek.days}
-                slots={selectedWeekSlots}
-                homeroomId={selectedHomeroomId}
-                homeroomName={scheduledHomerooms.find((h) => h.id === selectedHomeroomId)?.name ?? 'Class'}
-                entries={entries}
-                unavailability={unavailability}
-                subjects={subjects}
-                teachers={teachers}
-                rooms={rooms}
-                constraints={constraints}
-                homerooms={homeroomsLite}
-                slotClash={slotClash}
-                groupName={groupName}
-                cellConflicts={cellConflicts}
-                onSetCell={setCellEntry}
-                onClearCell={clearCellEntry}
-                onTogglePin={togglePin}
-                onMove={moveEntry}
-              />
-              {/* What this class's week adds up to, under the week itself. */}
-              <LessonStatsCard dimension="class" id={selectedHomeroomId} className="mt-2.5" />
-            </>
-          )
-        ) : view === 'teacher' ? (
-          <TeacherWeekView teacherId={selectedTeacherId} />
-        ) : (
-          <div className="space-y-5">
-            {/* A class whose period group has no slots can hold nothing. Said
-                plainly here, because an empty row reads as a solver failure. */}
-            {weeks
-              .filter((w) => w.slots.length === 0 && scheduledHomerooms.some((h) => (slotGroupIds[h.id] ?? null) === w.groupId))
-              .map((w) => (
-                <p key={w.groupId ?? 'base'} className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
-                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                  <span>
-                    <strong>{w.name}</strong> has classes assigned to it but no period slots yet, so nothing can be
-                    scheduled for them. Add its periods in Configuration.
-                  </span>
-                </p>
-              ))}
-            {weekSections.map(({ week, homerooms }) => (
-              <div key={week.groupId ?? 'base'}>
-                {weeks.length > 1 && (
-                  <div className="flex items-baseline gap-2 mb-1.5">
-                    <span className={SECTION_LABEL}>{week.name}</span>
-                    <span className="text-[11px] text-[#A1A1AA]">
-                      {homerooms.length} classes · {week.days.length} days × {week.slots.length} periods
-                    </span>
-                  </div>
-                )}
-                <MasterTimetableEditor
-                  days={week.days}
-                  slots={week.slots}
-                  homerooms={homerooms}
+        <div className="p-2">
+          {emptyBands.map((w) => (
+            <p key={w.groupId ?? 'base'} className="flex items-start gap-2 px-3 py-2 mb-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>{w.name}</strong> has classes but no period slots, so nothing can be
+                scheduled for them. Add its periods in Configuration.
+              </span>
+            </p>
+          ))}
+
+          {view === 'class' ? (
+            selectedHomeroomId && (
+              <>
+                <EditableTimetableGrid
+                  days={selectedWeek.days}
+                  slots={selectedWeekSlots}
+                  homeroomId={selectedHomeroomId}
+                  homeroomName={scheduledHomerooms.find((h) => h.id === selectedHomeroomId)?.name ?? 'Class'}
                   entries={entries}
+                  unavailability={unavailability}
                   subjects={subjects}
                   teachers={teachers}
                   rooms={rooms}
-                  unavailability={unavailability}
                   constraints={constraints}
-                  homeroomsLite={homeroomsLite}
+                  homerooms={homeroomsLite}
                   slotClash={slotClash}
-                  groupName={groupName}
-                  cellConflicts={cellConflicts}
-                  onSetCell={setCellEntry}
-                  onClearCell={clearCellEntry}
-                  onTogglePin={togglePin}
+                  hasOverride={hasOverride}
                   onMove={moveEntry}
-                  onOpenClass={openClass}
                 />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                <LessonStatsCard dimension="class" id={selectedHomeroomId} className="mt-2" />
+              </>
+            )
+          ) : view === 'teacher' ? (
+            <TeacherWeekView teacherId={selectedTeacherId} />
+          ) : master.week && masterHomerooms.length > 0 ? (
+            <MasterTimetableEditor
+              days={master.week.days}
+              slots={master.week.slots}
+              homerooms={masterHomerooms}
+              entries={entries}
+              subjects={subjects}
+              teachers={teachers}
+              rooms={rooms}
+              unavailability={unavailability}
+              constraints={constraints}
+              homeroomsLite={homeroomsLite}
+              slotClash={slotClash}
+              hasOverride={hasOverride}
+              onMove={moveEntry}
+              onOpenClass={openClass}
+            />
+          ) : (
+            <p className="py-10 text-center text-sm text-[#A1A1AA]">
+              No classes are scheduled in this period group yet.
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   )
+}
+
+/** A hairline between secondary actions, so the row reads as a list. */
+function Sep() {
+  return <span aria-hidden className="hidden sm:inline-block w-px h-4 bg-[#E4E4E7] mx-0.5" />
 }

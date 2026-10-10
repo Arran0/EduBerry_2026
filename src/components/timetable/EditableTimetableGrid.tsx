@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { Pin, Coffee, Ban } from 'lucide-react'
+import { Pin, Coffee, Ban, CalendarClock, Layers } from 'lucide-react'
 import { conflictCellKeys } from '@/lib/timetable/generator'
 import { buildConstraintIndex, cellKey, timeOffBlocked } from '@/lib/timetable/constraints'
 import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
@@ -9,7 +9,8 @@ import type {
   PlacedEntry, PeriodSlot, Subject, Room, TeacherUnavailability, TimetableConstraint, HomeroomLite, Weekday,
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
-import SlotDetailsModal from './SlotDetailsModal'
+import DraftSlotModal from './draft/DraftSlotModal'
+import { TAP, FOCUS } from './ui'
 
 interface Props {
   days: Weekday[]
@@ -25,14 +26,8 @@ interface Props {
   homerooms?: HomeroomLite[]
   // Periods of other bell schedules sharing a wall-clock hour (Round 9).
   slotClash?: Map<string, string[]>
-  groupName?: (groupId: string) => string | undefined
-  cellConflicts?: (homeroomId: string, day: Weekday, slotId: string) => string[]
-  onSetCell: (
-    homeroomId: string, day: Weekday, slotId: string, groupId: string | null,
-    subjectId: string, teacherIds: string[], roomId: string | null,
-  ) => void
-  onClearCell: (homeroomId: string, day: Weekday, slotId: string, groupId: string | null) => void
-  onTogglePin: (entry: PlacedEntry) => void
+  /** Marks a cell a date change amends. */
+  hasOverride?: (homeroomId: string, day: Weekday, slotId: string) => boolean
   // Dropping a lesson on another period. Returns false when refused.
   onMove?: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean
 }
@@ -43,10 +38,11 @@ const gridKey = (homeroomId: string, day: Weekday, slotId: string) => `${homeroo
 export const TIME_OFF_FILL =
   'repeating-linear-gradient(45deg, #fff1f2, #fff1f2 4px, #ffe4e6 4px, #ffe4e6 8px)'
 
+const BLOCK_WORD: Record<number, string> = { 2: 'Double', 3: 'Triple' }
+
 export default function EditableTimetableGrid({
   days, slots, homeroomId, homeroomName, entries, unavailability, subjects, teachers, rooms,
-  constraints = [], homerooms = [], slotClash, groupName, cellConflicts,
-  onSetCell, onClearCell, onTogglePin, onMove,
+  constraints = [], homerooms = [], slotClash, hasOverride, onMove,
 }: Props) {
   const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
   const [dragCell, setDragCell] = useState<string | null>(null)
@@ -70,18 +66,6 @@ export default function EditableTimetableGrid({
     const m = new Map<string, PlacedEntry>()
     for (const e of entries) {
       if (e.homeroomId === homeroomId && !e.groupId) m.set(`${e.day}__${e.slotId}`, e)
-    }
-    return m
-  }, [entries, homeroomId])
-
-  // Everything in a cell, whole-class layer and split groups alike — what the
-  // details modal shows.
-  const allByCell = useMemo(() => {
-    const m = new Map<string, PlacedEntry[]>()
-    for (const e of entries) {
-      if (e.homeroomId !== homeroomId) continue
-      const k = `${e.day}__${e.slotId}`
-      m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
   }, [entries, homeroomId])
@@ -131,16 +115,16 @@ export default function EditableTimetableGrid({
       .filter((n): n is string => !!n)
       .join(', ')
 
-  const openEntries = openCell ? allByCell.get(`${openCell.day}__${openCell.slot.id}`) ?? [] : []
-
   return (
-    <div className="overflow-x-auto border border-[#D4D4D8] bg-white">
+    <div className="overflow-x-auto border border-[#A1A1AA] bg-white">
       <table className="w-full border-collapse text-sm min-w-[26rem] sm:min-w-[40rem]">
         <thead>
-          <tr className="bg-[#FAFAF9]">
-            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] w-14 sm:w-28 sticky left-0 bg-[#FAFAF9] z-10">Period</th>
+          <tr className="bg-[#27272A]">
+            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#D4D4D8] w-14 sm:w-28 sticky left-0 bg-[#27272A] z-10">
+              Period
+            </th>
             {days.map((d) => (
-              <th key={d} className="p-1 sm:p-2 text-center text-[10px] sm:text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
+              <th key={d} className="p-1 sm:p-2 text-center text-[10px] sm:text-[11px] font-semibold text-[#F5F5F5] border-l border-[#52525B]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -151,7 +135,7 @@ export default function EditableTimetableGrid({
           {slots.map((slot) => (
             <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
               <td className={`p-1 sm:p-2 align-top text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
-                <div className="font-medium text-[#52525B]">{slot.label}</div>
+                <div className="font-semibold text-[#3F3F46]">{slot.label}</div>
                 {slot.start_time && slot.end_time && (
                   <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
                 )}
@@ -161,8 +145,7 @@ export default function EditableTimetableGrid({
                   return (
                     <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
                       <div className="h-10 sm:h-14 bg-amber-50 flex items-center justify-center text-amber-500">
-                        <Coffee size={12} className="sm:hidden" />
-                        <Coffee size={14} className="hidden sm:block" />
+                        <Coffee size={13} />
                       </div>
                     </td>
                   )
@@ -179,6 +162,7 @@ export default function EditableTimetableGrid({
                 const linkedAbove = entry ? linkedTo(entry, day, -1) : false
                 const linkedBelow = entry ? linkedTo(entry, day, 1) : false
                 const isOver = overCell === cellK
+                const amended = hasOverride?.(homeroomId, day, slot.id) ?? false
                 return (
                   <td
                     key={day}
@@ -201,25 +185,25 @@ export default function EditableTimetableGrid({
                       title={
                         entry
                           ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${
-                              span > 1 ? ` · ${span === 2 ? 'double' : span === 3 ? 'triple' : `${span}-period`} block` : ''
+                              span > 1 ? ` · ${BLOCK_WORD[span] ?? `${span}-period`} block` : ''
                             }${off ? ' · marked time off' : ''}`
                           : off ? 'Time off — this class is kept free' : 'Free period'
                       }
-                      className={`relative w-full h-10 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight transition-all ${
+                      className={`relative w-full h-11 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight ${FOCUS} ${
                         dragCell === cellK ? 'opacity-40' : ''
                       } ${
                         inConflict
                           ? 'ring-2 ring-inset ring-rose-400'
                           : entry
-                            ? `hover:brightness-95 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`
+                            ? `hover:brightness-95 transition-[filter] duration-150 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`
                             : off
-                              ? 'border border-rose-200 text-rose-400 hover:border-rose-300'
-                              : 'border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A]'
+                              ? `border border-rose-200 text-rose-400 hover:border-rose-300 ${TAP}`
+                              : `border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A] ${TAP}`
                       }`}
                       style={
                         entry
                           ? {
-                              background: (subj?.color ?? '#52525B') + '1f',
+                              background: (subj?.color ?? '#52525B') + '2b',
                               borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
                               // A block is one lesson across several rows, so the
                               // edges between its periods are left open and it
@@ -234,37 +218,41 @@ export default function EditableTimetableGrid({
                       {entry ? (
                         <>
                           {!linkedAbove && (
-                            <div className="font-semibold text-[#18181B] truncate">{subj?.name ?? 'Subject'}</div>
+                            <div className="font-bold text-[#18181B] truncate pr-4">{subj?.name ?? 'Subject'}</div>
                           )}
-                          {!linkedAbove && names && <div className="text-[#52525B] truncate">{names}</div>}
-                          {!linkedAbove && room && <div className="text-[#A1A1AA] truncate hidden sm:block">{room.name}</div>}
+                          {!linkedAbove && names && <div className="text-[#3F3F46] truncate">{names}</div>}
+                          {!linkedAbove && room && <div className="text-[#71717A] truncate hidden sm:block">{room.name}</div>}
                           {span > 1 && !linkedAbove && (
-                            <div className="text-[9px] uppercase tracking-wide text-[#71717A]">
-                              {span === 2 ? 'Double' : span === 3 ? 'Triple' : `${span} in a row`}
+                            <div className="text-[9px] uppercase tracking-wide font-medium text-[#52525B]">
+                              {BLOCK_WORD[span] ?? `${span} in a row`}
                             </div>
                           )}
                           {linkedAbove && (
-                            <span className="block text-center text-[#A1A1AA] leading-[2.25rem] sm:leading-[3rem]">⌄</span>
+                            <span className="block text-center text-[#A1A1AA] leading-[2.5rem] sm:leading-[3rem]">⌄</span>
                           )}
                           {linkedBelow && (
                             <span
                               className="absolute left-0 right-0 bottom-[-1px] h-px"
-                              style={{ background: (subj?.color ?? '#52525B') + '1f' }}
+                              style={{ background: (subj?.color ?? '#52525B') + '2b' }}
                             />
                           )}
-                          {entry.isLocked && !linkedAbove && (
-                            <Pin size={10} className="absolute top-0.5 right-0.5 text-[#52525B]" />
-                          )}
+                          <span className="absolute top-0.5 right-0.5 flex items-center gap-px">
+                            {amended && <CalendarClock size={10} className="text-[#B8983C]" />}
+                            {entry.combinedKey && <Layers size={10} className="text-indigo-600" />}
+                            {entry.isLocked && !linkedAbove && <Pin size={10} className="text-[#3F3F46]" />}
+                          </span>
                           {off && <Ban size={10} className="absolute bottom-0.5 right-0.5 text-rose-500" />}
                         </>
                       ) : splits > 0 ? (
-                        <span className="block text-center leading-[2.25rem] sm:leading-[3rem] text-indigo-500 font-medium">{splits} groups</span>
+                        <span className="block text-center leading-[2.5rem] sm:leading-[3rem] text-indigo-600 font-semibold">
+                          {splits} groups
+                        </span>
                       ) : off ? (
                         <span className="flex items-center justify-center gap-1 h-full text-rose-400">
                           <Ban size={11} /> <span className="hidden sm:inline">Off</span>
                         </span>
                       ) : (
-                        <span className="block text-center leading-[2.25rem] sm:leading-[3rem]">+</span>
+                        <span className="block text-center leading-[2.5rem] sm:leading-[3rem]">+</span>
                       )}
                     </button>
                   </td>
@@ -276,25 +264,12 @@ export default function EditableTimetableGrid({
       </table>
 
       {openCell && (
-        <SlotDetailsModal
-          target={{ homeroomId, homeroomName, day: openCell.day, slot: openCell.slot }}
-          entries={openEntries}
-          subjects={subjects}
-          teachers={teachers}
-          rooms={rooms}
-          groupName={groupName}
-          conflicts={cellConflicts?.(homeroomId, openCell.day, openCell.slot.id) ?? []}
-          timeOff={isTimeOff(openCell.day, openCell.slot.id)}
+        <DraftSlotModal
+          homeroomId={homeroomId}
+          homeroomName={homeroomName}
+          day={openCell.day}
+          slot={openCell.slot}
           onClose={() => setOpenCell(null)}
-          onTogglePin={onTogglePin}
-          onSave={(groupId, subjectId, teacherIds, roomId) => {
-            onSetCell(homeroomId, openCell.day, openCell.slot.id, groupId, subjectId, teacherIds, roomId)
-            setOpenCell(null)
-          }}
-          onClear={(entry) => {
-            onClearCell(homeroomId, openCell.day, openCell.slot.id, entry.groupId ?? null)
-            setOpenCell(null)
-          }}
         />
       )}
     </div>

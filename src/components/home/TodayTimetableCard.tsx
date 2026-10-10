@@ -11,10 +11,14 @@ import {
   type TimetableEntry,
   type TimetableViewData,
 } from '@/lib/timetable'
+import { applyOverrides, todayISO } from '@/lib/timetable/overrides'
+import type { EntryOverride } from '@/lib/timetable/overrides'
 
 interface Period {
   slot: PeriodSlot
   entry: TimetableEntry | null
+  /** True when a per-date change put this lesson here, or moved it away. */
+  changed: boolean
 }
 
 function formatTime(t: string | null): string {
@@ -49,13 +53,21 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
         if (!view) { setPeriods([]); return }
         // WEEKDAYS is Monday-first; JS getDay() is Sunday=0.
         const today = WEEKDAYS[(new Date().getDay() + 6) % 7]
+        // This card is about one specific date, so it is the one place that
+        // resolves the per-date changes outright rather than flagging them:
+        // a cancelled period is gone and a cover lesson is the lesson.
+        const resolved = applyOverrides(
+          view.entries,
+          (view.overrides ?? []) as EntryOverride[],
+          todayISO(),
+        )
         const teaching = [...view.slots]
           .filter(s => !s.is_break)
           .sort((a, b) => a.position - b.position)
-        const list: Period[] = teaching.map(slot => ({
-          slot,
-          entry: view.entries.find(e => e.day === today && e.slot_id === slot.id) ?? null,
-        }))
+        const list: Period[] = teaching.map(slot => {
+          const entry = resolved.find(e => e.day === today && e.slot_id === slot.id) ?? null
+          return { slot, entry, changed: !!entry?.override }
+        })
         setPeriods(list)
       })
       .catch(err => {
@@ -93,7 +105,7 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
-            {periods!.filter(p => p.entry?.subject_id).map(({ slot, entry }) => (
+            {periods!.filter(p => p.entry?.subject_id).map(({ slot, entry, changed }) => (
               <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 py-2.5">
                 <span className="text-[11px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0">
                   {formatTime(slot.start_time)}
@@ -106,6 +118,14 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
                     <p className="text-[11px] text-slate-400 truncate">{entryTeacherLabel(entry)}</p>
                   )}
                 </div>
+                {changed && (
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 flex-shrink-0"
+                    title="Changed just for today"
+                  >
+                    Today
+                  </span>
+                )}
               </div>
             ))}
           </div>

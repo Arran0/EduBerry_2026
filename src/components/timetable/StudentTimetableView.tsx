@@ -5,7 +5,9 @@ import { CalendarRange, Loader2, Download } from 'lucide-react'
 import { fetchTimetableForStudent, entryTeacherLabel } from '@/lib/timetable'
 import type { TimetableViewData } from '@/lib/timetable'
 import { exportTimetableToExcel } from '@/lib/timetable/export'
+import { BTN_NEUTRAL } from './ui'
 import TimetableGrid from './TimetableGrid'
+import DateChangesNotice from './DateChangesNotice'
 
 export default function StudentTimetableView({ studentId }: { studentId: string }) {
   const [loading, setLoading] = useState(true)
@@ -35,7 +37,7 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
 
   return (
     <div className="space-y-8">
-      {views.map(({ config, slots, timetable, entries }) => (
+      {views.map(({ config, slots, timetable, entries, overrides }) => (
         <div key={config.id} className="space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
@@ -56,7 +58,7 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
                   secondary: (e) => entryTeacherLabel(e),
                 })
               }
-              className="inline-flex items-center gap-1.5 text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] px-3 py-1.5 text-sm font-medium transition-colors"
+              className={BTN_NEUTRAL}
             >
               <Download size={14} /> Export
             </button>
@@ -66,7 +68,9 @@ export default function StudentTimetableView({ studentId }: { studentId: string 
             slots={slots}
             entries={entries}
             secondary={(e) => entryTeacherLabel(e)}
+            overrides={overrides}
           />
+          <DateChangesNotice overrides={overrides} slots={slots} />
         </div>
       ))}
     </div>

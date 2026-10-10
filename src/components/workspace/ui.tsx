@@ -15,12 +15,52 @@ import { Search, ChevronDown, Check, X, ChevronLeft, ChevronRight, CalendarDays 
  * you wrote them in — so `w-full` keeps winning and the field blows its row out.
  */
 export const INPUT_SIZED =
-  'border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+  'border border-[#D4D4D8] bg-white px-3 py-2 sm:py-1.5 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
 export const INPUT = `w-full ${INPUT_SIZED}`
+
+/**
+ * The press. A button that only changes colour on `:hover` gives a mouse
+ * nothing on the click itself and a touchscreen nothing at all — the finger is
+ * already over the hover state. A sub-pixel sink plus a hair of scale reads as
+ * a physical press at any input, costs no layout (transform only), and is
+ * dropped entirely for anyone who has asked for less motion.
+ */
+export const TAP =
+  'transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out ' +
+  'active:scale-[0.97] active:duration-75 ' +
+  'motion-reduce:transition-colors motion-reduce:active:scale-100'
+
+/** Keyboard focus, in the gold the rest of the workspace accents with. */
+export const FOCUS =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C] focus-visible:ring-offset-1 focus-visible:ring-offset-white'
+
+/**
+ * Buttons are a comfortable 44px tap target on a phone and noticeably tighter
+ * from `sm` up, where the pointer is precise and the screen is full of grid.
+ * A toolbar of eight 44px-tall buttons on a desktop is wasted canvas.
+ */
+export const BTN_BASE =
+  `inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium ` +
+  `min-h-[2.75rem] px-3 text-sm sm:min-h-0 sm:py-1.5 sm:text-[13px] ` +
+  `disabled:opacity-50 disabled:pointer-events-none ${TAP} ${FOCUS}`
+
 export const BTN_PRIMARY =
-  'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] px-3.5 py-2 text-sm font-medium disabled:opacity-50 transition-colors'
+  `${BTN_BASE} bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5]`
 export const BTN_NEUTRAL =
-  'inline-flex items-center justify-center gap-1.5 bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB] px-3 py-2 text-sm font-medium disabled:opacity-50 transition-colors'
+  `${BTN_BASE} bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB]`
+/** Lowest-emphasis action — borderless until hovered. */
+export const BTN_QUIET =
+  `${BTN_BASE} text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B]`
+export const BTN_GO =
+  `${BTN_BASE} bg-emerald-700 hover:bg-emerald-800 text-white`
+export const BTN_DANGER =
+  `${BTN_BASE} text-rose-600 border border-rose-200 bg-white hover:bg-rose-50`
+/** The small in-panel variant: a chip, not a button bar. */
+export const BTN_SM =
+  `inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium ` +
+  `min-h-[2.25rem] px-2.5 text-[13px] sm:min-h-0 sm:py-1 sm:text-xs ` +
+  `disabled:opacity-50 disabled:pointer-events-none ${TAP} ${FOCUS}`
+
 export const SECTION_LABEL = 'text-[10px] font-bold uppercase tracking-widest text-[#525252]'
 export const ROW = 'flex items-center gap-3 px-3 py-2.5 bg-[#F5F5F5] border border-[#E4E4E7]'
 
@@ -112,7 +152,7 @@ export function SegmentedNav<K extends string>({
             onClick={() => onChange(key)}
             aria-pressed={active}
             title={label}
-            className={`min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-sm font-medium transition-colors ${
+            className={`min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 min-h-[2.75rem] sm:min-h-0 sm:py-1.5 text-sm sm:text-[13px] font-medium ${TAP} ${FOCUS} ${
               active ? 'flex-1' : 'flex-none lg:flex-1'
             } ${
               active
@@ -122,6 +162,62 @@ export function SegmentedNav<K extends string>({
           >
             {Icon && <Icon size={15} className="flex-shrink-0" />}
             <span className={`truncate ${active ? 'inline' : 'hidden lg:inline'}`}>{label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Mini tabs ─────────────────────────────────────────────────
+// A compact segmented switch for picking one of a handful of views — period
+// groups, grid modes. Unlike SegmentedNav it does not claim the full width, so
+// it can sit inside a toolbar row next to other controls, and it scrolls
+// sideways rather than wrapping when there are more options than room.
+
+export interface MiniTab<K extends string> {
+  key: K
+  label: string
+  /** Second line / trailing count — the thing that makes the choice obvious. */
+  meta?: string
+  icon?: React.ElementType
+}
+
+export function MiniTabs<K extends string>({
+  tabs, value, onChange, className = '', ariaLabel,
+}: {
+  tabs: MiniTab<K>[]
+  value: K
+  onChange: (key: K) => void
+  className?: string
+  ariaLabel?: string
+}) {
+  if (tabs.length < 2) return null
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className={`inline-flex max-w-full overflow-x-auto border border-[#D4D4D8] bg-white divide-x divide-[#E4E4E7] ${className}`}
+    >
+      {tabs.map(({ key, label, meta, icon: Icon }) => {
+        const active = value === key
+        return (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(key)}
+            className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 min-h-[2.25rem] sm:min-h-0 sm:py-1 text-[13px] sm:text-xs font-medium ${TAP} ${FOCUS} ${
+              active
+                ? 'bg-[#27272A] text-white'
+                : 'text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B]'
+            }`}
+          >
+            {Icon && <Icon size={13} className={active ? 'text-[#B8983C]' : 'text-[#A1A1AA]'} />}
+            <span className="truncate max-w-[9rem]">{label}</span>
+            {meta && (
+              <span className={`tabular-nums ${active ? 'text-white/55' : 'text-[#A1A1AA]'}`}>{meta}</span>
+            )}
           </button>
         )
       })}
@@ -215,7 +311,7 @@ export function SmartSelect({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 py-2 text-sm text-left transition-colors hover:border-[#A1A1AA] focus:outline-none focus:border-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg ${buttonClassName}`}
+        className={`w-full inline-flex items-center gap-2 border border-[#D4D4D8] bg-white px-3 min-h-[2.75rem] sm:min-h-0 sm:py-1.5 text-sm text-left transition-colors hover:border-[#A1A1AA] focus-visible:outline-none focus-visible:border-[#27272A] focus-visible:ring-1 focus-visible:ring-[#B8983C] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg ${buttonClassName}`}
       >
         {leadingIcon}
         {selected?.color && (
@@ -271,7 +367,7 @@ export function SmartSelect({
                     key={o.value}
                     type="button"
                     onClick={() => pick(o.value)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 min-h-[2.75rem] sm:min-h-0 text-left transition-colors ${
                       active ? 'bg-[#F5F5F5]' : 'hover:bg-[#F5F5F5]'
                     }`}
                   >

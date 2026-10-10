@@ -494,4 +494,32 @@ export interface TimetableViewData {
   slots: PeriodSlot[]
   timetable: Timetable
   entries: TimetableEntry[]
+  /**
+   * Per-date amendments to this config's weekly template — see
+   * lib/timetable/overrides.ts. `entries` is always the plain weekly
+   * timetable; applying these is the viewer's job, because what a cell shows
+   * depends on which date is being looked at.
+   *
+   * Typed loosely here to keep types.ts free of the overrides module.
+   */
+  overrides: {
+    id: string
+    config_id: string
+    homeroom_id: string
+    day: Weekday
+    slot_id: string
+    group_id: string | null
+    effective_from: string
+    effective_to: string | null
+    kind: 'replace' | 'cancel'
+    subject_id: string | null
+    teacher_id: string | null
+    teacher_ids: string[] | null
+    room_id: string | null
+    note: string | null
+    created_at: string
+    updated_at: string
+    subject?: Subject
+    room?: Room
+  }[]
 }

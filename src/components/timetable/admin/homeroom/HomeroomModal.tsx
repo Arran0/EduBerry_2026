@@ -37,7 +37,6 @@ import { OverloadedTeachersNotice } from '../../draft/TeacherLoad'
 import { withExtraPeriods } from '@/lib/timetable/workload'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 import LessonStatsCard from '../../LessonStatsCard'
-import SlotDetailsModal from '../../SlotDetailsModal'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
 
@@ -1686,7 +1685,6 @@ function RequirementsPanel({
  */
 function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
   const draft = useTimetableDraftOptional()
-  const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
 
   const lessons = useMemo(
     () => (draft?.entries ?? []).filter((e) => e.homeroomId === homeroom.id),
@@ -1715,17 +1713,16 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
     return <p className="text-sm text-[#71717A] py-6 text-center">Add teaching period slots first (Configuration).</p>
   }
 
-  const openEntries = openCell
-    ? draft.entries.filter(
-        (e) => e.homeroomId === homeroom.id && e.day === openCell.day && e.slotId === openCell.slot.id,
-      )
-    : []
+  const hasOverride = (hr: string, day: Weekday, slotId: string) =>
+    draft.overrideToday(hr, day, slotId, null) !== null
 
   return (
     <div>
+      {/* A homeroom follows exactly one bell schedule, so there is nothing to
+          switch between here — which band it is gets named instead. */}
       <Section
         title="Time off"
-        hint={`Tap a free period to keep this class out of it (assembly, etc.) — the generator never schedules it there. The draft timetable is drawn in, so a lesson in the way can be dragged to another period or pinned in place.${
+        hint={`Tap a free period to keep this class out of it. Click a lesson to open it.${
           draft.weeks.length > 1 ? ` This class follows the ${week.name}.` : ''
         }`}
         first
@@ -1739,9 +1736,9 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
           teachers={draft.teachers}
           rooms={draft.rooms}
           conflicts={conflictCells}
+          hasOverride={hasOverride}
+          emptyCellHomeroomId={homeroom.id}
           onMove={draft.moveEntry}
-          onTogglePin={draft.togglePin}
-          onOpen={(_e, day, slot) => setOpenCell({ day, slot })}
         />
         {/* The subjects this class is taught, and whether they all fit. */}
         <LessonStatsCard dimension="class" id={homeroom.id} className="mt-2.5" />
@@ -1765,37 +1762,13 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
             teachers={draft.teachers}
             rooms={draft.rooms}
             conflicts={conflictCells}
+            hasOverride={hasOverride}
             onMove={draft.moveEntry}
-            onTogglePin={draft.togglePin}
-            onOpen={(_e, day, slot) => setOpenCell({ day, slot })}
           />
         ) : (
           <p className="text-xs text-[#A1A1AA]">No class teacher assigned yet.</p>
         )}
       </Section>
-
-      {openCell && (
-        <SlotDetailsModal
-          target={{ homeroomId: homeroom.id, homeroomName: homeroom.name, day: openCell.day, slot: openCell.slot }}
-          entries={openEntries}
-          subjects={draft.subjects}
-          teachers={draft.teachers}
-          rooms={draft.rooms}
-          groupName={draft.groupName}
-          conflicts={draft.cellConflicts(homeroom.id, openCell.day, openCell.slot.id)}
-          timeOff={draft.isConstraintOn('homeroom', homeroom.id, 'time_off', openCell.day, openCell.slot.id)}
-          onClose={() => setOpenCell(null)}
-          onTogglePin={draft.togglePin}
-          onSave={(groupId, subjectId, teacherIds, roomId) => {
-            draft.setCellEntry(homeroom.id, openCell.day, openCell.slot.id, groupId, subjectId, teacherIds, roomId)
-            setOpenCell(null)
-          }}
-          onClear={(entry) => {
-            draft.clearCellEntry(homeroom.id, openCell.day, openCell.slot.id, entry.groupId ?? null)
-            setOpenCell(null)
-          }}
-        />
-      )}
     </div>
   )
 }

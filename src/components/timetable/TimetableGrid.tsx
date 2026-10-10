@@ -1,9 +1,13 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import { Coffee } from 'lucide-react'
+import { Coffee, CalendarClock } from 'lucide-react'
 import { WEEKDAY_LABELS } from '@/lib/timetable'
-import type { PeriodSlot, TimetableEntry, Weekday } from '@/lib/timetable'
+import type { PeriodSlot, TimetableEntry, TimetableViewData, Weekday } from '@/lib/timetable'
+import { describeSpan, todayISO } from '@/lib/timetable/overrides'
+import type { EntryOverride } from '@/lib/timetable/overrides'
+
+type ViewOverride = TimetableViewData['overrides'][number]
 
 interface Props {
   days: Weekday[]
@@ -12,10 +16,30 @@ interface Props {
   // What the secondary line under the subject shows: the teacher (student view)
   // or the class/homeroom (staff view).
   secondary?: (entry: TimetableEntry) => string | null
+  /**
+   * Per-date amendments. The grid stays the weekly template — a cell a date
+   * change touches is marked rather than rewritten, because one cell can be
+   * one thing this Tuesday and another the next, and a week grid has no room
+   * to be both. The exact day is resolved on the home card and in the list
+   * under the grid.
+   */
+  overrides?: ViewOverride[]
 }
 
 // Read-only weekly grid (days × period slots) shared by the student and staff views.
-export default function TimetableGrid({ days, slots, entries, secondary }: Props) {
+export default function TimetableGrid({ days, slots, entries, secondary, overrides = [] }: Props) {
+  // Cells amended today or at any point in future. A change that finished last
+  // term is history and would only add noise to this week.
+  const amended = useMemo(() => {
+    const today = todayISO()
+    const m = new Map<string, ViewOverride[]>()
+    for (const o of overrides) {
+      if (o.effective_to !== null && o.effective_to < today) continue
+      const k = `${o.day}__${o.slot_id}`
+      m.set(k, [...(m.get(k) ?? []), o])
+    }
+    return m
+  }, [overrides])
   // A cell can hold several parallel split-group lessons.
   const byCell = useMemo(() => {
     const m = new Map<string, TimetableEntry[]>()
@@ -62,10 +86,24 @@ export default function TimetableGrid({ days, slots, entries, secondary }: Props
                     </td>
                   )
                 }
-                const cellEntries = byCell.get(`${day}__${slot.id}`) ?? []
+                const cellKey = `${day}__${slot.id}`
+                const cellEntries = byCell.get(cellKey) ?? []
+                const changes = amended.get(cellKey) ?? []
                 const split = cellEntries.length > 1
                 return (
-                  <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7] align-top">
+                  <td key={day} className="relative p-0.5 sm:p-1 border-t border-l border-[#E4E4E7] align-top">
+                    {changes.length > 0 && (
+                      <span
+                        className="absolute top-0.5 right-0.5 z-10 text-[#B8983C]"
+                        title={changes
+                          .map((o) => `${describeSpan(o as EntryOverride)}: ${
+                            o.kind === 'cancel' ? 'no lesson' : o.subject?.name ?? 'changed lesson'
+                          }${o.note ? ` (${o.note})` : ''}`)
+                          .join('\n')}
+                      >
+                        <CalendarClock size={11} />
+                      </span>
+                    )}
                     {cellEntries.length === 0 ? (
                       <div className="h-9 sm:h-14" />
                     ) : (
