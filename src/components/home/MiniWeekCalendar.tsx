@@ -102,7 +102,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
                 className={`flex flex-col cursor-pointer select-none ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
               >
                 <div className={`px-1 py-2 text-center flex-shrink-0 transition-colors duration-300 ${isExpanded ? c.headBg : ''}`}>
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{DAY_LETTERS[i]}</p>
+                  <p className="text-[9px] md:text-[11px] font-bold uppercase tracking-wide text-slate-500">{DAY_LETTERS[i]}</p>
                   <p className={`text-sm font-bold leading-tight mt-0.5 ${isToday ? c.todayText : 'text-slate-700'}`}>{day.getDate()}</p>
                 </div>
                 <div className="flex-1 overflow-y-auto scrollbar-hide px-1 pb-2 space-y-1 min-w-0">

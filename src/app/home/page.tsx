@@ -100,7 +100,7 @@ import AttendanceInfographicPanel, {
   HomeAttendanceCounts,
 } from '@/components/home/desktop/AttendanceInfographicPanel'
 import { fmtINR } from '@/lib/formatMoney'
-import { useIsDesktop, useHasHover } from '@/hooks/useMediaQuery'
+import { useIsDesktop, useIsTabletUp, useHasHover } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
@@ -123,7 +123,7 @@ function QuoteBanner() {
           transition={{ duration: 0.45, ease: 'easeInOut' }}
           className="overflow-hidden"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1">
+          <div className="home-container pt-5 pb-1">
             <DailyQuoteCard />
           </div>
         </motion.div>
@@ -290,7 +290,7 @@ function CarouselArrows({ onPrev, onNext }: { onPrev: () => void; onNext: () => 
     hover:bg-white hover:text-slate-900 transition-all duration-200
     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-10 z-10 max-w-7xl mx-auto">
+    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-10 z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto">
       <button type="button" onClick={onPrev} aria-label="Previous card" className={`${arrowClass} left-0`}>
         <ChevronLeft size={18} />
       </button>
@@ -446,9 +446,20 @@ export default function HomePage() {
   const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [containerW, setContainerW] = useState(0)
-  // ≥1024px: the cards stop being a swipe strip and become a dashboard grid.
-  // SSR-safe (false on the first paint, upgraded on mount).
+  // Two hinges, two jobs. Both are SSR-safe — false on the first paint and
+  // upgraded on mount — so the server render and the first client render agree
+  // on the phone layout and neither one can cause a hydration mismatch.
+  //
+  //   gridLayout (≥768px)  the feed cards stop being a one-at-a-time swipe
+  //                        strip and become a dashboard grid, and the standing
+  //                        statistics leave the strip for fixed rows of their
+  //                        own. A pointer has no swipe, and two cards already
+  //                        fit side by side at this width.
+  //   isDesktop  (≥1024px) the statistics have the width to stop being stacked
+  //                        2×2 tiles and become chart-plus-rows infographic
+  //                        panels, and the grid opens its third column.
   const isDesktop = useIsDesktop()
+  const gridLayout = useIsTabletUp()
   const [attendanceCounts, setAttendanceCounts] = useState<HomeAttendanceCounts | null>(null)
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
@@ -756,9 +767,11 @@ export default function HomePage() {
     setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
   }, [isAdmin])
 
-  // Re-runs when the desktop grid hands the page back to the swipe track, so a
-  // carousel remounted by a window resize measures itself instead of reusing a
-  // stale width.
+  // Re-runs when the dashboard grid hands the page back to the swipe track, so
+  // a carousel remounted by a window resize measures itself instead of reusing
+  // a stale width. Above `md:` there is no strip at all: the node is gone, so
+  // this bails and the observer is disconnected rather than left watching a
+  // detached element.
   useLayoutEffect(() => {
     const el = cardContainerRef.current
     if (!el) return
@@ -767,7 +780,7 @@ export default function HomePage() {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [isDesktop, stripNode])
+  }, [gridLayout, stripNode])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   // The announcements page marks a page of notices read as it loads them;
@@ -930,10 +943,11 @@ export default function HomePage() {
      in fixed rows of their own on desktop, and a dashboard that quietly omits
      "Bus Fees" on a day nothing was billed — moving every other panel as it
      goes — is harder to read than one whose rows are always in the same place.
-     So emptiness is relaxed for those three cards only, and only on desktop
-     where they have left the strip. Role and preference gates always apply:
-     this relaxes "has content", never "should this user see it". */
-  const showEmptyStatCards = isDesktop
+     So emptiness is relaxed for those three cards only, and only once they
+     have left the strip for a fixed row of their own — which is now the `md:`
+     grid, not just desktop. Role and preference gates always apply: this
+     relaxes "has content", never "should this user see it". */
+  const showEmptyStatCards = gridLayout
 
   const slots: HomeSlot[] = []
 
@@ -1217,17 +1231,39 @@ export default function HomePage() {
     })
   }
 
-  /* Desktop splits the slot list into three rows: the statistics get rows of
-     their own — attendance across the full width, then the two fee ledgers
-     side by side — and everything else stays in the rotating strip above them.
-     A statistic is a standing number an admin reads at a glance; putting it
-     behind a swipe (or worse, a swipe it shares with a notifications feed) is
-     exactly the mobile habit this view is meant to drop. Below lg every slot
-     stays in the one strip, unchanged. */
+  /* One slot list, laid out two ways.
+
+     On a phone every slot is a slide in the swipe strip, one card per screen.
+     At `md:` and up the strip is gone entirely and the same slots become a
+     dashboard: the statistics take fixed rows of their own — attendance across
+     the full width, then the two fee ledgers side by side — and the feeds fill
+     a 12-column grid above them, every card in a fixed place and on screen at
+     once.
+
+     Why the strip doesn't survive: a statistic is a standing number read at a
+     glance, and a gesture or a 7-second rotation between the viewer and it is
+     the phone habit this view exists to drop. The feeds are the less obvious
+     half of the same argument — a teacher can have nine of them (timetable,
+     exams, grading, tasks, school work, assessments, report cards,
+     notifications, attendance), and at 7 seconds a card that is a full minute
+     of waiting to see today's timetable on a screen with room for all nine.
+     `span` on each slot — already declared with the slot, and until now unused
+     — says which ones read better across the full width. */
   const STAT_KEYS: AdminCardView[] = ['attendance', 'fees', 'bus-fees']
-  const carouselSlots = isDesktop ? slots.filter(s => !STAT_KEYS.includes(s.key)) : slots
-  const attendanceSlot = isDesktop ? slots.find(s => s.key === 'attendance') : undefined
-  const feeSlots = isDesktop ? slots.filter(s => s.key === 'fees' || s.key === 'bus-fees') : []
+  const gridSlots = gridLayout ? slots.filter(s => !STAT_KEYS.includes(s.key)) : []
+  const carouselSlots = gridLayout ? [] : slots
+  const attendanceSlot = gridLayout ? slots.find(s => s.key === 'attendance') : undefined
+  const feeSlots = gridLayout ? slots.filter(s => s.key === 'fees' || s.key === 'bus-fees') : []
+
+  /* A slot's desktop width. `half` is the default — two up at `md:`, three at
+     `xl:` where a 1600px container has the room. `wide` is for the cards that
+     read side-by-side internally (a week calendar, the two-scope attendance
+     panel): full width at `md:`, two thirds at `xl:` so a `half` can sit
+     beside it. */
+  const SPAN_CLASS: Record<HomeSlot['span'], string> = {
+    half: 'md:col-span-6 xl:col-span-4',
+    wide: 'md:col-span-12 xl:col-span-8',
+  }
 
   // The carousel's index space — the strip's own slots, so the dots and the
   // drag maths stay in step with what is actually in the strip at this width.
@@ -1413,7 +1449,7 @@ export default function HomePage() {
       el.removeEventListener('touchcancel', onEnd)
       el.removeEventListener('click', onClick)
     }
-  }, [CARD_VIEWS, dragX, isDesktop, stripNode])
+  }, [CARD_VIEWS, dragX, gridLayout, stripNode])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -1651,7 +1687,7 @@ export default function HomePage() {
 
               {/* Welcome text — pinned inside the blur zone */}
               <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-7">
+                <div className="home-container pb-7">
                   {(() => {
                     const { line1, icon } = getGreetingData()
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -1689,18 +1725,17 @@ export default function HomePage() {
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
           {bannerReady && <QuoteBanner />}
 
-          {/* ── Home cards — one slot list (see `slots` above), laid out by width.
-              Below lg: every slot in a full-bleed swipe track, one card per
+          {/* ── Phone: every slot in a full-bleed swipe track, one card per
               screen, rotating every 7 s. The track (this div plus
               cardContainerRef) is edge-to-edge while each slide still centers
-              its own content in the page's max-w-7xl box, so the visible card
-              is exactly the width it always was and only the swipe hit area is
+              its own content in the page's container, so the visible card is
+              exactly the width it always was and only the swipe hit area is
               wider.
-              At lg and up the same track carries row 1 — everything that isn't
-              a headline statistic — and the statistics move out into two rows
-              of their own below it: attendance across the full width, then the
-              two fee ledgers side by side, each as an infographic panel rather
-              than stacked tiles. ── */}
+              This whole branch is gone at `md:` — see the dashboard grid below
+              it. Not merely hidden: an off-screen strip still ticking would
+              re-render the page every 7 s for a deck nobody can see. With
+              `carouselSlots` empty the autoplay, the ResizeObserver and the
+              touch listeners all bail on their own. ── */}
           {carouselSlots.length > 0 && (
           <div className="w-full px-2 pt-6">
             <motion.div variants={cardVariants} className="mb-0">
@@ -1741,7 +1776,7 @@ export default function HomePage() {
                         {...(active ? {} : INERT_ATTR)}
                         style={{ width: containerW || '100%', flexShrink: 0 }}
                       >
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="home-container">
                           {slot.heading}
                           <div className="mx-2 sm:mx-4">{slot.body}</div>
                         </div>
@@ -1750,10 +1785,14 @@ export default function HomePage() {
                     })}
                   </motion.div>
 
-                  {/* Desktop has no swipe, so the strip grows pointer and
-                      keyboard controls: arrows either side (revealed on hover,
-                      and on focus for keyboard users) plus the dots below. */}
-                  {isDesktop && CARD_VIEWS.length > 1 && (
+                  {/* A pointer has no swipe, so where there is one the strip
+                      grows arrows either side (revealed on hover, and on focus
+                      for keyboard users) on top of the dots below. Keyed on the
+                      pointer rather than the width: the strip only survives
+                      below `md:` now, and a mouse user in a narrow window is
+                      exactly the case that has no other way to page through
+                      it. */}
+                  {hasHover && CARD_VIEWS.length > 1 && (
                     <CarouselArrows
                       onPrev={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) - 1 + CARD_VIEWS.length) % CARD_VIEWS.length])}
                       onNext={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) + 1) % CARD_VIEWS.length])}
@@ -1803,26 +1842,72 @@ export default function HomePage() {
           </div>
           )}
 
-          {/* ── Desktop rows 2 and 3: the standing statistics, always on screen.
-              Same max-w-7xl box as the banner text, classrooms grid and app row
-              below, so every region on the page shares one left edge. ── */}
-          {isDesktop && (attendanceSlot || feeSlots.length > 0) && (
-            <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2 space-y-6 ${carouselSlots.length === 0 ? 'pt-6' : ''}`}>
+          {/* ── md: and up, row 1 — the feeds, as a 12-column dashboard grid.
+              Every card in a fixed place and on screen at once, which is the
+              whole point: a card that moves position between visits can never
+              be learned, and one behind a rotation can't be glanced at.
+              Deliberately *not* `grid-flow-row-dense`: dense packing back-fills
+              the gap a `wide` card leaves at the end of a row by pulling a
+              later `half` up into it, which tiles the deck without holes but
+              makes the visual order diverge from the DOM order — a keyboard
+              user would then tab through the cards in a different sequence from
+              the one they are reading. One trailing gap is cosmetic; a tab
+              order that disagrees with the page is not.
+              `items-stretch` plus `.home-grid`'s `height: 100%` gives every
+              card in a row a shared bottom edge. ── */}
+          {gridSlots.length > 0 && (
+            <div className="home-container pt-6">
+              <motion.div
+                variants={cardVariants}
+                className="home-grid grid grid-cols-1 md:grid-cols-12 items-stretch gap-4 lg:gap-5"
+              >
+                {gridSlots.map(slot => (
+                  <section
+                    key={slot.key}
+                    className={`flex flex-col min-w-0 ${SPAN_CLASS[slot.span]}`}
+                    aria-label={slot.key.replace(/-/g, ' ')}
+                  >
+                    {slot.heading}
+                    {/* min-h-0 lets an overflow-y-auto card inside actually
+                        scroll instead of growing the row; the min-height is the
+                        floor a short card holds so a row of one list and one
+                        near-empty card doesn't collapse to nothing. */}
+                    <div className="flex-1 min-h-0 md:min-h-[230px]">
+                      {slot.desktopBody ?? slot.body}
+                    </div>
+                  </section>
+                ))}
+              </motion.div>
+            </div>
+          )}
+
+          {/* ── md: and up, rows 2 and 3 — the standing statistics, never behind
+              a gesture. Attendance takes the full width (it carries two scopes
+              side by side), then the fee ledgers sit as peers.
+              At `lg:` each one swaps its stacked 2×2 tiles for the chart-plus-
+              rows infographic panel (`desktopBody`); between 768 and 1024 the
+              tiles stay, because a donut beside its metric rows needs more than
+              a half of 900px. Same container as every other region on the page,
+              so they all share one left edge. ── */}
+          {gridLayout && (attendanceSlot || feeSlots.length > 0) && (
+            <div className="home-container pt-6 pb-2 space-y-6">
               {attendanceSlot && (
                 <motion.section variants={cardVariants}>
                   {attendanceSlot.heading}
-                  {attendanceSlot.desktopBody ?? attendanceSlot.body}
+                  {isDesktop ? (attendanceSlot.desktopBody ?? attendanceSlot.body) : attendanceSlot.body}
                 </motion.section>
               )}
               {feeSlots.length > 0 && (
                 <motion.div
                   variants={cardVariants}
-                  className={`grid gap-5 items-stretch ${feeSlots.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}
+                  className={`grid gap-4 lg:gap-5 items-stretch ${feeSlots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}
                 >
                   {feeSlots.map(slot => (
-                    <section key={slot.key} className="flex flex-col">
+                    <section key={slot.key} className="flex flex-col min-w-0">
                       {slot.heading}
-                      <div className="flex-1">{slot.desktopBody ?? slot.body}</div>
+                      <div className="flex-1">
+                        {isDesktop ? (slot.desktopBody ?? slot.body) : slot.body}
+                      </div>
                     </section>
                   ))}
                 </motion.div>
@@ -1839,7 +1924,7 @@ export default function HomePage() {
               skeleton grid, so enrolled accounts don't see the section pop in
               and shift the page below it. ── */}
           {showClassroomsOnHome && (classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+            <div className="home-container pt-6 pb-8">
               <motion.div variants={cardVariants}>
                 <SectionHeading
                   icon={GraduationCap}
@@ -1909,7 +1994,7 @@ export default function HomePage() {
           <motion.div variants={cardVariants}>
             <div className="relative w-full overflow-hidden bg-white">
               {/* Content */}
-              <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+              <div className="relative z-10 home-container py-5">
                 <SectionHeading
                   icon={LayoutGrid}
                   chipClass="bg-gradient-to-br from-sky-500 to-indigo-600"
@@ -1922,7 +2007,7 @@ export default function HomePage() {
                     with legible (11px) labels rather than the 9.5px ones that
                     only work at arm's length on a phone. */}
                 <div className="overflow-x-auto lg:overflow-visible scrollbar-hide -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8">
-                  <div className="flex gap-2 lg:grid lg:grid-cols-8 lg:gap-3">
+                  <div className="flex gap-2 lg:grid lg:grid-cols-8 2xl:grid-cols-10 lg:gap-3">
                     {moreApps.map((app, idx) => {
                       const Icon = app.icon
                       return (

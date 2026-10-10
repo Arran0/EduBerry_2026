@@ -400,6 +400,46 @@ body {
   }
 }
 
+/* ============================================================ */
+/* Home dashboard grid — density for the same card family        */
+/* ============================================================ */
+
+/* The same `.home-card` family, laid out as a grid rather than a strip. The
+   difference from `.strip-compact` is the height rule: a strip shows one card
+   at a time, so a fixed 195px is the card's whole story, while in a grid the
+   cards sit in rows beside each other and a fixed height guarantees ragged
+   bottoms the moment two cards in a row disagree. `height: 100%` hands the
+   decision to the grid cell — the row's own min-height sizes it and every card
+   in that row ends on the same line.
+
+   This starts at `md:` rather than `lg:` because the grid itself does: at 768px
+   the strip has already become two columns, and a card still carrying its
+   phone height would leave the denser layout looking like it had not been
+   re-cut at all.
+
+   Same specificity trick as `.strip-compact` above: each rule is exactly one
+   class more than the Tailwind utility it overrides, so it wins without
+   `!important`. A card added to the family later picks all of this up for free
+   by carrying `.home-card`. */
+@media (min-width: 768px) {
+  .home-grid .home-card {
+    height: 100%;
+  }
+
+  .home-grid .home-card-row {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .home-grid .home-card-stack {
+    padding: 0.625rem;
+  }
+
+  .home-grid .home-card-stack > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem;
+  }
+}
+
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work
    the academics page and the classrooms behind it as a tool, so every corner
    inside squares off: cards, day columns, icon chips, inputs, tabs and pill
@@ -671,6 +711,16 @@ body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
   .input-with-icons-both {
     padding-left: 3rem;
     padding-right: 3rem;
+  }
+
+  /* The home page's one content box. Every region on the page — the banner's
+     greeting, the dashboard grid, the statistic rows, the classrooms grid and
+     the app shortcuts — shares this, so they all share one left edge no matter
+     how wide the window gets. The 2xl step is what stops a dashboard from
+     sitting in a 1280px column with 640px of empty margin either side on a
+     27" monitor; below that it is the app's standard max-w-7xl. */
+  .home-container {
+    @apply max-w-7xl 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8;
   }
 }
 

@@ -31,27 +31,27 @@ function tally(rows: { status: string }[], present: Set<string>, absent: Set<str
 const TILES = [
   {
     key: 'present' as const,
-    icon: <CheckCircle2 size={13} className="text-emerald-500 mb-1" />,
+    icon: <CheckCircle2 size={13} className="text-emerald-600 mb-1" />,
     label: 'Present',
     box: 'bg-emerald-50/90 border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70',
-    value: 'text-emerald-600',
-    caption: 'text-emerald-500',
+    value: 'text-emerald-700',
+    caption: 'text-emerald-700',
   },
   {
     key: 'absent' as const,
-    icon: <XCircle size={13} className="text-red-400 mb-1" />,
+    icon: <XCircle size={13} className="text-red-600 mb-1" />,
     label: 'Absent',
     box: 'bg-red-50/90 border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70',
-    value: 'text-red-500',
-    caption: 'text-red-400',
+    value: 'text-red-700',
+    caption: 'text-red-700',
   },
   {
     key: 'exception' as const,
-    icon: <AlertTriangle size={12} className="text-amber-400 mb-1" />,
+    icon: <AlertTriangle size={12} className="text-amber-700 mb-1" />,
     label: 'Irregular',
     box: 'bg-amber-50/90 border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70',
-    value: 'text-amber-500',
-    caption: 'text-amber-400',
+    value: 'text-amber-700',
+    caption: 'text-amber-700',
   },
 ]
 
@@ -74,7 +74,7 @@ function Row({
           {icon}
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate" title={label}>{label}</span>
         </div>
-        <Link href={href} className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+        <Link href={href} className="flex-shrink-0 flex items-center gap-0.5 text-[10px] md:text-[11px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
           View report <ChevronRight size={11} />
         </Link>
       </div>
@@ -87,7 +87,7 @@ function Row({
           >
             {tile.icon}
             <span className={`text-xl font-black leading-none ${tile.value}`}>{t[tile.key]}</span>
-            <span className={`text-[9.5px] font-semibold mt-1 ${tile.caption}`}>{tile.label}</span>
+            <span className={`text-[9.5px] md:text-[11px] font-semibold mt-1 ${tile.caption}`}>{tile.label}</span>
           </Link>
         ))}
       </div>

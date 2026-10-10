@@ -120,7 +120,7 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
                 </div>
                 {changed && (
                   <span
-                    className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 flex-shrink-0"
+                    className="text-[9px] md:text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 flex-shrink-0"
                     title="Changed just for today"
                   >
                     Today

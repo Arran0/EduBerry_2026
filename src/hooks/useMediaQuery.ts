@@ -28,6 +28,21 @@ export function useIsDesktop(): boolean {
 }
 
 /**
+ * The app's tablet hinge — Tailwind's `md:` breakpoint (≥768px), i.e. anything
+ * that isn't a phone.
+ *
+ * Paired with `useIsDesktop` these are two hinges with two different jobs, and
+ * the home dashboard needs both: at `md:` a swipe strip should already have
+ * become a grid (a pointer has no swipe, and two cards fit side by side), while
+ * the statistics only have the width to become chart-plus-rows infographics at
+ * `lg:`. Collapsing both decisions onto one breakpoint forces a choice between
+ * a carousel on a 900px window and a donut squeezed into 360px.
+ */
+export function useIsTabletUp(): boolean {
+  return useMediaQuery('(min-width: 768px)')
+}
+
+/**
  * A real pointing device — a mouse or trackpad, not a finger.
  *
  * For behaviour that keys off *hover* rather than width. A touch tap on iOS

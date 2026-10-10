@@ -60,7 +60,7 @@ export default function DailyQuoteCard() {
 
   return (
     // Wrapper paddingLeft = PR so the portrait's left half sits outside the pill
-    <div className="relative" style={{ paddingLeft: PR }}>
+    <div className="relative md:max-w-[70ch]" style={{ paddingLeft: PR }}>
 
       {/* Circle portrait — centre on stadium left edge */}
       <div
@@ -82,7 +82,7 @@ export default function DailyQuoteCard() {
       >
         <div style={{ paddingTop: 7, paddingBottom: 7, paddingLeft: PR + 10, paddingRight: PR + 4 }}>
 
-          <p className="text-[7px] font-black uppercase tracking-[0.14em] text-slate-400 mb-[3px]">
+          <p className="text-[7px] md:text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-[3px]">
             Quote of the day
           </p>
 
@@ -109,7 +109,7 @@ export default function DailyQuoteCard() {
             )}
           </p>
 
-          <p className="text-[9px] text-slate-500 mt-[4px] font-semibold tracking-tight">
+          <p className="text-[9px] md:text-[11px] text-slate-500 mt-[4px] font-semibold tracking-tight">
             — {quote.author}
           </p>
 
