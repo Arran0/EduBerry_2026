@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Loader2, Search, Plus, Trash2, DoorOpen } from 'lucide-react'
+import { Loader2, Plus, Trash2, DoorOpen, BookOpen } from 'lucide-react'
 import {
   fetchSubjects, createSubject, deleteSubject,
   fetchRooms, createRoom, deleteRoom, ROOM_TYPE_LABELS,
@@ -19,6 +19,10 @@ import { ColorPicker, SUBJECT_COLORS } from '../colorPicker'
 import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../../PeriodGroupSwitch'
+import {
+  EntityShell, EntityList, EntityRow, DetailHeader, EmptyDetail,
+} from '../EntityList'
+import { BTN_SM, TAP, FOCUS } from '../../ui'
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
@@ -91,43 +95,11 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
     return <div className="flex justify-center py-16 text-[#A1A1AA]"><Loader2 className="animate-spin" size={22} /></div>
   }
 
-  return (
-    <div className="grid gap-0 sm:grid-cols-[17rem_1fr] sm:h-full border border-[#E4E4E7]">
-      {/* Column 1 — subjects + add */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
-        <div className="p-2.5 border-b border-[#E4E4E7] space-y-2">
-          <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
-            <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search subjects…" className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none" />
-          </div>
-          <button
-            onClick={() => setShowRooms((v) => !v)}
-            className={`w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border transition-colors ${showRooms ? 'bg-[#27272A] text-white border-[#27272A]' : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'}`}
-          >
-            <DoorOpen size={13} /> {showRooms ? 'Back to subjects' : 'Manage rooms'}
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto max-h-56 sm:max-h-none p-1.5 space-y-px">
-          {filtered.length === 0 ? (
-            <p className="text-xs text-[#A1A1AA] p-2">No subjects yet.</p>
-          ) : filtered.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => { setSelectedId(s.id); setShowRooms(false) }}
-              className={`w-full flex items-center gap-2 text-left px-2.5 py-2 text-sm transition-colors ${s.id === selectedId && !showRooms ? 'bg-[#27272A] text-white' : 'text-[#3F3F46] hover:bg-[#EBEBEB]'}`}
-            >
-              <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: s.color || '#94a3b8' }} />
-              <span className="flex-1 min-w-0 truncate font-medium">{s.name}</span>
-              {s.code && <span className={`text-[10px] font-mono ${s.id === selectedId && !showRooms ? 'text-white/60' : 'text-[#A1A1AA]'}`}>{s.code}</span>}
-            </button>
-          ))}
-        </div>
-
-        {/* Add subject — three dense rows: the CBSE name typeahead, a
-            thumb-friendly colour strip (no hidden popover — every swatch is
-            always visible and directly tappable), then code + submit. */}
-        <div className="p-2.5 border-t border-[#E4E4E7] bg-white space-y-2">
+  const addSubjectForm = (
+        /* The CBSE name typeahead, a thumb-friendly colour strip (no hidden
+           popover — every swatch is visible and directly tappable), then code
+           + submit. */
+        <div className="p-2 border-t border-[#E4E4E7] bg-white space-y-2">
           <div className="relative">
             <input
               ref={inputRef}
@@ -165,20 +137,62 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             </button>
           </div>
         </div>
-      </div>
+  )
 
-      {/* Column 2 — detail */}
-      <div className="min-w-0 min-h-0 flex flex-col">
-        {showRooms ? (
-          <div className="flex-1 overflow-y-auto p-4"><RoomsPanel /></div>
-        ) : !selected ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">Select a subject.</div>
-        ) : (
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-3.5 h-3.5 flex-shrink-0" style={{ background: selected.color || '#94a3b8' }} />
-              <span className="font-semibold text-[#18181B]">{selected.name}</span>
-              {selected.code && <span className="text-[11px] font-mono text-[#A1A1AA]">{selected.code}</span>}
+  return (
+    <EntityShell
+      listWidth="17rem"
+      list={
+        <div className="flex flex-col min-h-0 sm:h-full">
+          <EntityList
+            query={query}
+            onQuery={setQuery}
+            placeholder="Search subjects…"
+            count={filtered.length}
+            total={subjects.length}
+            actions={
+              <button
+                onClick={() => setShowRooms((v) => !v)}
+                aria-pressed={showRooms}
+                className={`w-full ${BTN_SM} border ${
+                  showRooms
+                    ? 'bg-[#27272A] text-white border-[#27272A]'
+                    : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
+                }`}
+              >
+                <DoorOpen size={13} /> {showRooms ? 'Back to subjects' : 'Manage rooms'}
+              </button>
+            }
+          >
+            {filtered.length === 0 ? (
+              <p className="text-xs text-[#A1A1AA] p-2">No subjects yet.</p>
+            ) : filtered.map((s) => (
+              <EntityRow
+                key={s.id}
+                selected={s.id === selectedId && !showRooms}
+                onClick={() => { setSelectedId(s.id); setShowRooms(false) }}
+                title={s.name}
+                swatch={s.color}
+                trailing={s.code
+                  ? <span className={`text-[10px] font-mono ${s.id === selectedId && !showRooms ? 'text-white/60' : 'text-[#A1A1AA]'}`}>{s.code}</span>
+                  : undefined}
+              />
+            ))}
+          </EntityList>
+          {addSubjectForm}
+        </div>
+      }
+    >
+      {showRooms ? (
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4"><RoomsPanel /></div>
+      ) : !selected ? (
+        <EmptyDetail>Select a subject.</EmptyDetail>
+      ) : (
+        <>
+          <DetailHeader
+            icon={BookOpen}
+            meta={selected.code ?? undefined}
+            right={
               <button
                 onClick={async () => {
                   if (!confirm(`Delete subject "${selected.name}"?`)) return
@@ -186,16 +200,24 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
                   setSelectedId('')
                   await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
                 }}
-                className="ml-auto text-[#D4D4D8] hover:text-rose-500 transition-colors"
+                aria-label={`Delete ${selected.name}`}
+                className={`text-[#D4D4D8] hover:text-rose-500 ${TAP} ${FOCUS}`}
               ><Trash2 size={15} /></button>
-            </div>
+            }
+          >
+            <span className="inline-flex items-center gap-2">
+              <span className="w-3 h-3 flex-shrink-0" style={{ background: selected.color || '#94a3b8' }} aria-hidden />
+              {selected.name}
+            </span>
+          </DetailHeader>
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
             {config
               ? <SubjectConstraintsPanel config={config} subject={selected} homerooms={homerooms} />
               : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to set this subject&rsquo;s limits.</p>}
           </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </EntityShell>
   )
 }
 

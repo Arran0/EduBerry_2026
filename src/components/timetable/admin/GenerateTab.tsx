@@ -27,7 +27,6 @@ import {
 import type { SolverResult } from '@/lib/timetable/solverClient'
 import { useTimetableDraft } from '../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../draft/TeacherLoad'
-import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../PeriodGroupSwitch'
 import {
   BTN_PRIMARY, BTN_NEUTRAL, BTN_GO, BTN_SM, SmartSelect, SECTION_LABEL, INPUT, TAP, FOCUS,
 } from '../ui'
@@ -118,25 +117,17 @@ export default function GenerateTab() {
     [scheduledTeachers],
   )
 
-  // Which band the master grid and the class picker are showing. One grid at a
-  // time rather than one per band stacked down the page: two 30-column grids
-  // above each other is two scroll lengths and no way to compare them.
-  const masterBands = useMemo(
-    () => scheduledHomerooms.map((h) => slotGroupIds[h.id] ?? null),
-    [scheduledHomerooms, slotGroupIds],
-  )
-  const master = usePeriodGroupSwitch(weeks, masterBands)
-  const masterHomerooms = useMemo(
-    () => scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === master.groupId),
-    [scheduledHomerooms, slotGroupIds, master.groupId],
-  )
-  const bandClassCounts = useMemo(
-    () => new Map(
-      weeks.map((w) => [
-        w.groupId,
-        scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === w.groupId).length,
-      ]),
-    ),
+  // The master view's grids: the classes of each period group against that
+  // group's own week. With no period groups this is a single section and the
+  // view looks exactly as it always did.
+  const masterSections = useMemo(
+    () =>
+      weeks
+        .map((week) => ({
+          week,
+          homerooms: scheduledHomerooms.filter((h) => (slotGroupIds[h.id] ?? null) === week.groupId),
+        }))
+        .filter((sec) => sec.homerooms.length > 0 && sec.week.slots.length > 0),
     [weeks, scheduledHomerooms, slotGroupIds],
   )
 
@@ -197,6 +188,28 @@ export default function GenerateTab() {
 
   const clearUnlocked = () => setEntries((prev) => prev.filter((e) => e.isLocked))
 
+  /**
+   * Empties the week, pins included.
+   *
+   * "Clear unpinned" deliberately spares the pins, which is what you want
+   * nine times in ten — and useless the one time you want to start over, when
+   * the pins are exactly what you are trying to get rid of. Pins are invisible
+   * on an empty grid, so losing them silently would be worse than asking.
+   */
+  const clearAll = () => {
+    const pinned = entries.filter((e) => e.isLocked).length
+    if (
+      pinned > 0 &&
+      !confirm(
+        `This clears the whole week, including ${pinned} pinned period${pinned === 1 ? '' : 's'}. ` +
+        'Continue?',
+      )
+    ) return
+    setEntries([])
+    setUnplaced(null)
+    flash('Week cleared.')
+  }
+
   // ── Constraint solver ─────────────────────────────────────
   // The problem exactly as the in-browser solver is given it, so a proof is a
   // proof about the timetable the admin is actually asking for.
@@ -249,7 +262,16 @@ export default function GenerateTab() {
     }
     const { result, payload } = outcome
     if (result.placements.length === 0) {
-      setSolverError('The solver returned no timetable.')
+      // Not an error, and not a reason to touch the grid: the solver simply
+      // did not come back with a week to apply. Which of those it was decides
+      // whether there is anything the admin can do about it.
+      flash(
+        result.status === 'impossible'
+          ? 'These rules no longer allow this week — run "Can this be built?".'
+          : result.status === 'invalid'
+            ? 'The solver rejected the problem. Nothing changed.'
+            : 'No tidier week found in the time available. Yours is unchanged.',
+      )
       setImproving(false)
       return
     }
@@ -257,6 +279,17 @@ export default function GenerateTab() {
       payload, result, rooms,
       [...homeroomsLite.map((h) => h.id), ...requirements.map((r) => r.homeroom_id)],
     )
+    // The guarantee this button is sold on, enforced here rather than trusted:
+    // the solver holds completeness across its stages, but a bad payload or a
+    // future change to it must not be able to quietly cost the week a lesson.
+    if (improved.length < entries.length) {
+      flash(
+        `Discarded a tidier week that would have lost ${entries.length - improved.length} ` +
+        'period(s). Yours is unchanged.',
+      )
+      setImproving(false)
+      return
+    }
     // Pinned cells are given to the solver as fixed, so they come back where
     // they were; keeping the originals would double them up.
     setEntries(improved)
@@ -526,10 +559,20 @@ export default function GenerateTab() {
           <Sep />
           <button
             onClick={clearUnlocked}
+            disabled={entries.length === 0}
             className={`${BTN_SM} text-[#52525B] hover:bg-rose-50 hover:text-rose-700`}
             title="Empties every period that is not pinned"
           >
             <Trash2 size={12} /> Clear unpinned
+          </button>
+          <Sep />
+          <button
+            onClick={clearAll}
+            disabled={entries.length === 0}
+            className={`${BTN_SM} text-[#52525B] hover:bg-rose-50 hover:text-rose-700`}
+            title="Empties the whole week, pinned periods included"
+          >
+            <Trash2 size={12} /> Clear all
           </button>
           {view === 'class' && (
             <>
@@ -698,18 +741,9 @@ export default function GenerateTab() {
             </div>
           )}
           {view === 'master' && (
-            <>
-              <PeriodGroupSwitch
-                weeks={weeks}
-                present={master.present}
-                counts={bandClassCounts}
-                value={master.groupId}
-                onChange={master.setGroupId}
-              />
-              <p className="text-[11px] text-[#A1A1AA] ml-auto hidden md:block">
-                Drag to move · click to open · red = clash
-              </p>
-            </>
+            <p className="text-[11px] text-[#A1A1AA] ml-auto hidden md:block">
+              Drag to move · click to open · red = clash
+            </p>
           )}
           {view === 'class' && weeks.length > 1 && (
             <span className="text-[11px] text-[#71717A] flex-shrink-0">
@@ -753,27 +787,44 @@ export default function GenerateTab() {
             )
           ) : view === 'teacher' ? (
             <TeacherWeekView teacherId={selectedTeacherId} />
-          ) : master.week && masterHomerooms.length > 0 ? (
-            <MasterTimetableEditor
-              days={master.week.days}
-              slots={master.week.slots}
-              homerooms={masterHomerooms}
-              entries={entries}
-              subjects={subjects}
-              teachers={teachers}
-              rooms={rooms}
-              unavailability={unavailability}
-              constraints={constraints}
-              homeroomsLite={homeroomsLite}
-              slotClash={slotClash}
-              hasOverride={hasOverride}
-              onMove={moveEntry}
-              onOpenClass={openClass}
-            />
-          ) : (
+          ) : masterSections.length === 0 ? (
             <p className="py-10 text-center text-sm text-[#A1A1AA]">
-              No classes are scheduled in this period group yet.
+              No classes are scheduled yet.
             </p>
+          ) : (
+            /* One grid per period group. Two bells are two different sets of
+               period rows and cannot share a grid, so a school running both
+               gets both — each with its own fit, zoom and full screen. */
+            <div className="space-y-4">
+              {masterSections.map(({ week, homerooms }) => (
+                <div key={week.groupId ?? 'base'}>
+                  {masterSections.length > 1 && (
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className={SECTION_LABEL}>{week.name}</span>
+                      <span className="text-[11px] text-[#A1A1AA] tabular-nums">
+                        {homerooms.length} classes · {week.days.length} days × {week.slots.length} periods
+                      </span>
+                    </div>
+                  )}
+                  <MasterTimetableEditor
+                    days={week.days}
+                    slots={week.slots}
+                    homerooms={homerooms}
+                    entries={entries}
+                    subjects={subjects}
+                    teachers={teachers}
+                    rooms={rooms}
+                    unavailability={unavailability}
+                    constraints={constraints}
+                    homeroomsLite={homeroomsLite}
+                    slotClash={slotClash}
+                    hasOverride={hasOverride}
+                    onMove={moveEntry}
+                    onOpenClass={openClass}
+                  />
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>

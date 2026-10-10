@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Loader2, Search, GraduationCap, UserCog, Gauge } from 'lucide-react'
+import { Loader2, GraduationCap, UserCog, Gauge, CalendarRange } from 'lucide-react'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchStaffProfiles } from '@/lib/admin'
@@ -17,6 +17,9 @@ import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { TeacherLoadBadge, TeacherLoadMeter } from '../../draft/TeacherLoad'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
 import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../../PeriodGroupSwitch'
+import {
+  EntityShell, EntityList, EntityRow, DetailHeader, EmptyDetail,
+} from '../EntityList'
 import { teacherIdsOf } from '@/lib/timetable'
 
 /**
@@ -64,55 +67,52 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-full border border-[#E4E4E7]">
-      {/* Column 1 — teachers */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
-        <div className="p-2.5 border-b border-[#E4E4E7]">
-          <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
-            <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search staff…" className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none" />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto max-h-64 sm:max-h-none p-1.5 space-y-px">
+    <EntityShell
+      list={
+        <EntityList
+          query={query}
+          onQuery={setQuery}
+          placeholder="Search staff…"
+          count={filtered.length}
+          total={teachers.length}
+        >
           {filtered.length === 0 ? (
             <p className="text-xs text-[#A1A1AA] p-2">No staff found.</p>
           ) : filtered.map((t) => {
             const owns = homerooms.filter((h) => h.class_teacher_id === t.id).length
             const w = draft?.workloadOf(t.id)
             return (
-              <button
+              <EntityRow
                 key={t.id}
+                selected={t.id === selectedId}
                 onClick={() => setSelectedId(t.id)}
-                className={`w-full text-left px-2.5 py-2 text-sm transition-colors ${t.id === selectedId ? 'bg-[#27272A] text-white' : 'text-[#3F3F46] hover:bg-[#EBEBEB]'}`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium truncate flex-1 min-w-0">{t.full_name}</span>
-                  {t.id !== selectedId && <TeacherLoadBadge workload={w} />}
-                </div>
-                <div className={`text-[11px] truncate ${t.id === selectedId ? 'text-white/60' : 'text-[#A1A1AA]'}`}>
-                  {w && w.over > 0
+                title={t.full_name ?? 'Unnamed'}
+                trailing={t.id !== selectedId ? <TeacherLoadBadge workload={w} /> : undefined}
+                subtitle={
+                  w && w.over > 0
                     ? `${w.over} period${w.over === 1 ? '' : 's'} over their week`
                     : owns > 0
                       ? `Class teacher · ${owns} homeroom${owns > 1 ? 's' : ''}`
-                      : t.email}
-                </div>
-              </button>
+                      : t.email
+                }
+              />
             )
           })}
-        </div>
-      </div>
-
-      {/* Column 2 — detail */}
-      <div className="min-w-0 min-h-0 flex flex-col">
-        {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">Select a teacher.</div>
-        ) : (
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <UserCog size={16} className="text-[#71717A]" />
-              <NameLink kind="teacher" id={selected.id} name={selected.full_name} className="font-semibold text-[#18181B]" />
-            </div>
-            <p className="text-xs text-[#71717A] mb-3">{selected.email}</p>
+        </EntityList>
+      }
+    >
+      {!selected ? (
+        <EmptyDetail>Select a teacher.</EmptyDetail>
+      ) : (
+        <>
+          <DetailHeader
+            icon={UserCog}
+            meta={selected.email}
+            right={<TeacherBands teacherId={selected.id} />}
+          >
+            <NameLink kind="teacher" id={selected.id} name={selected.full_name} className="font-semibold text-[#18181B]" />
+          </DetailHeader>
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
 
             {/* What they are asked for against what their week holds — the
                 arithmetic that decides whether a timetable can exist at all. */}
@@ -163,9 +163,45 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
               ? <TeacherConstraintsPanel config={config} teacher={selected} homerooms={homerooms} />
               : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to edit this teacher&rsquo;s constraints.</p>}
           </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </EntityShell>
+  )
+}
+
+/**
+ * The bells this teacher works to.
+ *
+ * With several period groups running, "28 of 30 periods" is ambiguous until
+ * you know which weeks those 30 periods came from — and a teacher who spans
+ * two bands has a capacity that is the UNION of them, not the sum, because an
+ * overlapping period is one slot they can only stand in once. Naming the bands
+ * here is what makes the meter below readable.
+ */
+function TeacherBands({ teacherId }: { teacherId: string }) {
+  const draft = useTimetableDraftOptional()
+  const bands = useMemo(() => {
+    if (!draft || draft.weeks.length < 2) return []
+    const ids = new Set<string | null>()
+    for (const r of draft.requirements) {
+      if (teacherIdsOf(r).includes(teacherId)) ids.add(draft.slotGroupIds[r.homeroom_id] ?? null)
+    }
+    for (const e of draft.entries) {
+      if (teacherIdsOf(e).includes(teacherId)) ids.add(draft.slotGroupIds[e.homeroomId] ?? null)
+    }
+    return draft.weeks.filter((w) => ids.has(w.groupId))
+  }, [draft, teacherId])
+
+  if (bands.length === 0) return null
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-[#71717A]">
+      <CalendarRange size={12} className="text-[#A1A1AA]" aria-hidden />
+      {bands.map((b) => (
+        <span key={b.groupId ?? 'base'} className="px-1.5 py-0.5 bg-[#F5F5F5] border border-[#E4E4E7]">
+          {b.name}
+        </span>
+      ))}
+    </span>
   )
 }
 

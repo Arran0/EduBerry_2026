@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, Plus, Trash2, X, Users, UserCog, ListChecks, CalendarOff, Layers,
-  Upload, UserPlus, AlertTriangle, Search, GraduationCap, Copy, ClipboardPaste, Pencil, Check,
+  Upload, UserPlus, AlertTriangle, GraduationCap, Copy, ClipboardPaste, Pencil, Check,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import {
@@ -36,6 +36,9 @@ import { useTimetableDraftOptional } from '../../draft/TimetableDraftContext'
 import { OverloadedTeachersNotice } from '../../draft/TeacherLoad'
 import { withExtraPeriods } from '@/lib/timetable/workload'
 import DraftWeekGrid from '../../draft/DraftWeekGrid'
+import {
+  EntityShell, EntityList, EntityRow, DetailHeader, EmptyDetail,
+} from '../EntityList'
 import LessonStatsCard from '../../LessonStatsCard'
 
 const GROUP_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#dc2626', '#65a30d']
@@ -106,61 +109,47 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   }
 
   return (
-    <div className="grid gap-0 sm:grid-cols-[16rem_1fr] sm:h-full border border-[#E4E4E7]">
-      {/* Column 1 — active homerooms */}
-      <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
-        <div className="p-2.5 border-b border-[#E4E4E7]">
-          <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5">
-            <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search homerooms…"
-              className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none"
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto max-h-64 sm:max-h-none p-1.5 space-y-px">
+    <EntityShell
+      list={
+        <EntityList
+          query={query}
+          onQuery={setQuery}
+          placeholder="Search homerooms…"
+          count={filtered.length}
+          total={active.length}
+        >
           {filtered.length === 0 ? (
             <p className="text-xs text-[#A1A1AA] p-2">No active homerooms.</p>
           ) : (
             filtered.map((h) => (
-              <button
+              <EntityRow
                 key={h.id}
+                selected={h.id === selectedId}
                 onClick={() => setSelectedId(h.id)}
-                className={`w-full text-left px-2.5 py-2 text-sm transition-colors ${
-                  h.id === selectedId ? 'bg-[#27272A] text-white' : 'text-[#3F3F46] hover:bg-[#EBEBEB]'
-                }`}
-              >
-                <div className="font-medium truncate">{h.name}</div>
-                <div className={`text-[11px] truncate ${h.id === selectedId ? 'text-white/60' : 'text-[#A1A1AA]'}`}>
-                  {h.class_teacher_id
+                title={h.name}
+                subtitle={
+                  h.class_teacher_id
                     ? teachers.find((t) => t.id === h.class_teacher_id)?.full_name ?? 'Class teacher set'
-                    : 'No class teacher'}
-                </div>
-              </button>
+                    : 'No class teacher'
+                }
+              />
             ))
           )}
-        </div>
-      </div>
-
-      {/* Column 2 — detail for the selected homeroom */}
-      <div className="min-w-0 min-h-0 flex flex-col">
-        {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">
-            Select a homeroom.
-          </div>
-        ) : (
-          <>
-            <div className="px-4 pt-3.5 pb-2 border-b border-[#E4E4E7]">
-              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                <GraduationCap size={16} className="text-[#71717A]" />
-                <NameLink kind="homeroom" id={selected.id} name={selected.name} className="font-semibold text-[#18181B]" />
-                <PeriodGroupPicker homeroom={selected} />
-              </div>
-              <SegmentedNav items={PANELS} value={panel} onChange={setPanel} />
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
+        </EntityList>
+      }
+    >
+      {!selected ? (
+        <EmptyDetail>Select a homeroom.</EmptyDetail>
+      ) : (
+        <>
+          <DetailHeader
+            icon={GraduationCap}
+            right={<PeriodGroupPicker homeroom={selected} />}
+            below={<SegmentedNav items={PANELS} value={panel} onChange={setPanel} />}
+          >
+            <NameLink kind="homeroom" id={selected.id} name={selected.name} className="font-semibold text-[#18181B]" />
+          </DetailHeader>
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {panel === 'teacher' && (
                 <ClassTeacherPanel
                   homeroom={selected} teachers={teachers}
@@ -183,14 +172,13 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
                   )
                   : <NeedConfig />
               )}
-              {panel === 'timeoff' && (
-                config ? <TimeOffPanel homeroom={selected} /> : <NeedConfig />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+            {panel === 'timeoff' && (
+              config ? <TimeOffPanel homeroom={selected} /> : <NeedConfig />
+            )}
+          </div>
+        </>
+      )}
+    </EntityShell>
   )
 }
 
@@ -1111,6 +1099,20 @@ function RequirementsPanel({
   const week = draftCtx?.weekFor(homeroom.id) ?? null
   const workingDays = week?.days.length ?? config.working_days.length
 
+  // A combined lesson is one period that every member class sits in at once,
+  // so every member has to follow the same bell. Two classes on different
+  // period groups have no period in common, and the solver drops the lesson
+  // silently — it simply never appears, with nothing to say why. So the
+  // mismatch is named in the picker and refused at the form.
+  const bandOf = (homeroomId: string) => draftCtx?.slotGroupIds[homeroomId] ?? null
+  const bandName = (groupId: string | null) =>
+    draftCtx?.weeks.find((w) => w.groupId === groupId)?.name ?? 'Base schedule'
+  const multiBand = (draftCtx?.weeks.length ?? 1) > 1
+  const myBand = bandOf(homeroom.id)
+  const strandedMembers = multiBand
+    ? extraMembers.filter((m) => bandOf(m.homeroomId) !== myBand)
+    : []
+
   const load = useCallback(async () => {
     setLoading(true)
     const [reqs, cmb, g, sl, cons] = await Promise.all([
@@ -1162,8 +1164,22 @@ function RequirementsPanel({
 
   const roomOptions: SmartOption[] = useMemo(() => rooms.map((r) => ({ value: r.id, label: r.name })), [rooms])
   const extraOptions: SmartOption[] = useMemo(
-    () => homerooms.filter((h) => h.id !== homeroom.id && !extraMembers.some((m) => m.homeroomId === h.id)).map((h) => ({ value: h.id, label: h.name })),
-    [homerooms, homeroom.id, extraMembers],
+    () => homerooms
+      .filter((h) => h.id !== homeroom.id && !extraMembers.some((m) => m.homeroomId === h.id))
+      .map((h) => {
+        const band = draftCtx?.slotGroupIds[h.id] ?? null
+        const mine = draftCtx?.slotGroupIds[homeroom.id] ?? null
+        const show = (draftCtx?.weeks.length ?? 1) > 1
+        return {
+          value: h.id,
+          label: h.name,
+          sublabel: show
+            ? draftCtx?.weeks.find((w) => w.groupId === band)?.name ?? 'Base schedule'
+            : undefined,
+          badge: show && band !== mine ? 'other bell' : undefined,
+        }
+      }),
+    [homerooms, homeroom.id, extraMembers, draftCtx],
   )
 
   const addExtraMember = (id: string) => {
@@ -1186,6 +1202,16 @@ function RequirementsPanel({
     if (isCombined) {
       const members = [{ homeroomId: homeroom.id, groupId: form.groupId || null }, ...extraMembers]
       if (members.length < 2) { setError('Add at least one more class for a combined lesson.'); setAdding(false); return }
+      if (strandedMembers.length > 0) {
+        setError(
+          `${strandedMembers.map((m) => homeroomName(m.homeroomId)).join(', ')} ` +
+          `follow${strandedMembers.length === 1 ? 's' : ''} a different period group to ` +
+          `${homeroomName(homeroom.id)} (${bandName(myBand)}), so there is no period they all share. ` +
+          'Move them to the same period group, or leave them out.',
+        )
+        setAdding(false)
+        return
+      }
       const block = Math.max(1, parseInt(form.blockSize, 10) || 1)
       const created = await createCombinedClass({
         config_id: config.id,
@@ -1382,9 +1408,8 @@ function RequirementsPanel({
                 />
               </Field>
               <p className="text-[11px] text-[#A1A1AA] mt-1.5">
-                Each class defaults to attending as a whole — pick a group instead if only part of a class joins.
-                The combined lesson still shows up on every homeroom listed here. Every class in it has to follow
-                the same period group, or there is no period they all share.
+                Each class attends as a whole unless you pick one of its groups. The lesson shows on every
+                class listed here{multiBand ? ', and they must all follow the same period group' : ''}.
               </p>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800">
@@ -1401,7 +1426,17 @@ function RequirementsPanel({
                   )}
                 </span>
                 {extraMembers.map((m) => (
-                  <span key={m.homeroomId} className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
+                  <span
+                    key={m.homeroomId}
+                    className={`inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 border ${
+                      multiBand && bandOf(m.homeroomId) !== myBand
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : 'bg-[#F5F5F5] border-[#E4E4E7]'
+                    }`}
+                    title={multiBand && bandOf(m.homeroomId) !== myBand
+                      ? `${homeroomName(m.homeroomId)} follows ${bandName(bandOf(m.homeroomId))} — no period in common with this class`
+                      : undefined}
+                  >
                     {homeroomName(m.homeroomId)}
                     {(extraGroups[m.homeroomId]?.length ?? 0) > 0 && (
                       <select

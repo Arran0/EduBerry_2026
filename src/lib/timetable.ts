@@ -216,6 +216,37 @@ export async function createPeriodSlot(
   return data
 }
 
+/**
+ * Strips the clock times off a config's period slots.
+ *
+ * Two bell schedules with different timings cannot share a teacher cleanly:
+ * period 3 of Primary overlaps periods 2 AND 3 of Secondary, so the clash map
+ * marks both as taken and a teacher who works across the two bands becomes
+ * almost impossible to place. With no times, a period collides only with the
+ * period at the same POSITION in the other band — a clean 1:1 — and allocating
+ * staff across groups becomes tractable. See `slotsCollide` in generator.ts.
+ *
+ * Pass a `groupId` to clear one band, or omit it for the whole config.
+ */
+export async function clearPeriodSlotTimes(
+  configId: string,
+  groupId?: string | null,
+): Promise<boolean> {
+  let q = supabase
+    .from('timetable_period_slots')
+    .update({ start_time: null, end_time: null })
+    .eq('config_id', configId)
+  if (groupId !== undefined) {
+    q = groupId === null ? q.is('group_id', null) : q.eq('group_id', groupId)
+  }
+  const { error } = await q
+  if (error) {
+    console.error('clearPeriodSlotTimes error:', error)
+    return false
+  }
+  return true
+}
+
 export async function deletePeriodSlot(id: string): Promise<boolean> {
   const { error } = await supabase.from('timetable_period_slots').delete().eq('id', id)
   if (error) {

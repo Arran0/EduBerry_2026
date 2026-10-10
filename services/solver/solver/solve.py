@@ -172,7 +172,7 @@ def optimise(
     workers: int = 8,
     hint: dict[str, tuple[int, int]] | None = None,
 ) -> SolveResult:
-    """The best week within the budget, in two stages.
+    """The best week within the budget.
 
     Stage one gets the week complete: fewest periods left unplaced, and among
     those, fewest periods pushed over a subject's per-day cap. Stage two holds
@@ -183,6 +183,16 @@ def optimise(
     Allowing a period over a per-day cap rather than leaving it unplaced is the
     same trade the browser solver makes in its relaxed pass. It is counted and
     returned, never silently taken.
+
+    When the caller supplies a week, a stage ZERO runs first and pins it down.
+    `AddHint` alone is only a suggestion: on a whole-school problem CP-SAT
+    routinely spends both later stages without completing a solution from it
+    and returns nothing at all — so "improve this week" reported that the
+    solver had returned no timetable and changed nothing, while holding a
+    perfectly good week in its hands the whole time. Solving once with the
+    hinted variables FIXED is a verification pass rather than a search (half a
+    second on 2,400 lessons), and it yields a result that can always be handed
+    back. Everything after it can only be an improvement on that.
     """
     started = time.monotonic()
     builder = Builder(problem, relaxable=False, soft_demand=True)
@@ -195,6 +205,27 @@ def optimise(
         for lesson_id, (day, start) in hint.items():
             for pl in built.placements.get(lesson_id, ()):
                 built.model.AddHint(pl.var, 1 if (pl.day, pl.start) == (day, start) else 0)
+
+    hinted_unplaced: int | None = None
+    if hint is not None:
+        hinted_unplaced = sum(l.size for l in problem.lessons if l.id not in hint)
+        # Seeded with the caller's week and bounded by it, so nothing below can
+        # cost the week a period.
+        built.model.Add(sum(built.unplaced_periods_terms) <= hinted_unplaced)
+
+    # ── Stage zero: the caller's own week, pinned ────────────
+    floor: SolveResult | None = None
+    if hint:
+        built.model.Minimize(sum(built.objective_terms) if built.objective_terms else 0)
+        stage0 = _solver(min(5.0, max(1.0, budget_s * 0.2)), workers)
+        stage0.parameters.fix_variables_to_their_hinted_value = True
+        status0 = stage0.Solve(built.model)
+        if status0 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            floor = _harvest(problem, built, stage0, started)
+            # It is the caller's week, not an improvement on it, so there is no
+            # bound to report — saying "optimal" of it would be a lie.
+            floor.status = "feasible"
+            floor.penaltyBound = None
 
     def apply_hint(values: dict[str, int] | None) -> None:
         """Re-seed the search. `None` restores the caller's own week."""
@@ -210,26 +241,28 @@ def optimise(
             for pl in built.placements.get(lesson.id, ()):
                 built.model.AddHint(pl.var, values[pl.var.Name()])
 
-    # Stage two is where the time pays off, so stage one gets a short slice: it
-    # only has to confirm or beat a completeness the caller usually already has.
-    stage1_budget = max(1.0, budget_s * 0.25)
+    # Stage two is where the time pays off, so stage one gets a short slice
+    # WHEN there is a week to fall back on: all it has to do then is confirm or
+    # beat a completeness the caller already holds. With no hint there is
+    # nothing to fall back on and stage one is the whole job, so it gets the
+    # lion's share instead.
+    spent0 = time.monotonic() - started
+    stage1_budget = max(1.0, (budget_s - spent0) * (0.25 if hint else 0.75))
 
     # ── Stage one: completeness ──────────────────────────────
-    # Seeded with the caller's week and bounded by it, so this can only match
-    # or improve on what they already had.
-    hinted_unplaced: int | None = None
-    if hint is not None:
-        hinted_unplaced = sum(
-            l.size for l in problem.lessons if l.id not in hint
-        )
-        built.model.Add(sum(built.unplaced_periods_terms) <= hinted_unplaced)
-
     stage1_values: dict[str, int] | None = None
     if built.completeness_terms:
         built.model.Minimize(sum(built.completeness_terms))
         stage1 = _solver(stage1_budget, workers)
         status1 = stage1.Solve(built.model)
         if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # Either proven impossible at this completeness (the rules moved
+            # under the caller's week since it was built), or simply out of
+            # time — on a whole-school problem the latter is the common case,
+            # not the odd one. Either way stage zero's week still stands, so
+            # hand that back rather than nothing.
+            if floor is not None:
+                return floor
             return SolveResult(
                 status="impossible" if status1 == cp_model.INFEASIBLE else "unknown",
                 wallTimeMs=int((time.monotonic() - started) * 1000),
@@ -257,29 +290,32 @@ def optimise(
         reached_unplaced = 0
 
     apply_hint(stage1_values)
+    improved = _stage_two(problem, built, started, budget_s, workers)
+    # Stage two can run out of time having completed nothing, which is not a
+    # reason to lose the week we already hold.
+    if not improved.placements and floor is not None:
+        floor.wallTimeMs = int((time.monotonic() - started) * 1000)
+        return floor
+    return improved
 
-    # ── Stage two: quality, with completeness held ───────────
-    spent = time.monotonic() - started
-    remaining = max(1.0, budget_s - spent)
-    built.model.Minimize(sum(built.objective_terms) if built.objective_terms else 0)
-    solver = _solver(remaining, workers)
-    status = solver.Solve(built.model)
-    elapsed = int((time.monotonic() - started) * 1000)
 
+def _harvest(
+    problem: Problem,
+    built: Built,
+    solver: cp_model.CpSolver,
+    started: float,
+) -> SolveResult:
+    """A solved model, read out as a result.
+
+    Shared by stage zero and stage two so the week the caller gets back is
+    described the same way whichever stage produced it.
+    """
     result = SolveResult(
-        status={
-            cp_model.OPTIMAL: "optimal",
-            cp_model.FEASIBLE: "feasible",
-            cp_model.INFEASIBLE: "impossible",
-            cp_model.MODEL_INVALID: "invalid",
-        }.get(status, "unknown"),
-        wallTimeMs=elapsed,
+        status="feasible",
+        wallTimeMs=int((time.monotonic() - started) * 1000),
         variables=len(built.model.Proto().variables),
         constraints=len(built.model.Proto().constraints),
     )
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return result
-
     result.placements = _read_placements(built, solver)
     gaps = [lid for lid, v in built.unplaced.items() if solver.Value(v)]
     by_id = {l.id: l for l in problem.lessons}
@@ -289,12 +325,46 @@ def optimise(
 
     from .model import W_OVER_CAP
 
-    # Stage two's objective is quality alone bar the cap term, which stage one
-    # already pinned, so the numbers below are directly comparable with the
-    # browser solver's softPenalty.
+    # The objective in force is quality alone bar the cap term, which stage one
+    # pinned, so the numbers below are directly comparable with the browser
+    # solver's softPenalty.
     sunk = SCALE * W_OVER_CAP * result.overCapPeriods
     result.penalty = round((solver.ObjectiveValue() - sunk) / SCALE, 2)
     result.penaltyBound = round(max(0.0, solver.BestObjectiveBound() - sunk) / SCALE, 2)
+    return result
+
+
+def _stage_two(
+    problem: Problem,
+    built: Built,
+    started: float,
+    budget_s: float,
+    workers: int,
+) -> SolveResult:
+    """Quality, with completeness already pinned.
+
+    The model is expected to carry its floor on `unplaced_periods_terms` and a
+    seeded hint before this is called.
+    """
+    spent = time.monotonic() - started
+    remaining = max(1.0, budget_s - spent)
+    built.model.Minimize(sum(built.objective_terms) if built.objective_terms else 0)
+    solver = _solver(remaining, workers)
+    status = solver.Solve(built.model)
+
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return SolveResult(
+            status={
+                cp_model.INFEASIBLE: "impossible",
+                cp_model.MODEL_INVALID: "invalid",
+            }.get(status, "unknown"),
+            wallTimeMs=int((time.monotonic() - started) * 1000),
+            variables=len(built.model.Proto().variables),
+            constraints=len(built.model.Proto().constraints),
+        )
+
+    result = _harvest(problem, built, solver, started)
+    result.status = "optimal" if status == cp_model.OPTIMAL else "feasible"
     return result
 
 

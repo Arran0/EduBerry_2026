@@ -110,9 +110,7 @@ export default function SlotDetailsModal({
   const editableEntries = useMemo(() => entries.filter((e) => !e.combinedKey), [entries])
 
   type Panel = { mode: 'edit' | 'replace'; entry: PlacedEntry | null } | null
-  const [panel, setPanel] = useState<Panel>(
-    entries.length === 0 ? { mode: 'edit', entry: null } : null,
-  )
+  const [panel, setPanel] = useState<Panel>(null)
 
   useBodyScrollLock(true)
 
@@ -250,18 +248,21 @@ export default function SlotDetailsModal({
                 <Ban size={12} /> Banned for this class
               </span>
             ) : null}
+            {/* An empty period still has a date change available: that is how
+                a cover lesson or a one-off exam gets into a free slot. */}
+            {entries.length === 0 && onSaveOverride && panel === null && (
+              <button
+                onClick={() => setPanel({ mode: 'replace', entry: null })}
+                className={`${BTN_SM} bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]`}
+                title="Put a lesson in this period for one date, or from a date onwards"
+              >
+                <CalendarClock size={12} /> Put a lesson here on a date
+              </button>
+            )}
             {entries.length > 0 && editableEntries.length === 0 && (
               <span className="text-[11px] text-[#A1A1AA]">
                 Combined lessons are edited on the combined class.
               </span>
-            )}
-            {entries.length > 0 && editableEntries.length > 0 && panel === null && (
-              <button
-                onClick={() => setPanel({ mode: 'edit', entry: null })}
-                className={`${BTN_SM} bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]`}
-              >
-                <Pencil size={12} /> Add another lesson
-              </button>
             )}
           </div>
 
@@ -274,15 +275,6 @@ export default function SlotDetailsModal({
               groupName={groupName}
               onDelete={onDeleteOverride}
             />
-          )}
-
-          {entries.length === 0 && panel === null && (
-            <button
-              onClick={() => setPanel({ mode: 'edit', entry: null })}
-              className={`w-full ${BTN_SM} bg-[#F5F5F5] border border-[#D4D4D8] text-[#18181B] hover:bg-[#EBEBEB]`}
-            >
-              <Pencil size={12} /> Add a lesson
-            </button>
           )}
 
           {panel?.mode === 'edit' && (
@@ -487,7 +479,7 @@ function LessonForm({
       onSubmit={(e) => { e.preventDefault(); if (subjectId) onSubmit(subjectId, teacherIds, roomId || null) }}
     >
       <p className={SECTION_LABEL}>
-        {entry ? 'Edit lesson — every week' : 'Add a lesson — every week'}
+        Edit lesson — every week
         {entry?.groupId && ` · ${groupName?.(entry.groupId) ?? 'Group'}`}
       </p>
       <Labelled label="Subject">

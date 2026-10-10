@@ -49,17 +49,35 @@ const BASE_ROW = 38 // px per class row
 // period columns get whatever width is left over.
 const LABEL_FONT = 11
 const FALLBACK_LABEL = 128
-const MIN_ZOOM = 0.4
+const MIN_ZOOM = 0.28
 const MAX_ZOOM = 1.6
 /**
  * How far Fit is allowed to shrink before it stops shrinking.
  *
- * Fitting a 30-class week onto a phone needs about 25%, which renders the
- * subject codes at four pixels — technically "the whole week on screen", and
- * unreadable. Past this the grid keeps a legible size and scrolls sideways
- * inside its own pane instead, which is a scroll the thumb is already doing.
+ * Low enough that a whole week — every day, every period — fits the pane on a
+ * desktop, because seeing the shape of the week at once is the whole point of
+ * a master grid. Text stops being readable long before this, so below
+ * TINY_ZOOM the cells drop their labels and become colour blocks: an overview
+ * that reads as an overview, with the detail a click away.
  */
-const MIN_FIT_ZOOM = 0.62
+const MIN_FIT_ZOOM = 0.34
+/** Below this a cell is a colour block, not a label. */
+const TINY_ZOOM = 0.52
+
+// Rules for the sticky header and the sticky class column.
+//
+// `border-collapse: collapse` moves border painting to the table itself, and
+// the table does not paint the borders of a cell that is `position: sticky` —
+// so every rule in the header disappeared the moment it stuck, which is why
+// the period numbers looked like they were floating in a block of colour.
+// An inset shadow is painted by the element, so it stays put.
+const HEAD_EDGES = 'inset 0 -1px 0 #52525B'
+const DAY_HEAD_EDGES = 'inset 0 -1px 0 #52525B, inset 2px 0 0 #A1A1AA'
+const SLOT_HEAD_EDGES = 'inset 0 -1px 0 #71717A, inset 1px 0 0 #52525B'
+const SLOT_HEAD_DAY_EDGES = 'inset 0 -1px 0 #71717A, inset 2px 0 0 #A1A1AA'
+const STICKY_HEAD_EDGES = 'inset 0 -1px 0 #52525B, inset -1px 0 0 #52525B'
+const STICKY_COL_EDGES = 'inset 0 -1px 0 #E4E4E7, inset -1px 0 0 #A1A1AA'
+
 
 /**
  * The compact class label for a grid row: "G:3A 26-27" — grade + section and
@@ -180,8 +198,10 @@ export default function MasterTimetableEditor({
   const cellW = Math.round(BASE_CELL * zoom)
   const rowH = Math.round(BASE_ROW * zoom)
   const px = (n: number) => `${n}px`
-  // Below ~0.75 there is no room for a second line inside a cell.
+  // Below ~0.75 there is no room for a second line inside a cell; below
+  // TINY_ZOOM there is no room for text at all.
   const dense = zoom < 0.75
+  const tiny = zoom < TINY_ZOOM
   const fontMain = Math.max(7, Math.round(10.5 * zoom))
   const fontSub = Math.max(6, Math.round(8.5 * zoom))
   const fontHead = Math.max(8, Math.round(10 * zoom))
@@ -265,8 +285,8 @@ export default function MasterTimetableEditor({
             <th
               ref={labelRef}
               rowSpan={2}
-              className="sticky left-0 top-0 z-30 bg-[#27272A] text-[#F5F5F5] border-b border-r border-[#3F3F46] px-2 py-1 text-left font-bold uppercase tracking-widest whitespace-nowrap"
-              style={{ fontSize: px(fontHead) }}
+              className="sticky left-0 top-0 z-30 bg-[#27272A] text-[#F5F5F5] px-2 py-1 text-left font-bold uppercase tracking-widest whitespace-nowrap"
+              style={{ fontSize: px(fontHead), boxShadow: STICKY_HEAD_EDGES }}
             >
               Class
             </th>
@@ -274,10 +294,11 @@ export default function MasterTimetableEditor({
               <th
                 key={d}
                 colSpan={teachingSlots.length}
-                className={`sticky top-0 z-20 bg-[#27272A] text-[#F5F5F5] border-b border-[#3F3F46] px-1 py-1 text-center font-semibold ${
-                  di > 0 ? 'border-l-2 border-l-[#71717A]' : ''
-                }`}
-                style={{ fontSize: px(fontHead) }}
+                className="sticky top-0 z-20 bg-[#27272A] text-[#F5F5F5] px-1 py-1 text-center font-semibold"
+                style={{
+                  fontSize: px(fontHead),
+                  boxShadow: di > 0 ? DAY_HEAD_EDGES : HEAD_EDGES,
+                }}
               >
                 {dense ? WEEKDAY_LABELS[d].slice(0, 3) : WEEKDAY_LABELS[d]}
               </th>
@@ -288,14 +309,13 @@ export default function MasterTimetableEditor({
               teachingSlots.map((s, i) => (
                 <th
                   key={`${d}-${s.id}`}
-                  className={`sticky z-20 bg-[#3F3F46] text-[#D4D4D8] border-b border-[#52525B] px-0.5 py-0.5 text-center font-medium ${
-                    i === 0 && di > 0 ? 'border-l-2 border-l-[#71717A]' : 'border-l border-l-[#52525B]'
-                  }`}
+                  className="sticky z-20 bg-[#3F3F46] text-[#D4D4D8] px-0.5 py-0.5 text-center font-medium"
                   style={{
                     top: px(dayRowH),
                     width: px(cellW),
                     minWidth: px(cellW),
                     fontSize: px(fontSub),
+                    boxShadow: i === 0 && di > 0 ? SLOT_HEAD_DAY_EDGES : SLOT_HEAD_EDGES,
                   }}
                   title={s.label ?? undefined}
                 >
@@ -314,10 +334,10 @@ export default function MasterTimetableEditor({
             return (
               <tr key={hr.id} onMouseEnter={() => setHotRow(hr.id)} onMouseLeave={() => setHotRow(null)}>
                 <td
-                  className={`sticky left-0 z-10 border-b border-r border-[#D4D4D8] p-0 whitespace-nowrap leading-tight font-semibold text-[#18181B] tabular-nums ${
+                  className={`sticky left-0 z-10 p-0 whitespace-nowrap leading-tight font-semibold text-[#18181B] tabular-nums ${
                     hot ? 'bg-[#FEF9E7]' : band ? 'bg-[#F7F7F8]' : 'bg-white'
                   }`}
-                  style={{ fontSize: px(LABEL_FONT) }}
+                  style={{ fontSize: px(LABEL_FONT), boxShadow: STICKY_COL_EDGES }}
                 >
                   {onOpenClass ? (
                     <button
@@ -405,7 +425,8 @@ export default function MasterTimetableEditor({
                                   dragId === eid ? 'opacity-40' : ''
                                 } ${inConflict ? 'ring-1 ring-inset ring-rose-400' : ''}`}
                                 style={{
-                                  background: (subj?.color ?? '#52525B') + '33',
+                                  background: (subj?.color ?? '#52525B') + (tiny ? 'cc' : '33'),
+                                  minHeight: tiny ? px(rowH) : undefined,
                                   // A double/triple runs across adjacent period
                                   // columns: only the outer edges of the run are
                                   // drawn, so it reads as one wide lesson.
@@ -414,19 +435,21 @@ export default function MasterTimetableEditor({
                                   marginRight: linkedRight ? -1 : undefined,
                                 }}
                               >
-                                <div className="font-bold text-[#18181B] truncate">
-                                  {linkedLeft ? '·' : subj?.code || subj?.name?.slice(0, 4) || '—'}
-                                </div>
+                                {!tiny && (
+                                  <div className="font-bold text-[#18181B] truncate">
+                                    {linkedLeft ? '·' : subj?.code || subj?.name?.slice(0, 4) || '—'}
+                                  </div>
+                                )}
                                 {!dense && !linkedLeft && names.length > 0 && (
                                   <div className="text-[#3F3F46] truncate" style={{ fontSize: px(fontSub) }}>
                                     {names.length > 1 ? `${shortName(names[0])} +${names.length - 1}` : shortName(names[0])}
                                   </div>
                                 )}
                                 <div className="absolute top-0 right-0 flex items-center gap-px">
-                                  {entry.groupId && (
+                                  {entry.groupId && !tiny && (
                                     <span className="w-1 h-1 rounded-full bg-indigo-500" title="Split group" />
                                   )}
-                                  {span > 1 && !linkedLeft && (
+                                  {span > 1 && !linkedLeft && !tiny && (
                                     <span
                                       className="font-bold text-[#52525B]"
                                       style={{ fontSize: px(Math.max(6, Math.round(7 * zoom))) }}
@@ -435,7 +458,7 @@ export default function MasterTimetableEditor({
                                       ×{span}
                                     </span>
                                   )}
-                                  {amended && (
+                                  {amended && !tiny && (
                                     <span title="A date change amends this period" className="inline-flex">
                                       <CalendarClock
                                         size={Math.max(7, Math.round(9 * zoom))}
@@ -443,7 +466,7 @@ export default function MasterTimetableEditor({
                                       />
                                     </span>
                                   )}
-                                  {entry.combinedKey && <Layers size={Math.max(7, Math.round(9 * zoom))} className="text-indigo-600" />}
+                                  {entry.combinedKey && !tiny && <Layers size={Math.max(7, Math.round(9 * zoom))} className="text-indigo-600" />}
                                   {entry.isLocked && !linkedLeft && (
                                     <Pin size={Math.max(7, Math.round(9 * zoom))} className="text-[#18181B]" />
                                   )}

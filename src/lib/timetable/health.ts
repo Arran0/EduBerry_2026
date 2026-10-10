@@ -239,21 +239,38 @@ export function computeHealth(input: HealthInput): HealthReport {
   const spreadScore = clamp(100 - clusters * 4)
 
   // ── 6. Daily load balance across homerooms ───────────────────
+  // Measured as the AVERAGE deviation of a class-day from that class's own
+  // daily average — not the total of every deviation in the school.
+  //
+  // The total was what this used to be, and it made the component useless at
+  // any real size: 34 classes over 5 days, each day off its average by a
+  // single period, summed to 170, and `100 - 170 * 2` is 0 however good the
+  // week is. Every school with more than a dozen classes scored exactly 0.
   const hrDay = new Map<string, number>()
-  for (const e of entries) hrDay.set(`${e.homeroomId}|${e.day}`, (hrDay.get(`${e.homeroomId}|${e.day}`) ?? 0) + 1)
-  const hrLoads = new Map<string, number[]>()
-  for (const [k, v] of hrDay) {
-    const hr = k.split('|')[0]
-    if (!hrLoads.has(hr)) hrLoads.set(hr, [])
-    hrLoads.get(hr)!.push(v)
+  for (const e of entries) {
+    const k = `${e.homeroomId}|${e.day}`
+    hrDay.set(k, (hrDay.get(k) ?? 0) + 1)
   }
-  let imbalance = 0
-  for (const [hr, loads] of hrLoads) {
-    // Each class is levelled against the length of its own week.
-    const avg = loads.reduce((a, b) => a + b, 0) / Math.max(1, weekDays(hr).length)
-    for (const l of loads) imbalance += Math.abs(l - avg)
+  const scheduled = new Set(entries.map((e) => e.homeroomId))
+  let deviation = 0
+  let classDays = 0
+  for (const hr of scheduled) {
+    // Each class is levelled against the length of its own week, and against
+    // every day of it: a class with one completely empty day is exactly the
+    // imbalance this is looking for, and skipping the days with no lessons on
+    // them hid it.
+    const days = weekDays(hr)
+    if (days.length === 0) continue
+    const loads = days.map((d) => hrDay.get(`${hr}|${d}`) ?? 0)
+    const avg = loads.reduce((a, b) => a + b, 0) / days.length
+    for (const l of loads) deviation += Math.abs(l - avg)
+    classDays += days.length
   }
-  const balanceScore = clamp(100 - imbalance * 2)
+  /** Periods a day, on average, that a class's load sits off its own mean. */
+  const imbalance = classDays === 0 ? 0 : deviation / classDays
+  // Half a period of drift is a tidy week; four is a week with empty days in
+  // it. 25 a period puts the band where those two land either side of it.
+  const balanceScore = clamp(100 - imbalance * 25)
 
   // ── Weighted total ───────────────────────────────────────────
   const components: HealthComponent[] = [
@@ -692,8 +709,8 @@ function buildSuggestions({
       out.push({
         title: 'Even out the long and short days',
         detail:
-          `Daily loads vary by about ${Math.round(imbalance)} periods across the week. ` +
-          'This usually follows from time off on some days, or from a class whose periods do not divide evenly into its days.',
+          `A class's day sits about ${imbalance.toFixed(1)} period(s) off its own daily average. ` +
+          'That usually follows from time off on some days, or from a class whose periods do not divide evenly into its days.',
         where: 'Homeroom → Time off, Configuration → Period slots',
       })
     }

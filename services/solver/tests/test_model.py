@@ -276,6 +276,38 @@ def test_optimise_never_places_less_than_the_week_it_was_given():
     assert len(r.placements) == 4
 
 
+def test_optimise_hands_back_the_caller_week_when_it_cannot_beat_it():
+    """The regression behind "the solver returned no timetable".
+
+    `AddHint` is a suggestion, not a solution. On a school-sized problem CP-SAT
+    routinely spends the whole budget without completing a solution from it and
+    returns nothing — so "Tidy up this week" reported failure and changed
+    nothing while a complete week sat in the request it had just been handed.
+
+    Sized to be genuinely out of reach in the budget below (49k variables in
+    ~1s), with a hint that is a real, conflict-free week: one teacher per
+    class, one lesson per cell. Whatever the later stages manage, the result
+    must still carry that week.
+    """
+    lessons, hint = [], {}
+    for c in range(30):
+        for k in range(30):
+            lid = f"L{c}_{k}"
+            lessons.append(
+                lesson(lid, classes=[f"hr{c}"], subject=f"sub{k % 9}",
+                       teachers=[f"t{c}"], max_per_day=9)
+            )
+            hint[lid] = (k // 8, k % 8)
+    p = parse_problem(problem(lessons=lessons, slots=8, days=DAYS))
+
+    r = optimise(p, budget_s=1.2, hint=hint)
+
+    assert r.status != "unknown", "a week it could not improve on must still come back"
+    assert len(r.placements) == len(lessons)
+    assert r.unplacedPeriods == 0
+    assert r.penalty is not None
+
+
 def test_optimise_prefers_a_period_over_the_cap_to_a_period_missing():
     """The same trade the browser solver's relaxed pass makes."""
     # Three periods of one subject, one day, cap of 1 a day. Something has to give.

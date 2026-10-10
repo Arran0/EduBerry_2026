@@ -286,3 +286,92 @@ describe('lessons time off has left nowhere to sit', () => {
     expect(coverage!.score).toBe(0)
   })
 })
+
+describe('daily balance', () => {
+  const balanceOf = (entries: PlacedEntry[], homeroomIds: string[]) =>
+    report({
+      entries,
+      homerooms: homeroomIds.map((id) => ({ id, class_teacher_id: null })),
+    }).components.find((c) => c.key === 'balance')!.score
+
+  /** `perDay` periods in every class, on every day. */
+  const evenWeek = (classes: number, perDay: number): PlacedEntry[] => {
+    const out: PlacedEntry[] = []
+    for (let c = 0; c < classes; c++) {
+      for (const day of DAYS) {
+        for (let p = 0; p < perDay; p++) {
+          out.push({
+            homeroomId: `hr${c}`, day, slotId: `s${p + 1}`, subjectId: `sub${p}`,
+            teacherId: null, roomId: null, isLocked: false,
+          })
+        }
+      }
+    }
+    return out
+  }
+
+  it('is full marks for a week with the same load every day', () => {
+    const ids = Array.from({ length: 4 }, (_, i) => `hr${i}`)
+    expect(balanceOf(evenWeek(4, 4), ids)).toBe(100)
+  })
+
+  /** 4 periods a day, plus a 5th on Monday — the ordinary odd remainder. */
+  const slightlyUneven = (classes: number): PlacedEntry[] => {
+    const out = evenWeek(classes, 4)
+    for (let c = 0; c < classes; c++) {
+      out.push({
+        homeroomId: `hr${c}`, day: 'monday', slotId: 's5', subjectId: 'extra',
+        teacherId: null, roomId: null, isLocked: false,
+      })
+    }
+    return out
+  }
+
+  it('does not fall apart as the school gets bigger', () => {
+    // The regression. The old metric SUMMED every class-day's deviation
+    // instead of averaging it, so a week whose periods simply do not divide
+    // evenly into five days — which is most weeks — scored 0 the moment the
+    // school had more than a dozen classes, and scored the same as a week
+    // with every lesson crammed onto one day. Balance is a property of the
+    // shape of a week, not of how many classes share that shape.
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `hr${i}`)
+    const small = balanceOf(slightlyUneven(2), ids(2))
+    const large = balanceOf(slightlyUneven(34), ids(34))
+    // Equal bar float noise — the metric is scale-invariant by construction.
+    expect(large).toBeCloseTo(small, 6)
+    // And a near-even week is a good one, not a zero.
+    expect(large).toBeGreaterThan(60)
+  })
+
+  it('marks down a week stacked onto fewer days', () => {
+    // 20 periods for one class, all on Monday and Tuesday: three empty days.
+    const lumpy: PlacedEntry[] = []
+    for (const day of ['monday', 'tuesday'] as Weekday[]) {
+      for (let p = 0; p < 6; p++) {
+        lumpy.push({
+          homeroomId: 'hr0', day, slotId: `s${p + 1}`, subjectId: `sub${p}`,
+          teacherId: null, roomId: null, isLocked: false,
+        })
+      }
+    }
+    const stacked = balanceOf(lumpy, ['hr0'])
+    const even = balanceOf(evenWeek(1, 4), ['hr0'])
+    expect(stacked).toBeLessThan(even)
+    expect(stacked).toBeLessThan(50)
+  })
+
+  it('counts a class’s empty day as the imbalance it is', () => {
+    // Four days of four periods and one day of none scores worse than four
+    // days of four periods in a four-day week, where nothing is missing.
+    const fourOfFive: PlacedEntry[] = []
+    for (const day of ['monday', 'tuesday', 'wednesday', 'thursday'] as Weekday[]) {
+      for (let p = 0; p < 4; p++) {
+        fourOfFive.push({
+          homeroomId: 'hr0', day, slotId: `s${p + 1}`, subjectId: `sub${p}`,
+          teacherId: null, roomId: null, isLocked: false,
+        })
+      }
+    }
+    expect(balanceOf(fourOfFive, ['hr0'])).toBeLessThan(100)
+  })
+})
