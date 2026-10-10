@@ -219,7 +219,9 @@ export function computeHealth(input: HealthInput): HealthReport {
   // Teacher idle gaps are deliberately NOT scored. A free period between two
   // lessons is not a defect: teachers read it as breathing room, not as a hole
   // to be closed, and flagging it buried the problems that do matter under a
-  // list of names with nothing wrong with them.
+  // list of names with nothing wrong with them. The solver agrees — it prefers
+  // a spread-out day and prices long unbroken runs instead; see
+  // teacherDayPenalty in generator.ts.
 
   // ── 5. Subject spread (same subject repeated in a day) ───────
   // A double or triple is one lesson occupying several periods, not a subject

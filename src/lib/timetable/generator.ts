@@ -19,7 +19,8 @@
 //
 // Soft constraints (penalty-scored, minimized):
 //   - spread a subject across distinct days (respect max_per_day)
-//   - minimize teacher idle gaps within a day
+//   - spread a teacher's day out: long unbroken runs cost (see
+//     teacherDayPenalty), stranded idle periods cost a little
 //   - balance a homeroom's daily lesson load
 //   - meet min per day / per week targets (Round 3)
 //   - fill pinned class-teacher cells (Round 3)
@@ -1104,6 +1105,59 @@ function placeCombinedUnit(state: SolveState, unit: CombinedUnit, args: BuildArg
   return true
 }
 
+// ── What a teacher's day should look like ────────────────────
+
+/**
+ * Periods a teacher is happy to take back to back before it starts to tell.
+ * A run of two is a normal morning; a run of five is a day with no breath in
+ * it, and that is what teachers actually object to.
+ */
+export const PREFERRED_RUN = 2
+/** Each period of a run beyond PREFERRED_RUN. */
+const W_LONG_RUN = 3
+/**
+ * Each idle period stranded between two lessons.
+ *
+ * Deliberately far below W_LONG_RUN, and this is the whole trade: the
+ * objective used to minimise exactly this term at weight 3, which meant it
+ * rewarded packing a teacher's day into one unbroken block — the opposite of
+ * what staff want. It is kept, weakly, because the other extreme is just as
+ * unkind: two lessons at period 1 and period 8 strand someone at school all
+ * day for two hours of teaching. So spreading wins, and among equally spread
+ * weeks the less stranded one wins.
+ */
+const W_STRANDED = 0.5
+
+/**
+ * What one teacher's day costs, given the sorted clock indices they teach in.
+ *
+ * Exported so the tests can state the preference directly, and mirrored by
+ * `build_teacher_compactness` in services/solver — the CP-SAT quality score
+ * has to be the same score, or "Tidy up this week" would spend its budget
+ * undoing what Generate just did.
+ */
+export function teacherDayPenalty(sorted: number[]): number {
+  if (sorted.length < 2) return 0
+
+  // Runs of back-to-back periods.
+  let penalty = 0
+  let run = 1
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i < sorted.length && sorted[i] === sorted[i - 1] + 1) {
+      run++
+      continue
+    }
+    if (run > PREFERRED_RUN) penalty += (run - PREFERRED_RUN) * W_LONG_RUN
+    run = 1
+  }
+
+  // Idle periods inside the day's span.
+  const span = sorted[sorted.length - 1] - sorted[0] + 1
+  penalty += (span - sorted.length) * W_STRANDED
+
+  return penalty
+}
+
 // ── Soft-penalty scoring (global) ────────────────────────────
 
 function softPenalty(
@@ -1154,9 +1208,7 @@ function softPenalty(
     }
   }
   for (const set of teacherDaySlots.values()) {
-    const idxs = [...set].sort((a, b) => a - b)
-    const span = idxs[idxs.length - 1] - idxs[0] + 1
-    penalty += (span - idxs.length) * 3
+    penalty += teacherDayPenalty([...set].sort((a, b) => a - b))
   }
 
   penalty += minTargetShortfall(placements, index)
@@ -1287,19 +1339,16 @@ function scopedPenalty(
     penalty += Math.abs((state.dayLoad.get(`${homeroomId}|${day}`) ?? 0) - avg)
   }
 
-  // Idle gaps in each teacher's day. A teacher may also teach other classes,
+  // The shape of each teacher's day. A teacher may also teach other classes,
   // but only the days of THIS class's week can have changed.
+  //
+  // The same teacherDayPenalty() the global scan uses, so the local search
+  // accepts exactly the moves a full rescan would.
   for (const t of teachers) {
     for (const day of days) {
       const set = state.teacherDaySlots.get(`${t}|${day}`)
       if (!set || set.size === 0) continue
-      let lo = Infinity
-      let hi = -Infinity
-      for (const i of set) {
-        if (i < lo) lo = i
-        if (i > hi) hi = i
-      }
-      penalty += (hi - lo + 1 - set.size) * 3
+      penalty += teacherDayPenalty([...set].sort((a, b) => a - b))
     }
   }
 

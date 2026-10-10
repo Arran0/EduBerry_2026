@@ -56,13 +56,18 @@ const MAX_ZOOM = 1.6
  *
  * Low enough that a whole week — every day, every period — fits the pane on a
  * desktop, because seeing the shape of the week at once is the whole point of
- * a master grid. Text stops being readable long before this, so below
- * TINY_ZOOM the cells drop their labels and become colour blocks: an overview
- * that reads as an overview, with the detail a click away.
+ * a master grid.
  */
 const MIN_FIT_ZOOM = 0.34
-/** Below this a cell is a colour block, not a label. */
+/**
+ * Below this a cell is too narrow for a four-letter code, so the label is cut
+ * to three. The cell keeps its ordinary look either way — accent edge, tinted
+ * fill, subject text — because a grid of plain colour blocks is pretty and
+ * unreadable: you cannot tell Maths from Music without clicking.
+ */
 const TINY_ZOOM = 0.52
+/** Characters of the subject code a cell has room for at each tier. */
+const LABEL_CHARS = { tiny: 3, normal: 4 } as const
 
 // Rules for the sticky header and the sticky class column.
 //
@@ -199,9 +204,10 @@ export default function MasterTimetableEditor({
   const rowH = Math.round(BASE_ROW * zoom)
   const px = (n: number) => `${n}px`
   // Below ~0.75 there is no room for a second line inside a cell; below
-  // TINY_ZOOM there is no room for text at all.
+  // TINY_ZOOM the label itself has to be shorter.
   const dense = zoom < 0.75
   const tiny = zoom < TINY_ZOOM
+  const labelChars = tiny ? LABEL_CHARS.tiny : LABEL_CHARS.normal
   const fontMain = Math.max(7, Math.round(10.5 * zoom))
   const fontSub = Math.max(6, Math.round(8.5 * zoom))
   const fontHead = Math.max(8, Math.round(10 * zoom))
@@ -425,8 +431,7 @@ export default function MasterTimetableEditor({
                                   dragId === eid ? 'opacity-40' : ''
                                 } ${inConflict ? 'ring-1 ring-inset ring-rose-400' : ''}`}
                                 style={{
-                                  background: (subj?.color ?? '#52525B') + (tiny ? 'cc' : '33'),
-                                  minHeight: tiny ? px(rowH) : undefined,
+                                  background: (subj?.color ?? '#52525B') + '33',
                                   // A double/triple runs across adjacent period
                                   // columns: only the outer edges of the run are
                                   // drawn, so it reads as one wide lesson.
@@ -435,16 +440,22 @@ export default function MasterTimetableEditor({
                                   marginRight: linkedRight ? -1 : undefined,
                                 }}
                               >
-                                {!tiny && (
-                                  <div className="font-bold text-[#18181B] truncate">
-                                    {linkedLeft ? '·' : subj?.code || subj?.name?.slice(0, 4) || '—'}
-                                  </div>
-                                )}
+                                <div className="font-bold text-[#18181B] truncate">
+                                  {linkedLeft
+                                    ? '·'
+                                    : (subj?.code || subj?.name || '—').slice(0, labelChars)}
+                                </div>
                                 {!dense && !linkedLeft && names.length > 0 && (
                                   <div className="text-[#3F3F46] truncate" style={{ fontSize: px(fontSub) }}>
                                     {names.length > 1 ? `${shortName(names[0])} +${names.length - 1}` : shortName(names[0])}
                                   </div>
                                 )}
+                                {/* Badges compete with the label for a cell
+                                    about 19px wide at the smallest zoom, so
+                                    below TINY_ZOOM only the pin survives — it
+                                    is the one that changes what the next
+                                    generate does. The rest come back on the
+                                    way in. */}
                                 <div className="absolute top-0 right-0 flex items-center gap-px">
                                   {entry.groupId && !tiny && (
                                     <span className="w-1 h-1 rounded-full bg-indigo-500" title="Split group" />

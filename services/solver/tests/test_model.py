@@ -413,3 +413,63 @@ def test_a_double_is_impossible_when_no_run_is_long_enough():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ── The shape of a teacher's day ─────────────────────────────
+
+
+def _runs(starts: list[int]) -> list[int]:
+    """Lengths of the back-to-back runs in a sorted list of period indices."""
+    out, run = [], 1
+    for i in range(1, len(starts) + 1):
+        if i < len(starts) and starts[i] == starts[i - 1] + 1:
+            run += 1
+            continue
+        out.append(run)
+        run = 1
+    return out
+
+
+def test_optimise_spreads_a_teacher_day_instead_of_packing_it():
+    """Teachers want their periods spread, not back to back.
+
+    The objective used to minimise stranded idle periods, which is the same
+    thing as rewarding one unbroken block — on a 12-class sample it produced 83
+    periods beyond a pair in a row, with runs of four. This has to agree with
+    ``teacherDayPenalty`` in src/lib/timetable/generator.ts, or "Tidy up this
+    week" would repack what Generate had just spread out.
+
+    One teacher, four lessons, one day, eight periods: plenty of room to
+    spread, and nothing else competing for the slots.
+    """
+    lessons = [
+        lesson(f"L{i}", classes=[f"hr{i}"], subject=f"sub{i}", teachers=["t1"])
+        for i in range(4)
+    ]
+    p = parse_problem(problem(lessons=lessons, slots=8, days=["monday"]))
+    r = optimise(p, budget_s=20)
+
+    assert r.status in ("optimal", "feasible")
+    assert len(r.placements) == 4
+    starts = sorted(pl.start for pl in r.placements)
+    assert max(_runs(starts)) <= 2, f"packed into a run: {starts}"
+
+
+def test_optimise_still_keeps_two_lessons_near_each_other():
+    """The other extreme is its own unkindness.
+
+    Two lessons at period 1 and period 8 strand a teacher at school all day for
+    two hours of teaching, so the weak stranded term has to survive: with the
+    runs already as short as they can be, the tie goes to the tighter day.
+    """
+    lessons = [
+        lesson(f"L{i}", classes=[f"hr{i}"], subject=f"sub{i}", teachers=["t1"])
+        for i in range(2)
+    ]
+    p = parse_problem(problem(lessons=lessons, slots=8, days=["monday"]))
+    r = optimise(p, budget_s=20)
+
+    assert len(r.placements) == 2
+    starts = sorted(pl.start for pl in r.placements)
+    # Not necessarily adjacent, but nowhere near opposite ends of the day.
+    assert starts[1] - starts[0] <= 2, f"stranded across the day: {starts}"

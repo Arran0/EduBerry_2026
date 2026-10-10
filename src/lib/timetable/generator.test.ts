@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { generateTimetable } from './generator'
+import {
+  generateTimetable, buildSchedules, teacherDayPenalty, PREFERRED_RUN,
+} from './generator'
 import { computeHealth } from './health'
+import { teacherIdsOf } from './types'
 import type {
   GeneratorInput, PeriodSlot, Requirement, TimetableConfig, SlotGroup, Weekday, PlacedEntry,
   CombinedClassInput, Room,
@@ -655,8 +658,15 @@ describe('the bounded search', () => {
       expect(searched.unplacedCount).toBeLessThanOrEqual(built.unplacedCount)
       // It should not merely hold the line — the search is what makes a
       // generated timetable usable, and it has real work to do here.
+      //
+      // Not a 10x cut any more. That threshold was calibrated when the
+      // objective MINIMISED stranded periods, so a packed week scored near
+      // zero and the floor was near zero with it. The objective now prefers a
+      // teacher's day spread out, and the residual is the deliberately cheap
+      // stranded term — measured at 39 of 210 here, all of it stranded, with
+      // no teacher run longer than two.
       expect(built.softPenalty).toBeGreaterThan(100)
-      expect(searched.softPenalty).toBeLessThan(built.softPenalty / 10)
+      expect(searched.softPenalty).toBeLessThan(built.softPenalty * 0.4)
     }
   })
 })
@@ -744,4 +754,78 @@ describe('periods construction could not place', () => {
       expect(r.unplacedCount).toBe(0)
     }
   })
+})
+
+// ── What a teacher's day should look like ────────────────────
+
+describe('a teacher’s day is spread, not packed', () => {
+  it('prices a long unbroken run above a scattered day', () => {
+    // Five periods back to back versus five spread across the day. Teachers
+    // object to the first, so the objective has to as well.
+    const packed = teacherDayPenalty([0, 1, 2, 3, 4])
+    const spread = teacherDayPenalty([0, 2, 4, 6, 8])
+    expect(packed).toBeGreaterThan(spread)
+  })
+
+  it('charges nothing for a pair, and more the longer the run gets', () => {
+    expect(teacherDayPenalty([0, 1])).toBe(0)
+    const three = teacherDayPenalty([0, 1, 2])
+    const four = teacherDayPenalty([0, 1, 2, 3])
+    const five = teacherDayPenalty([0, 1, 2, 3, 4])
+    expect(three).toBeGreaterThan(0)
+    expect(four).toBeGreaterThan(three)
+    expect(five).toBeGreaterThan(four)
+  })
+
+  it('still prefers two lessons together to two at opposite ends of the day', () => {
+    // The other extreme is its own unkindness: period 1 and period 8 strands
+    // someone at school all day for two hours of teaching. Spreading wins,
+    // but among equally spread weeks the less stranded one wins.
+    expect(teacherDayPenalty([3, 4])).toBeLessThan(teacherDayPenalty([0, 7]))
+  })
+
+  it('never asks a teacher for more than a pair in a row when the week has room', () => {
+    // Twelve classes, eight subjects each, four teachers' worth of load — the
+    // same shape as the search test above. Under the previous objective this
+    // produced 83 periods beyond a pair in a row, with runs of four.
+    const requirements: Requirement[] = []
+    for (let h = 0; h < 12; h++) {
+      for (let s = 0; s < 8; s++) {
+        requirements.push(requirement({
+          id: `r${h}-${s}`, homeroom_id: `hr${h}`, subject_id: `sub${s}`,
+          teacher_id: `t${(h % 4) * 8 + s}`, teacher_ids: [`t${(h % 4) * 8 + s}`],
+          periods_per_week: s < 4 ? 5 : 4,
+        }))
+      }
+    }
+    const cfg = config({ working_days: [...DAYS, 'saturday' as Weekday] })
+    const slots8 = slots(8)
+    const r = generateTimetable(
+      { config: cfg, slots: slots8, requirements, unavailability: [], rooms: [], seed: 1 },
+      { maxRestarts: 3, minRestarts: 3, budgetMs: 20_000, maxMoves: 60_000 },
+    )
+    const sched = buildSchedules(cfg, slots8, [], {})
+
+    const byTeacherDay = new Map<string, Set<number>>()
+    for (const p of r.entries) {
+      for (const t of teacherIdsOf(p)) {
+        const k = `${t}|${p.day}`
+        if (!byTeacherDay.has(k)) byTeacherDay.set(k, new Set())
+        byTeacherDay.get(k)!.add(sched.clock.get(p.slotId) ?? 0)
+      }
+    }
+
+    let longest = 0
+    for (const set of byTeacherDay.values()) {
+      const sorted = [...set].sort((a, b) => a - b)
+      let run = 1
+      for (let i = 1; i <= sorted.length; i++) {
+        if (i < sorted.length && sorted[i] === sorted[i - 1] + 1) { run++; continue }
+        if (run > longest) longest = run
+        run = 1
+      }
+    }
+    expect(byTeacherDay.size).toBeGreaterThan(100) // the sample is real
+    expect(longest).toBeLessThanOrEqual(PREFERRED_RUN)
+  }, 60_000)
 })

@@ -38,7 +38,21 @@ SCALE = 420
 
 #: Soft weights, matching softPenalty() in generator.ts exactly.
 W_SUBJECT_REPEAT = 6
-W_TEACHER_SPAN = 3
+#: Periods a teacher is happy to take back to back before it starts to tell.
+#: Mirrors PREFERRED_RUN in src/lib/timetable/generator.ts.
+PREFERRED_RUN = 2
+#: Each period of a run beyond PREFERRED_RUN.
+W_LONG_RUN = 3
+#: Each idle period stranded between two of a teacher's lessons.
+#:
+#: Far below W_LONG_RUN, and that is the trade: this term used to be the only
+#: one and carried weight 3, so the objective rewarded packing a teacher's day
+#: into one unbroken block — which is the opposite of what staff want. It is
+#: kept, weakly, because two lessons at period 1 and period 8 strand someone at
+#: school all day for two hours of teaching. Halves are not available in an
+#: integer model, so it is scaled against SCALE directly.
+W_STRANDED_NUM = 1
+W_STRANDED_DEN = 2
 W_MIN_SHORTFALL = 4
 W_UNFILLED_PIN = 8
 
@@ -587,10 +601,18 @@ class Builder:
             self.objective_terms.append((SCALE // days) * dev)
 
     def build_teacher_compactness(self) -> None:
-        """Idle periods stranded between two of a teacher's lessons cost.
+        """The shape of a teacher's day: spread out, not packed solid.
 
-        The same ``span - count`` measure the browser solver uses, so a week
-        improved here is improved by the score the admin already sees.
+        Mirrors ``teacherDayPenalty`` in src/lib/timetable/generator.ts, which
+        matters more than it sounds: the two solvers have to minimise the SAME
+        score or "Tidy up this week" spends its budget undoing what Generate
+        just did — repacking the runs the browser solver had spread out.
+
+        A long run is priced with a sliding window rather than by counting runs
+        directly. Every window of ``PREFERRED_RUN + 1`` consecutive periods may
+        hold ``PREFERRED_RUN`` lessons for free; each one beyond that costs. A
+        run of length L trips L - PREFERRED_RUN windows, so the total matches
+        the browser solver's ``(run - PREFERRED_RUN)`` term exactly.
         """
         clocks = sorted(set(self.p.clock.values()))
         if not clocks:
@@ -602,6 +624,7 @@ class Builder:
         for (teacher, day, clock), terms in self._teacher_busy_terms.items():
             per_day[(teacher, day)][index_of[clock]].extend(terms)
 
+        window = PREFERRED_RUN + 1
         for (teacher, day), slots in per_day.items():
             if len(slots) < 2:
                 continue
@@ -610,6 +633,20 @@ class Builder:
                 b = self.m.NewBoolVar(f"busy_{teacher}_{day}_{i}")
                 self.m.Add(sum(terms) == b)
                 busy_bools.append((i, b))
+            by_index = dict(busy_bools)
+
+            # ── Long runs ────────────────────────────────────
+            for start in range(len(clocks) - PREFERRED_RUN):
+                in_window = [
+                    by_index[i] for i in range(start, start + window) if i in by_index
+                ]
+                if len(in_window) <= PREFERRED_RUN:
+                    continue  # cannot exceed the comfortable run
+                excess = self.m.NewIntVar(0, len(in_window) - PREFERRED_RUN, "")
+                self.m.Add(excess >= sum(in_window) - PREFERRED_RUN)
+                self.objective_terms.append(W_LONG_RUN * SCALE * excess)
+
+            # ── Stranded idle periods, as a weak tie-break ───
             count = sum(b for _, b in busy_bools)
             any_busy = self.m.NewBoolVar("")
             self.m.AddMaxEquality(any_busy, [b for _, b in busy_bools])
@@ -622,7 +659,9 @@ class Builder:
             # valid bounds rather than exactly the first and last period.
             stranded = self.m.NewIntVar(0, len(clocks), "")
             self.m.Add(stranded >= hi - lo + 1 - count).OnlyEnforceIf(any_busy)
-            self.objective_terms.append(W_TEACHER_SPAN * SCALE * stranded)
+            self.objective_terms.append(
+                (W_STRANDED_NUM * SCALE // W_STRANDED_DEN) * stranded
+            )
 
     def build_pin_quality(self) -> None:
         """A pinned period the class teacher does not end up taking costs."""
