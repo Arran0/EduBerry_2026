@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ClipboardList, ChevronRight } from 'lucide-react'
 import { ClassroomWithDetails, ClassroomAssessment, fetchAssessments } from '@/lib/classrooms'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 interface MiniAssessment {
   assessment: ClassroomAssessment
@@ -66,9 +67,7 @@ export default function LatestAssessmentsMiniList({ classrooms, onEmptyChange }:
   return (
     <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="spinner" />
-        </div>
+        <SkeletonRows rows={4} />
       ) : items.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">

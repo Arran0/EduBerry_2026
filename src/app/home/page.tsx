@@ -70,6 +70,7 @@ import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniLi
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
 import NotificationsSummaryCard, { NotificationsCardSkeleton } from '@/components/home/NotificationsSummaryCard'
+import { SkeletonBar, SkeletonTiles } from '@/components/home/HomeCardSkeletons'
 import {
   createNotificationFeed,
   markNotificationRead,
@@ -101,7 +102,7 @@ import AttendanceInfographicPanel, {
 } from '@/components/home/desktop/AttendanceInfographicPanel'
 import SchoolOverviewPanel from '@/components/home/desktop/SchoolOverviewPanel'
 import { fmtINR } from '@/lib/formatMoney'
-import { useIsDesktop, useIsTabletUp, useHasHover } from '@/hooks/useMediaQuery'
+import { useIsDesktop, useIsTabletUp, useIsPhone, useHasHover } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
@@ -304,35 +305,39 @@ function CarouselArrows({ onPrev, onNext }: { onPrev: () => void; onNext: () => 
 
 /** Mobile stat-tile card for a fee ledger — the 2×2 grid of deep-linked tiles. */
 function FeeTilesCard({
-  summary, collectedHref, outstandingHref, todayHref, duesLabel,
+  summary, collectedHref, outstandingHref, todayHref, duesLabel, loading = false,
 }: {
   summary: HomeFeesSummary | null
   collectedHref: string
   outstandingHref: string
   todayHref: string
   duesLabel: string
+  /** The ledger's fetch is still in flight. The tiles keep their size, tints
+   *  and captions — only the four figures shimmer, so the card never asserts a
+   *  ₹0 that nobody counted and then quietly replaces it. */
+  loading?: boolean
 }) {
   return (
     <div className="pro-card h-[260px] p-4 flex items-center">
       <div className="grid grid-cols-2 gap-3 w-full">
         <Link href={collectedHref} className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
           <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-          <p className="text-base font-bold text-white tabular-nums leading-tight">{fmtINR(summary?.collected ?? 0)}</p>
+          <p className="text-base font-bold text-white tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} className="opacity-30" /> : fmtINR(summary?.collected ?? 0)}</p>
           <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
         </Link>
         <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
           <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(summary?.outstanding ?? 0)}</p>
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} cool /> : fmtINR(summary?.outstanding ?? 0)}</p>
           <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
         </Link>
         <Link href={todayHref} className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
           <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{fmtINR(summary?.todayCollection ?? 0)}</p>
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} cool /> : fmtINR(summary?.todayCollection ?? 0)}</p>
           <p className="text-[10px] font-semibold text-[#52525B] mt-0.5">Today&apos;s Collection</p>
         </Link>
         <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
           <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{summary?.studentsWithDues ?? '—'}</p>
+          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={34} h={15} cool /> : (summary?.studentsWithDues ?? '—')}</p>
           <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">{duesLabel}</p>
         </Link>
       </div>
@@ -342,6 +347,16 @@ function FeeTilesCard({
 
 /** Mobile stat-tile card for today's attendance — students over staff. */
 function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }) {
+  // `null` is "the fetch hasn't come back" — the page never hands this a loaded
+  // zero as null. Six em dashes in six tinted boxes read as a finished card
+  // reporting nothing recorded, so it shimmers the tiles instead.
+  if (counts === null) {
+    return (
+      <div className="pro-card h-[260px] overflow-hidden flex flex-col">
+        <SkeletonTiles rows={2} />
+      </div>
+    )
+  }
   const scopes: { title: string; icon: React.ElementType; base: string; tally: AttendanceTally | null; anchors: [string, string, string] }[] = [
     {
       title: 'Students', icon: Users, base: '/more/attendance', tally: counts?.students ?? null,
@@ -443,13 +458,14 @@ export default function HomePage() {
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
-  const [bannerReady, setBannerReady] = useState(false)
-  const [isMobileBanner, setIsMobileBanner] = useState(false)
   const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
   const [containerW, setContainerW] = useState(0)
-  // Two hinges, two jobs. Both are SSR-safe — false on the first paint and
-  // upgraded on mount — so the server render and the first client render agree
-  // on the phone layout and neither one can cause a hydration mismatch.
+  // Three hinges. All of them are read on the *first* render rather than on
+  // mount (useMediaQuerySync): this whole page lives behind ProtectedLayout's
+  // auth gate, so it is never part of the server HTML and has no server render
+  // to agree with. Deferring to an effect only meant a 1440px window laid out
+  // and committed the phone carousel before flipping to the grid — a full
+  // layout swap, and the very first thing anyone saw on opening the app.
   //
   //   gridLayout (≥768px)  the feed cards stop being a one-at-a-time swipe
   //                        strip and become a dashboard grid, and the standing
@@ -459,8 +475,10 @@ export default function HomePage() {
   //   isDesktop  (≥1024px) the statistics have the width to stop being stacked
   //                        2×2 tiles and become chart-plus-rows infographic
   //                        panels, and the grid opens its third column.
+  //   isPhone    (<640px)  the hero band is deeper, relative to the viewport.
   const isDesktop = useIsDesktop()
   const gridLayout = useIsTabletUp()
+  const isMobileBanner = useIsPhone()
   const [attendanceCounts, setAttendanceCounts] = useState<HomeAttendanceCounts | null>(null)
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
@@ -474,13 +492,23 @@ export default function HomePage() {
   const [announcementsLoaded, setAnnouncementsLoaded] = useState(false)
   // Student-only mini cards fetch their own data; each reports back whether it
   // ended up empty so its slot can be dropped from the carousel entirely
-  // instead of showing an empty-state placeholder. Default to "has content"
-  // until told otherwise, so a slot isn't hidden before its own fetch resolves.
-  const [schoolWorkEmpty, setSchoolWorkEmpty] = useState(false)
-  const [assessmentsEmpty, setAssessmentsEmpty] = useState(false)
-  const [reportCardsEmpty, setReportCardsEmpty] = useState(false)
-  const [timetableEmpty, setTimetableEmpty] = useState(false)
-  const [examsEmpty, setExamsEmpty] = useState(false)
+  // instead of showing an empty-state placeholder.
+  //
+  // `null` is "has not reported yet" — distinct from a reported `false`. The
+  // difference is what `slotsSettled` below is built out of: these used to
+  // start at `false` ("has content"), which reserved the slot correctly but
+  // left no way to ask whether every card had finished deciding.
+  const [schoolWorkEmpty, setSchoolWorkEmpty] = useState<boolean | null>(null)
+  const [assessmentsEmpty, setAssessmentsEmpty] = useState<boolean | null>(null)
+  const [reportCardsEmpty, setReportCardsEmpty] = useState<boolean | null>(null)
+  const [timetableEmpty, setTimetableEmpty] = useState<boolean | null>(null)
+  const [examsEmpty, setExamsEmpty] = useState<boolean | null>(null)
+  // Presence checks that add a card rather than remove one, so they need a
+  // "resolved" flag of their own: an empty array is indistinguishable from an
+  // unfinished fetch, and without this the card simply appeared out of nowhere
+  // partway through the load.
+  const [overdueFeesLoaded, setOverdueFeesLoaded] = useState(false)
+  const [gradingLoaded, setGradingLoaded] = useState(false)
   // Team names for a coordinator's "Your team" subtitle on the admin
   // attendance card (mirrors the roster loadAttendanceCounts scopes to).
   const [coordinatorTeamNames, setCoordinatorTeamNames] = useState<string[]>([])
@@ -540,26 +568,26 @@ export default function HomePage() {
   const pageVariants = reduceMotion ? staticContainerVariants : containerVariants
   const cardVariants = reduceMotion ? staticItemVariants : itemVariants
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobileBanner(window.innerWidth < 640)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
 
+  // The banner photo. Decoded off-screen first so it swaps in complete rather
+  // than painting in bands, then cross-faded over the gradient the hero already
+  // shows. Nothing here gates the page any more: the band holds its own height
+  // from the first paint whether or not a school has set a photo, so there is
+  // no scroll to correct afterwards — the `window.scrollTo(0, 0)` this used to
+  // fire on every load existed only to undo the height animation's drift.
   useEffect(() => {
+    let cancelled = false
     fetchRawSetting<string>('welcome_banner')
       .then(url => {
-        if (url) {
-          const img = new window.Image()
-          img.onload = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.onerror = () => { window.scrollTo(0, 0); setWelcomeBanner(url); setBannerReady(true) }
-          img.src = url
-        } else {
-          window.scrollTo(0, 0)
-          setBannerReady(true)
-        }
+        if (!url || cancelled) return
+        const img = new window.Image()
+        const show = () => { if (!cancelled) setWelcomeBanner(url) }
+        img.onload = show
+        img.onerror = show
+        img.src = url
       })
+      .catch(err => console.error('Failed to load welcome banner:', err))
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -702,42 +730,88 @@ export default function HomePage() {
     () => [...taskItemsByDay.values()].some(list => list.length > 0),
     [taskItemsByDay],
   )
+
+  /* ────────────────────────────────────────────────────────────────────────
+     One settle point for the whole deck.
+
+     Which cards this account gets is partly a question about *data*: a student
+     with nothing due doesn't get a School Work card, a teacher with an empty
+     grading queue doesn't get a Grading card. Each of those questions is
+     answered by its own fetch, and each used to add or drop its slot the
+     moment its own answer came back — eight fetches, eight separate commits,
+     and because `spanClassFor` sizes a card from how many cards there are,
+     every one of them resized and reordered the cards around it. That is the
+     reflow storm in the recording: a Notifications card appears, the grid is
+     two-up, then it vanishes and the grid is one-up, then a card slides in
+     underneath.
+
+     So the deck now changes shape exactly once. Until every presence question
+     for this role has an answer, each entitled slot is reserved and shows its
+     own skeleton; at the moment the last one lands, the empty ones drop
+     together in a single commit. In practice the fetches finish within a few
+     hundred milliseconds of each other, so what the user sees is one deck that
+     fills in — not a page rearranging itself eight times.
+
+     Only *presence* waits on this. Content still arrives per card the instant
+     its own fetch does, which is the whole point of the skeletons: a card is
+     real as soon as it can be, it just doesn't move its neighbours when it
+     gets there. ──────────────────────────────────────────────────────────── */
+  const slotsSettled =
+    !notifLoading && announcementsLoaded &&
+    (!isStudent || (
+      overdueFeesLoaded && classroomsLoaded &&
+      schoolWorkEmpty !== null && assessmentsEmpty !== null &&
+      reportCardsEmpty !== null && timetableEmpty !== null && examsEmpty !== null
+    )) &&
+    (!isStaff || (gradingLoaded && !taskCalendarLoading)) &&
+    (!isAttendanceViewer || attendanceCounts !== null) &&
+    (!isAdmin || (schoolFeesSummary !== null && busFeesSummary !== null))
+
   /* A week calendar is a fixture, not a feed: the week itself is the content,
      and a week with nothing due says "nothing due" — which is information, not
      an empty card. So on the dashboard it keeps its place whether or not it has
      entries. In the phone strip it still drops when empty, because there an
      empty slide is a wasted swipe and seven wasted seconds. The admin's
      show-on-home preference is untouched either way. */
-  const showTaskCalendar = (gridLayout || hasTasks) && (!isAdmin || showTaskCalendarOnHome)
+  const showTaskCalendar = (gridLayout || !slotsSettled || hasTasks) && (!isAdmin || showTaskCalendarOnHome)
 
-  // Whether the notifications slot belongs in the strip at all: reserved
-  // (with a skeleton) while its fetch is still in flight, since we don't yet
-  // know whether it will end up empty — settles to notifItems.length > 0 once
-  // resolved. Keeps the first thing anyone sees from being a mismatched card
-  // (e.g. Attendance) that then gets shoved aside once notifications load.
-  const showNotifSlot = notifLoading || !announcementsLoaded ||
+  // Whether the notifications slot belongs in the deck at all: reserved (with
+  // a skeleton) until the deck settles, since we don't yet know whether it will
+  // end up empty — then settles to whether there is anything in it. Keeps the
+  // first thing anyone sees from being a mismatched card (e.g. Attendance) that
+  // then gets shoved aside once notifications load.
+  const showNotifSlot = !slotsSettled ||
     notifItems.length > 0 || unreadAnnouncements.length > 0
 
-  // Student-only mini cards: shown until their own fetch reports back empty
-  // (see the onEmptyChange props wired up below).
-  const showSchoolWork = gridLayout || !schoolWorkEmpty
-  const showAssessments = !assessmentsEmpty
-  const showReportCards = !reportCardsEmpty
-  const showTimetable = !timetableEmpty
-  const showExams = !examsEmpty
+  // Student-only mini cards: reserved until the deck settles, then kept only if
+  // the card reported back that it has something in it (see the onEmptyChange
+  // props wired up below).
+  const showSchoolWork = gridLayout || !slotsSettled || !schoolWorkEmpty
+  const showAssessments = !slotsSettled || !assessmentsEmpty
+  const showReportCards = !slotsSettled || !reportCardsEmpty
+  const showTimetable = !slotsSettled || !timetableEmpty
+  const showExams = !slotsSettled || !examsEmpty
 
-  // Attendance-viewer summary: reserved while attendanceCounts is still
-  // loading (null), dropped only once loaded and every count across both
-  // student and staff tallies is zero.
-  const showAttendanceViewerCard = !attendanceCounts || (
+  // Attendance-viewer summary: reserved until the deck settles, dropped only
+  // once every count across both student and staff tallies is zero.
+  const showAttendanceViewerCard = !slotsSettled || !attendanceCounts || (
     attendanceCounts.students.present + attendanceCounts.students.absent + attendanceCounts.students.exception +
     attendanceCounts.staff.present + attendanceCounts.staff.absent + attendanceCounts.staff.exception
   ) > 0
 
   const hasFeesSummaryData = (s: HomeFeesSummary | null) =>
-    !s || s.collected > 0 || s.outstanding > 0 || s.todayCollection > 0 || s.studentsWithDues > 0
+    !slotsSettled || !s || s.collected > 0 || s.outstanding > 0 || s.todayCollection > 0 || s.studentsWithDues > 0
   const showFees = hasFeesSummaryData(schoolFeesSummary)
   const showBusFees = hasFeesSummaryData(busFeesSummary)
+
+  /* The two cards that *appear* rather than disappear. Both are alerts — fees
+     a student owes, exam papers waiting on a grader — so an empty one would be
+     a false alarm and they genuinely must not be reserved on spec. Holding them
+     back until the deck settles costs nothing (nobody can act on a card that
+     isn't drawn yet) and means they arrive with everything else rather than
+     dropping into the middle of a settled grid a second later. */
+  const showOverdueFeesSlot = slotsSettled && hasOverdueFees
+  const showGradingSlot = slotsSettled && hasGradingQueue
 
   const loadFeeSummaries = useCallback(async () => {
     if (!isAdmin) return
@@ -806,6 +880,18 @@ export default function HomePage() {
     markAnnouncementsRead(user.id, [announcement.id])
   }, [user])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
+
+  /* School Work and Assessments are fetched *from* the classroom list, and both
+     answer "I am empty" straight away when handed one that is empty — which is
+     exactly what they are handed on the first render, before the enrolment
+     query has come back. Their answer about an empty list says nothing about
+     the real one, so it is thrown away when the list arrives and the two cards
+     are asked again. Without this they could be dropped from the deck on the
+     strength of a reading taken before there was anything to read. */
+  useEffect(() => {
+    setSchoolWorkEmpty(null)
+    setAssessmentsEmpty(null)
+  }, [classrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
 
@@ -828,6 +914,7 @@ export default function HomePage() {
     fetchFeesForStudent(user.id, undefined, ['unpaid', 'partial'])
       .then(fees => setOverdueFees(fees.filter(f => isFeeOverdue(f, today))))
       .catch(err => console.error('Failed to load student fees for home card:', err))
+      .finally(() => setOverdueFeesLoaded(true))
   }, [isStudent, user])
 
   useEffect(() => {
@@ -835,6 +922,7 @@ export default function HomePage() {
     fetchGraderGradingQueues(user.id)
       .then(setGradingQueues)
       .catch(err => console.error('Failed to load grading queues for home card:', err))
+      .finally(() => setGradingLoaded(true))
   }, [isStaff, user])
 
   // Re-opens the feed from the top. Runs on mount, and again whenever a live
@@ -965,7 +1053,7 @@ export default function HomePage() {
 
   const slots: HomeSlot[] = []
 
-  if (isStudent && hasOverdueFees) {
+  if (isStudent && showOverdueFeesSlot) {
     slots.push({
       key: 'overdue-fees',
       span: 'half',
@@ -1038,7 +1126,7 @@ export default function HomePage() {
         />
       ),
       body: <AttendanceTilesCard counts={attendanceCounts} />,
-      desktopBody: <AttendanceInfographicPanel counts={attendanceCounts} />,
+      desktopBody: <AttendanceInfographicPanel counts={attendanceCounts} loading={attendanceCounts === null} />,
     })
   }
 
@@ -1076,7 +1164,7 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && hasGradingQueue) {
+  if (isStaff && showGradingSlot) {
     slots.push({
       key: 'grading',
       span: 'half',
@@ -1192,6 +1280,7 @@ export default function HomePage() {
       ),
       body: (
         <FeeTilesCard
+          loading={schoolFeesSummary === null}
           summary={schoolFeesSummary}
           collectedHref="/more/fees?section=issued&filter=collected"
           outstandingHref="/more/fees?section=issued&filter=outstanding"
@@ -1201,6 +1290,7 @@ export default function HomePage() {
       ),
       desktopBody: (
         <FeesInfographicPanel
+          loading={schoolFeesSummary === null}
           summary={schoolFeesSummary}
           collectedHref="/more/fees?section=issued&filter=collected"
           outstandingHref="/more/fees?section=issued&filter=outstanding"
@@ -1226,6 +1316,7 @@ export default function HomePage() {
       ),
       body: (
         <FeeTilesCard
+          loading={busFeesSummary === null}
           summary={busFeesSummary}
           collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
           outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
@@ -1235,6 +1326,7 @@ export default function HomePage() {
       ),
       desktopBody: (
         <FeesInfographicPanel
+          loading={busFeesSummary === null}
           summary={busFeesSummary}
           collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
           outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
@@ -1604,55 +1696,59 @@ export default function HomePage() {
         <motion.div variants={pageVariants} initial="hidden" animate="visible">
 
           {/* ── Immersive full-width welcome banner ──
-              The reveal animates `height`, which relays out everything below it
-              on every frame for two full seconds — the whole page slides down
-              under the pointer while it settles. Under reduced motion it opens
-              at its final height instead, and the Ken Burns drift and the sheen
-              sweep sit out too. */}
-          <AnimatePresence>
-            {bannerReady && (
-              <motion.div
-                key="home-banner"
-                initial={reduceMotion ? false : { height: 0 }}
-                animate={{ height: bannerHeight }}
-                exit={{ height: 0 }}
-                transition={reduceMotion ? { duration: 0 } : { duration: 2, ease: [0.22, 1, 0.36, 1] }}
-                className={`relative w-full overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
-              >
-                <motion.div
-                  initial={reduceMotion ? false : { opacity: 0, scale: 1.04 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={reduceMotion ? { duration: 0 } : { duration: 2, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-x-0 top-0"
-                  style={{ height: bannerHeight, willChange: 'transform, opacity' }}
-                >
+              This used to open by animating `height` from 0 to its final value
+              over two seconds, and it only started once a settings fetch and an
+              image decode had both come back. Animating height is a layout
+              animation: every frame re-flowed the whole document, so for two
+              seconds after the data had landed the entire dashboard slid down
+              the screen — and because it began late, the page had already drawn
+              itself once at the wrong offset before it did. That slide is most
+              of what reads as "not smooth" on this page.
 
-              {/* Background: photo (slow Ken Burns drift) or vivid gradient */}
-              {welcomeBanner ? (
+              The height is a constant per breakpoint and owes nothing to the
+              network, so the band now occupies its final height from the very
+              first paint and never animates it again. Only the photo fades in
+              over the gradient when it arrives — opacity and transform, which
+              the compositor can do without touching layout. Nothing below the
+              banner moves at any point. */}
+          <div
+            className={`relative w-full overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
+            style={{ height: bannerHeight }}
+          >
+            <div className="absolute inset-0">
+
+              {/* Background: the gradient is always there — it is the banner's
+                  own placeholder, not a fallback — and a school's photo cross-
+                  fades over it once loaded. Rendering the gradient first also
+                  means the greeting below has a surface to sit on immediately,
+                  so its contrast never changes out from under the reader. */}
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-500 via-cyan-400 to-emerald-400">
+                <div className="absolute -top-16 -right-16 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
+                <div className="absolute top-6 left-1/4 w-48 h-48 bg-teal-300/20 rounded-full blur-2xl" />
+                <div className="absolute bottom-0 -left-10 w-64 h-64 bg-emerald-300/15 rounded-full blur-3xl" />
+                <svg className="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="wd" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+                      <circle cx="2" cy="2" r="1.5" fill="white" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#wd)" />
+                </svg>
+              </div>
+
+              {welcomeBanner && (
                 <motion.img
+                  key={welcomeBanner}
                   src={welcomeBanner}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
-                  initial={reduceMotion ? false : { scale: 1.12 }}
-                  animate={{ scale: 1 }}
-                  transition={reduceMotion ? { duration: 0 } : { duration: 9, ease: 'easeOut' }}
-                  style={{ willChange: 'transform' }}
+                  initial={reduceMotion ? false : { opacity: 0, scale: 1.06 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={reduceMotion
+                    ? { duration: 0 }
+                    : { opacity: { duration: 0.6, ease: 'easeOut' }, scale: { duration: 6, ease: 'easeOut' } }}
+                  style={{ willChange: 'transform, opacity' }}
                 />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-sky-500 via-cyan-400 to-emerald-400">
-                  <div className="absolute -top-16 -right-16 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-                  <div className="absolute top-6 left-1/4 w-48 h-48 bg-teal-300/20 rounded-full blur-2xl" />
-                  <div className="absolute bottom-0 -left-10 w-64 h-64 bg-emerald-300/15 rounded-full blur-3xl" />
-                  <svg className="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <pattern id="wd" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-                        <circle cx="2" cy="2" r="1.5" fill="white" />
-                      </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#wd)" />
-                  </svg>
-                </div>
               )}
 
               {/* Admin: small pencil icon pinned to top-right corner.
@@ -1717,7 +1813,14 @@ export default function HomePage() {
                 />
               )}
 
-              {/* Welcome text — pinned inside the blur zone */}
+              {/* Welcome text — pinned inside the blur zone.
+                  The greeting is the user's own name and the clock: both known
+                  the instant the page mounts, neither waiting on anything. It
+                  used to sit out the first 0.9 s and then take another 0.9 s to
+                  fade, so the hero stood empty through the whole load and the
+                  headline arrived last of all — after the cards it is supposed
+                  to introduce. Now it is there from the start, with a short
+                  fade to take the hard edge off. */}
               <div className="absolute inset-x-0 bottom-0 z-10">
                 <div className="home-container pb-7">
                   {(() => {
@@ -1725,9 +1828,9 @@ export default function HomePage() {
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div
-                        initial={{ opacity: 0, y: 12 }}
+                        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
+                        transition={reduceMotion ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                       >
                         <div className="flex items-center gap-1.5 mb-2">
                           {icon}
@@ -1749,13 +1852,15 @@ export default function HomePage() {
                   })()}
                 </div>
               </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            </div>
+          </div>
 
-          {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ── */}
-          {bannerReady && <QuoteBanner />}
+          {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ──
+              No longer gated on `bannerReady`: the quote comes from a local
+              table keyed on the date, so waiting on a banner settings fetch to
+              show it only meant the row below the hero appeared late and pushed
+              the dashboard down a second time. */}
+          <QuoteBanner />
 
           {/* ── Phone: every slot in a full-bleed swipe track, one card per
               screen, rotating every 7 s. The track (this div plus

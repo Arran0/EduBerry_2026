@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Briefcase, ChevronRight, Users } from 'lucide-react'
 import DonutChart from '@/components/charts/DonutChart'
 import MetricBars from '@/components/charts/MetricBars'
+import { SkeletonDonutBlock } from '../HomeCardSkeletons'
 
 export interface AttendanceTally {
   present: number
@@ -28,13 +29,19 @@ const IRREGULAR = '#f59e0b'
  * rather than reimplementing them.
  */
 export function ScopeBlock({
-  icon: Icon, title, tally, reportHref, hrefs,
+  icon: Icon, title, tally, reportHref, hrefs, loading = false,
 }: {
   icon: React.ElementType
   title: string
   tally: AttendanceTally | null
   reportHref: string
   hrefs: { present: string; absent: string; exception: string }
+  /** The fetch is still in flight. A panel handed no data otherwise draws a
+   *  perfectly confident 0 / 0% — a reading nobody took — and then swaps it for
+   *  the real one, which is indistinguishable from the numbers having changed.
+   *  While this is set the figures shimmer instead; the caption and the way out
+   *  to the full report stay, so the block is never a hole. */
+  loading?: boolean
 }) {
   const present = tally?.present ?? 0
   const absent = tally?.absent ?? 0
@@ -57,6 +64,7 @@ export function ScopeBlock({
         </Link>
       </div>
 
+      {loading ? <SkeletonDonutBlock size={118} /> : (
       <div className="flex items-center gap-4 xl:gap-5">
         <DonutChart
           size={118}
@@ -83,6 +91,7 @@ export function ScopeBlock({
           />
         </div>
       </div>
+      )}
     </div>
   )
 }
@@ -93,10 +102,17 @@ export function ScopeBlock({
  * attendance rate in the hole and the counts read off beside it. Same deep
  * links as the tiles, so nothing a phone user could reach is lost.
  */
-export default function AttendanceInfographicPanel({ counts }: { counts: HomeAttendanceCounts | null }) {
+export default function AttendanceInfographicPanel({
+  counts,
+  loading = false,
+}: {
+  counts: HomeAttendanceCounts | null
+  loading?: boolean
+}) {
   return (
     <div className="pro-card h-full flex flex-row divide-x divide-slate-200 items-center">
       <ScopeBlock
+        loading={loading}
         icon={Users}
         title="Students"
         tally={counts?.students ?? null}
@@ -108,6 +124,7 @@ export default function AttendanceInfographicPanel({ counts }: { counts: HomeAtt
         }}
       />
       <ScopeBlock
+        loading={loading}
         icon={Briefcase}
         title="Staff"
         tally={counts?.staff ?? null}

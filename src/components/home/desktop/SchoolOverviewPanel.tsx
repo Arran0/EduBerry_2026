@@ -15,6 +15,7 @@ import DonutChart from '@/components/charts/DonutChart'
 import MetricBars from '@/components/charts/MetricBars'
 import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
 import { ScopeBlock, HomeAttendanceCounts } from './AttendanceInfographicPanel'
+import { SkeletonBar, SkeletonDonutBlock } from '../HomeCardSkeletons'
 import { HomeFeesSummary } from './FeesInfographicPanel'
 
 const COLLECTED = '#10b981'
@@ -69,6 +70,11 @@ function FeeColumn({
   return (
     <div className="p-4 xl:p-5 min-w-0 h-full flex flex-col">
       <ColumnHead icon={icon} title={title} href={reportHref} linkLabel="View all" />
+      {/* A null summary here means the fetch has not come back — the page only
+          ever hands this a figure or nothing at all, never a loaded zero as
+          null. So it shimmers rather than stating a ₹0 nobody counted and then
+          replacing it, which reads as the ledger moving. */}
+      {summary === null ? <SkeletonDonutBlock size={104} /> : (
       <div className="flex-1 flex items-center gap-4 xl:gap-5">
         <DonutChart
           size={104}
@@ -121,19 +127,22 @@ function FeeColumn({
           />
         </div>
       </div>
+      )}
     </div>
   )
 }
 
 /** One scalar in the footer strip — a figure over its name, with a way in. */
 function FooterMetric({
-  icon: Icon, value, label, href, title,
+  icon: Icon, value, label, href, title, loading = false,
 }: {
   icon: React.ElementType
+  /** The figure, or null while its ledger is still loading. */
   value: string
   label: string
   href: string
   title?: string
+  loading?: boolean
 }) {
   return (
     <Link
@@ -144,7 +153,7 @@ function FooterMetric({
       <Icon size={15} className="text-slate-500 flex-shrink-0" />
       <span className="min-w-0">
         <span className="block text-sm font-bold text-slate-800 tabular-nums leading-none">
-          {value}
+          {loading ? <SkeletonBar w={50} h={13} cool /> : value}
         </span>
         <span className="block text-[11px] font-medium text-slate-500 mt-1 truncate">
           {label}
@@ -197,6 +206,7 @@ export default function SchoolOverviewPanel({
     footer.push(
       <FooterMetric
         key="school-today"
+        loading={schoolFees === null}
         icon={CalendarCheck}
         value={fmtINR(schoolFees?.todayCollection ?? 0)}
         label="Today's collection"
@@ -205,6 +215,7 @@ export default function SchoolOverviewPanel({
       />,
       <FooterMetric
         key="school-dues"
+        loading={schoolFees === null}
         icon={Users}
         value={String(schoolFees?.studentsWithDues ?? '—')}
         label="Students with dues"
@@ -216,6 +227,7 @@ export default function SchoolOverviewPanel({
     footer.push(
       <FooterMetric
         key="bus-today"
+        loading={busFees === null}
         icon={CalendarCheck}
         value={fmtINR(busFees?.todayCollection ?? 0)}
         label="Bus collection today"
@@ -224,6 +236,7 @@ export default function SchoolOverviewPanel({
       />,
       <FooterMetric
         key="bus-dues"
+        loading={busFees === null}
         icon={Bus}
         value={String(busFees?.studentsWithDues ?? '—')}
         label="Passengers with dues"
@@ -272,6 +285,7 @@ export default function SchoolOverviewPanel({
                 comparison, so splitting them across the panel would be wrong. */}
             <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-200 -mt-1">
               <ScopeBlock
+                loading={attendance !== null && attendance.counts === null}
                 icon={Users}
                 title="Students"
                 tally={attendance?.counts?.students ?? null}
@@ -283,6 +297,7 @@ export default function SchoolOverviewPanel({
                 }}
               />
               <ScopeBlock
+                loading={attendance !== null && attendance.counts === null}
                 icon={Briefcase}
                 title="Staff"
                 tally={attendance?.counts?.staff ?? null}

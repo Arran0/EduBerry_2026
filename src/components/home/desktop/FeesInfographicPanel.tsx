@@ -6,6 +6,7 @@ import { CalendarCheck, Users } from 'lucide-react'
 import DonutChart from '@/components/charts/DonutChart'
 import MetricBars from '@/components/charts/MetricBars'
 import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
+import { SkeletonBar, SkeletonDonutBlock } from '../HomeCardSkeletons'
 
 export interface HomeFeesSummary {
   collected: number
@@ -22,6 +23,10 @@ interface FeesInfographicPanelProps {
   todayHref: string
   /** 'Students with Dues' vs 'Passengers with Dues'. */
   duesLabel: string
+  /** The fetch is still in flight — see ScopeBlock's note: an unloaded panel
+   *  otherwise states a confident ₹0 / 0% and then replaces it, which reads as
+   *  the ledger changing rather than as the page filling in. */
+  loading?: boolean
 }
 
 /**
@@ -31,7 +36,7 @@ interface FeesInfographicPanelProps {
  * footer. Every segment keeps the deep link its mobile tile carried.
  */
 export default function FeesInfographicPanel({
-  summary, collectedHref, outstandingHref, todayHref, duesLabel,
+  summary, collectedHref, outstandingHref, todayHref, duesLabel, loading = false,
 }: FeesInfographicPanelProps) {
   const collected = summary?.collected ?? 0
   const outstanding = summary?.outstanding ?? 0
@@ -40,6 +45,11 @@ export default function FeesInfographicPanel({
 
   return (
     <div className="pro-card h-full flex flex-col">
+      {loading ? (
+        <div className="flex-1 flex items-center p-4 xl:p-5">
+          <SkeletonDonutBlock size={136} />
+        </div>
+      ) : (
       <div className="flex-1 flex items-center gap-5 xl:gap-7 p-4 xl:p-5">
         <DonutChart
           size={136}
@@ -94,6 +104,7 @@ export default function FeesInfographicPanel({
           />
         </div>
       </div>
+      )}
 
       <div className="grid grid-cols-2 divide-x divide-slate-200 border-t border-slate-200">
         <Link
@@ -104,7 +115,7 @@ export default function FeesInfographicPanel({
           <CalendarCheck size={15} className="text-slate-500 flex-shrink-0" />
           <span className="min-w-0">
             <span className="block text-sm font-bold text-slate-800 tabular-nums leading-none">
-              {fmtINR(summary?.todayCollection ?? 0)}
+              {loading ? <SkeletonBar w={54} h={13} cool /> : fmtINR(summary?.todayCollection ?? 0)}
             </span>
             <span className="block text-[11px] font-medium text-slate-500 mt-1 truncate">
               Today&apos;s collection
@@ -118,7 +129,7 @@ export default function FeesInfographicPanel({
           <Users size={15} className="text-slate-500 flex-shrink-0" />
           <span className="min-w-0">
             <span className="block text-sm font-bold text-slate-800 tabular-nums leading-none">
-              {summary?.studentsWithDues ?? '—'}
+              {loading ? <SkeletonBar w={30} h={13} cool /> : (summary?.studentsWithDues ?? '—')}
             </span>
             <span className="block text-[11px] font-medium text-slate-500 mt-1 truncate">
               {duesLabel}

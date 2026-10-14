@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FileSpreadsheet, Clock, Trophy, ChevronRight } from 'lucide-react'
 import { fetchExamsForStudent, type ExamStudentSummary } from '@/lib/exam'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 function examTime(e: ExamStudentSummary): number | null {
   const t = e.start_at ?? e.due_at
@@ -69,9 +70,7 @@ export default function ExamsMiniCard({ userId, onEmptyChange }: ExamsMiniCardPr
         <span className="text-sm font-bold text-slate-700">Exams</span>
       </div>
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="spinner" />
-        </div>
+        <SkeletonRows rows={4} />
       ) : !upcoming && !latestResult ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">

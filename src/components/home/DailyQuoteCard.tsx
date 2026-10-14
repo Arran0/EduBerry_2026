@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import { getDailyQuote } from '@/lib/quotes'
 
 const PR = 26 // portrait radius px
@@ -43,20 +43,60 @@ function AuthorPortrait({ wiki, author }: { wiki: string; author: string }) {
 export default function DailyQuoteCard() {
   const quote = useMemo(() => getDailyQuote(), [])
   const fullText = `“${quote.text}”`
+  const reduceMotion = useReducedMotion()
 
-  // Typing animation — ~28 ms per character
-  const [displayed, setDisplayed] = useState('')
+  /* The typing effect, without the two things that made it expensive.
+
+     It used to call setState once per character on a 28 ms timer: sixty-odd
+     React renders of a component mounted inside the home page, every one of
+     them landing in the window where the dashboard's own fetches are resolving
+     and its cards are mounting. And because the <p> held only the text typed so
+     far, the pill was a different height the moment a quote wrapped to a second
+     line — a layout change in the row directly above the cards.
+
+     Both go away by writing to the node instead of through state, and by
+     sizing the paragraph with the *whole* quote from the first frame: the full
+     text sits underneath at zero opacity reserving the space, and the visible
+     copy is laid over it. The box is final-sized before a character appears,
+     and React renders this component exactly once.
+
+     Under reduced motion there is no typing at all — the quote is simply
+     there. */
+  const typedRef = useRef<HTMLSpanElement | null>(null)
+  const cursorRef = useRef<HTMLSpanElement | null>(null)
+
   useEffect(() => {
-    setDisplayed('')
-    let i = 0
-    const tick = () => {
-      i++
-      setDisplayed(fullText.slice(0, i))
-      if (i < fullText.length) setTimeout(tick, 28)
+    const node = typedRef.current
+    if (!node) return
+    if (reduceMotion) {
+      node.textContent = fullText
+      if (cursorRef.current) cursorRef.current.style.display = 'none'
+      return
     }
-    const t = setTimeout(tick, 200) // small initial delay
-    return () => clearTimeout(t)
-  }, [fullText])
+
+    node.textContent = ''
+    let raf = 0
+    let start = 0
+    const MS_PER_CHAR = 28
+    const DELAY = 200
+
+    const step = (now: number) => {
+      if (!start) start = now
+      // Driven off elapsed time rather than a per-character timer, so a frame
+      // the browser skips while the dashboard is mounting doesn't stretch the
+      // animation out — it catches up on the next one.
+      const chars = Math.floor(Math.max(0, now - start - DELAY) / MS_PER_CHAR)
+      const next = fullText.slice(0, Math.min(chars, fullText.length))
+      if (node.textContent !== next) node.textContent = next
+      if (chars < fullText.length) {
+        raf = requestAnimationFrame(step)
+      } else if (cursorRef.current) {
+        cursorRef.current.style.display = 'none'
+      }
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [fullText, reduceMotion])
 
   return (
     // Wrapper paddingLeft = PR so the portrait's left half sits outside the pill
@@ -86,9 +126,13 @@ export default function DailyQuoteCard() {
             Quote of the day
           </p>
 
-          {/* Handwritten Caveat font, typing character by character */}
+          {/* Handwritten Caveat font, typing character by character.
+              The full quote sits in the flow at zero opacity so the paragraph
+              is its final height from the first frame; the typed copy is laid
+              over it. Without that the pill grew a line mid-animation and took
+              the dashboard down with it. */}
           <p
-            className="text-slate-800 leading-snug min-h-[1.3em]"
+            className="relative text-slate-800 leading-snug min-h-[1.3em]"
             style={{
               fontFamily: "'Caveat', cursive",
               fontWeight: 700,
@@ -98,15 +142,19 @@ export default function DailyQuoteCard() {
               wordSpacing: '0.05em',
             }}
           >
-            {displayed}
-            {/* blinking cursor while typing */}
-            {displayed.length < fullText.length && (
-              <motion.span
-                animate={{ opacity: [1, 0] }}
-                transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
+            <span aria-hidden="true" className="invisible">{fullText}</span>
+            <span className="absolute inset-0">
+              {/* The accessible copy is this one — a screen reader gets the
+                  whole quote at once rather than a string that grows. */}
+              <span ref={typedRef} aria-hidden="true" />
+              <span className="sr-only">{fullText}</span>
+              <span
+                ref={cursorRef}
+                aria-hidden="true"
+                className="quote-caret"
                 style={{ fontFamily: 'monospace', marginLeft: 1 }}
-              >|</motion.span>
-            )}
+              >|</span>
+            </span>
           </p>
 
           <p className="text-[9px] md:text-[11px] text-slate-500 mt-[4px] font-semibold tracking-tight">

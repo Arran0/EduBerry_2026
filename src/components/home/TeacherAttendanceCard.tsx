@@ -12,6 +12,7 @@ import {
   STUDENT_ABSENT_STATUSES,
 } from '@/lib/attendance'
 import { fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
+import { SkeletonTiles } from './HomeCardSkeletons'
 
 interface Tally { present: number; absent: number; exception: number }
 
@@ -174,10 +175,16 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
 
   return (
     <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
+      {/* The tiles this settles into, drawn at their real size and in their real
+          tints — the numbers land in boxes that are already where they will be
+          rather than replacing a hole with a card. `rows` matches what this
+          account will actually get: a class teacher sees their homeroom above
+          their team, everyone else sees the team alone. Not knowable until the
+          fetch returns, so the placeholder shows both and the second row drops
+          only if there is no homeroom — the card is a fixed 260px box either
+          way, so nothing outside it can move. */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="spinner" />
-        </div>
+        <SkeletonTiles rows={2} />
       ) : (
         <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-slate-200">
           {hasHomeroom && studentTally && (

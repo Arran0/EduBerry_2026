@@ -4,6 +4,7 @@ import React, { useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, XCircle, Inbox, Check, Loader2, Megaphone, ChevronRight } from 'lucide-react'
 import { NotifItem, NotifTone, isApplicantDecision } from '@/lib/leaveNotifications'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 export const TONE_ICON: Record<NotifTone, React.ReactNode> = {
   approved: <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />,
@@ -68,17 +69,11 @@ function formatNoticeDate(dateStr: string): string {
 export function NotificationsCardSkeleton() {
   return (
     <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
-      <div className="flex-1 divide-y divide-white/25">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="home-card-row flex items-start gap-2.5 px-5 py-3 animate-pulse">
-            <span className="mt-0.5 w-[15px] h-[15px] rounded-full bg-slate-300/60 flex-shrink-0" />
-            <div className="flex-1 min-w-0 space-y-1.5 py-0.5">
-              <div className="h-2.5 rounded-full bg-slate-300/60" style={{ width: `${85 - i * 8}%` }} />
-              <div className="h-2.5 rounded-full bg-slate-300/40" style={{ width: `${55 - i * 5}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Was an `animate-pulse` opacity throb while every other card on the
+          page showed a spinner. Now it draws from the same `.skeleton` shimmer
+          as the rest of the dashboard, so eight cards loading at once read as
+          one page filling in rather than eight different kinds of waiting. */}
+      <SkeletonRows rows={4} />
     </div>
   )
 }

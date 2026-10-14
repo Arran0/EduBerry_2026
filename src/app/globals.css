@@ -843,6 +843,20 @@ body:has(.pro-chrome) .modal-portal.modal-portal .icon-chip {
   .skeleton::after { animation: none; }
 }
 
+/* The daily quote's typing caret. A CSS blink rather than a framer-motion one:
+   this runs on the compositor and costs nothing, where the motion value behind
+   the old version ticked through React on every frame of the home page's load. */
+.quote-caret {
+  animation: quote-caret-blink 1s steps(1, end) infinite;
+}
+@keyframes quote-caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quote-caret { animation: none; opacity: 0; }
+}
+
 /* Announcement feed — slim scrollbar for the fixed-height content well.
    Long announcements scroll inside the row instead of stretching the feed. */
 .ann-scroll {

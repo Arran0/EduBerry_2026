@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react'
 import { CheckCircle2 } from 'lucide-react'
+import { SkeletonBar } from './HomeCardSkeletons'
 
 export interface MiniCalendarItem {
   id: string
@@ -79,15 +80,17 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
 
   return (
     <div ref={rootRef} className={`home-card ${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} h-[260px] overflow-hidden flex flex-col`}>
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="spinner" />
-        </div>
-      ) : (
+      {/* The week itself needs no data — the seven columns, their letters and
+          their dates are known the moment the card mounts. So the scaffold is
+          drawn straight away and only the *entries* are placeholders while the
+          fetch is in flight. Nothing is replaced when the data lands; the
+          shimmer lines simply become titles. (This card is `wide` on the
+          dashboard, so the spinner-in-an-empty-box it used to show was a lone
+          24px dot in about 1300×260 of nothing.) */}
         <div className="flex-1 flex min-h-0">
           {weekDays.map((day, i) => {
             const key = formatDateKey(day)
-            const dayItems = itemsByDay.get(key) ?? []
+            const dayItems = loading ? [] : (itemsByDay.get(key) ?? [])
             const isToday = isSameDay(day, today)
             const isExpanded = isSameDay(day, expandedDate)
             const isLast = i === 6
@@ -97,16 +100,31 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
             return (
               <div
                 key={key}
-                onClick={() => setExpandedDate(day)}
+                onClick={() => { if (!loading) setExpandedDate(day) }}
                 style={{ flex: isExpanded ? expandRatio : 1, transition: 'flex 0.35s ease', minWidth: 0 }}
-                className={`flex flex-col cursor-pointer select-none ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
+                className={`flex flex-col select-none ${loading ? '' : 'cursor-pointer'} ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
               >
                 <div className={`px-1 py-2 text-center flex-shrink-0 transition-colors duration-300 ${isExpanded ? c.headBg : ''}`}>
                   <p className="text-[9px] md:text-[11px] font-bold uppercase tracking-wide text-slate-500">{DAY_LETTERS[i]}</p>
                   <p className={`text-sm font-bold leading-tight mt-0.5 ${isToday ? c.todayText : 'text-slate-700'}`}>{day.getDate()}</p>
                 </div>
                 <div className="flex-1 overflow-y-auto scrollbar-hide px-1 pb-2 space-y-1 min-w-0">
-                  {dayItems.length === 0 ? (
+                  {loading ? (
+                    /* Entry-shaped placeholders: a few in the open column, a
+                       hint in the narrow ones, staggered across the week so it
+                       fills left to right instead of flashing as one block. */
+                    Array.from({ length: isExpanded ? 5 : 2 }).map((_, j) => (
+                      <SkeletonBar
+                        key={j}
+                        h={isExpanded ? 14 : 7}
+                        w={isExpanded ? `${94 - j * 8}%` : '100%'}
+                        rounded={!sharp}
+                        cool
+                        delay={i * 0.06 + j * 0.05}
+                        className={isExpanded ? '' : 'mx-auto'}
+                      />
+                    ))
+                  ) : dayItems.length === 0 ? (
                     isExpanded && <p className="text-[10px] text-slate-400 text-center mt-4">Nothing due</p>
                   ) : isExpanded ? (
                     dayItems.map(item => (
@@ -141,7 +159,6 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
             )
           })}
         </div>
-      )}
     </div>
   )
 }

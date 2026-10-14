@@ -13,6 +13,7 @@ import {
 } from '@/lib/timetable'
 import { applyOverrides, todayISO } from '@/lib/timetable/overrides'
 import type { EntryOverride } from '@/lib/timetable/overrides'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 interface Period {
   slot: PeriodSlot
@@ -93,9 +94,7 @@ export default function TodayTimetableCard({ userId, onEmptyChange }: TodayTimet
           <ChevronRight size={15} className="text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
         </div>
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="spinner" />
-          </div>
+          <SkeletonRows rows={5} lead="time" />
         ) : !hasAny ? (
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="w-12 h-12 rounded-2xl bg-white/50 flex items-center justify-center mb-3">
