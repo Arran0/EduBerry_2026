@@ -4,10 +4,18 @@ import React from 'react'
 import Link from 'next/link'
 import { ClipboardCheck, ChevronRight } from 'lucide-react'
 import { type GraderExamProgress } from '@/lib/exam'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 interface ExamGradingCardProps {
   /** Exams under grading that this user grades. */
   queues: GraderExamProgress[]
+  /** The queue fetch is still in flight. The card is now a standing part of
+   *  every staff dashboard rather than something that only appears when there
+   *  is work waiting, so its empty state is reached often — and "Nothing to
+   *  grade" must not be said until it is actually known. An empty array means
+   *  "nothing yet" on the first render and "nothing at all" after, and only
+   *  this tells the two apart. */
+  loading?: boolean
 }
 
 /** Staff card: for each exam the user grades that is under grading, shows how
@@ -15,14 +23,16 @@ interface ExamGradingCardProps {
  *  grading tab. The mobile carousel only carries this card when a queue is
  *  waiting; the desktop dashboard shows it either way, so an empty queue says
  *  so rather than leaving the card blank. */
-export default function ExamGradingCard({ queues }: ExamGradingCardProps) {
+export default function ExamGradingCard({ queues, loading = false }: ExamGradingCardProps) {
   return (
     <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
       <div className="px-5 pt-4 pb-3 border-b border-slate-200 flex items-center gap-2">
         <ClipboardCheck size={16} className="text-indigo-500" />
         <span className="text-sm font-bold text-slate-700">Grading</span>
       </div>
-      {queues.length === 0 ? (
+      {loading ? (
+        <SkeletonRows rows={3} cool lead="dot" />
+      ) : queues.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="w-12 h-12 bg-slate-100 flex items-center justify-center mb-3">
             <ClipboardCheck size={22} className="text-slate-300" />

@@ -4,6 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import { SchoolFee } from '@/lib/fees'
+import { SkeletonRows } from './HomeCardSkeletons'
 
 function formatAmount(n: number): string {
   return '₹' + (Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -18,14 +19,26 @@ function formatDue(dateStr: string | null): string {
 interface OverdueFeesCardProps {
   /** Fees already filtered to overdue (unpaid/partial, past due date). */
   fees: SchoolFee[]
+  /** The fee fetch is still in flight — see ExamGradingCard's note. Telling a
+   *  student they are all paid up before anyone has looked is the one thing
+   *  this card must never do. */
+  loading?: boolean
 }
 
 /** A student's fees past their due date, each row linking to the fees app.
  *  The mobile carousel only carries this card when there are any; the desktop
  *  dashboard shows every card, so an empty list reads as "nothing overdue"
  *  (good news worth stating) rather than an empty box. */
-export default function OverdueFeesCard({ fees }: OverdueFeesCardProps) {
+export default function OverdueFeesCard({ fees, loading = false }: OverdueFeesCardProps) {
   const total = fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0)
+
+  if (loading) {
+    return (
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">
+        <SkeletonRows rows={3} />
+      </div>
+    )
+  }
 
   if (fees.length === 0) {
     return (

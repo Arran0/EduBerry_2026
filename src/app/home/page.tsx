@@ -104,9 +104,7 @@ import SchoolOverviewPanel from '@/components/home/desktop/SchoolOverviewPanel'
 import { fmtINR } from '@/lib/formatMoney'
 import { useIsDesktop, useIsTabletUp, useIsPhone, useHasHover } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
-import { useHasClassrooms } from '@/hooks/useHasClassrooms'
 import { useGridColumns } from '@/hooks/useGridColumns'
-import { useStaggeredRows } from '@/hooks/useStaggeredRows'
 import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
 import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 
@@ -451,10 +449,6 @@ export default function HomePage() {
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
-  // Resolves ahead of the full classrooms fetch (single-row check) so the
-  // section can reserve its skeleton space without waiting on classroomsLoaded
-  // — and stays hidden for accounts with no classrooms, same as today.
-  const hasClassrooms = useHasClassrooms(user?.id, profile?.role)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
@@ -486,29 +480,18 @@ export default function HomePage() {
   // built before the strip settles, avoiding a visible resnap).
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
-  // Whether the unread-announcements pull has resolved yet — the notifications
-  // slot is reserved until it has, so the card doesn't settle to "all caught
-  // up" and then grow announcement rows underneath the user.
-  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false)
-  // Student-only mini cards fetch their own data; each reports back whether it
-  // ended up empty so its slot can be dropped from the carousel entirely
-  // instead of showing an empty-state placeholder.
-  //
-  // `null` is "has not reported yet" — distinct from a reported `false`. The
-  // difference is what `slotsSettled` below is built out of: these used to
-  // start at `false` ("has content"), which reserved the slot correctly but
-  // left no way to ask whether every card had finished deciding.
-  const [schoolWorkEmpty, setSchoolWorkEmpty] = useState<boolean | null>(null)
-  const [assessmentsEmpty, setAssessmentsEmpty] = useState<boolean | null>(null)
-  const [reportCardsEmpty, setReportCardsEmpty] = useState<boolean | null>(null)
-  const [timetableEmpty, setTimetableEmpty] = useState<boolean | null>(null)
-  const [examsEmpty, setExamsEmpty] = useState<boolean | null>(null)
-  // Presence checks that add a card rather than remove one, so they need a
-  // "resolved" flag of their own: an empty array is indistinguishable from an
-  // unfinished fetch, and without this the card simply appeared out of nowhere
-  // partway through the load.
+  /* Whether those two fetches have returned. They decide what the card SAYS,
+     never whether the card EXISTS — an empty array means "not asked yet" on the
+     first render and "genuinely nothing" after, and the cards' empty states
+     ("No fees overdue", "Nothing to grade") are good news that must not be
+     announced before anyone has checked. Presence is settled by role alone;
+     see THE LAYOUT RULE below. */
   const [overdueFeesLoaded, setOverdueFeesLoaded] = useState(false)
   const [gradingLoaded, setGradingLoaded] = useState(false)
+  // Whether the unread-announcements pull has resolved yet. The notifications
+  // card no longer comes and goes with it — see the layout note below — but the
+  // card still needs to know whether to shimmer or to say "all caught up".
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false)
   // Team names for a coordinator's "Your team" subtitle on the admin
   // attendance card (mirrors the roster loadAttendanceCounts scopes to).
   const [coordinatorTeamNames, setCoordinatorTeamNames] = useState<string[]>([])
@@ -522,11 +505,21 @@ export default function HomePage() {
   const notifFeed = useRef<NotificationFeed | null>(null)
   const [taskItemsByDay, setTaskItemsByDay] = useState<Map<string, MiniCalendarItem[]>>(new Map())
   const [taskCalendarLoading, setTaskCalendarLoading] = useState(true)
-  const [showTaskCalendarOnHome, setShowTaskCalendarOnHomeState] = useState(false)
-  // Off unless the account opted in from the Academics classrooms heading.
-  // Starts false so the server render and the first client render agree —
-  // the stored preference is read right after mount, like the one above.
-  const [showClassroomsOnHome, setShowClassroomsOnHomeState] = useState(false)
+  /* The two per-account "show this section on home" preferences.
+     Both live in localStorage, so both are answerable synchronously — and they
+     have to be, because each one adds or removes a whole section. Read in an
+     effect (as they were) they defaulted to off for the first commit and then
+     flipped, which is a layout change after the first paint: exactly what this
+     page must not do. There is no SSR render to disagree with, since the page
+     sits behind ProtectedLayout's auth gate. */
+  const showTaskCalendarOnHome = useMemo(
+    () => (user ? getShowTaskCalendarOnHome(user.id) : false),
+    [user],
+  )
+  const showClassroomsOnHome = useMemo(
+    () => (user ? getShowClassroomsOnHome(user.id) : false),
+    [user],
+  )
   const interactedRef = useRef(false)
   const swipeStartXRef = useRef<number | null>(null)
   const swipeStartYRef = useRef(0)
@@ -724,94 +717,71 @@ export default function HomePage() {
     })
   }, [isAttendanceViewer, isCoordinator, user])
 
-  const hasOverdueFees = overdueFees.length > 0
-  const hasGradingQueue = gradingQueues.length > 0
-  const hasTasks = useMemo(
-    () => [...taskItemsByDay.values()].some(list => list.length > 0),
-    [taskItemsByDay],
-  )
+  /* ════════════════════════════════════════════════════════════════════════
+     THE LAYOUT RULE: which cards exist is decided by WHO YOU ARE, never by
+     WHAT YOUR DATA SAYS.
 
-  /* ────────────────────────────────────────────────────────────────────────
-     One settle point for the whole deck.
+     Every gate below reads only from `profile.role`, the two stored
+     show-on-home preferences, and the viewport width. Not one of them touches
+     a fetch. That is the whole point: all three of those are answerable on the
+     very first render, so the deck's shape is final before a single query has
+     been sent, and the page never rearranges itself afterwards.
 
-     Which cards this account gets is partly a question about *data*: a student
-     with nothing due doesn't get a School Work card, a teacher with an empty
-     grading queue doesn't get a Grading card. Each of those questions is
-     answered by its own fetch, and each used to add or drop its slot the
-     moment its own answer came back — eight fetches, eight separate commits,
-     and because `spanClassFor` sizes a card from how many cards there are,
-     every one of them resized and reordered the cards around it. That is the
-     reflow storm in the recording: a Notifications card appears, the grid is
-     two-up, then it vanishes and the grid is one-up, then a card slides in
-     underneath.
+     It used to work the other way. "Should there be a Notifications card?" was
+     answered by fetching the notifications; "a Grading card?" by fetching the
+     queue. Eight such questions, eight answers arriving at eight different
+     moments, and since a card's width is a share of however many cards there
+     are, each answer resized and reshuffled the ones around it. Batching them
+     into a single settle point made it one rearrangement instead of eight —
+     better, but one is still one, and it still landed after the user had
+     started reading.
 
-     So the deck now changes shape exactly once. Until every presence question
-     for this role has an answer, each entitled slot is reserved and shows its
-     own skeleton; at the moment the last one lands, the empty ones drop
-     together in a single commit. In practice the fetches finish within a few
-     hundred milliseconds of each other, so what the user sees is one deck that
-     fills in — not a page rearranging itself eight times.
+     The cost of deciding up front is that a card whose data turns out empty
+     keeps its place and says so. That is the deliberate trade: "Nothing to
+     grade", "No fees overdue", "You're all caught up" are real answers to real
+     questions, and a dashboard whose tiles are always in the same place is
+     worth more than one that hides the quiet ones. Every card here already had
+     an empty state designed for exactly this — they were just rarely reached,
+     because the slot was usually dropped before anyone could see one.
 
-     Only *presence* waits on this. Content still arrives per card the instant
-     its own fetch does, which is the whole point of the skeletons: a card is
-     real as soon as it can be, it just doesn't move its neighbours when it
-     gets there. ──────────────────────────────────────────────────────────── */
-  const slotsSettled =
-    !notifLoading && announcementsLoaded &&
-    (!isStudent || (
-      overdueFeesLoaded && classroomsLoaded &&
-      schoolWorkEmpty !== null && assessmentsEmpty !== null &&
-      reportCardsEmpty !== null && timetableEmpty !== null && examsEmpty !== null
-    )) &&
-    (!isStaff || (gradingLoaded && !taskCalendarLoading)) &&
-    (!isAttendanceViewer || attendanceCounts !== null) &&
-    (!isAdmin || (schoolFeesSummary !== null && busFeesSummary !== null))
+     So: to add or remove a card, change a role gate. Never reintroduce a
+     `.length > 0` here. Emptiness belongs inside the card, where it can only
+     change that card's own contents.
+     ════════════════════════════════════════════════════════════════════════ */
 
-  /* A week calendar is a fixture, not a feed: the week itself is the content,
-     and a week with nothing due says "nothing due" — which is information, not
-     an empty card. So on the dashboard it keeps its place whether or not it has
-     entries. In the phone strip it still drops when empty, because there an
-     empty slide is a wasted swipe and seven wasted seconds. The admin's
-     show-on-home preference is untouched either way. */
-  const showTaskCalendar = (gridLayout || !slotsSettled || hasTasks) && (!isAdmin || showTaskCalendarOnHome)
+  // A week calendar is a fixture, not a feed: the week itself is the content,
+  // and a week with nothing due says "nothing due". Admins opt in; everyone
+  // else on staff gets it.
+  const showTaskCalendar = !isAdmin || showTaskCalendarOnHome
 
-  // Whether the notifications slot belongs in the deck at all: reserved (with
-  // a skeleton) until the deck settles, since we don't yet know whether it will
-  // end up empty — then settles to whether there is anything in it. Keeps the
-  // first thing anyone sees from being a mismatched card (e.g. Attendance) that
-  // then gets shoved aside once notifications load.
-  const showNotifSlot = !slotsSettled ||
-    notifItems.length > 0 || unreadAnnouncements.length > 0
+  // Everyone has an inbox, so everyone has the card. Empty, it says they are
+  // caught up — which on a Monday morning is worth knowing.
+  const showNotifSlot = true
 
-  // Student-only mini cards: reserved until the deck settles, then kept only if
-  // the card reported back that it has something in it (see the onEmptyChange
-  // props wired up below).
-  const showSchoolWork = gridLayout || !slotsSettled || !schoolWorkEmpty
-  const showAssessments = !slotsSettled || !assessmentsEmpty
-  const showReportCards = !slotsSettled || !reportCardsEmpty
-  const showTimetable = !slotsSettled || !timetableEmpty
-  const showExams = !slotsSettled || !examsEmpty
+  // Student cards. Each is a standing part of a student's dashboard rather
+  // than something that comes and goes with the week's workload.
+  const showSchoolWork = true
+  const showAssessments = true
+  const showReportCards = true
+  const showTimetable = true
+  const showExams = true
 
-  // Attendance-viewer summary: reserved until the deck settles, dropped only
-  // once every count across both student and staff tallies is zero.
-  const showAttendanceViewerCard = !slotsSettled || !attendanceCounts || (
-    attendanceCounts.students.present + attendanceCounts.students.absent + attendanceCounts.students.exception +
-    attendanceCounts.staff.present + attendanceCounts.staff.absent + attendanceCounts.staff.exception
-  ) > 0
+  // The attendance-viewer summary and the two fee ledgers: entitlement only.
+  // A day nobody has been marked yet is a reading the panel states honestly
+  // ("not marked yet"), not a reason for the panel to be absent.
+  const showAttendanceViewerCard = true
+  const showFees = true
+  const showBusFees = true
 
-  const hasFeesSummaryData = (s: HomeFeesSummary | null) =>
-    !slotsSettled || !s || s.collected > 0 || s.outstanding > 0 || s.todayCollection > 0 || s.studentsWithDues > 0
-  const showFees = hasFeesSummaryData(schoolFeesSummary)
-  const showBusFees = hasFeesSummaryData(busFeesSummary)
-
-  /* The two cards that *appear* rather than disappear. Both are alerts — fees
-     a student owes, exam papers waiting on a grader — so an empty one would be
-     a false alarm and they genuinely must not be reserved on spec. Holding them
-     back until the deck settles costs nothing (nobody can act on a card that
-     isn't drawn yet) and means they arrive with everything else rather than
-     dropping into the middle of a settled grid a second later. */
-  const showOverdueFeesSlot = slotsSettled && hasOverdueFees
-  const showGradingSlot = slotsSettled && hasGradingQueue
+  /* The two that read as alerts — fees a student owes, papers waiting on a
+     grader. These are the ones the rule above costs something real: a quiet
+     card that says "No fees overdue" is not an alert, and under the old
+     behaviour it simply would not have been drawn. Both already answer the
+     empty case with good news rather than a blank box, which is what makes
+     keeping their place affordable; the alternative was them dropping into
+     the middle of a settled grid a second after it had been read. */
+  const showOverdueFeesSlot = true
+  const showGradingSlot = true
 
   const loadFeeSummaries = useCallback(async () => {
     if (!isAdmin) return
@@ -880,18 +850,6 @@ export default function HomePage() {
     markAnnouncementsRead(user.id, [announcement.id])
   }, [user])
   useEffect(() => { loadClassrooms() }, [loadClassrooms])
-
-  /* School Work and Assessments are fetched *from* the classroom list, and both
-     answer "I am empty" straight away when handed one that is empty — which is
-     exactly what they are handed on the first render, before the enrolment
-     query has come back. Their answer about an empty list says nothing about
-     the real one, so it is thrown away when the list arrives and the two cards
-     are asked again. Without this they could be dropped from the deck on the
-     strength of a reading taken before there was anything to read. */
-  useEffect(() => {
-    setSchoolWorkEmpty(null)
-    setAssessmentsEmpty(null)
-  }, [classrooms])
   useEffect(() => { if (isAttendanceViewer) loadAttendanceCounts() }, [isAttendanceViewer, loadAttendanceCounts])
   useEffect(() => { if (isAdmin) loadFeeSummaries() }, [isAdmin, loadFeeSummaries])
 
@@ -1019,10 +977,6 @@ export default function HomePage() {
       .finally(() => setTaskCalendarLoading(false))
   }, [isStaff, user])
 
-  useEffect(() => {
-    if (isAdmin && user) setShowTaskCalendarOnHomeState(getShowTaskCalendarOnHome(user.id))
-  }, [isAdmin, user])
-
   /* ────────────────────────────────────────────────────────────────────────
      The home cards, as data. One list feeds both presentations: the mobile
      swipe strip (one slot per screen, gesture-driven) and the desktop
@@ -1033,23 +987,12 @@ export default function HomePage() {
      ──────────────────────────────────────────────────────────────────────── */
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
-  /* A card with nothing in it is a wasted swipe, so the strip drops empty
-     slots at every width. The standing statistics are the exception: they sit
-     in fixed rows of their own on desktop, and a dashboard that quietly omits
-     "Bus Fees" on a day nothing was billed — moving every other panel as it
-     goes — is harder to read than one whose rows are always in the same place.
-     So emptiness is relaxed for those three cards only, and only once they
-     have left the strip for a fixed row of their own — which is now the `md:`
-     grid, not just desktop. Role and preference gates always apply: this
-     relaxes "has content", never "should this user see it". */
-  const showEmptyStatCards = gridLayout
-
   /* The three standing statistics, as one set of gates. The mobile slot list
      and the desktop School Overview panel both read these, so "who is entitled
      to see this ledger" is decided in exactly one place. */
-  const showAttendanceStat = isStaff && isAttendanceViewer && (showEmptyStatCards || showAttendanceViewerCard)
-  const showFeesStat = isAdmin && (showEmptyStatCards || showFees)
-  const showBusFeesStat = isAdmin && (showEmptyStatCards || showBusFees)
+  const showAttendanceStat = isStaff && isAttendanceViewer && showAttendanceViewerCard
+  const showFeesStat = isAdmin && showFees
+  const showBusFeesStat = isAdmin && showBusFees
 
   const slots: HomeSlot[] = []
 
@@ -1066,7 +1009,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
         />
       ),
-      body: <OverdueFeesCard fees={overdueFees} />,
+      body: <OverdueFeesCard fees={overdueFees} loading={!overdueFeesLoaded} />,
     })
   }
 
@@ -1085,7 +1028,11 @@ export default function HomePage() {
           action={<PushToggle onDark={false} compact />}
         />
       ),
-      body: notifLoading
+      // Both halves of this box arrive separately — the leave feed and the
+      // unread announcements. It shimmers until both are in, so it can never
+      // settle to "you're all caught up" and then sprout announcement rows
+      // underneath someone who has already read it and moved on.
+      body: notifLoading || !announcementsLoaded
         ? <NotificationsCardSkeleton />
         : (
           <NotificationsSummaryCard
@@ -1177,7 +1124,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/exam" className="text-indigo-600 hover:text-indigo-700" />}
         />
       ),
-      body: <ExamGradingCard queues={gradingQueues} />,
+      body: <ExamGradingCard queues={gradingQueues} loading={!gradingLoaded} />,
     })
   }
 
@@ -1194,7 +1141,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
         />
       ),
-      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onEmptyChange={setSchoolWorkEmpty} />,
+      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />,
     })
   }
 
@@ -1210,7 +1157,7 @@ export default function HomePage() {
           title="Assessments"
         />
       ),
-      body: <LatestAssessmentsMiniList classrooms={classrooms} onEmptyChange={setAssessmentsEmpty} />,
+      body: <LatestAssessmentsMiniList classrooms={classrooms} />,
     })
   }
 
@@ -1227,7 +1174,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
         />
       ),
-      body: <ReportCardsMiniList userId={user.id} onEmptyChange={setReportCardsEmpty} />,
+      body: <ReportCardsMiniList userId={user.id} />,
     })
   }
 
@@ -1244,7 +1191,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
         />
       ),
-      body: <TodayTimetableCard userId={user.id} onEmptyChange={setTimetableEmpty} />,
+      body: <TodayTimetableCard userId={user.id} />,
     })
   }
 
@@ -1261,7 +1208,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
         />
       ),
-      body: <ExamsMiniCard userId={user.id} onEmptyChange={setExamsEmpty} />,
+      body: <ExamsMiniCard userId={user.id} />,
     })
   }
 
@@ -1424,10 +1371,6 @@ export default function HomePage() {
   }, [CARD_VIEWS])
 
   useEffect(() => {
-    if (user) setShowClassroomsOnHomeState(getShowClassroomsOnHome(user.id))
-  }, [user])
-
-  useEffect(() => {
     if (!showCardCarousel || CARD_VIEWS.length < 2) return
     // Reduced motion, the explicit pause button, and a pointer or focus inside
     // the strip each stop the clock entirely — the user still has the dots,
@@ -1461,12 +1404,20 @@ export default function HomePage() {
   const HOME_CLASSROOM_LIMIT = classroomColumns * HOME_CLASSROOM_VISIBLE_ROWS
   const HOME_CLASSROOM_COL_GAP = 10
   const HOME_CLASSROOM_ROW_GAP = 12.5 // 25% more than the column gap, for shadow-bleed margin between rows
+  /** The grid's height, fixed for the life of the page.
+   *
+   *  This used to be a function of how many rows had been dealt out so far: one
+   *  row while the enrolment query was in flight, then growing a row at a time
+   *  as `useStaggeredRows` revealed them. Easing rather than jumping made it
+   *  pleasant to watch, but it is still the section — and everything below it,
+   *  More Apps included — moving down the page after the user can already see
+   *  it, which is the thing this page is not allowed to do any more.
+   *
+   *  So the box is its full three rows from the first paint and never changes.
+   *  The staggered reveal still runs; it now deals the rows into a container
+   *  that is already their size, which is the same animation without the page
+   *  underneath it being dragged along. */
   const homeClassroomsMaxHeight = classroomGridMaxHeight(HOME_CLASSROOM_VISIBLE_ROWS, HOME_CLASSROOM_ROW_GAP)
-  /** Height of the grid as it stands. The rows are dealt out one at a time on
-   *  first load and this follows them, so the cards below the grid ease down
-   *  the page a row at a time rather than jumping. */
-  const homeClassroomGridHeight = (rows: number) => classroomGridMaxHeight(
-    Math.max(1, Math.min(HOME_CLASSROOM_VISIBLE_ROWS, rows)), HOME_CLASSROOM_ROW_GAP)
   const homeClassroomItemWidth = classroomItemWidth(classroomColumns, HOME_CLASSROOM_COL_GAP)
   const {
     visibleCount: classroomVisibleCount,
@@ -1474,11 +1425,6 @@ export default function HomePage() {
     handleScroll: handleClassroomsScroll,
   } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: HOME_CLASSROOM_ROW_GAP })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
-  const homeClassroomRowCount = Math.min(
-    HOME_CLASSROOM_VISIBLE_ROWS,
-    Math.max(1, Math.ceil(topClassrooms.length / classroomColumns)),
-  )
-  const homeRevealRows = useStaggeredRows(homeClassroomRowCount, classroomsLoaded)
 
   const snapToView = useCallback((targetView: AdminCardView) => {
     const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
@@ -1689,6 +1635,31 @@ export default function HomePage() {
     if (app.adminOrStudentOnly && isStaff && !isAdmin) return false
     return true
   })
+
+  /* Nothing at all until the layout is decided.
+     The deck's shape is a pure function of the role, the two stored
+     preferences and the viewport width (see THE LAYOUT RULE above). Two of
+     those are free, but the role comes from the profile — so until the profile
+     is in hand there is no honest answer to "what does this page look like",
+     and the page draws nothing rather than guessing. Guessing is what it used
+     to do: with no profile `isStaff` is false and `isStudent` is therefore
+     true, so a teacher's first commit was a *student's* dashboard, replaced
+     wholesale a moment later.
+     In practice this is zero frames — AuthContext sets the profile before it
+     clears its loading flag, and ProtectedLayout holds its own branded spinner
+     over the whole route until then, so what the user sees is that spinner
+     giving way directly to a fully-shaped dashboard. The guard is here so the
+     guarantee holds even when that ordering doesn't (a slow profile fetch
+     landing after the auth safety timeout). The div carries the page theme so
+     the body keeps the home gradient throughout — the blank moment is the home
+     page's own background, not a white flash. */
+  if (!user || !profile) {
+    return (
+      <ProtectedLayout>
+        <div data-page-theme="home" className="min-h-screen" aria-busy="true" />
+      </ProtectedLayout>
+    )
+  }
 
   return (
     <ProtectedLayout>
@@ -2074,12 +2045,15 @@ export default function HomePage() {
           {/* ── Classrooms — off by default, shown when the account turns it on
               from the Academics classrooms heading (home leads with the day's
               work, and the same buttons live on Academics either way).
-              Still hidden entirely for accounts not enrolled in any classroom:
-              before classroomsLoaded resolves, hasClassrooms (a fast single-row
-              check) decides whether to reserve the section's space with a
-              skeleton grid, so enrolled accounts don't see the section pop in
-              and shift the page below it. ── */}
-          {showClassroomsOnHome && (classroomsLoaded ? topClassrooms.length > 0 : hasClassrooms === true) && (
+
+              The stored preference is the whole gate, by the layout rule above.
+              It used to also wait on an enrolment probe and then on the real
+              list, which meant the section faded in partway down the load and
+              pushed More Apps down the page. Anyone who has turned this on has
+              classrooms to turn it on *from* — the Academics heading that
+              carries the toggle — so the enrolment check was guarding against
+              a case the preference already rules out. ── */}
+          {showClassroomsOnHome && (
             <div className="home-container pt-6 pb-8">
               <motion.div variants={cardVariants}>
                 <SectionHeading
@@ -2117,9 +2091,7 @@ export default function HomePage() {
                   ref={classroomsScrollRef}
                   onScroll={handleClassroomsScroll}
                   style={{
-                    height: homeClassroomGridHeight(classroomsLoaded ? Math.min(homeClassroomRowCount, homeRevealRows) : 1),
-                    maxHeight: homeClassroomsMaxHeight,
-                    transition: 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+                    height: homeClassroomsMaxHeight,
                     rowGap: HOME_CLASSROOM_ROW_GAP,
                     columnGap: HOME_CLASSROOM_COL_GAP,
                     paddingTop: HOME_CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
@@ -2129,13 +2101,20 @@ export default function HomePage() {
                   }}
                   className="flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
                 >
+                  {/* A full box of placeholders, not one row of them. The
+                      staged row-by-row reveal this used to do existed to make
+                      the *container growing* feel smooth; the container no
+                      longer grows, so the stagger would now just be three rows
+                      of skeleton collapsing to one and dealing themselves back
+                      out. Slots are position-keyed, so each placeholder becomes
+                      its real button in place with no unmount, and any surplus
+                      folds away inside the fixed box. */}
                   <ClassroomGridItems
                     items={classroomsLoaded ? topClassrooms.map(classroom => ({ classroom })) : null}
-                    skeletonCount={classroomColumns}
+                    skeletonCount={HOME_CLASSROOM_LIMIT}
                     heightClass="h-[64px]"
                     itemWidth={homeClassroomItemWidth}
                     columns={classroomColumns}
-                    maxRows={homeRevealRows}
                     showTeacher
                     navigatingId={navigatingId}
                     onNavigate={id => setNavigatingId(id)}
