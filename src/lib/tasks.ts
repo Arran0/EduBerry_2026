@@ -626,27 +626,23 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
   end.setDate(end.getDate() + 6)
   const endStr = fmt(end)
 
-  // Single inner-join query: fetch the user's tasks for the visible week in one
-  // round-trip instead of resolving task ids first and querying tasks separately.
-  // On high-latency connections (mobile) collapsing this waterfall noticeably
-  // cuts the time-to-first-render; PostgREST nests the join rather than fanning
-  // out the parent, so each task still appears once.
-  const { data: rawTasks, error } = await supabase
-    .from('tasks')
-    .select('*, task_assignees!inner(user_id)')
-    .eq('task_assignees.user_id', userId)
-    .gte('due_date', startStr)
-    .lte('due_date', endStr)
-    .order('created_at', { ascending: false })
+  // Still one round-trip, but driven from the user's own assignments.
+  //
+  // The previous form (`tasks?select=*,task_assignees!inner(user_id)`) reads the same
+  // rows, but PostgREST renders it as a LATERAL whose driving side is `tasks` — so the
+  // database walked every task in the range school-wide and ran the assignee lookup per
+  // row. Measured at ~1.0s per call on an idle database. Eighty staff opening the app
+  // at 08:45 turned that into pool exhaustion and a project-wide PGRST002 outage; see
+  // supabase-migrations/perf_task_calendar_join_direction.sql.
+  const { data: rawTasks, error } = await supabase.rpc('tasks_for_user_week', {
+    p_user_id: userId,
+    p_start: startStr,
+    p_end: endStr,
+  })
 
   if (error || !rawTasks) return { week: [] }
 
-  // Drop the embedded join column so the rows match the plain Task shape.
-  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees: _task_assignees, ...task }) => task as Task
-  )
-
-  const week = await hydrateTasksLight(cleanTasks)
+  const week = await hydrateTasksLight(rawTasks as Task[])
   return { week }
 }
 
@@ -658,28 +654,19 @@ export async function fetchCalendarData(userId: string, weekStart: Date): Promis
 export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails[]> {
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
-  // which hits PostgREST URL-length limits for users with large task backlogs.
-  // All conditions are collapsed into ONE .or() call — chaining two .or() calls
-  // sends two separate PostgREST `or=` params which may only honour the last one,
-  // silently dropping the status filter and breaking results for heavy users.
-  const dateFilter = `or(due_date.is.null,due_date.lt.${todayStr})`
-  const { data: rawTasks, error } = await supabase
-    .from('tasks')
-    .select('*, task_assignees!inner(user_id)')
-    .eq('task_assignees.user_id', userId)
-    .or(
-      `and(status.in.(not_done,partial),${dateFilter}),` +
-      `and(status.eq.done,require_check.is.true,${dateFilter})`
-    )
-    .order('created_at', { ascending: false })
+  // Keeps both properties the hand-built filter was protecting — one round-trip, and
+  // no assignee-id list in the URL — while letting the planner start from this user's
+  // assignments instead of scanning every open task in the school. The status and date
+  // conditions now live in SQL, so they can no longer be mangled by PostgREST's
+  // single-`or=`-param limitation.
+  const { data: rawTasks, error } = await supabase.rpc('tasks_overdue_for_user', {
+    p_user_id: userId,
+    p_today: todayStr,
+  })
 
   if (error || !rawTasks) return []
 
-  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees: _task_assignees, ...task }) => task as Task
-  )
-  return hydrateTasksMinimal(cleanTasks)
+  return hydrateTasksMinimal(rawTasks as Task[])
 }
 
 /**
@@ -687,21 +674,14 @@ export async function fetchOverdueTasks(userId: string): Promise<TaskWithDetails
  * Called only when the user expands the "Bonus Tasks" section.
  */
 export async function fetchBonusTasksForCalendar(userId: string): Promise<TaskWithDetails[]> {
-  // Single inner-join query avoids the two-step assignee-lookup + .in() pattern
-  // which hits PostgREST URL-length limits for users with large task backlogs.
-  const { data: rawTasks, error } = await supabase
-    .from('tasks')
-    .select('*, task_assignees!inner(user_id)')
-    .eq('task_assignees.user_id', userId)
-    .or(`bonus_points.neq.0,tag.eq.bonus`)
-    .order('created_at', { ascending: false })
+  // Driven from the user's assignments for the same reason as the overdue panel above.
+  const { data: rawTasks, error } = await supabase.rpc('tasks_bonus_for_user', {
+    p_user_id: userId,
+  })
 
   if (error || !rawTasks) return []
 
-  const cleanTasks = (rawTasks as (Task & { task_assignees?: unknown })[]).map(
-    ({ task_assignees: _task_assignees, ...task }) => task as Task
-  )
-  return hydrateTasksMinimal(cleanTasks)
+  return hydrateTasksMinimal(rawTasks as Task[])
 }
 
 /**
