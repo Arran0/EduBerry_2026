@@ -58,13 +58,28 @@ export default function PunchPromptModal({
           popup's border stop matching the page's. Scoping the theme here,
           rather than fixing the fallback, is what makes the popup keep
           matching if that colour ever changes. */}
-      <div data-page-theme="staff-attendance" className="relative px-3 pb-3 pt-9 sm:px-0 sm:pb-0 sm:pt-0">
+      {/* ModalShell's panel is `overflow-hidden` with a 1.75rem radius — it has
+          to be, so a bare sheet's content is clipped to the sheet's shape on a
+          phone. This wrapper therefore has to keep everything it draws *inside*
+          that rounded rectangle, the close button included.
+
+          Above `sm:` it used to have no padding at all, which put the card flush
+          with the panel and the close button at -0.75rem outside it: entirely
+          beyond the panel's edge, so the clip took all but the sliver that
+          happened to poke back in past the corner curve. The padding is what
+          buys the button somewhere to be — and incidentally stops the panel's
+          1.75rem corners from shaving the card's own 1.5rem ones, which is the
+          same clip a few pixels further in. */}
+      <div data-page-theme="staff-attendance" className="relative px-3 pb-3 pt-9 sm:p-4">
         {/* Small close button, floated over the card's top-right corner so the
-            card itself stays exactly as it looks on the attendance page. */}
+            card itself stays exactly as it looks on the attendance page.
+            `sm:top-1.5 sm:right-1.5` leaves it overlapping that corner, the way
+            the negative offsets did, while keeping the whole 2rem circle (plus
+            its ring) clear of the panel's corner arc. */}
         <button
           onClick={onClose}
           aria-label={kind === 'checkin' ? 'Close check-in reminder' : 'Close check-out reminder'}
-          className="absolute top-1 right-4 sm:-top-3 sm:-right-3 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-900/10 shadow-[0_6px_18px_-6px_rgba(15,23,42,0.45)] hover:bg-slate-50 hover:text-slate-700 active:scale-95 transition-all"
+          className="absolute top-1 right-4 sm:top-1.5 sm:right-1.5 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-900/10 shadow-[0_6px_18px_-6px_rgba(15,23,42,0.45)] hover:bg-slate-50 hover:text-slate-700 active:scale-95 transition-all"
         >
           <X size={15} strokeWidth={2.5} />
         </button>
