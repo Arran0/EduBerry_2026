@@ -29,7 +29,7 @@ import Modal from '@/components/workspace/Modal'
 import { supabase } from '@/lib/supabase'
 import {
   acknowledgeAlert, fetchActiveRuns, fetchOpenAlerts, fetchRunRiderCounts, fixAgeSeconds,
-  formatClock, materialiseRuns, relativeMinutes, resolveAlert, todayISO,
+  formatClock, materialiseRuns, OPEN_ALERTS_PAGE, relativeMinutes, resolveAlert, todayISO,
   type RunRiderCounts,
 } from '@/lib/transport/runs'
 import { fetchTodaySnapshot, seatEfficiency, unaccounted, type TodaySnapshot } from '@/lib/transport/snapshot'
@@ -54,7 +54,8 @@ const TransportMap = dynamic(() => import('../TransportMap'), {
   ),
 })
 
-const SEVERITY_RANK: Record<TransportAlert['severity'], number> = { critical: 0, warning: 1, info: 2 }
+// Alert ordering is the database's job now — it has to be, because the rail pages
+// through the list and only the server can order rows it has not sent yet.
 
 const inr = (n: number) =>
   `₹${Math.round(n).toLocaleString('en-IN')}`
@@ -62,6 +63,8 @@ const inr = (n: number) =>
 export default function OperationsSection() {
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [alerts, setAlerts] = useState<TransportAlert[]>([])
+  const [alertTotal, setAlertTotal] = useState(0)
+  const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
   const [snapshot, setSnapshot] = useState<TodaySnapshot | null>(null)
   const [riders, setRiders] = useState<Record<string, RunRiderCounts>>({})
   const [mismatch, setMismatch] = useState<MismatchRow[]>([])
@@ -72,6 +75,12 @@ export default function OperationsSection() {
 
   const runIds = useRef<Set<string>>(new Set())
   useEffect(() => { runIds.current = new Set(runs.map(r => r.id)) }, [runs])
+
+  // How many alerts the reader has actually opened. The realtime subscription below
+  // is mounted once, so it cannot read `alerts` directly without going stale — and it
+  // must refresh exactly the span on screen rather than the whole table.
+  const loadedAlerts = useRef(0)
+  useEffect(() => { loadedAlerts.current = alerts.length }, [alerts])
 
   /**
    * There used to be a "Generate today's trips" button here, and it was a fair
@@ -94,7 +103,7 @@ export default function OperationsSection() {
       fetchTodaySnapshot(),
       fetchAttendanceMismatch(windowOf(30).from, windowOf(30).to),
     ])
-    setRuns(r); setAlerts(a); setSnapshot(s); setMismatch(m)
+    setRuns(r); setAlerts(a.alerts); setAlertTotal(a.total); setSnapshot(s); setMismatch(m)
     setRiders(await fetchRunRiderCounts(r.map(x => x.id)))
     setLoading(false)
 
@@ -126,7 +135,17 @@ export default function OperationsSection() {
     }
     const refetchAlerts = () => {
       if (alertTimer) clearTimeout(alertTimer)
-      alertTimer = setTimeout(() => { if (alive) fetchOpenAlerts().then(a => { if (alive) setAlerts(a) }) }, 400)
+      alertTimer = setTimeout(() => {
+        if (!alive) return
+        // Only what is on screen. Re-reading all 6,000-odd open alerts here, once a
+        // minute, is what made this rail the most expensive thing on the page.
+        const span = Math.max(OPEN_ALERTS_PAGE, loadedAlerts.current)
+        fetchOpenAlerts(span, 0).then(a => {
+          if (!alive) return
+          setAlerts(a.alerts)
+          setAlertTotal(a.total)
+        })
+      }, 400)
     }
 
     const channel = supabase
@@ -160,15 +179,26 @@ export default function OperationsSection() {
   const dismissAlert = useCallback(async (id: string) => {
     const before = alerts
     setAlerts(prev => prev.filter(a => a.id !== id))
-    if (!(await resolveAlert(id)).success) setAlerts(before)
+    setAlertTotal(n => Math.max(0, n - 1))
+    if (!(await resolveAlert(id)).success) { setAlerts(before); setAlertTotal(n => n + 1) }
   }, [alerts])
 
-  const sortedAlerts = useMemo(
-    () => [...alerts].sort((a, b) =>
-      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-      new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime()),
-    [alerts],
-  )
+  /**
+   * Load the next page onto the end of the list. Offset is the count already held,
+   * which is sound because the server orders on immutable columns.
+   */
+  const loadMoreAlerts = useCallback(async () => {
+    setLoadingMoreAlerts(true)
+    const next = await fetchOpenAlerts(OPEN_ALERTS_PAGE, alerts.length)
+    // Guard against a realtime refresh having replaced the list underneath this
+    // request: drop anything already held rather than rendering it twice.
+    setAlerts(prev => {
+      const seen = new Set(prev.map(a => a.id))
+      return [...prev, ...next.alerts.filter(a => !seen.has(a.id))]
+    })
+    setAlertTotal(next.total)
+    setLoadingMoreAlerts(false)
+  }, [alerts.length])
 
   const onRoad = useMemo(
     () => runs.filter(r => r.status === 'in_progress' || r.status === 'boarding'),
@@ -375,13 +405,13 @@ export default function OperationsSection() {
         <div className={`${ADMIN.card} overflow-hidden`}>
           <div className="flex items-center justify-between bg-[#FAFAFA] px-4 py-2.5">
             <span className={ADMIN.label}>Needs attention</span>
-            {sortedAlerts.length > 0 && (
+            {alertTotal > 0 && (
               <span className="rounded-full bg-[#DC2626] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                {sortedAlerts.length}
+                {alertTotal.toLocaleString('en-IN')}
               </span>
             )}
           </div>
-          {sortedAlerts.length === 0 ? (
+          {alerts.length === 0 ? (
             <div className="px-4 py-10 text-center">
               <Check size={22} className="mx-auto mb-2 text-emerald-500" />
               <p className="text-sm font-semibold text-[#52525B]">Nothing needs attention</p>
@@ -392,7 +422,7 @@ export default function OperationsSection() {
             </div>
           ) : (
             <div className="max-h-[32rem] space-y-2 overflow-y-auto p-2">
-              {sortedAlerts.map(a => (
+              {alerts.map(a => (
                 <AlertCard
                   key={a.id}
                   alert={a}
@@ -401,6 +431,24 @@ export default function OperationsSection() {
                   onResolve={() => dismissAlert(a.id)}
                 />
               ))}
+
+              {alerts.length < alertTotal && (
+                <button
+                  type="button"
+                  onClick={loadMoreAlerts}
+                  disabled={loadingMoreAlerts}
+                  className="w-full rounded-lg border border-[#E4E4E7] bg-white px-3 py-2.5 text-[12px] font-semibold text-[#52525B] transition hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingMoreAlerts
+                    ? 'Loading…'
+                    : `Load ${Math.min(OPEN_ALERTS_PAGE, alertTotal - alerts.length)} more`}
+                </button>
+              )}
+
+              <p className="pb-1 pt-0.5 text-center text-[11px] text-[#A1A1AA]">
+                Showing {alerts.length.toLocaleString('en-IN')} of{' '}
+                {alertTotal.toLocaleString('en-IN')}
+              </p>
             </div>
           )}
         </div>

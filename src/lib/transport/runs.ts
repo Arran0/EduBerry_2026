@@ -143,17 +143,42 @@ export async function fetchMyRunPassenger(
   return (data as unknown as TransportRunPassenger) ?? null
 }
 
-export async function fetchOpenAlerts(): Promise<TransportAlert[]> {
-  const { data, error } = await supabase
+/** How many alerts the Operations rail asks for at a time. */
+export const OPEN_ALERTS_PAGE = 10
+
+/**
+ * One page of the live alert list, worst first, plus the full count for the badge.
+ *
+ * This used to return every open alert — 6,694 of them, each with a route and a
+ * student joined on — and it ran again on every realtime `transport_alerts` change.
+ * Since `transport_tick` touches an alert row every minute for each condition still
+ * firing, that was the whole table being re-fetched once a minute, for a rail that
+ * shows a dozen rows.
+ *
+ * Ordering is `severity, first_seen_at, id`, all descending. It was `last_seen_at`,
+ * which cannot page: the tick bumps it every minute on every still-firing alert, so
+ * rows reorder between one page request and the next and the reader sees duplicates
+ * and gaps. `first_seen_at` is immutable, so pages stay put, and it answers the more
+ * useful question anyway — when did this problem start, rather than when did the
+ * cron last notice it, which for a live alert is always "a moment ago". `id` breaks
+ * remaining ties so the order is total.
+ */
+export async function fetchOpenAlerts(
+  limit: number = OPEN_ALERTS_PAGE,
+  offset: number = 0,
+): Promise<{ alerts: TransportAlert[]; total: number }> {
+  const { data, error, count } = await supabase
     .from('transport_alerts')
     .select(`*,
       route:transport_routes!route_id(id, name, code, color),
-      student:profiles!student_id(${PROFILE_COLS})`)
+      student:profiles!student_id(${PROFILE_COLS})`, { count: 'exact' })
     .in('status', ['open', 'acknowledged'])
     .order('severity', { ascending: false })
-    .order('last_seen_at', { ascending: false })
-  if (error) { console.error('fetchOpenAlerts failed:', error); return [] }
-  return (data as unknown as TransportAlert[]) || []
+    .order('first_seen_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (error) { console.error('fetchOpenAlerts failed:', error); return { alerts: [], total: 0 } }
+  return { alerts: (data as unknown as TransportAlert[]) || [], total: count ?? 0 }
 }
 
 /** Alerts a parent should see for their child's run. */

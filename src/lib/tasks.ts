@@ -791,14 +791,19 @@ export async function fetchAnalyticsData(userId: string, period: 'week' | 'month
   // Tasks and subtasks are independent tables — page through both at once so
   // the Analytics tab waits on the slower of the two, not on their sum.
   const [taskRows, subtaskRows] = await Promise.all([
+    // Driven from the user's assignments, like the calendar reads — the embedded
+    // `task_assignees!inner` form this replaces made PostgREST scan every task in the
+    // window school-wide and run the assignee lookup per row (94.3ms mean). The page
+    // ordering is total (created_at, then id) so pages cannot overlap or skip a row
+    // when two tasks share a created_at.
     fetchAllPages('tasks', from =>
-      supabase
-        .from('tasks')
-        .select('status, require_check, due_date, bonus_points, task_assignees!inner(user_id)')
-        .eq('task_assignees.user_id', userId)
-        .neq('status', 'dismissed')
-        .or(dateFilter)
-        .range(from, from + PAGE - 1)),
+      supabase.rpc('task_stats_rows_for_user', {
+        p_user_id: userId,
+        p_cutoff_date: cutoffStr,
+        p_cutoff_ts: cutoffISO,
+        p_offset: from,
+        p_limit: PAGE,
+      })),
     fetchAllPages('subtasks', from =>
       supabase
         .from('subtasks')
