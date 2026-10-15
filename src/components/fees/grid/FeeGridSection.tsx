@@ -3,8 +3,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Fee Configuration.
 //
-//   1. Terms and fee heads — the shape of the grid.
-//   2. The issue bar — pick a term or a month, narrow by head and grade, and
+//   1. Terms and fee heads — the shape of the grid, side by side.
+//   2. The issue panel — pick a term or a month, narrow by head and grade, and
 //      the cells it covers light up in the grid below.
 //   3. The grid — grades down, terms / monthly / other across.
 //   4. What has been issued, with undo.
@@ -13,11 +13,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import {
-  AlertOctagon, CalendarDays, Copy, Loader2, Lock, Plus, Receipt, Repeat, Tag,
-} from 'lucide-react'
+import { AlertOctagon, Copy, Lock, Plus, Receipt, Timer } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
+import { ADMIN } from '@/components/fees/ui'
+import { Loading, Notice, SectionBar, TitledPanel } from '@/components/fees/shell'
 import {
   cloneGrid, fetchGrid, fetchStudents, rateKey, sessionMonths, setRates,
   type ChargeRow, type GridBundle, type GroupRow, type HeadRow, type IssueRow,
@@ -27,7 +27,7 @@ import FeeGrid from './FeeGrid'
 import ChargeSheet from './ChargeSheet'
 import { GroupSheet, HeadSheet, TermSheet } from './SetupSheets'
 import { IssueBar, IssueSheet, IssuesLog, UndoSheet, emptyScope, type IssueScope } from './IssuePanel'
-import { BTN, GLASS, SF, SYS, shortDate } from './glass'
+import { shortDate } from './kit'
 
 const EMPTY: GridBundle = {
   terms: [], heads: [], groups: [], rates: [], charges: [], issues: [], cells: [], fineCategories: [],
@@ -35,7 +35,9 @@ const EMPTY: GridBundle = {
 
 type ChargeState = { kind: 'other' | 'fine'; charge: ChargeRow | null } | null
 
-export default function FeeGridSection() {
+const chip = 'inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] border leading-none whitespace-nowrap'
+
+export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void }) {
   const { year, years } = useAcademicYear()
   const perms = useFeePermissions()
   const [data, setData] = useState<GridBundle>(EMPTY)
@@ -63,8 +65,7 @@ export default function FeeGridSection() {
     if (!year) return
     if (!quiet) setLoading(true)
     try {
-      const b = await fetchGrid(year.id)
-      setData(b)
+      setData(await fetchGrid(year.id))
       setLoadError(null)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the fee grid.')
@@ -76,7 +77,7 @@ export default function FeeGridSection() {
   useEffect(() => { void load() }, [load])
   useEffect(() => { fetchStudents().then(setStudents).catch(() => setStudents([])) }, [])
 
-  // Keep the issue bar pointing at something that exists.
+  // Keep the issue panel pointing at something that exists.
   useEffect(() => {
     setScope(s => {
       const termOk = s.termId && data.terms.some(t => t.id === s.termId)
@@ -128,112 +129,88 @@ export default function FeeGridSection() {
 
   const refresh = () => { void load(true) }
 
-  if (perms.loading || (loading && !data.terms.length && !loadError)) {
-    return (
-      <div className="py-24 flex justify-center text-[rgba(60,60,67,0.6)]" style={SF}>
-        <Loader2 className="animate-spin" />
-      </div>
-    )
-  }
+  if (perms.loading || (loading && !data.terms.length && !loadError)) return <Loading />
 
   if (!year) {
-    return (
-      <p className="px-4 py-12 text-center text-[14px] text-[rgba(60,60,67,0.6)]" style={SF}>
-        No academic sessions exist yet. Add one in Fee Settings → Sessions.
-      </p>
-    )
+    return <Notice>No academic sessions exist yet. Add one in Fee Settings → Sessions.</Notice>
   }
 
-  const termHeads = data.heads.filter(h => h.frequency === 'term')
-  const monthHeads = data.heads.filter(h => h.frequency === 'monthly')
+  const headRows = [...data.heads].sort((a, b) =>
+    (a.frequency === b.frequency ? 0 : a.frequency === 'term' ? -1 : 1) || a.sort - b.sort || a.name.localeCompare(b.name))
 
   return (
-    <div style={SF} className="relative isolate px-3 sm:px-0 pb-10">
-      {/* Something for the glass to refract. Kept faint and behind the
-          chrome only — the grid sits on solid white. */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 h-[420px] -z-10 overflow-hidden">
-        <div className="absolute -left-20 -top-24 w-[520px] h-[420px] rounded-full bg-[#5AC8FA]/25 blur-[90px]" />
-        <div className="absolute left-1/3 -top-10 w-[460px] h-[360px] rounded-full bg-[#AF52DE]/[0.14] blur-[100px]" />
-        <div className="absolute right-0 -top-20 w-[420px] h-[380px] rounded-full bg-[#34C759]/[0.14] blur-[90px]" />
-      </div>
-
-      {loadError && (
-        <div className="mb-3 rounded-[14px] bg-[#FF3B30]/10 text-[#C4271D] text-[13.5px] px-4 py-3">{loadError}</div>
-      )}
+    <div className="pb-8">
+      {loadError && <Notice tone="error">{loadError}</Notice>}
       {!canEdit && (
-        <div className="mb-3 rounded-[14px] bg-[#FF9500]/10 text-[#9A5B00] text-[13.5px] px-4 py-3">
+        <Notice tone="warn">
           You can see the fee grid but not change it — that needs the “Edit the price list” permission.
-        </div>
+        </Notice>
       )}
 
-      {/* ── Shape: terms and heads ─────────────────────────────────────── */}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <div className={`${GLASS} rounded-[22px] px-4 py-3.5`}>
-          <div className="flex items-center gap-2 mb-2.5">
-            <span className="w-7 h-7 rounded-[9px] flex items-center justify-center text-white" style={{ background: SYS.blue }}>
-              <CalendarDays size={14} />
-            </span>
-            <h3 className="text-[15px] font-semibold text-[#1C1C1E] flex-1">Terms</h3>
-            {canEdit && (
-              <button className={BTN.plain} onClick={() => setTermSheet({ term: null })}><Plus size={15} strokeWidth={2.4} /> Term</button>
-            )}
-          </div>
+      {/* ── The grid's shape: terms and fee heads ──────────────────────── */}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start">
+        <TitledPanel
+          title="Terms" count={data.terms.length || undefined}
+          right={canEdit && (
+            <button className={ADMIN.onDarkBtn} onClick={() => setTermSheet({ term: null })}>
+              <Plus size={11} strokeWidth={2.5} /> Term
+            </button>
+          )}
+        >
           {data.terms.length === 0 ? (
-            <p className="text-[13.5px] text-[rgba(60,60,67,0.6)]">Add Term 1, Term 2… each with the date its fees fall due.</p>
+            <p className="px-3 py-4 text-[12px] text-[#8C8878]">Add Term 1, Term 2… each with the date its fees fall due.</p>
+          ) : data.terms.map(t => (
+            <button key={t.id} onClick={() => canEdit && setTermSheet({ term: t })}
+                    className="w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-[7px] text-left border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
+              <span className="text-[12.5px] font-semibold text-[#18181B] truncate">{t.name}</span>
+              <span className="text-[11px] text-[#6B675A] tabular-nums">due {shortDate(t.due_date)}</span>
+              <span className="w-[62px] text-right">
+                {termLocked(t) && (
+                  <span className={`${chip} bg-[#EAF5EE] text-[#1F6B42] border-[#C6E3D2]`}><Lock size={8} className="inline -mt-px" /> Issued</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </TitledPanel>
+
+        <TitledPanel
+          title="Fee heads" count={data.heads.length || undefined}
+          right={canEdit && (
+            <button className={ADMIN.onDarkBtn} onClick={() => setHeadSheet({ head: null })}>
+              <Plus size={11} strokeWidth={2.5} /> Head
+            </button>
+          )}
+        >
+          {headRows.length === 0 ? (
+            <p className="px-3 py-4 text-[12px] text-[#8C8878]">Tuition, Bus, Uniform, ID card, Water bottle — anything the school charges.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {data.terms.map(t => (
-                <button key={t.id} onClick={() => canEdit && setTermSheet({ term: t })}
-                        className="group rounded-[14px] bg-white/80 ring-1 ring-black/[0.05] px-3 py-2 text-left hover:bg-white transition-colors">
-                  <span className="flex items-center gap-1.5 text-[14px] font-semibold text-[#1C1C1E]">
-                    {t.name}{termLocked(t) && <Lock size={11} className="text-[#34C759]" />}
+            <div className="grid sm:grid-cols-2">
+              {headRows.map(h => (
+                <button key={h.id} onClick={() => canEdit && setHeadSheet({ head: h })}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-[7px] text-left border-b border-[#F0ECE2] sm:odd:border-r hover:bg-[#FAF8F2]">
+                  <span className="text-[12.5px] font-semibold text-[#18181B] truncate flex items-center gap-1.5">
+                    {h.name}
+                    {headLocked(h) && <Lock size={10} className="text-[#1F6B42] flex-shrink-0" />}
                   </span>
-                  <span className="block text-[12px] text-[rgba(60,60,67,0.6)]">Due {shortDate(t.due_date)}</span>
+                  <span className="flex items-center gap-1">
+                    {h.gender_split && (
+                      <span className={`${chip} bg-white text-[#52525B] border-[#E3DFD3]`}>B/G</span>
+                    )}
+                    <span className={`${chip} ${h.frequency === 'monthly'
+                      ? 'bg-[#27272A] text-[#B8983C] border-[#27272A]'
+                      : 'bg-[#F4F1E7] text-[#6B675A] border-[#E3DFD3]'}`}>
+                      {h.frequency === 'monthly' ? 'Monthly' : 'Term-wise'}
+                    </span>
+                  </span>
                 </button>
               ))}
             </div>
           )}
-        </div>
-
-        <div className={`${GLASS} rounded-[22px] px-4 py-3.5`}>
-          <div className="flex items-center gap-2 mb-2.5">
-            <span className="w-7 h-7 rounded-[9px] flex items-center justify-center text-white" style={{ background: SYS.teal }}>
-              <Tag size={14} />
-            </span>
-            <h3 className="text-[15px] font-semibold text-[#1C1C1E] flex-1">Fee heads</h3>
-            {canEdit && (
-              <button className={BTN.plain} onClick={() => setHeadSheet({ head: null })}><Plus size={15} strokeWidth={2.4} /> Head</button>
-            )}
-          </div>
-          {data.heads.length === 0 ? (
-            <p className="text-[13.5px] text-[rgba(60,60,67,0.6)]">Tuition, Bus, Uniform, ID card, Water bottle — anything the school charges.</p>
-          ) : (
-            <div className="grid gap-2">
-              {[{ label: 'Term-wise', list: termHeads, icon: <CalendarDays size={12} /> },
-                { label: 'Monthly', list: monthHeads, icon: <Repeat size={12} /> }]
-                .filter(g => g.list.length > 0)
-                .map(g => (
-                  <div key={g.label} className="flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 text-[12px] text-[rgba(60,60,67,0.6)] w-[82px]">{g.icon} {g.label}</span>
-                    {g.list.map(h => (
-                      <button key={h.id} onClick={() => canEdit && setHeadSheet({ head: h })}
-                              className="inline-flex items-center gap-1.5 rounded-full bg-white/80 ring-1 ring-black/[0.05] h-8 px-3 text-[13.5px] font-medium text-[#1C1C1E] hover:bg-white transition-colors">
-                        {h.name}
-                        {h.gender_split && (
-                          <span className="text-[10.5px] font-bold"><span className="text-[#0A84FF]">B</span><span className="text-[rgba(60,60,67,0.3)]">/</span><span className="text-[#FF2D55]">G</span></span>
-                        )}
-                        {headLocked(h) && <Lock size={11} className="text-[#34C759]" />}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
+        </TitledPanel>
       </div>
 
-      {/* ── Issue bar ──────────────────────────────────────────────────── */}
-      <div className="sticky top-2 z-30 mt-3">
+      {/* ── Issue ──────────────────────────────────────────────────────── */}
+      <div className="mt-3">
         <IssueBar
           scope={scope} setScope={setScope}
           terms={data.terms} heads={data.heads} groups={data.groups} months={months}
@@ -242,36 +219,42 @@ export default function FeeGridSection() {
       </div>
 
       {/* ── Grid ───────────────────────────────────────────────────────── */}
-      <div className="mt-5 mb-2.5 flex flex-wrap items-end gap-2 px-1">
-        <div className="mr-auto">
-          <h2 className="text-[24px] leading-tight font-bold tracking-[-0.02em] text-[#1C1C1E]">Fee grid</h2>
-          <p className="text-[13px] text-[rgba(60,60,67,0.6)]">
-            Session {year.code} · type a price into any cell; press <span className="inline-flex items-center gap-0.5"><Plus size={11} /></span> beside a grade to split it into groups by section.
-          </p>
-        </div>
-        {canEdit && (
-          <button onClick={() => setChargeSheet({ kind: 'other', charge: null })} className={BTN.glass}>
-            <Receipt size={14} color={SYS.indigo} /> Other fee
-          </button>
-        )}
-        {canFine && (
-          <button onClick={() => setChargeSheet({ kind: 'fine', charge: null })} className={BTN.glass}>
-            <AlertOctagon size={14} color={SYS.red} /> Issue fine
-          </button>
-        )}
+      <div className="mt-5">
+        <SectionBar
+          title="Fee grid"
+          hint={<>Session {year.code} · type a price into a cell · <Plus size={10} className="inline -mt-px" /> beside a grade splits it into groups by section</>}
+          actions={
+            <>
+              {canEdit && (
+                <button onClick={() => setChargeSheet({ kind: 'other', charge: null })} className={ADMIN.ghostBtn}>
+                  <Receipt size={13} /> <span className="max-sm:hidden">Other</span> fee
+                </button>
+              )}
+              {canFine && (
+                <button onClick={() => setChargeSheet({ kind: 'fine', charge: null })} className={ADMIN.ghostBtn}>
+                  <AlertOctagon size={13} /> Fine
+                </button>
+              )}
+              {onLateFees && (
+                <button onClick={onLateFees} className={ADMIN.ghostBtn} title="Late fee settings">
+                  <Timer size={13} /> <span className="max-sm:hidden">Late fees</span>
+                </button>
+              )}
+            </>
+          }
+        />
+        <FeeGrid
+          terms={data.terms} heads={data.heads} groups={data.groups} rates={data.rates}
+          cells={data.cells} charges={data.charges} issues={data.issues} students={students}
+          scope={scope} canEdit={canEdit}
+          onCommit={commitRate}
+          onAddGroup={grade => setGroupSheet({ grade, group: null })}
+          onEditGroup={g => setGroupSheet({ grade: g.grade, group: g })}
+          onOpenCharge={c => setChargeSheet({ kind: c.kind, charge: c })}
+          onEditTerm={t => setTermSheet({ term: t })}
+          onEditHead={h => setHeadSheet({ head: h })}
+        />
       </div>
-
-      <FeeGrid
-        terms={data.terms} heads={data.heads} groups={data.groups} rates={data.rates}
-        cells={data.cells} charges={data.charges} issues={data.issues} students={students}
-        scope={scope} canEdit={canEdit}
-        onCommit={commitRate}
-        onAddGroup={grade => setGroupSheet({ grade, group: null })}
-        onEditGroup={g => setGroupSheet({ grade: g.grade, group: g })}
-        onOpenCharge={c => setChargeSheet({ kind: c.kind, charge: c })}
-        onEditTerm={t => setTermSheet({ term: t })}
-        onEditHead={h => setHeadSheet({ head: h })}
-      />
 
       <IssuesLog
         issues={data.issues} heads={data.heads} groups={data.groups} canUndo={canUndo}
@@ -325,10 +308,11 @@ export default function FeeGridSection() {
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className={`fixed z-[60] left-1/2 -translate-x-1/2 bottom-[max(1.25rem,env(safe-area-inset-bottom))] ${GLASS}
-                        rounded-full px-4 py-2.5 text-[13.5px] text-[#1C1C1E] max-w-[calc(100vw-32px)]`}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.18 }}
+            className="fixed z-[60] left-1/2 -translate-x-1/2 bottom-[max(1.25rem,env(safe-area-inset-bottom))]
+                       bg-[#27272A] text-white text-[12px] pl-3 pr-4 py-2.5 border-l-[3px] border-[#B8983C]
+                       shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] max-w-[calc(100vw-32px)]"
             role="status"
           >
             {toast}
@@ -364,26 +348,26 @@ function CloneLink({
     }
   }
 
+  const link = 'font-bold uppercase tracking-[0.08em] text-[10px] text-[#52525B] hover:text-[#18181B] underline underline-offset-2'
+
   return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2 text-[12.5px] text-[rgba(60,60,67,0.6)]">
-      <Copy size={12} />
+    <div className="mt-6 pt-3 border-t border-[#E3DFD3] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-[#8C8878]">
+      <Copy size={11} />
       <span>Copy terms, heads and prices from</span>
       <select value={from} onChange={e => { setFrom(e.target.value); setConfirm(false) }}
-              className="bg-transparent text-[#007AFF] font-medium focus:outline-none cursor-pointer">
+              className="bg-transparent font-bold text-[#18181B] focus:outline-none cursor-pointer">
         {years.map(y => <option key={y.id} value={y.id}>{y.code}</option>)}
       </select>
       {confirm ? (
         <>
           <span>— anything already here is kept.</span>
-          <button onClick={go} disabled={busy} className="text-[#007AFF] font-semibold hover:underline">
-            {busy ? 'Copying…' : 'Copy now'}
-          </button>
-          <button onClick={() => setConfirm(false)} className="hover:underline">Cancel</button>
+          <button onClick={() => void go()} disabled={busy} className={link}>{busy ? 'Copying…' : 'Copy now'}</button>
+          <button onClick={() => setConfirm(false)} className={link}>Cancel</button>
         </>
       ) : (
-        <button onClick={() => setConfirm(true)} className="text-[#007AFF] font-medium hover:underline">Copy</button>
+        <button onClick={() => setConfirm(true)} className={link}>Copy</button>
       )}
-      {error && <span className="basis-full text-center text-[#FF3B30]">{error}</span>}
+      {error && <span className="basis-full text-center text-[#A93232]">{error}</span>}
     </div>
   )
 }

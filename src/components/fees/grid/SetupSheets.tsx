@@ -5,14 +5,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Layers, Loader2, Lock, Tag, Trash2 } from 'lucide-react'
+import { ADMIN } from '@/components/fees/ui'
+import { Segmented } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
   deleteGroup, deleteHead, deleteTerm, saveGroup, saveHead, saveTerm,
   type Frequency, type GroupRow, type HeadRow, type StudentLite, type TermRow,
 } from '@/lib/fees/grid'
-import {
-  BTN, Chip, ErrorNote, GlassSheet, Group, GroupRowItem, INLINE_FIELD, SYS, Segmented,
-} from './glass'
+import { Aside, ErrorNote, FeeSheet, Field, Pick } from './kit'
 
 function useBusy() {
   const [busy, setBusy] = useState(false)
@@ -23,6 +23,30 @@ function useBusy() {
     finally { setBusy(false) }
   }
   return { busy, error, run }
+}
+
+function Footer({ onDelete, onCancel, onSave, busy, saveLabel }: {
+  onDelete?: () => void
+  onCancel: () => void
+  onSave: () => void
+  busy: boolean
+  saveLabel: string
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {onDelete && (
+        <button onClick={onDelete} disabled={busy}
+                className={`${ADMIN.ghostBtn} hover:!text-[#A93232] hover:!border-[#EFCCCC]`}>
+          <Trash2 size={13} /> Delete
+        </button>
+      )}
+      <div className="flex-1" />
+      <button onClick={onCancel} className={ADMIN.ghostBtn}>Cancel</button>
+      <button onClick={onSave} disabled={busy} className={ADMIN.darkBtn}>
+        {busy && <Loader2 size={13} className="animate-spin" />} {saveLabel}
+      </button>
+    </div>
+  )
 }
 
 // ── Term ────────────────────────────────────────────────────────────────
@@ -56,38 +80,36 @@ export function TermSheet({
   })
 
   return (
-    <GlassSheet
-      open={open} onClose={onClose} size="md" accent={SYS.blue}
-      icon={<CalendarDays size={18} />}
+    <FeeSheet
+      open={open} onClose={onClose} icon={<CalendarDays size={15} />}
       title={term ? term.name : 'New term'}
-      subtitle="Term-wise fees are billed against this due date."
-      footer={
-        <div className="flex items-center gap-2">
-          {term && !locked && (
-            <button onClick={remove} disabled={busy} className={BTN.destructive}><Trash2 size={14} /> Delete</button>
-          )}
-          <div className="flex-1" />
-          <button onClick={onClose} className={BTN.glass}>Cancel</button>
-          <button onClick={save} disabled={busy} className={BTN.primary}>
-            {busy && <Loader2 size={14} className="animate-spin" />} {term ? 'Save term' : 'Add term'}
-          </button>
-        </div>
-      }
+      subtitle="Term-wise fees are billed against this due date"
+      footer={<Footer onDelete={term && !locked ? remove : undefined} onCancel={onClose}
+                      onSave={save} busy={busy} saveLabel={term ? 'Save term' : 'Add term'} />}
     >
-      <Group footer={locked ? 'Fees for this term have been issued, so its due date is locked. Undo those issues to change it.' : undefined}>
-        <GroupRowItem label="Name">
-          <input value={name} onChange={e => setName(e.target.value)} className={INLINE_FIELD} placeholder="Term 1" />
-        </GroupRowItem>
-        <GroupRowItem label="Due date" hint={locked ? <Lock size={14} className="text-[#34C759]" /> : undefined}>
-          <input type="date" value={due} disabled={locked} onChange={e => setDue(e.target.value)} className={INLINE_FIELD} />
-        </GroupRowItem>
-      </Group>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Name">
+          <input value={name} onChange={e => setName(e.target.value)} className={ADMIN.inputPlain} placeholder="Term 1" />
+        </Field>
+        <Field label="Due date">
+          <input type="date" value={due} disabled={locked} onChange={e => setDue(e.target.value)}
+                 className={`${ADMIN.inputPlain} disabled:bg-[#F4F1E7] disabled:text-[#8C8878]`} />
+        </Field>
+      </div>
+      {locked && (
+        <Aside tone="good">
+          <Lock size={11} className="inline mr-1 -mt-0.5" />
+          Fees for this term have been issued, so its due date is locked. Undo those issues to change it.
+        </Aside>
+      )}
       <ErrorNote>{error}</ErrorNote>
-    </GlassSheet>
+    </FeeSheet>
   )
 }
 
 // ── Head ────────────────────────────────────────────────────────────────
+type Split = 'same' | 'split'
+
 export function HeadSheet({
   open, onClose, yearId, head, nextSort, locked, onSaved,
 }: {
@@ -96,19 +118,21 @@ export function HeadSheet({
 }) {
   const [name, setName] = useState('')
   const [frequency, setFrequency] = useState<Frequency>('term')
-  const [split, setSplit] = useState(false)
+  const [split, setSplit] = useState<Split>('same')
   const { busy, error, run } = useBusy()
 
   useEffect(() => {
     if (!open) return
     setName(head?.name ?? '')
     setFrequency(head?.frequency ?? 'term')
-    setSplit(head?.gender_split ?? false)
+    setSplit(head?.gender_split ? 'split' : 'same')
   }, [open, head])
 
   const save = () => run(async () => {
     if (name.trim().length < 2) throw new Error('Name the fee head — Tuition, Bus, Uniform…')
-    await saveHead(yearId, { id: head?.id, name, frequency, gender_split: split, sort: head?.sort ?? nextSort })
+    await saveHead(yearId, {
+      id: head?.id, name, frequency, gender_split: split === 'split', sort: head?.sort ?? nextSort,
+    })
     onSaved(); onClose()
   })
 
@@ -119,71 +143,47 @@ export function HeadSheet({
   })
 
   return (
-    <GlassSheet
-      open={open} onClose={onClose} size="md" accent={SYS.teal}
-      icon={<Tag size={18} />}
+    <FeeSheet
+      open={open} onClose={onClose} icon={<Tag size={15} />}
       title={head ? head.name : 'New fee head'}
-      subtitle="A line on the bill. Tuition, Bus, Uniform, ID card — anything the school charges."
-      footer={
-        <div className="flex items-center gap-2">
-          {head && !locked && (
-            <button onClick={remove} disabled={busy} className={BTN.destructive}><Trash2 size={14} /> Delete</button>
-          )}
-          <div className="flex-1" />
-          <button onClick={onClose} className={BTN.glass}>Cancel</button>
-          <button onClick={save} disabled={busy} className={BTN.primary}>
-            {busy && <Loader2 size={14} className="animate-spin" />} {head ? 'Save head' : 'Add head'}
-          </button>
-        </div>
-      }
+      subtitle="A line on the bill — tuition, bus, uniform, ID card, anything the school charges"
+      footer={<Footer onDelete={head && !locked ? remove : undefined} onCancel={onClose}
+                      onSave={save} busy={busy} saveLabel={head ? 'Save head' : 'Add head'} />}
     >
-      <Group>
-        <GroupRowItem label="Name">
-          <input value={name} autoFocus onChange={e => setName(e.target.value)} className={INLINE_FIELD} placeholder="Tuition" />
-        </GroupRowItem>
-      </Group>
+      <Field label="Name">
+        <input value={name} autoFocus onChange={e => setName(e.target.value)} className={ADMIN.inputPlain} placeholder="Tuition" />
+      </Field>
 
-      <Group
-        header="Collected"
-        footer={frequency === 'term'
-          ? 'Billed once per term, on the term’s due date. Each term gets its own column.'
-          : 'Billed every month you issue it — bus fees usually work this way.'}
+      <Field
+        label="Collected"
+        hint={frequency === 'term'
+          ? 'Billed once per term, on the term’s due date. Each term gets its own column in the grid.'
+          : 'One amount, billed every month you issue it — bus fees usually work this way.'}
       >
-        <div className="px-4 py-2.5 flex items-center justify-between gap-3">
-          <span className="text-[15px] text-[#1C1C1E]">Frequency</span>
-          <div className={locked ? 'pointer-events-none opacity-50' : ''}>
-            <Segmented<Frequency>
-              value={frequency} onChange={setFrequency}
-              options={[{ value: 'term', label: 'Term-wise' }, { value: 'monthly', label: 'Monthly' }]}
-            />
-          </div>
+        <div className={locked ? 'pointer-events-none opacity-50' : ''}>
+          <Segmented<Frequency> fill value={frequency} onChange={setFrequency}
+            options={[{ key: 'term', label: 'Term-wise' }, { key: 'monthly', label: 'Monthly' }]} />
         </div>
-      </Group>
+      </Field>
 
-      <Group footer="Turn on when boys and girls pay different amounts, like uniforms. Each cell then takes two figures.">
-        <div className="px-4 py-2.5 flex items-center justify-between gap-3">
-          <span className="text-[15px] text-[#1C1C1E]">Different for boys and girls</span>
-          <button
-            type="button" role="switch" aria-checked={split} disabled={locked}
-            onClick={() => setSplit(s => !s)}
-            className="relative w-[51px] h-[31px] rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
-            style={{ background: split ? SYS.green : 'rgba(120,120,128,0.16)' }}
-          >
-            <span
-              className="absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)] transition-all"
-              style={{ left: split ? 22 : 2 }}
-            />
-          </button>
+      <Field
+        label="Boys and girls"
+        hint="Choose “Different” when boys and girls pay different amounts, like uniforms. Each cell then takes two figures."
+      >
+        <div className={locked ? 'pointer-events-none opacity-50' : ''}>
+          <Segmented<Split> fill value={split} onChange={setSplit}
+            options={[{ key: 'same', label: 'Same for all' }, { key: 'split', label: 'Different' }]} />
         </div>
-      </Group>
+      </Field>
 
       {locked && (
-        <p className="mt-3 px-1 text-[12.5px] text-[rgba(60,60,67,0.6)] flex items-center gap-1.5">
-          <Lock size={12} className="text-[#34C759]" /> Fees under this head have been issued. You can rename it, but how it is collected is locked.
-        </p>
+        <Aside tone="good">
+          <Lock size={11} className="inline mr-1 -mt-0.5" />
+          Fees under this head have been issued. You can rename it, but how it is collected is locked.
+        </Aside>
       )}
       <ErrorNote>{error}</ErrorNote>
-    </GlassSheet>
+    </FeeSheet>
   )
 }
 
@@ -225,6 +225,12 @@ export function GroupSheet({
   const toggle = (sec: string) =>
     setSections(cur => cur.includes(sec) ? cur.filter(x => x !== sec) : [...cur, sec].sort())
 
+  const addExtra = () => {
+    const v = extra.trim().toUpperCase()
+    if (v && !sections.includes(v)) toggle(v)
+    setExtra('')
+  }
+
   const save = () => run(async () => {
     if (!name.trim()) throw new Error('Name the group.')
     if (sections.length === 0) throw new Error('Give the group at least one section.')
@@ -239,66 +245,56 @@ export function GroupSheet({
   })
 
   return (
-    <GlassSheet
-      open={open} onClose={onClose} size="md" accent={SYS.indigo}
-      icon={<Layers size={18} />}
+    <FeeSheet
+      open={open} onClose={onClose} icon={<Layers size={15} />}
       title={group ? `${gradeLabel(grade)} · ${group.name}` : `New group in ${gradeLabel(grade)}`}
-      subtitle="A group gets its own row in the grid and prices the sections you give it. Sections left out stay on the grade’s own row."
-      footer={
-        <div className="flex items-center gap-2">
-          {group && !locked && (
-            <button onClick={remove} disabled={busy} className={BTN.destructive}><Trash2 size={14} /> Delete</button>
-          )}
-          <div className="flex-1" />
-          <button onClick={onClose} className={BTN.glass}>Cancel</button>
-          <button onClick={save} disabled={busy} className={BTN.primary}>
-            {busy && <Loader2 size={14} className="animate-spin" />} {group ? 'Save group' : 'Add group'}
-          </button>
-        </div>
-      }
+      subtitle="A group gets its own row in the grid and prices the sections you give it"
+      footer={<Footer onDelete={group && !locked ? remove : undefined} onCancel={onClose}
+                      onSave={save} busy={busy} saveLabel={group ? 'Save group' : 'Add group'} />}
     >
-      <Group>
-        <GroupRowItem label="Name">
-          <input value={name} onChange={e => setName(e.target.value)} className={INLINE_FIELD} placeholder="Science stream" />
-        </GroupRowItem>
-      </Group>
+      <Field label="Name">
+        <input value={name} onChange={e => setName(e.target.value)} className={ADMIN.inputPlain} placeholder="Science stream" />
+      </Field>
 
-      <Group header="Sections" footer="A section can belong to only one group.">
-        <div className="px-4 py-3 flex flex-wrap gap-1.5">
-          {known.length === 0 && <span className="text-[13px] text-[rgba(60,60,67,0.6)]">No sections found for this grade yet — add one below.</span>}
-          {known.map(sec => {
-            const other = takenBy(sec)
-            return (
-              <Chip key={sec} on={sections.includes(sec)} onClick={() => toggle(sec)} disabled={!!other} tone={SYS.indigo}>
-                {sec}
-                <span className="opacity-60 text-[11px]">{other ? `in ${other.name}` : countIn(sec)}</span>
-              </Chip>
-            )
-          })}
+      <Field label="Sections" hint="A section can belong to only one group. Sections left out stay on the grade’s own row.">
+        <div className="bg-white border border-[#E3DFD3] p-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {known.length === 0 && (
+              <span className="text-[12px] text-[#8C8878]">No sections found for this grade yet — add one below.</span>
+            )}
+            {known.map(sec => {
+              const other = takenBy(sec)
+              return (
+                <Pick key={sec} on={sections.includes(sec)} onClick={() => toggle(sec)} disabled={!!other}
+                      title={other ? `Already in ${other.name}` : `${countIn(sec)} students`}>
+                  {sec}
+                  <span className="font-semibold normal-case tracking-normal opacity-60">
+                    {other ? `in ${other.name}` : countIn(sec)}
+                  </span>
+                </Pick>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-[#F0ECE2]">
+            <input
+              value={extra}
+              onChange={e => setExtra(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExtra() } }}
+              className={`${ADMIN.inputPlain} flex-1`}
+              placeholder="Another section, e.g. E"
+            />
+            <button type="button" className={ADMIN.ghostBtn} disabled={!extra.trim()} onClick={addExtra}>Add</button>
+          </div>
         </div>
-        <div className="px-4 py-2 flex items-center gap-2">
-          <input
-            value={extra}
-            onChange={e => setExtra(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && extra.trim()) {
-                e.preventDefault()
-                toggle(extra.trim().toUpperCase()); setExtra('')
-              }
-            }}
-            className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-[rgba(60,60,67,0.3)]"
-            placeholder="Add a section, e.g. E"
-          />
-          <button type="button" className={BTN.plain} disabled={!extra.trim()}
-                  onClick={() => { toggle(extra.trim().toUpperCase()); setExtra('') }}>Add</button>
-        </div>
-      </Group>
+      </Field>
+
       {locked && (
-        <p className="mt-3 px-1 text-[12.5px] text-[rgba(60,60,67,0.6)] flex items-center gap-1.5">
-          <Lock size={12} className="text-[#34C759]" /> This group has issued fees and cannot be deleted until they are undone.
-        </p>
+        <Aside tone="good">
+          <Lock size={11} className="inline mr-1 -mt-0.5" />
+          This group has issued fees and cannot be deleted until they are undone.
+        </Aside>
       )}
       <ErrorNote>{error}</ErrorNote>
-    </GlassSheet>
+    </FeeSheet>
   )
 }

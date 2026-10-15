@@ -34,7 +34,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { FeeScreen, TabBar, Loading, type TabDef } from '@/components/fees/shell'
-import { ADMIN } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
 import StudentFeeCard from '@/components/fees/StudentFeeCard'
 import FeeToolModal from '@/components/fees/FeeToolModal'
@@ -136,15 +135,12 @@ function FeesInner() {
             onToolChange={t => go({ tool: t })}
           />
         ) : main === 'config' ? (
-          <div className="px-3 sm:px-0 space-y-3">
-            {perms.can('fees.latefee.manage') && (
-              <div className="flex justify-end">
-                <button onClick={() => go({ tool: 'latefees' })} className={ADMIN.ghostBtn}>
-                  <Timer size={13} /> Late fee settings
-                </button>
-              </div>
-            )}
-            {perms.canAny('fees.view', 'fees.config.manage') ? <FeeGridSection /> : (
+          <div className="px-3 sm:px-0">
+            {perms.canAny('fees.view', 'fees.config.manage') ? (
+              <FeeGridSection
+                onLateFees={perms.can('fees.latefee.manage') ? () => go({ tool: 'latefees' }) : undefined}
+              />
+            ) : (
               <p className="px-3 py-10 text-[12.5px] text-[#8C8878] text-center">
                 You do not have permission to see the price list.
               </p>

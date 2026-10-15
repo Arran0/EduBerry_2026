@@ -30,7 +30,7 @@ const STATE_CHIP: Record<RteRow['status'], string> = {
 }
 
 /** The register's columns on a laptop; a phone folds each row into a card. */
-const RTE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_124px_104px_112px_auto]'
+const RTE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_124px_104px_112px_84px]'
 
 export default function RteRegister({
   rows, names, yearId, showAmounts, canManage, onChanged,

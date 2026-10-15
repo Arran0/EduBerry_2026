@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { decideRefund, payRefund, type RefundRow } from '@/lib/fees/reports'
 
 /** The queue's columns on a laptop; a phone gets `Row`'s card. */
-const REFUND_COLS = 'sm:grid-cols-[minmax(0,1fr)_132px_104px_auto]'
+const REFUND_COLS = 'sm:grid-cols-[minmax(0,1fr)_132px_104px_236px]'
 
 const STATE_CHIP: Record<RefundRow['status'], string> = {
   requested: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',

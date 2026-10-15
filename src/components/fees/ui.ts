@@ -47,6 +47,15 @@ export const ADMIN = {
   label: 'text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]',
   darkBtn: 'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
   ghostBtn: 'inline-flex items-center justify-center gap-1.5 bg-white text-[#52525B] hover:text-[#18181B] border border-[#E3DFD3] hover:border-[#C9C4B4] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+  /** The one action a screen is about — issuing, collecting. Used once per view. */
+  goldBtn: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap flex-shrink-0 bg-[#B8983C] hover:bg-[#A2842F] text-white border border-[#B8983C] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+  /** A quiet button that sits on a dark panel strip. */
+  onDarkBtn: 'inline-flex items-center justify-center gap-1 text-[#D4D4D8] hover:text-white border border-[#3F3F46] hover:border-[#71717A] text-[9.5px] font-bold uppercase tracking-[0.08em] leading-none px-2 py-[5px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+  /**
+   * A native picker sized to its contents, level with the search field. Not
+   * `inputPlain`, which is `w-full` and so takes a whole row in a toolbar.
+   */
+  select: 'bg-white border border-[#E3DFD3] pl-2.5 pr-2 py-[7px] text-[12.5px] font-semibold text-[#18181B] focus:outline-none focus:border-[#27272A] transition-colors cursor-pointer',
 } as const
 
 export const GOLD = '#B8983C'

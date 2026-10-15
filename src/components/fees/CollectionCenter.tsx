@@ -29,7 +29,7 @@ import {
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, inr } from '@/components/fees/ui'
-import { LABEL, Loading } from '@/components/fees/shell'
+import { LABEL, Loading, Segmented } from '@/components/fees/shell'
 import FeeToolModal from '@/components/fees/FeeToolModal'
 import type { LedgerFilter } from '@/components/fees/sections/CollectionSection'
 import { fetchYearSummary, type YearSummaryRow } from '@/lib/fees/reports'
@@ -204,32 +204,22 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
         </div>
       )}
 
-      {/* ── One segmented control, and the tools beside it ──────────────── */}
+      {/* ── One switch for where you are, the errands to its right ─────── */}
       <div className="flex flex-wrap items-center gap-2 mb-3 px-3 sm:px-0">
-        <div className="flex gap-1 p-1 bg-white border border-[#E3DFD3] flex-1 min-w-[260px]">
-          {sections.map(s => {
-            const on = s.key === active
-            const Icon = s.icon
-            return (
-              <button key={s.key} onClick={() => onSectionChange(s.key)}
-                      className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-1.5
-                                  text-[11px] font-bold uppercase tracking-[0.06em] transition-colors ${
-                        on ? 'bg-[#27272A] text-white' : 'text-[#8C8878] hover:text-[#18181B] hover:bg-[#FAF8F2]'
-                      }`}>
-                <Icon size={13} className="flex-shrink-0" />
-                <span className="truncate">{s.label}</span>
-              </button>
-            )
-          })}
-        </div>
+        <Segmented<CenterSection>
+          fill="phone"
+          value={active ?? 'collection'}
+          onChange={onSectionChange}
+          options={sections.map(s => ({ key: s.key, label: s.label, icon: s.icon }))}
+        />
         {tools.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-3 sm:flex gap-1.5 max-sm:w-full sm:ml-auto">
             {tools.map(t => {
               const Icon = t.icon
               return (
                 <button key={t.key} onClick={() => onToolChange(t.key)}
-                        className={ADMIN.ghostBtn}>
-                  <Icon size={13} /> {t.label}
+                        className={`${ADMIN.ghostBtn} max-sm:px-1.5`}>
+                  <Icon size={13} className="flex-shrink-0 max-sm:hidden" /> <span className="truncate">{t.label}</span>
                 </button>
               )
             })}

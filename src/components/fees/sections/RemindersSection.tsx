@@ -64,7 +64,7 @@ interface Family {
  * The two lists here, column by column on a laptop. A phone folds each row into
  * a card — see `Row`.
  */
-const CHASE_COLS = 'sm:grid-cols-[32px_minmax(0,1fr)_minmax(0,230px)_124px_104px_104px_auto]'
+const CHASE_COLS = 'sm:grid-cols-[32px_minmax(0,1fr)_minmax(0,230px)_124px_104px_104px_96px]'
 const LOG_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)_112px_minmax(0,96px)]'
 
 export default function RemindersSection({ onChanged }: { onChanged?: () => void }) {

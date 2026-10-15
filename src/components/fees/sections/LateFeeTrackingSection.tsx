@@ -32,8 +32,8 @@ import {
 } from '@/lib/fees/charges'
 
 /** The two lists' columns on a laptop; a phone folds each row into a card. */
-const CHARGE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)_120px_104px_auto]'
-const FINE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_minmax(0,160px)_104px_auto]'
+const CHARGE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)_120px_104px_196px]'
+const FINE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_minmax(0,160px)_104px_88px]'
 
 export default function LateFeeTrackingSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()

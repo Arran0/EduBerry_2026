@@ -41,9 +41,9 @@ import {
 type Sheet = 'types' | 'scholarships'
 
 /** The three lists' columns on a laptop; a phone folds each row into a card. */
-const PENDING_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_auto]'
-const GRANTED_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_auto]'
-const TYPE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_84px_auto]'
+const PENDING_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_212px]'
+const GRANTED_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,300px)_104px_88px]'
+const TYPE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_84px_64px]'
 
 export default function ConcessionsSection() {
   const { year } = useAcademicYear()

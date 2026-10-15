@@ -55,16 +55,21 @@ export function FeeScreen({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 mb-2.5 px-3 sm:px-0">
-          <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+        {/* The masthead: a dark square with the module's gold mark, the title
+            at the one display size the module has, and the session it is
+            scoped to as a micro-label under it. Controls sit level with the
+            title's baseline on the right rather than floating above it. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 sm:mb-4 px-3 sm:px-0">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#27272A] flex items-center justify-center flex-shrink-0
+                          shadow-[inset_0_-2px_0_#B8983C]">
             {icon}
           </div>
           <div className="flex-1 min-w-[150px]">
-            <h1 className="font-display text-lg font-bold text-[#18181B] leading-none truncate">
+            <h1 className="font-display text-[19px] sm:text-[22px] font-bold text-[#18181B] leading-none truncate tracking-[-0.01em]">
               {title}
             </h1>
             {subtitle && (
-              <p className="text-[10.5px] text-[#8C8878] mt-1 leading-tight">{subtitle}</p>
+              <p className={`${LABEL} mt-1.5 leading-tight normal-case tracking-[0.04em] text-[10.5px] font-semibold`}>{subtitle}</p>
             )}
           </div>
           {actions && (
@@ -189,7 +194,7 @@ export function TabBar<K extends string>({
   onChange: (key: K) => void
 }) {
   return (
-    <div className={`flex border-b border-[#E3DFD3] mb-3 ${BLEED} sm:mx-0 px-3 sm:px-0`}>
+    <div className="flex sm:gap-1 border-b border-[#E3DFD3] mb-3 sm:mb-4 px-3 sm:px-0">
       {tabs.map(t => {
         const on = t.key === active
         const Icon = t.icon
@@ -197,7 +202,7 @@ export function TabBar<K extends string>({
           <button
             key={t.key}
             onClick={() => onChange(t.key)}
-            className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-1.5 sm:px-3 pb-1.5
+            className={`flex-1 sm:flex-none min-w-0 flex items-center justify-center gap-1.5 px-1.5 sm:px-4 pb-2 pt-1
                         text-[11px] font-bold uppercase tracking-[0.06em] border-b-2 -mb-px
                         transition-colors ${
               on ? 'border-[#B8983C] text-[#18181B]' : 'border-transparent text-[#A8A395] hover:text-[#6B675A]'
@@ -218,6 +223,112 @@ export function TabBar<K extends string>({
         )
       })}
     </div>
+  )
+}
+
+export interface SegmentDef<K extends string> {
+  key: K
+  label: string
+  short?: string
+  icon?: React.ElementType
+  /** A count shown after the label — how many rows the choice would show. */
+  count?: number
+}
+
+/**
+ * The module's one switch between views of the same thing: joined square
+ * segments in a hairline frame, the live one dark. Used wherever a screen
+ * offers "this or that" — the Collection Center's sections, the ledger's
+ * status filter, term or month on the issue bar.
+ *
+ * `fill` stretches the segments to the frame's width (a phone, or a frame that
+ * owns its whole row); without it each segment is as wide as its words, which
+ * is what a laptop wants — a three-way switch stretched across 1,400px reads
+ * as three unrelated buttons.
+ */
+export function Segmented<K extends string>({
+  options, value, onChange, fill, size = 'md', className = '',
+}: {
+  options: SegmentDef<K>[]
+  value: K
+  onChange: (key: K) => void
+  /** `true` always stretches; `'phone'` stretches only below `sm`. */
+  fill?: boolean | 'phone'
+  size?: 'sm' | 'md'
+  className?: string
+}) {
+  const frame = fill === true ? 'flex w-full' : fill === 'phone' ? 'flex max-sm:w-full sm:inline-flex' : 'inline-flex'
+  const item = fill === true ? 'flex-1' : fill === 'phone' ? 'max-sm:flex-1' : ''
+  return (
+    <div role="tablist"
+         className={`${frame} max-w-full bg-white border border-[#E3DFD3] p-[3px] gap-[3px] ${className}`}>
+      {options.map(o => {
+        const on = o.key === value
+        const Icon = o.icon
+        return (
+          <button
+            key={o.key}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(o.key)}
+            className={`${item} min-w-0 inline-flex items-center justify-center gap-1.5
+                        ${size === 'sm' ? 'px-2 py-[5px]' : 'px-2.5 sm:px-3 py-[6px]'}
+                        text-[10.5px] font-bold uppercase tracking-[0.07em] leading-none whitespace-nowrap transition-colors ${
+              on ? 'bg-[#27272A] text-white' : 'text-[#8C8878] hover:text-[#18181B] hover:bg-[#FAF8F2]'}`}
+          >
+            {Icon && <Icon size={13} className={`flex-shrink-0 ${fill === 'phone' ? 'max-sm:hidden' : ''} ${on ? 'text-[#B8983C]' : ''}`} />}
+            <span className="truncate">
+              {o.short ? <><span className="sm:hidden">{o.short}</span><span className="max-sm:hidden">{o.label}</span></> : o.label}
+            </span>
+            {o.count !== undefined && (
+              <span className={`tabular-nums text-[9.5px] ${on ? 'text-[#B8983C]' : 'text-[#B5B09F]'}`}>{o.count}</span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * A screen's control row: what narrows the list on the left, what acts on it
+ * on the right. On a phone the two halves stack, the actions sharing one line.
+ */
+export function Toolbar({ left, right, className = '' }: {
+  left?: React.ReactNode
+  right?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-wrap items-center gap-2 mb-3 ${className}`}>
+      {left && <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">{left}</div>}
+      {right && <div className="flex flex-wrap items-center gap-1.5 max-sm:w-full sm:ml-auto">{right}</div>}
+    </div>
+  )
+}
+
+/**
+ * A titled panel: the dark strip the Salary hub names its panels with, an
+ * optional count beside the title, and room for one control on the right.
+ */
+export function TitledPanel({ title, count, right, className = '', children }: {
+  title: string
+  count?: number
+  right?: React.ReactNode
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className={`bg-white border border-[#E3DFD3] ${BLEED} sm:mx-0 max-sm:border-x-0 ${className}`}>
+      <div className="flex items-center gap-2 bg-[#27272A] px-3 min-h-[34px] py-1.5">
+        <h3 className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8] truncate">{title}</h3>
+        {count !== undefined && (
+          <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{count}</span>
+        )}
+        {right && <div className="ml-auto flex items-center gap-1.5">{right}</div>}
+      </div>
+      {children}
+    </section>
   )
 }
 

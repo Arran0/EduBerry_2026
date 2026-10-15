@@ -29,7 +29,7 @@ import {
 } from '@/lib/fees/charges'
 
 /** The rule list's columns on a laptop; a phone folds each row into a card. */
-const RULE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_72px_auto]'
+const RULE_COLS = 'sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)_72px_184px]'
 
 export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () => void }) {
   const { year } = useAcademicYear()

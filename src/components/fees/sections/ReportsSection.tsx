@@ -51,7 +51,7 @@ import {
  * The report lists, column by column once there is room for columns. On a phone
  * each row folds into a card: what it is on the left, the figure on the right.
  */
-const CLASS_COLS = 'sm:grid-cols-[72px_minmax(0,1fr)_120px_auto]'
+const CLASS_COLS = 'sm:grid-cols-[72px_minmax(0,1fr)_120px_124px]'
 const STAFF_COLS = 'sm:grid-cols-[minmax(0,1fr)_110px_100px_120px_124px]'
 const PIPELINE_COLS = 'sm:grid-cols-[132px_112px_minmax(0,1fr)_120px]'
 const GIVEN_COLS = 'sm:grid-cols-[132px_minmax(0,1fr)_120px]'
@@ -178,9 +178,16 @@ export default function ReportsSection() {
 
   return (
     <>
-      <div className="flex justify-end mb-2 px-3 sm:px-0">
-        <button onClick={() => setSearching(true)} className="inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] px-2.5 py-[7px]">
-          <Search size={13} /> Search
+      <div className="flex items-end justify-between gap-3 mb-3 px-3 sm:px-0">
+        <div className="min-w-0">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#3F3F46] leading-tight">Session report</h2>
+          <p className="text-[10.5px] text-[#8C8878] leading-tight mt-0.5 truncate">
+            Where the money stands, where it came from, and who still owes it
+          </p>
+        </div>
+        <button onClick={() => setSearching(true)}
+                className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px]">
+          <Search size={13} className="text-[#B8983C]" /> Find a bill or receipt
         </button>
       </div>
       {perms.amountsHidden && (

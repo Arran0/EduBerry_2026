@@ -5,23 +5,21 @@
 //
 // The same sheet creates one and, later, shows it: open a chip in the grid's
 // Other column and you are looking at the form you filled in, read-only, with
-// what was issued and to whom. A thing that looks different every time you
-// meet it is a thing nobody trusts.
+// what was issued and to whom.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  AlertOctagon, CheckCircle2, Loader2, Lock, Pencil, Receipt, Search, Send, Trash2, Undo2, X,
+  AlertOctagon, Check, Loader2, Lock, Pencil, Receipt, Search, Send, Trash2, Undo2, X,
 } from 'lucide-react'
+import { ADMIN, INVOICE_CHIP } from '@/components/fees/ui'
+import { Segmented } from '@/components/fees/shell'
 import { GRADE_OPTIONS, gradeLabel, gradeShortLabel } from '@/lib/grades'
 import {
   NO_GRADE_LABEL, deleteCharge, issueCharge, saveCharge,
   type ChargeFilters, type ChargeRow, type FineCategory, type IssueRow, type StudentLite,
 } from '@/lib/fees/grid'
-import {
-  BTN, Chip, ErrorNote, FIELD, GlassSheet, Group, GroupRowItem, INLINE_FIELD, SYS, Segmented,
-  rupees, shortDate, todayIso,
-} from './glass'
+import { Aside, ErrorNote, FeeSheet, Field, Pick, rupees, shortDate, todayIso } from './kit'
 
 type GenderFilter = 'all' | 'male' | 'female'
 const gkey = (g: number | null) => (g === null ? 'none' : String(g))
@@ -61,7 +59,6 @@ export default function ChargeSheet({
   onSaved: () => void
   onUndo: (issue: IssueRow) => void
 }) {
-  const accent = kind === 'fine' ? SYS.red : SYS.indigo
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
@@ -80,7 +77,6 @@ export default function ChargeSheet({
 
   const byId = useMemo(() => new Map(students.map(s => [s.id, s])), [students])
 
-  // Load the sheet from the charge (or blank).
   useEffect(() => {
     if (!open) return
     setError(null); setTriedSave(false); setQuery('')
@@ -144,7 +140,6 @@ export default function ChargeSheet({
 
   const amountNum = Number(amount)
   const problem = titleProblem(title)
-  const readOnly = !editing
 
   const toggleSet = (set: Set<string>, v: string, setter: (s: Set<string>) => void) => {
     const n = new Set(set)
@@ -165,12 +160,12 @@ export default function ChargeSheet({
     if (selected.length === 0) { setError('Choose at least one student.'); return }
     setBusy(true); setError(null)
     try {
-      const gradeList = Array.from(grades).map(g => (g === 'none' ? null : Number(g)))
       await saveCharge(yearId, {
         id: charge?.id, kind, title, description, amount: amountNum, due_date: due,
         student_ids: selected.map(s => s.id),
         filters: {
-          grades: gradeList, sections: Array.from(sections),
+          grades: Array.from(grades).map(g => (g === 'none' ? null : Number(g))),
+          sections: Array.from(sections),
           gender: gender === 'all' ? null : gender, picked: Array.from(picked),
         },
         fine_category_id: kind === 'fine' ? category : null,
@@ -184,173 +179,187 @@ export default function ChargeSheet({
     }
   }
 
-  const issueExisting = async () => {
-    if (!charge) return
+  const act = async (fn: () => Promise<void>) => {
     setBusy(true); setError(null)
-    try { await issueCharge(charge.id); onSaved(); onClose() }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not issue.') }
-    finally { setBusy(false) }
-  }
-
-  const remove = async () => {
-    if (!charge) return
-    setBusy(true); setError(null)
-    try { await deleteCharge(charge.id); onSaved(); onClose() }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not delete.') }
+    try { await fn(); onSaved(); onClose() }
+    catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.') }
     finally { setBusy(false) }
   }
 
   const noun = kind === 'fine' ? 'fine' : 'fee'
-  const sheetTitle = charge ? charge.title : kind === 'fine' ? 'Issue a fine' : 'New other fee'
+  const total = amountNum > 0 ? amountNum * selected.length : 0
 
   const footer = editing ? (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="text-[13px] text-[rgba(60,60,67,0.6)] mr-auto tabular-nums">
+      <span className="text-[11px] text-[#8C8878] mr-auto tabular-nums">
         {selected.length} student{selected.length === 1 ? '' : 's'}
-        {amountNum > 0 && <> · <span className="text-[#1C1C1E] font-semibold">{rupees(amountNum * selected.length)}</span></>}
-      </div>
-      <button onClick={() => (charge ? setEditing(false) : onClose())} className={BTN.glass}>Cancel</button>
+        {total > 0 && <> · <span className="font-bold text-[#18181B]">{rupees(total)}</span></>}
+      </span>
+      <button onClick={() => (charge ? setEditing(false) : onClose())} className={ADMIN.ghostBtn}>Cancel</button>
       {kind === 'other' && (
-        <button onClick={() => submit(false)} disabled={busy} className={BTN.glass}>Save as draft</button>
+        <button onClick={() => void submit(false)} disabled={busy} className={ADMIN.ghostBtn}>Save draft</button>
       )}
       {canIssue && (
-        <button onClick={() => submit(true)} disabled={busy} className={BTN.primary}
-                style={{ background: accent, boxShadow: `0 6px 16px -8px ${accent}` }}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        <button onClick={() => void submit(true)} disabled={busy} className={ADMIN.goldBtn}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
           {kind === 'fine' ? 'Issue fine' : 'Save & issue'}
         </button>
       )}
     </div>
   ) : (
     <div className="flex flex-wrap items-center gap-2">
-      {!issue && canEdit && (
-        <button onClick={remove} disabled={busy} className={BTN.destructive}><Trash2 size={14} /> Delete</button>
+      {!issue && canEdit && charge && (
+        <button onClick={() => void act(() => deleteCharge(charge.id))} disabled={busy}
+                className={`${ADMIN.ghostBtn} hover:!text-[#A93232] hover:!border-[#EFCCCC]`}>
+          <Trash2 size={13} /> Delete
+        </button>
       )}
       <div className="flex-1" />
       {!issue && canEdit && (
-        <button onClick={() => setEditing(true)} className={BTN.glass}><Pencil size={13} /> Edit</button>
+        <button onClick={() => setEditing(true)} className={ADMIN.ghostBtn}><Pencil size={12} /> Edit</button>
       )}
-      {!issue && canIssue && (
-        <button onClick={issueExisting} disabled={busy} className={BTN.primary}
-                style={{ background: accent }}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Issue now
+      {!issue && canIssue && charge && (
+        <button onClick={() => void act(() => issueCharge(charge.id))} disabled={busy} className={ADMIN.goldBtn}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Issue now
         </button>
       )}
       {issue && (
-        <button onClick={() => onUndo(issue)} className={BTN.destructive}><Undo2 size={14} /> Undo issue</button>
+        <button onClick={() => onUndo(issue)} className={`${ADMIN.ghostBtn} hover:!text-[#A93232] hover:!border-[#EFCCCC]`}>
+          <Undo2 size={13} /> Undo issue
+        </button>
       )}
     </div>
   )
 
   return (
-    <GlassSheet
-      open={open} onClose={onClose} size="xl" accent={accent}
-      icon={kind === 'fine' ? <AlertOctagon size={18} /> : <Receipt size={18} />}
-      title={sheetTitle}
+    <FeeSheet
+      open={open} onClose={onClose} size="xl"
+      icon={kind === 'fine' ? <AlertOctagon size={15} /> : <Receipt size={15} />}
+      title={charge ? charge.title : kind === 'fine' ? 'Issue a fine' : 'New other fee'}
       subtitle={charge
-        ? (issue
-          ? <span className="inline-flex items-center gap-1 text-[#248A3D]"><CheckCircle2 size={13} /> Issued {shortDate(issue.issued_at.slice(0, 10))} · locked</span>
-          : `Draft ${noun} — not billed yet`)
-        : kind === 'fine'
-          ? 'Billed straight away to the students you choose.'
-          : 'Billed under “Other” to the students you choose.'}
+        ? (issue ? `Issued ${shortDate(issue.issued_at.slice(0, 10))} · locked` : `Draft ${noun} — not billed yet`)
+        : kind === 'fine' ? 'Billed straight away to the students you choose' : 'Billed under “Other” to the students you choose'}
       footer={footer}
     >
-      {/* What */}
-      <Group
-        header="What parents will see"
-        footer={editing && triedSave && problem ? <span className="text-[#FF3B30]">{problem}</span>
-          : editing ? 'Be specific — this title is the line on the bill.' : undefined}
-      >
-        <GroupRowItem label="Title">
-          {readOnly ? <span className="text-[15px] text-right font-medium">{title}</span> : (
-            <input value={title} onChange={e => setTitle(e.target.value)} className={INLINE_FIELD}
-                   placeholder={kind === 'fine' ? 'Library book returned late' : 'Annual Day costume'} autoFocus={!charge} />
-          )}
-        </GroupRowItem>
-        {kind === 'fine' && fineCategories.length > 0 && (
-          <div className="px-4 py-2.5 flex flex-wrap gap-1.5 items-center">
-            <span className="text-[15px] text-[#1C1C1E] mr-2">Kind</span>
-            {fineCategories.map(c => (
-              <Chip key={c.id} on={category === c.id} tone={SYS.red} disabled={readOnly}
-                    onClick={() => {
-                      setCategory(category === c.id ? null : c.id)
-                      if (!amount && c.default_amount > 0) setAmount(String(c.default_amount))
-                    }}>
-                {c.name}
-              </Chip>
-            ))}
-          </div>
-        )}
-        <GroupRowItem label="Amount">
-          {readOnly ? <span className="text-[15px] tabular-nums font-semibold">{rupees(amountNum)}</span> : (
-            <input type="number" min={0} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}
-                   className={`${INLINE_FIELD} tabular-nums`} placeholder="₹0" />
-          )}
-        </GroupRowItem>
-        <GroupRowItem label="Due date">
-          {readOnly ? <span className="text-[15px]">{shortDate(due)}</span> : (
-            <input type="date" value={due} onChange={e => setDue(e.target.value)} className={INLINE_FIELD} />
-          )}
-        </GroupRowItem>
-        {(editing || description) && (
-          <div className="px-4 py-2.5">
-            {readOnly ? <p className="text-[14px] text-[rgba(60,60,67,0.75)] whitespace-pre-wrap">{description}</p> : (
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-                        className="w-full bg-transparent text-[15px] resize-none focus:outline-none placeholder:text-[rgba(60,60,67,0.3)]"
-                        placeholder="A note for parents (optional)" />
-            )}
-          </div>
-        )}
-      </Group>
+      {charge && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+            kind === 'fine' ? INVOICE_CHIP.overdue : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'}`}>
+            {kind === 'fine' ? 'Fine' : 'Other fee'}
+          </span>
+          <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+            issue ? INVOICE_CHIP.paid : INVOICE_CHIP.draft}`}>
+            {issue ? 'Issued' : 'Draft'}
+          </span>
+        </div>
+      )}
 
-      {/* Who */}
+      {/* What the bill says */}
+      {editing ? (
+        <div className="grid sm:grid-cols-[minmax(0,1fr)_140px_160px] gap-3">
+          <Field label="Title on the bill"
+                 error={triedSave && problem ? problem : undefined}
+                 hint="Be specific — parents read this line.">
+            <input value={title} onChange={e => setTitle(e.target.value)} className={ADMIN.inputPlain}
+                   placeholder={kind === 'fine' ? 'Library book returned late' : 'Annual Day costume'} autoFocus={!charge} />
+          </Field>
+          <Field label="Amount per student">
+            <input type="number" min={0} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}
+                   className={`${ADMIN.inputPlain} tabular-nums text-right`} placeholder="₹0" />
+          </Field>
+          <Field label="Due date">
+            <input type="date" value={due} onChange={e => setDue(e.target.value)} className={ADMIN.inputPlain} />
+          </Field>
+          {kind === 'fine' && fineCategories.length > 0 && (
+            <Field label="Kind of fine" className="sm:col-span-3">
+              <div className="flex flex-wrap gap-1.5">
+                {fineCategories.map(c => (
+                  <Pick key={c.id} on={category === c.id} tone="bad"
+                        onClick={() => {
+                          setCategory(category === c.id ? null : c.id)
+                          if (!amount && c.default_amount > 0) setAmount(String(c.default_amount))
+                        }}>
+                    {c.name}
+                  </Pick>
+                ))}
+              </div>
+            </Field>
+          )}
+          <Field label="Note for parents (optional)" className="sm:col-span-3">
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+                      className={`${ADMIN.inputPlain} resize-none`} placeholder="What this covers, if the title needs it" />
+          </Field>
+        </div>
+      ) : (
+        <dl className="grid grid-cols-3 border border-[#E3DFD3] bg-white divide-x divide-[#E3DFD3]">
+          {[
+            { k: 'Per student', v: rupees(amountNum) },
+            { k: 'Due', v: shortDate(due) },
+            { k: 'Total', v: rupees(total) },
+          ].map(x => (
+            <div key={x.k} className="px-3 py-2 min-w-0">
+              <dt className={ADMIN.label}>{x.k}</dt>
+              <dd className="text-[15px] font-bold tabular-nums text-[#18181B] truncate">{x.v}</dd>
+            </div>
+          ))}
+          {description && (
+            <p className="col-span-3 px-3 py-2 border-t border-[#E3DFD3] !border-l-0 text-[12px] text-[#52525B] whitespace-pre-wrap">
+              {description}
+            </p>
+          )}
+        </dl>
+      )}
+
+      {/* Who pays */}
       {editing && (
-        <Group header="Who pays" footer="Pick grades, then narrow by section or gender. Search adds any one student.">
-          <div className="px-4 py-3">
-            <div className="flex flex-wrap gap-1.5">
+        <Field label="Who pays" hint="Pick grades, then narrow by section or gender. Search adds any one student.">
+          <div className="bg-white border border-[#E3DFD3] p-2.5 space-y-2.5">
+            <div className="flex flex-wrap gap-1">
               {GRADE_OPTIONS.map(g => (
-                <Chip key={g.value} tone={accent} on={grades.has(gkey(g.value))}
+                <Pick key={g.value} on={grades.has(gkey(g.value))}
                       onClick={() => toggleSet(grades, gkey(g.value), setGrades)}>
                   {gradeShortLabel(g.value)}
-                </Chip>
+                </Pick>
               ))}
-              <Chip tone={accent} on={grades.has('none')} onClick={() => toggleSet(grades, 'none', setGrades)}>
-                No grade
-              </Chip>
+              <Pick on={grades.has('none')} onClick={() => toggleSet(grades, 'none', setGrades)}>No grade</Pick>
             </div>
 
-            {sectionOptions.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="text-[12.5px] text-[rgba(60,60,67,0.6)] mr-1">Sections</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2.5 border-t border-[#F0ECE2]">
+              <div className="flex flex-wrap items-center gap-1">
+                <span className={`${ADMIN.label} mr-1`}>Sections</span>
+                {sectionOptions.length === 0 && <span className="text-[11px] text-[#A8A395]">Pick a grade first</span>}
                 {sectionOptions.map(sec => (
-                  <Chip key={sec} tone={accent} on={sections.has(sec)} onClick={() => toggleSet(sections, sec, setSections)}>
-                    {sec}
-                  </Chip>
+                  <Pick key={sec} on={sections.has(sec)} onClick={() => toggleSet(sections, sec, setSections)}>{sec}</Pick>
                 ))}
-                {sections.size > 0 && <button className={BTN.plain} onClick={() => setSections(new Set())}>All sections</button>}
+                {sections.size > 0 && (
+                  <button className="text-[10.5px] font-semibold text-[#6B675A] hover:text-[#18181B] underline ml-1"
+                          onClick={() => setSections(new Set())}>All</button>
+                )}
               </div>
-            )}
-
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[12.5px] text-[rgba(60,60,67,0.6)]">Gender</span>
-              <Segmented<GenderFilter> size="sm" value={gender} onChange={setGender}
-                options={[{ value: 'all', label: 'All' }, { value: 'male', label: 'Boys' }, { value: 'female', label: 'Girls' }]} />
+              <div className="flex items-center gap-2">
+                <span className={ADMIN.label}>Gender</span>
+                <Segmented<GenderFilter> size="sm" value={gender} onChange={setGender}
+                  options={[{ key: 'all', label: 'All' }, { key: 'male', label: 'Boys' }, { key: 'female', label: 'Girls' }]} />
+              </div>
             </div>
 
-            <div className="mt-3 relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(60,60,67,0.45)]" />
-              <input value={query} onChange={e => setQuery(e.target.value)} className={`${FIELD} pl-9`}
-                     placeholder="Add a student by name or admission no." />
+            <div className="relative pt-2.5 border-t border-[#F0ECE2]">
+              <Search size={14} className="absolute left-3 top-[calc(50%+5px)] -translate-y-1/2 text-[#8C8878]" />
+              <input value={query} onChange={e => setQuery(e.target.value)} className={ADMIN.input}
+                     placeholder="Add one student by name or admission number" />
               {search.length > 0 && (
-                <div className="absolute z-10 left-0 right-0 mt-1 rounded-[12px] bg-white/90 backdrop-blur-2xl ring-1 ring-black/[0.06] shadow-[0_20px_40px_-20px_rgba(0,0,0,0.35)] overflow-hidden">
+                <div className="absolute z-10 left-0 right-0 mt-px bg-white border border-[#27272A] shadow-[0_12px_28px_-12px_rgba(0,0,0,0.35)]">
                   {search.map(s => (
                     <button key={s.id} type="button"
-                            onClick={() => { setPicked(new Set(picked).add(s.id)); const ex = new Set(excluded); ex.delete(s.id); setExcluded(ex); setQuery('') }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-[#007AFF]/[0.06] flex items-center gap-2">
-                      <span className="text-[14px] text-[#1C1C1E] flex-1 truncate">{s.full_name}</span>
-                      <span className="text-[12px] text-[rgba(60,60,67,0.6)]">
-                        {s.grade === null ? NO_GRADE_LABEL : `${gradeShortLabel(s.grade)}${s.section ? `-${s.section}` : ''}`}
+                            onClick={() => {
+                              setPicked(new Set(picked).add(s.id))
+                              const ex = new Set(excluded); ex.delete(s.id); setExcluded(ex)
+                              setQuery('')
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-[#FAF8F2] flex items-center gap-2 border-b border-[#F0ECE2] last:border-b-0">
+                      <span className="text-[12.5px] text-[#18181B] flex-1 truncate">{s.full_name}</span>
+                      <span className="text-[11px] text-[#8C8878]">
+                        {s.grade === null ? NO_GRADE_LABEL : `${gradeShortLabel(s.grade)}${s.section ? ` ${s.section}` : ''}`}
                       </span>
                     </button>
                   ))}
@@ -358,44 +367,51 @@ export default function ChargeSheet({
               )}
             </div>
           </div>
-        </Group>
+        </Field>
       )}
 
-      <Group header={`${selected.length} student${selected.length === 1 ? '' : 's'}${amountNum > 0 ? ` · ${rupees(amountNum * selected.length)}` : ''}`}>
+      {/* The students */}
+      <div className="bg-white border border-[#E3DFD3]">
+        <div className="flex items-center gap-2 bg-[#27272A] px-3 py-1.5">
+          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">Students</span>
+          <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{selected.length}</span>
+          {total > 0 && <span className="ml-auto text-[11px] font-bold tabular-nums text-white">{rupees(total)}</span>}
+        </div>
         {selected.length === 0 ? (
-          <p className="px-4 py-4 text-[13.5px] text-[rgba(60,60,67,0.6)]">
-            {editing ? 'Choose a grade or search for a student to start.' : 'No students.'}
+          <p className="px-3 py-5 text-[12px] text-[#8C8878]">
+            {editing ? 'Choose a grade, or search for a student, to start.' : 'No students.'}
           </p>
         ) : (
-          <div className="max-h-[260px] overflow-y-auto">
+          <div className="max-h-[240px] overflow-y-auto">
             {selected
               .slice()
               .sort((a, b) => (a.grade ?? 99) - (b.grade ?? 99) || (a.section ?? '').localeCompare(b.section ?? '') || a.full_name.localeCompare(b.full_name))
               .map(s => (
-                <div key={s.id} className="flex items-center gap-2 px-4 h-10 border-b last:border-b-0 border-[rgba(60,60,67,0.08)]">
-                  <span className="text-[14px] text-[#1C1C1E] flex-1 truncate">{s.full_name}</span>
-                  <span className="text-[12px] text-[rgba(60,60,67,0.6)] tabular-nums">
+                <div key={s.id} className="flex items-center gap-2 px-3 py-[6px] border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
+                  <span className="text-[12.5px] text-[#18181B] flex-1 truncate">{s.full_name}</span>
+                  <span className="text-[11px] text-[#8C8878] tabular-nums">
                     {s.grade === null ? 'No grade' : `${gradeLabel(s.grade)}${s.section ? ` ${s.section}` : ''}`}
                   </span>
                   {editing && (
                     <button onClick={() => removeStudent(s.id)} aria-label={`Remove ${s.full_name}`}
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-[rgba(60,60,67,0.45)] hover:bg-black/5">
+                            className="w-6 h-6 flex items-center justify-center text-[#C9C4B4] hover:text-[#A93232]">
                       <X size={13} />
                     </button>
                   )}
+                  {!editing && issue && <Check size={12} className="text-[#1F6B42]" />}
                 </div>
               ))}
           </div>
         )}
-      </Group>
+      </div>
 
       {issue && (
-        <p className="mt-3 px-1 text-[12.5px] text-[rgba(60,60,67,0.6)] flex items-center gap-1.5">
-          <Lock size={12} className="text-[#34C759]" />
+        <Aside tone="good">
+          <Lock size={11} className="inline mr-1 -mt-0.5" />
           Issued to {issue.invoice_count} student{issue.invoice_count === 1 ? '' : 's'} for {rupees(issue.total)}. Undo the issue to change anything.
-        </p>
+        </Aside>
       )}
       <ErrorNote>{error}</ErrorNote>
-    </GlassSheet>
+    </FeeSheet>
   )
 }

@@ -19,7 +19,7 @@ import {
 } from '@/lib/fees/invoices'
 
 /** The held-cheque list's columns on a laptop; a phone gets `Row`'s card. */
-const CHEQUE_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_104px_auto]'
+const CHEQUE_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_104px_300px]'
 
 export default function PostDatedCheques({
   canManage, showAmounts, people,

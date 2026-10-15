@@ -29,7 +29,7 @@ import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearCo
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
 import YearScope from '@/components/fees/config/YearScope'
-import { Btn, CELL, Col, FeeScreen, List, ListHead, Row, StatStrip, TAP } from '@/components/fees/shell'
+import { Btn, CELL, Col, FeeScreen, List, ListHead, Row, StatStrip, TAP, TitledPanel } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
@@ -54,8 +54,8 @@ import {
  * The lists on this page, column by column, once there is a screen wide enough
  * to have columns. A phone gets the card `Row` falls back to.
  */
-const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_120px_104px_104px_auto]'
-const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,170px)_112px_104px_auto]'
+const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_96px_96px_28px]'
+const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,140px)_96px_92px_60px]'
 const CHEQUE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,150px)_104px_104px]'
 const LEDGER_COLS = 'sm:grid-cols-[96px_minmax(0,1fr)_100px_100px_108px]'
 const CONCESSION_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_132px_108px]'
@@ -269,9 +269,12 @@ function ProfileInner() {
             })}
           </div>
 
-          <Heading icon={FileText}>Bills</Heading>
+          {/* Bills and receipts side by side once there is room: the two
+              halves of the same account, read against each other. */}
+          <div className="grid gap-3 xl:grid-cols-2 items-start">
           {(
-            <Panel empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
+            <TitledPanel title="Bills" count={invoices.length || undefined}>
+            <Panel flush empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
               {invoices.map(i => (
                 <Row key={i.id} cols={BILL_COLS} trailing={1} below={<>
                   <div className="space-y-0.5">
@@ -314,11 +317,12 @@ function ProfileInner() {
                 </Row>
               ))}
             </Panel>
+            </TitledPanel>
           )}
 
-          <Heading icon={Printer}>Receipts</Heading>
           {(
-            <Panel empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
+            <TitledPanel title="Receipts" count={payments.length || undefined}>
+            <Panel flush empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
               {payments.map(p => (
                 <Row key={p.id} cols={RECEIPT_COLS} trailing={2}
                      below={p.reversal_reason ? (
@@ -359,7 +363,9 @@ function ProfileInner() {
                 </Row>
               ))}
             </Panel>
+            </TitledPanel>
           )}
+          </div>
 
           {sheet && (
             <ModalShell
@@ -591,18 +597,9 @@ function ProfileInner() {
 }
 
 /** A hairline heading over one of the two lists the page always shows. */
-function Heading({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+function Panel({ empty, flush, children }: { empty: string | null; flush?: boolean; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 border-b border-[#E3DFD3] pb-1.5 pt-1">
-      <Icon size={14} className="text-[#B8983C]" />
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">{children}</h2>
-    </div>
-  )
-}
-
-function Panel({ empty, children }: { empty: string | null; children: React.ReactNode }) {
-  return (
-    <div className={`${ADMIN.card} overflow-hidden`}>
+    <div className={`${flush ? '' : ADMIN.card} overflow-hidden`}>
       {empty ? <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">{empty}</p> : children}
     </div>
   )

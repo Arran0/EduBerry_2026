@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import FeeToolModal from '@/components/fees/FeeToolModal'
-import { CELL, Col, List, ListHead, Row, TAP } from '@/components/fees/shell'
+import { CELL, Col, List, ListHead, Row, Segmented, TAP, TitledPanel } from '@/components/fees/shell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
@@ -52,11 +52,13 @@ export type LedgerFilter = InvoiceStatus | 'all'
  * two-column card `Row` falls back to, so the name and the balance sit on the
  * same line instead of at opposite ends of a sideways scroll.
  */
-const LEDGER_COLS = 'sm:grid-cols-[minmax(88px,116px)_minmax(0,1fr)_100px_104px_92px_96px_minmax(0,auto)]'
+// Every column fixed but the name, so a row with a Collect button and a row
+// without one put their figures in the same place.
+const LEDGER_COLS = 'sm:grid-cols-[minmax(88px,124px)_minmax(0,1fr)_100px_104px_92px_96px_132px]'
 
 /** The counter's two lists: a bill, and a receipt taken against one. */
-const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_120px_104px_104px_auto]'
-const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,160px)_112px_104px_auto]'
+const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_96px_96px_28px]'
+const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,140px)_96px_92px_92px]'
 
 const FILTERS: { key: LedgerFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -186,6 +188,15 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
     (!q || i.number.toLowerCase().includes(q) || nameOf(i.student_id).toLowerCase().includes(q))
   ), [invoices, filter, q, nameOf])
 
+  const counts = useMemo(() => {
+    const c = Object.fromEntries(FILTERS.map(f => [f.key, 0])) as Record<LedgerFilter, number>
+    for (const i of invoices) {
+      c.all += 1
+      if (i.status in c) c[i.status as LedgerFilter] += 1
+    }
+    return c
+  }, [invoices])
+
   const outstanding = useMemo(
     () => studentInvoices.filter(i => (i.balance ?? 0) > 0), [studentInvoices])
 
@@ -236,8 +247,11 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       )}
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+      {/* Search and the status switch narrow the ledger on the left; the two
+          things a clerk goes elsewhere for sit on the right. On a phone the
+          switch becomes one native picker beside the search. */}
       <div className="flex flex-wrap gap-2 items-center mb-3">
-        <div className="relative flex-1 min-w-[220px]">
+        <div className="relative flex-1 min-w-[150px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
           <input value={query} onChange={e => setQuery(e.target.value)}
                  placeholder="Student, admission number or bill number"
@@ -249,48 +263,38 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </button>
           )}
         </div>
-        {/* Six chips on a laptop; the same six as one native picker on a
-            phone, where they wrapped to a second and third line and pushed
-            the ledger itself off the bottom of the screen. The picker is also
-            the control a phone is best at — it opens a full-height wheel
-            rather than asking for a 70px tap. */}
         {!selected && (
           <>
-            <div className="max-sm:hidden flex gap-1 flex-wrap">
-              {FILTERS.map(f => (
-                <button key={f.key} onClick={() => onFilterChange(f.key)}
-                        className={filter === f.key
-                          ? 'px-2.5 py-1.5 text-[11px] font-semibold bg-[#27272A] text-white'
-                          : 'px-2.5 py-1.5 text-[11px] font-semibold bg-white border border-[#E3DFD3] text-[#6B675A] hover:text-[#18181B]'}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
+            <Segmented<LedgerFilter>
+              className="max-lg:hidden"
+              size="sm"
+              value={filter}
+              onChange={onFilterChange}
+              options={FILTERS.map(f => ({ key: f.key, label: f.label, count: counts[f.key] }))}
+            />
             <select value={filter} aria-label="Which bills to show"
                     onChange={e => onFilterChange(e.target.value as LedgerFilter)}
-                    className={`sm:hidden flex-shrink-0 w-[118px] bg-white border px-2 py-[7px]
-                                text-[12.5px] font-semibold text-[#18181B] focus:outline-none ${
-                      filter === 'all' ? 'border-[#E3DFD3]' : 'border-[#27272A]'}`}>
+                    className={`lg:hidden flex-shrink-0 ${ADMIN.select} ${filter === 'all' ? '' : '!border-[#27272A]'}`}>
               {FILTERS.map(f => (
                 <option key={f.key} value={f.key}>
-                  {f.key === 'all' ? 'All bills' : f.label}
+                  {f.key === 'all' ? 'All bills' : f.label} ({counts[f.key]})
                 </option>
               ))}
             </select>
           </>
         )}
-        {perms.can('fees.invoice.generate') && (
-          // Bills are issued from the fee grid now, where the cells they lock
-          // can be seen.
-          <Link href="/more/fees?tab=config" className={ADMIN.ghostBtn}>
-            <Sparkles size={13} />
-            <span className="sm:hidden">Issue</span>
-            <span className="max-sm:hidden">Issue fees</span>
-          </Link>
-        )}
-        <button onClick={() => setCheques(true)} className={ADMIN.ghostBtn}>
-          <Clock size={13} /> Cheques
-        </button>
+        <div className="flex gap-1.5 max-sm:w-full lg:ml-auto">
+          {perms.can('fees.invoice.generate') && (
+            // Bills are issued from the fee grid, where the cells they lock can
+            // be seen.
+            <Link href="/more/fees?tab=config" className={`${ADMIN.ghostBtn} max-sm:flex-1`}>
+              <Sparkles size={13} /> Issue fees
+            </Link>
+          )}
+          <button onClick={() => setCheques(true)} className={`${ADMIN.ghostBtn} max-sm:flex-1`}>
+            <Clock size={13} /> Cheques
+          </button>
+        </div>
       </div>
 
       {/* People the search found — the way into the counter. */}
@@ -347,50 +351,60 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
             </div>
           ) : (
             <>
-              {/* Who, what they owe, and the button. On a laptop that is one
-                  row. A phone gives the name the first line and then puts the
-                  figure and the button on a second, hairlined off — the label
-                  on the left, the amount beside it, Collect at the right edge
-                  where the thumb already is. Nothing wraps, so the card is the
-                  same height for every family. */}
-              <div className={`${ADMIN.card} p-3 sm:p-4`}>
-                <div className="sm:flex sm:items-center sm:justify-between sm:gap-3">
-                  <div className="min-w-0 sm:flex-1">
-                    <h2 className="text-[15px] font-bold text-[#18181B] truncate">
+              {/* The family at the counter. The dark strip says where you are;
+                  under it the name on the left and, on the right, the three
+                  figures in hairline cells with Collect at the end — the one
+                  gold button on the screen, because it is the thing the screen
+                  is for. A phone stacks the figures under the name. */}
+              <section className="bg-white border border-[#E3DFD3]">
+                <div className="flex items-center gap-2 bg-[#27272A] px-3 min-h-[34px] py-1.5">
+                  <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">At the counter</span>
+                  {selected.is_rte && (
+                    <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EEF2FB] text-[#3A5490]">RTE</span>
+                  )}
+                  <Link href={`/more/fees/students/${selected.student_id}`} className={`${ADMIN.onDarkBtn} ml-auto`}>
+                    <FileText size={11} /> Full fee profile
+                  </Link>
+                </div>
+                <div className="grid gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_auto] items-center">
+                  <div className="min-w-0">
+                    <h2 className="font-display text-[17px] font-bold text-[#18181B] truncate leading-tight">
                       {selected.full_name}
                     </h2>
-                    <p className="text-[11px] text-[#8C8878] truncate">
-                      {selected.grade === null ? '—' : gradeLabel(selected.grade)}
+                    <p className="text-[11px] text-[#8C8878] truncate mt-0.5">
+                      {selected.grade === null ? 'No class' : gradeLabel(selected.grade)}
                       {selected.section ? ` ${selected.section}` : ''}
                       {selected.admission_no ? ` · ${selected.admission_no}` : ''}
-                      {selected.is_rte ? ' · RTE' : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2.5 mt-2 pt-2 border-t border-[#F0ECE2]
-                                  sm:mt-0 sm:pt-0 sm:border-0 sm:gap-3 flex-shrink-0">
-                    <div className="min-w-0 sm:text-right">
-                      <div className={ADMIN.label}>Outstanding</div>
-                      <div className="text-[17px] font-bold text-[#18181B] tabular-nums leading-tight">
-                        {inr(selected.outstanding, showAmounts)}
-                      </div>
+                  <div className="flex items-stretch gap-2 flex-wrap sm:flex-nowrap">
+                    <div className="grid grid-cols-3 flex-1 sm:flex-none border border-[#E3DFD3] divide-x divide-[#E3DFD3] bg-[#FDFCF9]">
+                      {[
+                        { label: 'Billed', value: inr(selected.billed, showAmounts), tone: 'text-[#18181B]' },
+                        { label: 'Paid', value: inr(selected.paid, showAmounts), tone: 'text-[#1F6B42]' },
+                        { label: 'Outstanding', value: inr(selected.outstanding, showAmounts),
+                          tone: (selected.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#18181B]' },
+                      ].map(f => (
+                        <div key={f.label} className="px-3 py-1.5 sm:min-w-[112px]">
+                          <div className={ADMIN.label}>{f.label}</div>
+                          <div className={`text-[15px] font-bold tabular-nums leading-tight truncate ${f.tone}`}>{f.value}</div>
+                        </div>
+                      ))}
                     </div>
                     {canCollect && (
                       <button
                         onClick={() => setCollecting(true)}
                         disabled={outstanding.length === 0 && !rules.allow_overpayment}
-                        className={`${ADMIN.darkBtn} ml-auto sm:ml-0`}
+                        className={`${ADMIN.goldBtn} max-sm:w-full sm:px-4`}
                       >
                         <Receipt size={13} /> Collect
                       </button>
                     )}
                   </div>
                 </div>
-                <Link href={`/more/fees/students/${selected.student_id}`}
-                      className="text-[11px] text-[#6B675A] hover:text-[#18181B] hover:underline mt-3 inline-flex items-center gap-1">
-                  <FileText size={12} /> Open the full fee profile
-                </Link>
-              </div>
+              </section>
 
+              <div className="grid gap-3 xl:grid-cols-2 items-start">
               <Panel title="Unpaid bills" empty="Nothing outstanding — this family is fully paid up.">
                 {outstanding.map(i => (
                   <Row key={i.id} cols={BILL_COLS} trailing={1}>
@@ -477,6 +491,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
                   </Row>
                 ))}
               </Panel>
+              </div>
             </>
           )}
         </div>
@@ -531,7 +546,7 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
                 (i.balance ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
                 {inr(i.balance, showAmounts)}
               </span>
-              <span className={`${CELL.END} flex items-center justify-end gap-1`}>
+              <span className={`${CELL.END} flex items-center justify-end sm:justify-start gap-1`}>
                 {/* Collect and the student's name open the same counter, and on
                     a phone one way in is enough — tapping the name is the way a
                     list is read there, and the button would be a second control
@@ -627,14 +642,11 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
 function Panel({
   title, empty, children,
 }: { title: string; empty: string; children: React.ReactNode }) {
-  const isEmpty = React.Children.count(children) === 0
+  const count = React.Children.count(children)
   return (
-    <div className={ADMIN.card}>
-      <div className="px-4 py-2.5 border-b border-[#F0ECE2]">
-        <h3 className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">{title}</h3>
-      </div>
-      {isEmpty ? <p className="px-4 py-6 text-[12.5px] text-[#8C8878]">{empty}</p> : <div>{children}</div>}
-    </div>
+    <TitledPanel title={title} count={count || undefined}>
+      {count === 0 ? <p className="px-4 py-6 text-[12.5px] text-[#8C8878]">{empty}</p> : <div>{children}</div>}
+    </TitledPanel>
   )
 }
 
