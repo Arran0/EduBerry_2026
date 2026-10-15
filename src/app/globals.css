@@ -350,94 +350,245 @@ body {
 }
 
 /* ============================================================ */
-/* Home card strip — desktop density                             */
+/* Liquid Glass — the home card deck                             */
 /* ============================================================ */
 
-/* The home cards are sized for a phone: 260px tall with rows on 12px of
-   vertical padding, which is right when the card is most of the screen. On a
-   desktop the same card is one band across a 1280px page, and that height buys
-   nothing — the strip just pushes the statistics below it down the page.
+/* The deck (HomeCardDeck) is chrome: the sheet you push cards around on. So
+   it is the glass — a lens with a specular rim, a highlight that follows the
+   pointer and ambient colour underneath for it to bend. The cards riding on it
+   are content and stay solid (`.lg-deck .home-card` below): glass is never the
+   surface text is read off. Two layers at most — deck, then card. */
+.lg-deck {
+  position: relative;
+  isolation: isolate;
+  border-radius: 28px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.50) 0%, rgba(255, 255, 255, 0.18) 55%, rgba(255, 255, 255, 0.32) 100%);
+  backdrop-filter: blur(24px) saturate(185%);
+  -webkit-backdrop-filter: blur(24px) saturate(185%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.30),
+    0 2px 6px rgba(15, 23, 42, 0.05),
+    0 28px 56px -30px rgba(15, 23, 42, 0.40);
+}
 
-   Inside `.strip-compact` (the desktop card strip), every card drops to 195px
-   (a quarter off) and its rows tighten, so the same card shows *more* rows in
-   *less* height rather than the same three rows with air around them.
+/* Specular rim: a 1px gradient border, brightest where the light lands. */
+.lg-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.25) 35%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0.75) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
 
-   Why CSS rather than a `compact` prop threaded through nine card components:
-   the breakpoint is the only input, and a media query already knows it — no
-   component needs to re-render, and a card dropped into the strip later picks
-   the density up for free by carrying `.home-card`.
+/* The light source: follows the pointer (HomeCardDeck sets --lg-x/--lg-y),
+   resting top-left otherwise. */
+.lg-deck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(360px circle at var(--lg-x, 18%) var(--lg-y, -12%),
+    rgba(255, 255, 255, 0.55), transparent 55%);
+  pointer-events: none;
+  z-index: 1;
+  transition: background-position 0.2s ease;
+}
 
-   The hooks:
-     .home-card       the card's own 260px box
-     .home-card-row   one record inside it (vertical padding)
-     .home-card-stack a scroll area whose records are spaced by margin, not
-                      padding (space-y-*), so it needs the sibling selector
-   Each rule is one class more specific than the Tailwind utility it overrides,
-   which is what lets it win without !important. */
-@media (min-width: 1024px) {
-  .strip-compact .home-card {
-    height: 195px;
+/* Colour under the glass, in the active card's accent; cross-fades as the
+   deck turns. */
+.lg-ambient {
+  position: absolute;
+  inset: 6% 4%;
+  pointer-events: none;
+  z-index: 0;
+}
+.lg-ambient > span {
+  position: absolute;
+  width: 46%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  filter: blur(48px);
+  opacity: 0.32;
+  transition: background-color 0.9s ease, background 0.9s ease;
+}
+.lg-ambient > span:first-child { top: -8%; left: -4%; }
+.lg-ambient > span:last-child { bottom: -10%; right: -4%; opacity: 0.22; }
+
+/* Cards on the deck: solid, legible content with radii concentric to the
+   deck's (28 − 8 = 20). Height comes from the deck, which is fixed, so the
+   section never changes size from one card to the next. One class more
+   specific than .glass-card / .pro-card / the Tailwind height and radius
+   utilities the cards carry, so this wins without !important. */
+.lg-deck .home-card {
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.84) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 14px 30px -20px rgba(15, 23, 42, 0.45);
+}
+.lg-deck .home-card-row {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+/* Glass controls on the deck — the pager capsule and the step arrows. */
+.lg-pill,
+.lg-control {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 6px 14px -8px rgba(15, 23, 42, 0.30);
+}
+.lg-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(71 85 105);
+  transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+.lg-control:hover { background: rgba(255, 255, 255, 0.85); color: rgb(15 23 42); transform: scale(1.06); }
+.lg-control:active { transform: scale(0.94); }
+.lg-control:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.6); }
+
+/* Reduce Transparency: the glass densifies into an opaque sheet. */
+@media (prefers-reduced-transparency: reduce) {
+  .lg-deck,
+  .lg-pill,
+  .lg-control {
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
-
-  /* The track reserves room for the tallest card plus the dots below it. */
-  .strip-compact.strip-compact {
-    min-height: 265px;
-  }
-
-  .strip-compact .home-card-row {
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
-  }
-
-  .strip-compact .home-card-stack {
-    padding: 0.625rem;
-  }
-
-  /* Matches space-y-*'s own `> :not([hidden]) ~ :not([hidden])` shape so it
-     outranks it; a plain `> * + *` would lose on specificity. */
-  .strip-compact .home-card-stack > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 0.5rem;
-  }
+  .lg-deck::after,
+  .lg-ambient { display: none; }
 }
 
 /* ============================================================ */
-/* Home dashboard grid — density for the same card family        */
+/* School Overview — motion for the fee ledger and header        */
 /* ============================================================ */
 
-/* The same `.home-card` family, laid out as a grid rather than a strip. The
-   difference from `.strip-compact` is the height rule: a strip shows one card
-   at a time, so a fixed 195px is the card's whole story, while in a grid the
-   cards sit in rows beside each other and a fixed height guarantees ragged
-   bottoms the moment two cards in a row disagree. `height: 100%` hands the
-   decision to the grid cell — the row's own min-height sizes it and every card
-   in that row ends on the same line.
+/* A fee head's paid band: its colour, lit from above. */
+.fee-solid {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--fee-c) 78%, white) 0%,
+    var(--fee-c) 55%,
+    color-mix(in srgb, var(--fee-c) 85%, black) 100%);
+}
 
-   This starts at `md:` rather than `lg:` because the grid itself does: at 768px
-   the strip has already become two columns, and a card still carrying its
-   phone height would leave the denser layout looking like it had not been
-   re-cut at all.
+/* A fee head's owed band: the same colour, striped and drifting — money that
+   is still on its way. */
+.fee-stripes {
+  background-color: color-mix(in srgb, var(--fee-c) 22%, white);
+  background-image: linear-gradient(135deg,
+    color-mix(in srgb, var(--fee-c) 45%, transparent) 25%, transparent 25%,
+    transparent 50%, color-mix(in srgb, var(--fee-c) 45%, transparent) 50%,
+    color-mix(in srgb, var(--fee-c) 45%, transparent) 75%, transparent 75%);
+  background-size: 12px 12px;
+  animation: fee-stripes-drift 1.6s linear infinite;
+}
+@keyframes fee-stripes-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 12px 0; }
+}
 
-   Same specificity trick as `.strip-compact` above: each rule is exactly one
-   class more than the Tailwind utility it overrides, so it wins without
-   `!important`. A card added to the family later picks all of this up for free
-   by carrying `.home-card`. */
-@media (min-width: 768px) {
-  .home-grid .home-card {
-    height: 100%;
-  }
+/* A glint that runs across the paid half every few seconds. */
+.fee-glint {
+  overflow: hidden;
+}
+.fee-glint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+  transform: translateX(-120%);
+  animation: fee-glint 4.2s cubic-bezier(0.65, 0, 0.35, 1) 2s infinite;
+}
+@keyframes fee-glint {
+  0%   { transform: translateX(-120%); }
+  45%  { transform: translateX(260%); }
+  100% { transform: translateX(260%); }
+}
 
-  .home-grid .home-card-row {
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
-  }
+/* The two follow-up buttons under the bar. */
+.fee-action {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px -12px rgba(15, 23, 42, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.fee-action:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 14px 26px -14px rgba(15, 23, 42, 0.45);
+}
+.fee-action:active { transform: translateY(0) scale(0.98); }
+.fee-action:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.6); }
+.fee-action-icon {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
-  .home-grid .home-card-stack {
-    padding: 0.625rem;
-  }
+/* A small glass read-out that floats over the bar. */
+.lg-tooltip {
+  padding: 0.5rem 0.7rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.35), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
 
-  .home-grid .home-card-stack > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 0.5rem;
-  }
+/* The overview header's slow aurora. */
+.overview-aurora {
+  background:
+    radial-gradient(60% 140% at 0% 0%, rgba(16, 185, 129, 0.16), transparent 60%),
+    radial-gradient(50% 140% at 100% 0%, rgba(14, 165, 233, 0.14), transparent 60%),
+    linear-gradient(90deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9));
+  background-size: 160% 100%, 160% 100%, 100% 100%;
+  animation: overview-aurora 14s ease-in-out infinite alternate;
+}
+@keyframes overview-aurora {
+  from { background-position: 0% 0%, 100% 0%, 0 0; }
+  to   { background-position: 60% 0%, 40% 0%, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fee-stripes,
+  .fee-glint::after,
+  .overview-aurora { animation: none; }
 }
 
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work

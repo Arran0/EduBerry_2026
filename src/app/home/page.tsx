@@ -1,14 +1,14 @@
 'use client'
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
-import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Bell,
-  ChevronLeft,
   ChevronRight,
   Pencil,
   GraduationCap,
@@ -37,8 +37,6 @@ import {
   CalendarClock,
   FileSpreadsheet,
   ClipboardCheck,
-  Pause,
-  Play,
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
@@ -95,14 +93,13 @@ import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
-import FeesInfographicPanel, { HomeFeesSummary } from '@/components/home/desktop/FeesInfographicPanel'
-import AttendanceInfographicPanel, {
-  AttendanceTally,
-  HomeAttendanceCounts,
-} from '@/components/home/desktop/AttendanceInfographicPanel'
-import SchoolOverviewPanel from '@/components/home/desktop/SchoolOverviewPanel'
-import { fmtINR } from '@/lib/formatMoney'
-import { useIsDesktop, useIsTabletUp, useIsPhone, useHasHover } from '@/hooks/useMediaQuery'
+import { HomeFeesSummary } from '@/components/home/desktop/FeesInfographicPanel'
+import { AttendanceTally, HomeAttendanceCounts } from '@/components/home/desktop/AttendanceInfographicPanel'
+import SchoolOverviewPanel, { FeeHeadStat, HomeFeeBreakdown } from '@/components/home/desktop/SchoolOverviewPanel'
+import HomeCardDeck, { DeckSlot } from '@/components/home/HomeCardDeck'
+import AnimatedNumber from '@/components/charts/AnimatedNumber'
+import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
+import { useIsDesktop, useIsTabletUp, useIsPhone } from '@/hooks/useMediaQuery'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
@@ -241,166 +238,238 @@ type AdminCardView =
   | 'teacher-attendance' | 'task-calendar' | 'grading'
 
 /**
- * One home card, described once and rendered two ways: as a slide in the mobile
- * swipe strip, and as a cell in the desktop dashboard grid. `desktopBody` lets a
- * statistic swap its stacked mobile tiles for an infographic panel on desktop;
- * cards without one (feeds, lists, calendars) render the same body in both.
- * `span` is the card's desktop grid width — `wide` for anything that reads
- * side-by-side, `half` for everything else.
+ * One home card, described once. It becomes a slide in the card deck
+ * (HomeCardDeck); from 768px up the calendar and the standing statistics are
+ * lifted out of the deck into places of their own and reuse the same heading
+ * and body.
  */
 interface HomeSlot {
   key: AdminCardView
+  /** Read out by the pager ("Show notifications"). */
+  label: string
   heading: React.ReactNode
   body: React.ReactNode
-  desktopBody?: React.ReactNode
-  span: 'half' | 'wide'
 }
 
-/** Each slot's accent, used by the carousel's active indicator dot. */
-const DOT_COLORS: Record<AdminCardView, string> = {
-  attendance: 'bg-emerald-500',
-  'teacher-attendance': 'bg-emerald-500',
-  fees: 'bg-teal-500',
-  'bus-fees': 'bg-orange-500',
-  calendar: 'bg-violet-500',
-  'task-calendar': 'bg-sky-500',
-  assessments: 'bg-amber-500',
-  'report-cards': 'bg-rose-500',
-  'overdue-fees': 'bg-red-500',
-  notifications: 'bg-sky-500',
-  timetable: 'bg-indigo-500',
-  exams: 'bg-purple-500',
-  grading: 'bg-indigo-500',
+/** Each card's accent: tints the deck's glass and its pager capsule while the
+ *  card is up. */
+const SLOT_ACCENTS: Record<AdminCardView, string> = {
+  attendance: '#10b981',
+  'teacher-attendance': '#10b981',
+  fees: '#14b8a6',
+  'bus-fees': '#f97316',
+  calendar: '#8b5cf6',
+  'task-calendar': '#0ea5e9',
+  assessments: '#f59e0b',
+  'report-cards': '#f43f5e',
+  'overdue-fees': '#ef4444',
+  notifications: '#0ea5e9',
+  timetable: '#6366f1',
+  exams: '#a855f7',
+  grading: '#6366f1',
 }
 
-/**
- * Desktop step controls for the card strip. A pointer has no swipe, so the
- * strip needs something to click. The swipe track is full-bleed but the card
- * inside it is centred in the page's max-w-7xl box, so the arrows are anchored
- * to that same box — in the gutter either side of the card, not stranded at
- * the far edges of a 1440px screen. They stay out of the way until the strip
- * is hovered and come back on keyboard focus, so they are reachable without a
- * mouse. The wrapper stops above the indicator dots so the arrows sit against
- * the card rather than the strip's full height.
- */
-function CarouselArrows({ onPrev, onNext }: { onPrev: () => void; onNext: () => void }) {
-  const arrowClass = `pointer-events-auto absolute top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center
-    bg-white/80 backdrop-blur-sm border border-white/70 shadow-sm text-slate-600
-    opacity-0 group-hover/carousel:opacity-100 focus-visible:opacity-100
-    hover:bg-white hover:text-slate-900 transition-all duration-200
-    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60`
+const countFmt = (n: number) => Math.round(n).toLocaleString('en-IN')
+
+/** One deep-linked figure in a stat card's grid. */
+function StatTile({
+  href, icon: Icon, value, label, tint, loading, title,
+}: {
+  href: string
+  icon: React.ElementType
+  value: React.ReactNode
+  label: string
+  /** Tailwind classes for the icon chip's tint and ink. */
+  tint: string
+  loading: boolean
+  title?: string
+}) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-10 z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto">
-      <button type="button" onClick={onPrev} aria-label="Previous card" className={`${arrowClass} left-0`}>
-        <ChevronLeft size={18} />
-      </button>
-      <button type="button" onClick={onNext} aria-label="Next card" className={`${arrowClass} right-0`}>
-        <ChevronRight size={18} />
-      </button>
-    </div>
+    <Link
+      href={href}
+      title={title}
+      className="group flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:border-slate-300/80 hover:-translate-y-px hover:shadow-sm active:scale-[0.98] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+    >
+      <span className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${tint}`}>
+        <Icon size={15} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[15px] font-black text-slate-900 tabular-nums leading-none">
+          {loading ? <SkeletonBar w={48} h={13} cool /> : value}
+        </span>
+        <span className="block text-[10.5px] font-semibold text-slate-500 mt-1 truncate">{label}</span>
+      </span>
+    </Link>
   )
 }
 
-/** Mobile stat-tile card for a fee ledger — the 2×2 grid of deep-linked tiles. */
+/**
+ * A fee ledger as a phone/tablet card: the collected figure and rate up top,
+ * a paid-vs-owed bar that fills on arrival, and the four deep-linked figures
+ * below it.
+ */
 function FeeTilesCard({
-  summary, collectedHref, outstandingHref, todayHref, duesLabel, loading = false,
+  summary, accent, collectedHref, outstandingHref, todayHref, duesLabel, loading = false,
 }: {
   summary: HomeFeesSummary | null
+  accent: string
   collectedHref: string
   outstandingHref: string
   todayHref: string
   duesLabel: string
-  /** The ledger's fetch is still in flight. The tiles keep their size, tints
-   *  and captions — only the four figures shimmer, so the card never asserts a
-   *  ₹0 that nobody counted and then quietly replaces it. */
+  /** The ledger's fetch is still in flight: the figures shimmer rather than
+   *  asserting a ₹0 nobody counted and then quietly replacing it. */
   loading?: boolean
 }) {
+  const reduceMotion = useReducedMotion()
+  const collected = summary?.collected ?? 0
+  const outstanding = summary?.outstanding ?? 0
+  const billed = collected + outstanding
+  const rate = billed > 0 ? (collected / billed) * 100 : 0
   return (
-    <div className="pro-card h-[260px] p-4 flex items-center">
-      <div className="grid grid-cols-2 gap-3 w-full">
-        <Link href={collectedHref} className="flex flex-col items-center justify-center py-5 bg-[#27272A] border border-[#B8983C] hover:opacity-90 active:scale-95 transition-all shadow-sm">
-          <CheckCircle2 size={15} className="text-[#B8983C] mb-1.5" />
-          <p className="text-base font-bold text-white tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} className="opacity-30" /> : fmtINR(summary?.collected ?? 0)}</p>
-          <p className="text-[9.5px] font-semibold text-[#A1A1AA] mt-0.5">Collected</p>
-        </Link>
-        <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-          <Clock size={15} className="text-[#A1A1AA] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} cool /> : fmtINR(summary?.outstanding ?? 0)}</p>
-          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">Outstanding</p>
-        </Link>
-        <Link href={todayHref} className="flex flex-col items-center justify-center py-5 bg-[#F4F2EC] border border-[#E7E2D8] hover:bg-amber-50 active:scale-95 transition-all shadow-sm">
-          <CalendarCheck size={15} className="text-[#A8896B] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={62} h={15} cool /> : fmtINR(summary?.todayCollection ?? 0)}</p>
-          <p className="text-[10px] font-semibold text-[#52525B] mt-0.5">Today&apos;s Collection</p>
-        </Link>
-        <Link href={outstandingHref} className="flex flex-col items-center justify-center py-5 bg-white border border-[#E4E4E7] hover:bg-slate-50 active:scale-95 transition-all shadow-sm">
-          <Users size={15} className="text-[#A1A1AA] mb-1.5" />
-          <p className="text-base font-bold text-[#18181B] tabular-nums leading-tight">{loading ? <SkeletonBar w={34} h={15} cool /> : (summary?.studentsWithDues ?? '—')}</p>
-          <p className="text-[9.5px] font-semibold text-[#71717A] mt-0.5">{duesLabel}</p>
-        </Link>
+    <div className="home-card pro-card h-full rounded-[20px] p-4 flex flex-col">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Collected this year</p>
+          <p className="mt-1 font-display text-[1.65rem] font-black leading-none text-slate-900 tabular-nums" title={fmtINRExact(collected)}>
+            {loading ? <SkeletonBar w={110} h={24} cool /> : <AnimatedNumber value={collected} format={fmtINR} />}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500 tabular-nums">
+            {loading ? <SkeletonBar w={90} h={9} cool /> : <>of <span className="font-semibold text-slate-700">{fmtINR(billed)}</span> billed</>}
+          </p>
+        </div>
+        <span
+          className="flex-shrink-0 px-2.5 py-1 rounded-full text-[12px] font-black tabular-nums"
+          style={{ background: `${accent}1f`, color: accent }}
+        >
+          {loading ? '—' : <AnimatedNumber value={rate} format={n => `${Math.round(n)}%`} />}
+        </span>
+      </div>
+
+      <div className="mt-3 h-2.5 rounded-full bg-slate-200/80 overflow-hidden flex" aria-hidden>
+        {!loading && billed > 0 && (
+          <>
+            <motion.div
+              className="fee-solid h-full"
+              style={{ ['--fee-c' as string]: accent, width: `${rate}%`, transformOrigin: 'left' }}
+              initial={reduceMotion ? false : { scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: reduceMotion ? 0 : 1.1, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+            />
+            <motion.div
+              className="fee-stripes h-full flex-1"
+              style={{ ['--fee-c' as string]: '#f59e0b' }}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: reduceMotion ? 0 : 0.5, delay: 0.9 }}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="mt-auto pt-3 grid grid-cols-2 gap-2">
+        <StatTile
+          href={collectedHref} icon={CheckCircle2} label="Collected" loading={loading}
+          tint="bg-emerald-500/10 text-emerald-700" title={`Collected: ${fmtINRExact(collected)}`}
+          value={<AnimatedNumber value={collected} format={fmtINR} />}
+        />
+        <StatTile
+          href={outstandingHref} icon={Clock} label="Outstanding" loading={loading}
+          tint="bg-amber-500/10 text-amber-700" title={`Outstanding: ${fmtINRExact(outstanding)}`}
+          value={<AnimatedNumber value={outstanding} format={fmtINR} />}
+        />
+        <StatTile
+          href={todayHref} icon={CalendarCheck} label="Today's collection" loading={loading}
+          tint="bg-sky-500/10 text-sky-700" title={`Today's collection: ${fmtINRExact(summary?.todayCollection ?? 0)}`}
+          value={<AnimatedNumber value={summary?.todayCollection ?? 0} format={fmtINR} />}
+        />
+        <StatTile
+          href={outstandingHref} icon={Users} label={duesLabel} loading={loading}
+          tint="bg-rose-500/10 text-rose-700"
+          value={<AnimatedNumber value={summary?.studentsWithDues ?? 0} format={countFmt} />}
+        />
       </div>
     </div>
   )
 }
 
-/** Mobile stat-tile card for today's attendance — students over staff. */
+/** Today's attendance as a phone/tablet card — students over staff, each a
+ *  rate, a present/absent/irregular bar that fills in, and three deep links. */
 function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }) {
+  const reduceMotion = useReducedMotion()
   // `null` is "the fetch hasn't come back" — the page never hands this a loaded
-  // zero as null. Six em dashes in six tinted boxes read as a finished card
-  // reporting nothing recorded, so it shimmers the tiles instead.
+  // zero as null — so it shimmers rather than reporting nothing recorded.
   if (counts === null) {
     return (
-      <div className="pro-card h-[260px] overflow-hidden flex flex-col">
+      <div className="home-card pro-card h-full rounded-[20px] overflow-hidden flex flex-col">
         <SkeletonTiles rows={2} />
       </div>
     )
   }
-  const scopes: { title: string; icon: React.ElementType; base: string; tally: AttendanceTally | null; anchors: [string, string, string] }[] = [
+  const scopes: { title: string; icon: React.ElementType; base: string; tally: AttendanceTally; anchors: [string, string, string] }[] = [
     {
-      title: 'Students', icon: Users, base: '/more/attendance', tally: counts?.students ?? null,
+      title: 'Students', icon: Users, base: '/more/attendance', tally: counts.students,
       anchors: ['student-present', 'student-absent', 'student-irregular'],
     },
     {
-      title: 'Staff', icon: Briefcase, base: '/more/staff-attendance', tally: counts?.staff ?? null,
+      title: 'Staff', icon: Briefcase, base: '/more/staff-attendance', tally: counts.staff,
       anchors: ['staff-present', 'staff-absent', 'staff-exceptions'],
     },
   ]
   return (
-    <div className="pro-card h-[260px] overflow-hidden">
-      {scopes.map((scope, i) => {
+    <div className="home-card pro-card h-full rounded-[20px] overflow-hidden flex flex-col">
+      {scopes.map((scope, si) => {
         const Icon = scope.icon
+        const { present, absent, exception } = scope.tally
+        const total = present + absent + exception
+        const parts = [
+          { key: 'present', label: 'Present', value: present, color: '#10b981', ink: 'text-emerald-700', icon: CheckCircle2, anchor: scope.anchors[0] },
+          { key: 'absent', label: 'Absent', value: absent, color: '#ef4444', ink: 'text-red-700', icon: XCircle, anchor: scope.anchors[1] },
+          { key: 'irregular', label: 'Irregular', value: exception, color: '#f59e0b', ink: 'text-amber-700', icon: AlertTriangle, anchor: scope.anchors[2] },
+        ]
         return (
-          <div key={scope.title} className={`px-4 pt-3 pb-2 ${i === 0 ? 'border-b border-slate-200' : ''}`}>
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-1.5">
+          <div key={scope.title} className={`flex-1 min-h-0 px-4 py-3 flex flex-col justify-center ${si === 0 ? 'border-b border-slate-200/80' : ''}`}>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
                 <Icon size={12} className="text-slate-500" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{scope.title}</span>
-              </div>
-              <Link href={scope.base} className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
-                View report <ChevronRight size={11} />
+                <span className="ml-1 text-[13px] font-black text-slate-900 tabular-nums">
+                  {total > 0 ? <AnimatedNumber value={(present / total) * 100} format={n => `${Math.round(n)}%`} delay={si * 0.15} /> : '—'}
+                </span>
+              </span>
+              <Link href={scope.base} className="flex items-center gap-0.5 text-[10.5px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
+                {total > 0 ? 'View report' : 'Not marked yet'} <ChevronRight size={11} />
               </Link>
             </div>
-            {/* Tints stay, but the ink on them steps down to the 700 ramp: the
-                400/500 tones these used read at 1.6–2.5:1 on their own 50-level
-                tint — the headline number on an admin's home page was below
-                even the 3:1 large-text floor. The 700s hold the same semantic
-                hue at 4.8–5.9:1. */}
-            <div className="grid grid-cols-3 gap-2">
-              <Link href={`${scope.base}#${scope.anchors[0]}`} className="group flex flex-col items-center justify-center py-2.5 bg-emerald-50/90 border border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70 active:scale-95 transition-all">
-                <CheckCircle2 size={13} className="text-emerald-600 mb-1" />
-                <span className="text-xl font-black text-emerald-700 leading-none">{scope.tally?.present ?? '—'}</span>
-                <span className="text-[10.5px] font-semibold text-emerald-700 mt-1">Present</span>
-              </Link>
-              <Link href={`${scope.base}#${scope.anchors[1]}`} className="group flex flex-col items-center justify-center py-2.5 bg-red-50/90 border border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70 active:scale-95 transition-all">
-                <XCircle size={13} className="text-red-600 mb-1" />
-                <span className="text-xl font-black text-red-700 leading-none">{scope.tally?.absent ?? '—'}</span>
-                <span className="text-[10.5px] font-semibold text-red-700 mt-1">Absent</span>
-              </Link>
-              <Link href={`${scope.base}#${scope.anchors[2]}`} className="group flex flex-col items-center justify-center py-2.5 bg-amber-50/90 border border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70 active:scale-95 transition-all">
-                <AlertTriangle size={12} className="text-amber-700 mb-1" />
-                <span className="text-xl font-black text-amber-700 leading-none">{scope.tally?.exception ?? '—'}</span>
-                <span className="text-[10.5px] font-semibold text-amber-700 mt-1">Irregular</span>
-              </Link>
+            <div className="mt-2 h-2 rounded-full bg-slate-200/80 overflow-hidden flex" aria-hidden>
+              {total > 0 && parts.map((part, pi) => part.value > 0 && (
+                <motion.div
+                  key={part.key}
+                  className="h-full"
+                  style={{ background: part.color, width: `${(part.value / total) * 100}%`, transformOrigin: 'left' }}
+                  initial={reduceMotion ? false : { scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.7, ease: [0.16, 1, 0.3, 1], delay: si * 0.15 + pi * 0.25 }}
+                />
+              ))}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {parts.map(part => {
+                const PartIcon = part.icon
+                return (
+                  <Link
+                    key={part.key}
+                    href={`${scope.base}#${part.anchor}`}
+                    className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:border-slate-300/80 active:scale-95 transition-all"
+                  >
+                    <PartIcon size={12} className={part.ink} />
+                    <span className={`text-base font-black leading-none tabular-nums ${part.ink}`}>
+                      <AnimatedNumber value={part.value} format={countFmt} delay={si * 0.15} />
+                    </span>
+                    <span className={`text-[10px] font-semibold ${part.ink}`}>{part.label}</span>
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )
@@ -409,17 +478,13 @@ function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }
   )
 }
 
-/**
- * `inert` on an offscreen carousel slide, spelled so React 18 actually emits it.
- * React 18 doesn't carry `inert` in its known-property list, so a boolean value
- * is dropped with a "Received `true` for a non-boolean attribute" warning and
- * never reaches the DOM; an empty string is the HTML spelling of a *present*
- * boolean attribute and passes straight through as an unknown attribute. The
- * cast is only to satisfy @types/react, which already types `inert` the React 19
- * way (boolean) — drop both the constant and the cast on the React 19 upgrade
- * and write `inert={!active}`.
- */
-const INERT_ATTR = { inert: '' } as unknown as { inert?: boolean }
+/** Fee-head colours for the overview bar — distinct hues, none of them the
+ *  bus orange. */
+const FEE_HEAD_COLORS = ['#14b8a6', '#6366f1', '#eab308', '#ec4899', '#8b5cf6', '#06b6d4', '#84cc16', '#64748b']
+const BUS_FEE_COLOR = '#f97316'
+
+/** This device's copy of the school's banner URL — see the banner effect. */
+const BANNER_CACHE_KEY = 'home_welcome_banner_url'
 
 const ICON_GRADIENTS = [
   'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 55%, white), var(--brand-primary))',
@@ -444,31 +509,28 @@ export default function HomePage() {
   // Every role now shares the swipeable card container — students, regular
   // teachers, and attendance-viewers (admin/principal/coordinator) each get
   // their own set of slots.
-  const showCardCarousel = isStudent || isStaff
   const [unreadAnnouncements, setUnreadAnnouncements] = useState<UnreadAnnouncement[]>([])
   const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null)
+  // Whether the band may finish sliding open: the photo has decoded, or the
+  // school has none, or the fallback timer gave up waiting.
+  const [bannerReady, setBannerReady] = useState(false)
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [classroomsLoaded, setClassroomsLoaded] = useState(false)
   // Tracks the classroom whose page is being navigated to, for instant tap feedback.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
-  const [adminCardView, setAdminCardView] = useState<AdminCardView>('attendance')
-  const [containerW, setContainerW] = useState(0)
   // Three hinges. All of them are read on the *first* render rather than on
   // mount (useMediaQuerySync): this whole page lives behind ProtectedLayout's
   // auth gate, so it is never part of the server HTML and has no server render
   // to agree with. Deferring to an effect only meant a 1440px window laid out
-  // and committed the phone carousel before flipping to the grid — a full
-  // layout swap, and the very first thing anyone saw on opening the app.
+  // and committed the phone layout before flipping to the desktop one — a
+  // full layout swap, and the very first thing anyone saw on opening the app.
   //
-  //   gridLayout (≥768px)  the feed cards stop being a one-at-a-time swipe
-  //                        strip and become a dashboard grid, and the standing
-  //                        statistics leave the strip for fixed rows of their
-  //                        own. A pointer has no swipe, and two cards already
-  //                        fit side by side at this width.
-  //   isDesktop  (≥1024px) the statistics have the width to stop being stacked
-  //                        2×2 tiles and become chart-plus-rows infographic
-  //                        panels, and the grid opens its third column.
+  //   gridLayout (≥768px)  the page splits: the week calendar gets a column of
+  //                        its own beside the card deck, and the standing
+  //                        statistics leave the deck for fixed rows below.
+  //   isDesktop  (≥1024px) the split goes 2:1 side by side, and the statistics
+  //                        become the one School Overview panel.
   //   isPhone    (<640px)  the hero band is deeper, relative to the viewport.
   const isDesktop = useIsDesktop()
   const gridLayout = useIsTabletUp()
@@ -476,6 +538,8 @@ export default function HomePage() {
   const [attendanceCounts, setAttendanceCounts] = useState<HomeAttendanceCounts | null>(null)
   const [schoolFeesSummary, setSchoolFeesSummary] = useState<HomeFeesSummary | null>(null)
   const [busFeesSummary, setBusFeesSummary] = useState<HomeFeesSummary | null>(null)
+  // Both ledgers as one, by fee head — the desktop School Overview's bar.
+  const [feeBreakdown, setFeeBreakdown] = useState<HomeFeeBreakdown | null>(null)
   // Presence data for conditional carousel slots (resolved so the slot list is
   // built before the strip settles, avoiding a visible resnap).
   const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
@@ -520,44 +584,9 @@ export default function HomePage() {
     () => (user ? getShowClassroomsOnHome(user.id) : false),
     [user],
   )
-  const interactedRef = useRef(false)
-  const swipeStartXRef = useRef<number | null>(null)
-  const swipeStartYRef = useRef(0)
-  const swipeDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
-  const baseOffsetRef = useRef(0)
-  const dragX = useMotionValue(0)
-  const cardContainerRef = useRef<HTMLDivElement | null>(null)
-  // The strip is unmounted entirely when it has no cards (rather than left as
-  // an empty band), so the node comes and goes. Tracking it in state — set from
-  // a callback ref — lets the measure and touch effects re-run when it returns;
-  // keying them on the ref alone would leave them attached to nothing.
-  const [stripNode, setStripNode] = useState<HTMLDivElement | null>(null)
-  const attachStrip = useCallback((node: HTMLDivElement | null) => {
-    cardContainerRef.current = node
-    setStripNode(node)
-  }, [])
-  const [autoplayResetKey, setAutoplayResetKey] = useState(0)
-  // OS-level "reduce motion". Drives both the entrance animations and whether
-  // the strip rotates on its own at all.
+  // OS-level "reduce motion" — drives the entrance animations and the banner.
   const reduceMotion = useReducedMotion()
-  // WCAG 2.2.2 (Pause, Stop, Hide): content that moves on its own for more
-  // than five seconds needs a way to stop it. `userPausedAutoplay` is the
-  // explicit control below the dots; `autoplayHeld` is the implicit pause
-  // while a pointer is over the strip or focus is inside it, so the card can't
-  // slide out from under someone mid-read.
-  const [userPausedAutoplay, setUserPausedAutoplay] = useState(false)
-  const [autoplayHeld, setAutoplayHeld] = useState(false)
-  // The implicit hold is for pointer devices only — see useHasHover: a tap on
-  // a phone leaves a phantom hover behind, which would latch the hold on and
-  // stop the strip rotating for the rest of the session. Touch already resets
-  // the autoplay clock on every swipe and tap (autoplayResetKey), and has the
-  // pause button for a deliberate stop.
-  const hasHover = useHasHover()
-  const holdAutoplay = useCallback((held: boolean) => {
-    if (hasHover) setAutoplayHeld(held)
-  }, [hasHover])
-  // Resolved once here rather than branching at each of the dozen motion.div
-  // call sites below.
+  // Resolved once here rather than branching at each motion.div call site.
   const pageVariants = reduceMotion ? staticContainerVariants : containerVariants
   const cardVariants = reduceMotion ? staticItemVariants : itemVariants
 
@@ -568,19 +597,50 @@ export default function HomePage() {
   // from the first paint whether or not a school has set a photo, so there is
   // no scroll to correct afterwards — the `window.scrollTo(0, 0)` this used to
   // fire on every load existed only to undo the height animation's drift.
+  //
+  // The band opens half-drawn and slides the rest of the way down once the
+  // photo is ready (see `bannerReady`). Waiting on the settings round trip
+  // every time meant the theme gradient always showed first and the photo
+  // arrived over it; the URL is remembered on this device, so from the second
+  // visit on the photo is decoding (from the HTTP cache) before the settings
+  // fetch has even left, and the slide reveals the photo itself.
   useEffect(() => {
     let cancelled = false
+    let shownUrl: string | null = null
+    const load = (url: string) => {
+      if (url === shownUrl) return
+      shownUrl = url
+      const img = new window.Image()
+      const show = () => {
+        if (cancelled || shownUrl !== url) return
+        setWelcomeBanner(url)
+        setBannerReady(true)
+      }
+      img.onload = show
+      img.onerror = show
+      img.src = url
+    }
+    let cached: string | null = null
+    try { cached = window.localStorage.getItem(BANNER_CACHE_KEY) } catch { /* private mode */ }
+    if (cached) load(cached)
+    // Never hold the band half-open on a slow network: past this the
+    // gradient slides down on its own and the photo cross-fades in later.
+    const fallback = window.setTimeout(() => { if (!cancelled) setBannerReady(true) }, 1400)
     fetchRawSetting<string>('welcome_banner')
       .then(url => {
-        if (!url || cancelled) return
-        const img = new window.Image()
-        const show = () => { if (!cancelled) setWelcomeBanner(url) }
-        img.onload = show
-        img.onerror = show
-        img.src = url
+        if (cancelled) return
+        try {
+          if (url) window.localStorage.setItem(BANNER_CACHE_KEY, url)
+          else window.localStorage.removeItem(BANNER_CACHE_KEY)
+        } catch { /* private mode */ }
+        if (!url) { setWelcomeBanner(null); setBannerReady(true); return }
+        load(url)
       })
-      .catch(err => console.error('Failed to load welcome banner:', err))
-    return () => { cancelled = true }
+      .catch(err => {
+        console.error('Failed to load welcome banner:', err)
+        if (!cancelled) setBannerReady(true)
+      })
+    return () => { cancelled = true; window.clearTimeout(fallback) }
   }, [])
 
   useEffect(() => {
@@ -601,6 +661,7 @@ export default function HomePage() {
     // Show the new banner immediately — persisting it site-wide can finish in
     // the background instead of blocking the admin's own view of the change.
     setWelcomeBanner(publicUrl)
+    try { window.localStorage.setItem(BANNER_CACHE_KEY, publicUrl) } catch { /* private mode */ }
     saveSetting('welcome_banner', publicUrl).then(ok => {
       if (!ok) console.error('Failed to save welcome banner')
     })
@@ -788,21 +849,42 @@ export default function HomePage() {
     const currentYear = currentAcademicYear()
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
-    const [{ data: schoolFees }, { data: busFees }, { data: todaySchoolPay }, { data: todayBusPay }] = await Promise.all([
-      supabase.from('school_fees').select('status, amount, student_id').eq('academic_year', currentYear).neq('status', 'cancelled'),
+    const [
+      { data: schoolFees }, { data: busFees }, { data: todaySchoolPay }, { data: todayBusPay }, { data: feeHeads },
+    ] = await Promise.all([
+      supabase.from('school_fees').select('status, amount, student_id, fee_head_id').eq('academic_year', currentYear).neq('status', 'cancelled'),
       supabase.from('bus_fees').select('status, amount, passenger_id, due_date, created_at').neq('status', 'cancelled'),
-      supabase.from('school_fee_payments').select('amount').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
+      supabase.from('school_fee_payments').select('amount, fee:school_fees!fee_id(fee_head_id)').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
       supabase.from('bus_payments').select('amount').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
+      supabase.from('fee_heads').select('id, name').order('name'),
     ])
+
+    /* One running tally per fee head, for the School Overview's bar. Fees
+       issued without a head are pooled as "Other"; bus fees are one more head
+       at the end, so the overview can treat the whole ledger as one. */
+    type Tally = { collected: number; outstanding: number; today: number; dues: Set<string> }
+    const blank = (): Tally => ({ collected: 0, outstanding: 0, today: 0, dues: new Set() })
+    const byHead = new Map<string, Tally>()
+    const headOf = (id: string | null | undefined) => {
+      const key = id ?? '__other'
+      if (!byHead.has(key)) byHead.set(key, blank())
+      return byHead.get(key)!
+    }
 
     let sCollected = 0, sOutstanding = 0
     const sDueStudents = new Set<string>()
-    for (const f of schoolFees ?? []) {
+    for (const f of (schoolFees ?? []) as { status: string; amount: number; student_id: string; fee_head_id: string | null }[]) {
       const amt = Number(f.amount) || 0
-      if (f.status === 'paid') sCollected += amt
-      else { sOutstanding += amt; sDueStudents.add(f.student_id) }
+      const h = headOf(f.fee_head_id)
+      if (f.status === 'paid') { sCollected += amt; h.collected += amt }
+      else { sOutstanding += amt; sDueStudents.add(f.student_id); h.outstanding += amt; h.dues.add(f.student_id) }
     }
-    const sTodayCollection = (todaySchoolPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
+    let sTodayCollection = 0
+    for (const p of (todaySchoolPay ?? []) as unknown as { amount: number; fee: { fee_head_id: string | null } | null }[]) {
+      const amt = Number(p.amount) || 0
+      sTodayCollection += amt
+      headOf(p.fee?.fee_head_id).today += amt
+    }
     setSchoolFeesSummary({ collected: sCollected, outstanding: sOutstanding, todayCollection: sTodayCollection, studentsWithDues: sDueStudents.size })
 
     let bCollected = 0, bOutstanding = 0
@@ -816,22 +898,47 @@ export default function HomePage() {
     }
     const bTodayCollection = (todayBusPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
     setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
+
+    const names = new Map(((feeHeads ?? []) as { id: string; name: string }[]).map(h => [h.id, h.name]))
+    const heads: FeeHeadStat[] = [...byHead.entries()]
+      .filter(([, t]) => t.collected + t.outstanding + t.today > 0)
+      .sort((a, b) => (b[1].collected + b[1].outstanding) - (a[1].collected + a[1].outstanding))
+      .map(([id, t], i) => ({
+        id,
+        name: id === '__other' ? 'Other fees' : (names.get(id) ?? 'Fee'),
+        color: FEE_HEAD_COLORS[i % FEE_HEAD_COLORS.length],
+        collected: t.collected,
+        outstanding: t.outstanding,
+        todayCollection: t.today,
+        studentsWithDues: t.dues.size,
+        todayHref: '/more/fees?section=collection',
+        duesHref: '/more/fees?section=issued&filter=outstanding',
+      }))
+    if (bCollected + bOutstanding + bTodayCollection > 0) {
+      heads.push({
+        id: '__bus',
+        name: 'Bus fee',
+        color: BUS_FEE_COLOR,
+        collected: bCollected,
+        outstanding: bOutstanding,
+        todayCollection: bTodayCollection,
+        studentsWithDues: bDuePassengers.size,
+        todayHref: '/more/bus?tab=fees&section=collection',
+        duesHref: '/more/bus?tab=fees&section=issued&filter=outstanding',
+      })
+    }
+    setFeeBreakdown({
+      total: {
+        collected: sCollected + bCollected,
+        outstanding: sOutstanding + bOutstanding,
+        todayCollection: sTodayCollection + bTodayCollection,
+        // A student owing both school and bus fees is one student with dues.
+        studentsWithDues: new Set([...sDueStudents, ...bDuePassengers]).size,
+      },
+      heads,
+    })
   }, [isAdmin])
 
-  // Re-runs when the dashboard grid hands the page back to the swipe track, so
-  // a carousel remounted by a window resize measures itself instead of reusing
-  // a stale width. Above `md:` there is no strip at all: the node is gone, so
-  // this bails and the observer is disconnected rather than left watching a
-  // detached element.
-  useLayoutEffect(() => {
-    const el = cardContainerRef.current
-    if (!el) return
-    const measure = () => setContainerW(el.offsetWidth)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [gridLayout, stripNode])
 
   useEffect(() => { loadAnnouncements() }, [loadAnnouncements])
   // The announcements page marks a page of notices read as it loads them;
@@ -937,7 +1044,7 @@ export default function HomePage() {
    * application in the OD / Leave app agrees it has been seen. Only an
    * applicant's own decision can be read this way: a request waiting on this
    * user's decision stays unread until they approve or reject it. When the
-   * last row goes the whole slot drops out of the carousel (see CARD_VIEWS).
+   * last row goes the card says so, and hands the deck on after 3 s.
    */
   const handleReadNotification = useCallback((item: NotifItem) => {
     if (!user || !isApplicantDecision(item)) return
@@ -978,12 +1085,9 @@ export default function HomePage() {
   }, [isStaff, user])
 
   /* ────────────────────────────────────────────────────────────────────────
-     The home cards, as data. One list feeds both presentations: the mobile
-     swipe strip (one slot per screen, gesture-driven) and the desktop
-     dashboard grid (every slot visible at once, statistics rendered as
-     infographic panels). Deriving CARD_VIEWS from this list — rather than
-     maintaining a parallel array of keys — makes it impossible for the
-     carousel's index maths to drift out of step with the DOM order.
+     The home cards, as data. One list feeds every width: on a phone all of
+     it is the card deck; from 768px up the calendar and the statistics are
+     lifted out into their own places and the deck carries the rest.
      ──────────────────────────────────────────────────────────────────────── */
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
@@ -994,29 +1098,40 @@ export default function HomePage() {
   const showFeesStat = isAdmin && showFees
   const showBusFeesStat = isAdmin && showBusFees
 
-  const slots: HomeSlot[] = []
+  /* From 768px up the page is a split: the week calendar on the left, the
+     card deck on the right (2:1 at `lg:`, stacked at `md:`), with the
+     standing statistics below. On a phone everything is one deck. */
+  const splitLayout = gridLayout
 
-  if (isStudent && showOverdueFeesSlot) {
-    slots.push({
-      key: 'overdue-fees',
-      span: 'half',
-      heading: (
-        <SectionHeading
-          icon={AlertTriangle}
-          chipClass="bg-gradient-to-br from-red-400 to-rose-600"
-          eyebrow="Action needed"
-          title="Fees Due"
-          action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
-        />
-      ),
-      body: <OverdueFeesCard fees={overdueFees} loading={!overdueFeesLoaded} />,
-    })
-  }
+  /* The calendar is a fixture of the split for every role that has one —
+     staff (admins included, since the left column is the layout, not an
+     opt-in) get their task week, students their school week. On a phone an
+     admin keeps the opt-in, as before. */
+  const calendarSlotKey: AdminCardView | null = isStudent
+    ? (showSchoolWork ? 'calendar' : null)
+    : (splitLayout || showTaskCalendar ? 'task-calendar' : null)
+
+  const router = useRouter()
+  /* The day already open in the mini calendar, clicked again: follow it into
+     the full calendar it previews. */
+  const openTaskDay = useCallback((dateKey: string) => {
+    router.push(`/tasks?tab=weekly&date=${dateKey}`)
+  }, [router])
+  const openSchoolWorkDay = useCallback(() => {
+    router.push('/academics')
+  }, [router])
+
+  // The notifications box has loaded and has nothing in it — it still opens
+  // the deck, but hands over after 3 s rather than 7.
+  const notificationsEmpty = !notifLoading && announcementsLoaded
+    && notifItems.length === 0 && unreadAnnouncements.length === 0
+
+  const slots: HomeSlot[] = []
 
   if (showNotifSlot) {
     slots.push({
       key: 'notifications',
-      span: 'half',
+      label: 'notifications',
       heading: (
         <SectionHeading
           icon={Bell}
@@ -1049,11 +1164,27 @@ export default function HomePage() {
     })
   }
 
+  if (isStudent && showOverdueFeesSlot) {
+    slots.push({
+      key: 'overdue-fees',
+      label: 'fees due',
+      heading: (
+        <SectionHeading
+          icon={AlertTriangle}
+          chipClass="bg-gradient-to-br from-red-400 to-rose-600"
+          eyebrow="Action needed"
+          title="Fees Due"
+          action={<ViewAllLink href="/more/fees" className="text-red-600 hover:text-red-700" />}
+        />
+      ),
+      body: <OverdueFeesCard fees={overdueFees} loading={!overdueFeesLoaded} />,
+    })
+  }
+
   if (showAttendanceStat) {
     slots.push({
       key: 'attendance',
-      // Two scopes of donuts side by side — this one earns the full width.
-      span: 'wide',
+      label: 'attendance',
       heading: (
         <SectionHeading
           icon={BarChart3}
@@ -1063,7 +1194,7 @@ export default function HomePage() {
           subtitle={isCoordinator ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team') : undefined}
           action={
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[10px] font-semibold text-emerald-700">Live</span>
               </div>
@@ -1073,14 +1204,13 @@ export default function HomePage() {
         />
       ),
       body: <AttendanceTilesCard counts={attendanceCounts} />,
-      desktopBody: <AttendanceInfographicPanel counts={attendanceCounts} loading={attendanceCounts === null} />,
     })
   }
 
   if (isStaff && !isAttendanceViewer && user) {
     slots.push({
       key: 'teacher-attendance',
-      span: 'half',
+      label: 'attendance',
       heading: (
         <SectionHeading
           icon={BarChart3}
@@ -1094,27 +1224,38 @@ export default function HomePage() {
     })
   }
 
-  if (isStaff && showTaskCalendar) {
+  const taskCalendarHeading = (
+    <SectionHeading
+      icon={CalendarDays}
+      chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
+      eyebrow="This week"
+      title="My Tasks"
+      action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
+    />
+  )
+  const schoolWorkHeading = (
+    <SectionHeading
+      icon={CalendarDays}
+      chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
+      eyebrow="This week"
+      title="School Work"
+      action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
+    />
+  )
+
+  if (calendarSlotKey === 'task-calendar' && !splitLayout) {
     slots.push({
       key: 'task-calendar',
-      span: 'wide',
-      heading: (
-        <SectionHeading
-          icon={CalendarDays}
-          chipClass="bg-gradient-to-br from-sky-400 to-cyan-500"
-          eyebrow="This week"
-          title="My Tasks"
-          action={<ViewAllLink href="/tasks" className="text-sky-600 hover:text-sky-700" />}
-        />
-      ),
-      body: <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} />,
+      label: 'my tasks',
+      heading: taskCalendarHeading,
+      body: <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} onOpenDay={openTaskDay} />,
     })
   }
 
   if (isStaff && showGradingSlot) {
     slots.push({
       key: 'grading',
-      span: 'half',
+      label: 'grading',
       heading: (
         <SectionHeading
           icon={ClipboardCheck}
@@ -1128,27 +1269,19 @@ export default function HomePage() {
     })
   }
 
-  if (isStudent && user && showSchoolWork) {
+  if (calendarSlotKey === 'calendar' && user && !splitLayout) {
     slots.push({
       key: 'calendar',
-      span: 'wide',
-      heading: (
-        <SectionHeading
-          icon={CalendarDays}
-          chipClass="bg-gradient-to-br from-violet-400 to-indigo-500"
-          eyebrow="This week"
-          title="School Work"
-          action={<ViewAllLink href="/academics" className="text-violet-600 hover:text-violet-700" />}
-        />
-      ),
-      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} />,
+      label: 'school work',
+      heading: schoolWorkHeading,
+      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onOpenDay={openSchoolWorkDay} />,
     })
   }
 
   if (isStudent && user && showAssessments) {
     slots.push({
       key: 'assessments',
-      span: 'half',
+      label: 'assessments',
       heading: (
         <SectionHeading
           icon={ClipboardList}
@@ -1164,7 +1297,7 @@ export default function HomePage() {
   if (isStudent && user && showReportCards) {
     slots.push({
       key: 'report-cards',
-      span: 'half',
+      label: 'report cards',
       heading: (
         <SectionHeading
           icon={Award}
@@ -1181,7 +1314,7 @@ export default function HomePage() {
   if (isStudent && user && showTimetable) {
     slots.push({
       key: 'timetable',
-      span: 'half',
+      label: 'timetable',
       heading: (
         <SectionHeading
           icon={CalendarClock}
@@ -1198,7 +1331,7 @@ export default function HomePage() {
   if (isStudent && user && showExams) {
     slots.push({
       key: 'exams',
-      span: 'half',
+      label: 'exams',
       heading: (
         <SectionHeading
           icon={FileSpreadsheet}
@@ -1212,121 +1345,72 @@ export default function HomePage() {
     })
   }
 
+  const feeHeading = (
+    <SectionHeading
+      icon={CreditCard}
+      chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
+      eyebrow="School"
+      title="Fee Manager"
+      action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
+    />
+  )
+  const busFeeHeading = (
+    <SectionHeading
+      icon={Bus}
+      chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
+      eyebrow="Transport"
+      title="Bus Fees"
+      action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
+    />
+  )
+  const feeBody = (
+    <FeeTilesCard
+      loading={schoolFeesSummary === null}
+      summary={schoolFeesSummary}
+      accent="#14b8a6"
+      collectedHref="/more/fees?section=issued&filter=collected"
+      outstandingHref="/more/fees?section=issued&filter=outstanding"
+      todayHref="/more/fees?section=collection"
+      duesLabel="Students with dues"
+    />
+  )
+  const busFeeBody = (
+    <FeeTilesCard
+      loading={busFeesSummary === null}
+      summary={busFeesSummary}
+      accent="#f97316"
+      collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
+      outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
+      todayHref="/more/bus?tab=fees&section=collection"
+      duesLabel="Passengers with dues"
+    />
+  )
+
   if (showFeesStat) {
-    slots.push({
-      key: 'fees',
-      span: 'half',
-      heading: (
-        <SectionHeading
-          icon={CreditCard}
-          chipClass="bg-gradient-to-br from-teal-400 to-cyan-600"
-          eyebrow="School"
-          title="Fee Manager"
-          action={<ViewAllLink href="/more/fees" className="text-teal-600 hover:text-teal-700" />}
-        />
-      ),
-      body: (
-        <FeeTilesCard
-          loading={schoolFeesSummary === null}
-          summary={schoolFeesSummary}
-          collectedHref="/more/fees?section=issued&filter=collected"
-          outstandingHref="/more/fees?section=issued&filter=outstanding"
-          todayHref="/more/fees?section=collection"
-          duesLabel="Students with Dues"
-        />
-      ),
-      desktopBody: (
-        <FeesInfographicPanel
-          loading={schoolFeesSummary === null}
-          summary={schoolFeesSummary}
-          collectedHref="/more/fees?section=issued&filter=collected"
-          outstandingHref="/more/fees?section=issued&filter=outstanding"
-          todayHref="/more/fees?section=collection"
-          duesLabel="Students with Dues"
-        />
-      ),
-    })
+    slots.push({ key: 'fees', label: 'school fees', heading: feeHeading, body: feeBody })
   }
-
   if (showBusFeesStat) {
-    slots.push({
-      key: 'bus-fees',
-      span: 'half',
-      heading: (
-        <SectionHeading
-          icon={Bus}
-          chipClass="bg-gradient-to-br from-orange-400 to-rose-500"
-          eyebrow="Transport"
-          title="Bus Fees"
-          action={<ViewAllLink href="/more/bus?tab=fees" className="text-orange-600 hover:text-orange-700" />}
-        />
-      ),
-      body: (
-        <FeeTilesCard
-          loading={busFeesSummary === null}
-          summary={busFeesSummary}
-          collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
-          outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
-          todayHref="/more/bus?tab=fees&section=collection"
-          duesLabel="Passengers with Dues"
-        />
-      ),
-      desktopBody: (
-        <FeesInfographicPanel
-          loading={busFeesSummary === null}
-          summary={busFeesSummary}
-          collectedHref="/more/bus?tab=fees&section=issued&filter=collected"
-          outstandingHref="/more/bus?tab=fees&section=issued&filter=outstanding"
-          todayHref="/more/bus?tab=fees&section=collection"
-          duesLabel="Passengers with Dues"
-        />
-      ),
-    })
+    slots.push({ key: 'bus-fees', label: 'bus fees', heading: busFeeHeading, body: busFeeBody })
   }
 
-  /* One slot list, laid out two ways.
-
-     On a phone every slot is a slide in the swipe strip, one card per screen.
-     At `md:` and up the strip is gone entirely and the same slots become a
-     dashboard: the statistics take fixed rows of their own — attendance across
-     the full width, then the two fee ledgers side by side — and the feeds fill
-     a 12-column grid above them, every card in a fixed place and on screen at
-     once.
-
-     Why the strip doesn't survive: a statistic is a standing number read at a
-     glance, and a gesture or a 7-second rotation between the viewer and it is
-     the phone habit this view exists to drop. The feeds are the less obvious
-     half of the same argument — a teacher can have nine of them (timetable,
-     exams, grading, tasks, school work, assessments, report cards,
-     notifications, attendance), and at 7 seconds a card that is a full minute
-     of waiting to see today's timetable on a screen with room for all nine.
-     `span` on each slot — already declared with the slot, and until now unused
-     — says which ones read better across the full width. */
+  /* What the deck carries at this width. On a phone, every slot. In the split
+     the calendar has its own column, and the standing statistics have their
+     own place below (the School Overview at `lg:`, tile cards at `md:`), so
+     the deck skips them rather than showing the same figures twice — for an
+     admin that is attendance and both fee ledgers. */
   const STAT_KEYS: AdminCardView[] = ['attendance', 'fees', 'bus-fees']
-  const gridSlots = gridLayout ? slots.filter(s => !STAT_KEYS.includes(s.key)) : []
-  const carouselSlots = gridLayout ? [] : slots
-  const attendanceSlot = gridLayout ? slots.find(s => s.key === 'attendance') : undefined
-  const feeSlots = gridLayout ? slots.filter(s => s.key === 'fees' || s.key === 'bus-fees') : []
+  const deckSlots: DeckSlot[] = slots
+    .filter(s => !splitLayout || !STAT_KEYS.includes(s.key))
+    .map(s => ({
+      key: s.key,
+      label: s.label,
+      heading: s.heading,
+      body: s.body,
+      accent: SLOT_ACCENTS[s.key],
+      quickAdvance: s.key === 'notifications' && notificationsEmpty,
+    }))
 
-  /* A slot's width in the 12-column grid.
-
-     `half` is the default — two up at `md:`, three at `xl:` where a 1600px
-     container has the room. `wide` is for the cards that read side-by-side
-     internally (a week calendar, the two-scope attendance panel): full width
-     at `md:`, two thirds at `xl:` so a `half` can sit beside it.
-
-     The count overrides both when the deck is nearly empty. A student whose
-     cards have all resolved to empty but one was left with that one card at a
-     third of a 1280px page and two thirds of nothing beside it — the span is
-     only a *share* of a full row, and it needs a row to share. One card takes
-     the width; two split it. */
-  const spanClassFor = (slot: HomeSlot) => {
-    if (gridSlots.length === 1) return 'md:col-span-12'
-    if (gridSlots.length === 2) return 'md:col-span-6'
-    return slot.span === 'wide' ? 'md:col-span-12 xl:col-span-8' : 'md:col-span-6 xl:col-span-4'
-  }
-
-  /* The combined statistics panel stands in for the separate stat rows at
+  /* The combined statistics panel stands in for the separate stat cards at
      `lg:`, so it appears whenever this account is entitled to any of them. */
   const showOverviewPanel = showAttendanceStat || showFeesStat || showBusFeesStat
 
@@ -1335,59 +1419,6 @@ export default function HomePage() {
   const coordinatorSubtitle = isCoordinator
     ? (coordinatorTeamNames.length > 0 ? coordinatorTeamNames.join(', ') : 'Your team')
     : undefined
-
-  // The carousel's index space — the strip's own slots, so the dots and the
-  // drag maths stay in step with what is actually in the strip at this width.
-  // Memoised on the joined keys so the array identity only changes when that
-  // list does; the effects below depend on it and must not re-run every render.
-  const slotKeys = carouselSlots.map(s => s.key).join('|')
-  const CARD_VIEWS = useMemo<AdminCardView[]>(
-    () => (slotKeys ? slotKeys.split('|') as AdminCardView[] : []),
-    [slotKeys],
-  )
-
-  // When the slot list changes (role resolved, or a conditional card appears/
-  // disappears), keep the carousel coherent: before the user has interacted,
-  // pin to the first slot (so e.g. overdue-fees lands first once it loads);
-  // after interaction, hold their current card at its new index.
-  useEffect(() => {
-    if (CARD_VIEWS.length === 0) return
-    if (!interactedRef.current) {
-      setAdminCardView(CARD_VIEWS[0])
-      dragX.set(0)
-      return
-    }
-    const idx = CARD_VIEWS.indexOf(adminCardView)
-    if (idx === -1) {
-      setAdminCardView(CARD_VIEWS[0])
-      dragX.set(0)
-    } else {
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      dragX.set(-idx * W)
-    }
-    // Only realign when the slot list itself changes — not on every swipe
-    // (which updates adminCardView and would fight the swipe spring animation).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [CARD_VIEWS])
-
-  useEffect(() => {
-    if (!showCardCarousel || CARD_VIEWS.length < 2) return
-    // Reduced motion, the explicit pause button, and a pointer or focus inside
-    // the strip each stop the clock entirely — the user still has the dots,
-    // the arrows and the swipe to move through the deck themselves.
-    if (reduceMotion || userPausedAutoplay || autoplayHeld) return
-    const t = setInterval(() => {
-      // A background tab shouldn't burn through the deck: the user would come
-      // back several cards on from the one they left open.
-      if (typeof document !== 'undefined' && document.hidden) return
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      const currentIdx = Math.round(-dragX.get() / W)
-      const nextIdx = (currentIdx + 1) % CARD_VIEWS.length
-      setAdminCardView(CARD_VIEWS[nextIdx])
-      animate(dragX, -nextIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-    }, 7000)
-    return () => clearInterval(t)
-  }, [showCardCarousel, CARD_VIEWS, dragX, autoplayResetKey, reduceMotion, userPausedAutoplay, autoplayHeld])
 
   const getGreetingData = () => {
     const hour = new Date().getHours()
@@ -1426,100 +1457,6 @@ export default function HomePage() {
   } = useAutoLoadMore({ total: classrooms.length, initialCount: HOME_CLASSROOM_LIMIT, step: 4, intervalMs: 3000, bottomBufferPx: HOME_CLASSROOM_ROW_GAP })
   const topClassrooms = classrooms.slice(0, classroomVisibleCount)
 
-  const snapToView = useCallback((targetView: AdminCardView) => {
-    const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-    const targetIdx = CARD_VIEWS.indexOf(targetView)
-    interactedRef.current = true
-    setAdminCardView(targetView)
-    animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-    setAutoplayResetKey(k => k + 1)
-  }, [CARD_VIEWS, dragX])
-
-  // Native (non-passive) touch handlers so we can call preventDefault() once a
-  // gesture is confirmed horizontal — React's synthetic onTouchMove is passive
-  // by default and preventDefault() inside it is silently ignored, which let
-  // the page's vertical scroll fire alongside our horizontal drag and produced
-  // the wobble. Direction is locked from the first few pixels of movement:
-  // horizontal gestures drive the card drag (and block page scroll for the
-  // rest of the gesture); vertical gestures are left alone so native scroll
-  // (page or a nested list) behaves normally.
-  useEffect(() => {
-    const el = cardContainerRef.current
-    if (!el) return
-
-    const onStart = (e: TouchEvent) => {
-      interactedRef.current = true
-      swipeDirectionRef.current = null
-      swipeStartXRef.current = e.touches[0].clientX
-      swipeStartYRef.current = e.touches[0].clientY
-      baseOffsetRef.current = dragX.get()
-      setAutoplayResetKey(k => k + 1)
-    }
-
-    const onMove = (e: TouchEvent) => {
-      if (swipeStartXRef.current === null) return
-      const touch = e.touches[0]
-      const dx = touch.clientX - swipeStartXRef.current
-      const dy = touch.clientY - swipeStartYRef.current
-
-      if (swipeDirectionRef.current === null) {
-        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
-        swipeDirectionRef.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
-      }
-      if (swipeDirectionRef.current === 'vertical') return
-
-      e.preventDefault()
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      const raw = baseOffsetRef.current + dx
-      const minX = -(CARD_VIEWS.length - 1) * W
-      const maxX = 0
-      // Rubber-band resistance at edges
-      const x = raw < minX ? minX + (raw - minX) * 0.22 : raw > maxX ? raw * 0.22 : raw
-      dragX.set(x)
-    }
-
-    const onEnd = (e: TouchEvent) => {
-      if (swipeStartXRef.current === null) return
-      const wasHorizontal = swipeDirectionRef.current === 'horizontal'
-      const dx = (e.changedTouches[0]?.clientX ?? swipeStartXRef.current) - swipeStartXRef.current
-      swipeStartXRef.current = null
-      swipeDirectionRef.current = null
-      if (!wasHorizontal) return
-
-      const W = cardContainerRef.current?.offsetWidth ?? window.innerWidth
-      const currentX = dragX.get()
-      const fractional = -currentX / W
-      let targetIdx: number
-      if (dx < -40) {
-        targetIdx = Math.min(Math.ceil(fractional - 0.1), CARD_VIEWS.length - 1)
-      } else if (dx > 40) {
-        targetIdx = Math.max(Math.floor(fractional + 0.1), 0)
-      } else {
-        targetIdx = Math.max(0, Math.min(Math.round(fractional), CARD_VIEWS.length - 1))
-      }
-      setAdminCardView(CARD_VIEWS[targetIdx])
-      animate(dragX, -targetIdx * W, { type: 'spring', stiffness: 300, damping: 32, mass: 0.9 })
-    }
-
-    // Buttons/links inside a card (mark-as-read, load-more, view-all, …) don't
-    // go through the touch-drag path above, but tapping/clicking one is still
-    // "interacting with the card" — reset the autoplay clock on any click
-    // inside the strip so it doesn't jump to the next card mid-interaction.
-    const onClick = () => setAutoplayResetKey(k => k + 1)
-
-    el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove', onMove, { passive: false })
-    el.addEventListener('touchend', onEnd, { passive: true })
-    el.addEventListener('touchcancel', onEnd, { passive: true })
-    el.addEventListener('click', onClick)
-    return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('touchend', onEnd)
-      el.removeEventListener('touchcancel', onEnd)
-      el.removeEventListener('click', onClick)
-    }
-  }, [CARD_VIEWS, dragX, gridLayout, stripNode])
 
   // bannerLum===null means default gradient (white fade makes it light → dark text)
   // bannerLum set means custom image → use luminance threshold
@@ -1682,9 +1619,30 @@ export default function HomePage() {
               over the gradient when it arrives — opacity and transform, which
               the compositor can do without touching layout. Nothing below the
               banner moves at any point. */}
+          {/* The reveal: the band's box is its full height from the first
+              paint (nothing below it ever moves), and what slides is a clip
+              over its contents — open to the top half straight away, then
+              eased down to the full band once the photo is ready, so the
+              photo itself is what draws in rather than the theme colour
+              sitting there first. clip-path is composited, like the opacity
+              and transform elsewhere here, so the slide costs no layout. */}
           <div
-            className={`relative w-full overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
+            className="relative w-full"
             style={{ height: bannerHeight }}
+          >
+          <motion.div
+            className={`absolute inset-0 overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
+            initial={reduceMotion ? false : { clipPath: 'inset(0% 0% 50% 0%)', opacity: 0 }}
+            animate={reduceMotion || bannerReady
+              ? { clipPath: 'inset(0% 0% 0% 0%)', opacity: 1 }
+              : { clipPath: 'inset(0% 0% 50% 0%)', opacity: 0 }}
+            transition={reduceMotion
+              ? { duration: 0 }
+              : {
+                  clipPath: { duration: 1.15, ease: [0.65, 0, 0.35, 1], delay: 0.08 },
+                  opacity: { duration: 0.3, ease: 'easeOut' },
+                }}
+            style={{ willChange: 'clip-path' }}
           >
             <div className="absolute inset-0">
 
@@ -1799,9 +1757,10 @@ export default function HomePage() {
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div
-                        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={reduceMotion ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                        // Rises into place as the sliding band reaches it.
+                        animate={reduceMotion || bannerReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+                        transition={reduceMotion ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.7 }}
                       >
                         <div className="flex items-center gap-1.5 mb-2">
                           {icon}
@@ -1824,6 +1783,7 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </motion.div>
           </div>
 
           {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ──
@@ -1833,210 +1793,90 @@ export default function HomePage() {
               the dashboard down a second time. */}
           <QuoteBanner />
 
-          {/* ── Phone: every slot in a full-bleed swipe track, one card per
-              screen, rotating every 7 s. The track (this div plus
-              cardContainerRef) is edge-to-edge while each slide still centers
-              its own content in the page's container, so the visible card is
-              exactly the width it always was and only the swipe hit area is
-              wider.
-              This whole branch is gone at `md:` — see the dashboard grid below
-              it. Not merely hidden: an off-screen strip still ticking would
-              re-render the page every 7 s for a deck nobody can see. With
-              `carouselSlots` empty the autoplay, the ResizeObserver and the
-              touch listeners all bail on their own. ── */}
-          {carouselSlots.length > 0 && (
-          <div className="w-full px-2 pt-6">
-            <motion.div variants={cardVariants} className="mb-0">
-              <div
-                  ref={attachStrip}
-                  role="group"
-                  aria-roledescription="carousel"
-                  aria-label="Today at a glance"
-                  className="group/carousel strip-compact relative overflow-hidden min-h-[330px] pb-6"
-                  style={{ touchAction: 'pan-y' }}
-                  // Hold the rotation while the strip is being read or used.
-                  // Focus is tracked with the capture phase so it fires for a
-                  // link *inside* a card, not just the strip itself.
-                  onMouseEnter={() => holdAutoplay(true)}
-                  onMouseLeave={() => holdAutoplay(false)}
-                  onFocusCapture={() => holdAutoplay(true)}
-                  onBlurCapture={() => holdAutoplay(false)}
-                >
-                  {/* All cards live in a single horizontal strip — dragX slides the whole strip */}
-                  <motion.div style={{ x: dragX, display: 'flex' }}>
-                    {carouselSlots.map((slot, idx) => {
-                      const active = slot.key === adminCardView
-                      return (
-                      /* The strip is `overflow-hidden`, so the slides either
-                         side are invisible but were still in the tab order —
-                         tabbing off the active card dropped focus onto links
-                         no one could see and dragged the strip sideways. `inert`
-                         takes the whole offscreen subtree out of the tab order
-                         and out of the a11y tree in one go (and, unlike
-                         `tabIndex={-1}`, it reaches descendants); aria-hidden
-                         covers the browsers that don't support it yet. */
-                      <div
-                        key={slot.key}
-                        role="group"
-                        aria-roledescription="slide"
-                        aria-label={`${idx + 1} of ${carouselSlots.length}: ${slot.key.replace(/-/g, ' ')}`}
-                        aria-hidden={!active}
-                        {...(active ? {} : INERT_ATTR)}
-                        style={{ width: containerW || '100%', flexShrink: 0 }}
-                      >
-                        <div className="home-container">
-                          {slot.heading}
-                          <div className="mx-2 sm:mx-4">{slot.body}</div>
-                        </div>
-                      </div>
-                      )
-                    })}
-                  </motion.div>
+          {/* ── Today at a glance — the section under the quote.
+              Fixed height at every width, whichever card is up: the deck and
+              the calendar take their height from the layout, never from the
+              content, so turning a card or loading a list can't move the
+              page.
 
-                  {/* A pointer has no swipe, so where there is one the strip
-                      grows arrows either side (revealed on hover, and on focus
-                      for keyboard users) on top of the dots below. Keyed on the
-                      pointer rather than the width: the strip only survives
-                      below `md:` now, and a mouse user in a narrow window is
-                      exactly the case that has no other way to page through
-                      it. */}
-                  {hasHover && CARD_VIEWS.length > 1 && (
-                    <CarouselArrows
-                      onPrev={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) - 1 + CARD_VIEWS.length) % CARD_VIEWS.length])}
-                      onNext={() => snapToView(CARD_VIEWS[(CARD_VIEWS.indexOf(adminCardView) + 1) % CARD_VIEWS.length])}
-                    />
-                  )}
-
-                  {/* Slide indicator dots, plus the autoplay stop control.
-                      The dots keep their 6 px look but each one now sits in a
-                      44 px-tall tap target (a transparent padded button with
-                      the dot drawn inside) — at their old size they were a
-                      6 px target, well under the 44 px floor, and on a phone
-                      they sit right where a thumb lands. */}
-                  <div className="flex justify-center items-center gap-0.5 mt-1">
-                    {CARD_VIEWS.map((v: AdminCardView) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => { if (v !== adminCardView) snapToView(v) }}
-                        aria-label={`Show ${v.replace(/-/g, ' ')}`}
-                        aria-current={adminCardView === v}
-                        className="group/dot h-11 px-1.5 flex items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
-                      >
-                        <span
-                          className={`block rounded-full transition-all duration-300 ${adminCardView === v ? `w-4 h-1.5 ${DOT_COLORS[v]}` : 'w-1.5 h-1.5 bg-slate-300 group-hover/dot:bg-slate-400'}`}
-                        />
-                      </button>
-                    ))}
-
-                    {/* WCAG 2.2.2 — the deck advances itself every 7 s, so
-                        there has to be a way to stop it that doesn't depend on
-                        hovering. Hidden when the OS already asks for reduced
-                        motion, since nothing is rotating to stop. */}
-                    {CARD_VIEWS.length > 1 && !reduceMotion && (
-                      <button
-                        type="button"
-                        onClick={() => setUserPausedAutoplay(p => !p)}
-                        aria-label={userPausedAutoplay ? 'Resume automatic card rotation' : 'Stop automatic card rotation'}
-                        aria-pressed={userPausedAutoplay}
-                        className="ml-1 w-11 h-11 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
-                      >
-                        {userPausedAutoplay ? <Play size={12} /> : <Pause size={12} />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-            </motion.div>
-          </div>
+              Phone: one Liquid Glass deck carrying every card.
+              768px+: the week calendar beside the deck (2:1 from `lg:`,
+              stacked below it), the deck now carrying only the feeds — the
+              standing statistics have their own place underneath. ── */}
+          {!splitLayout && deckSlots.length > 0 && (
+            <div className="home-container pt-6 pb-2">
+              <motion.div variants={cardVariants}>
+                <HomeCardDeck slots={deckSlots} heightClass="h-[408px]" />
+              </motion.div>
+            </div>
           )}
 
-          {/* ── md: and up, row 1 — the feeds, as a 12-column dashboard grid.
-              Every card in a fixed place and on screen at once, which is the
-              whole point: a card that moves position between visits can never
-              be learned, and one behind a rotation can't be glanced at.
-              Deliberately *not* `grid-flow-row-dense`: dense packing back-fills
-              the gap a `wide` card leaves at the end of a row by pulling a
-              later `half` up into it, which tiles the deck without holes but
-              makes the visual order diverge from the DOM order — a keyboard
-              user would then tab through the cards in a different sequence from
-              the one they are reading. One trailing gap is cosmetic; a tab
-              order that disagrees with the page is not.
-              `items-stretch` plus `.home-grid`'s `height: 100%` gives every
-              card in a row a shared bottom edge. ── */}
-          {/* The dashboard is one region with one rhythm — the feed grid and
-              the statistics below it, separated by a single `space-y-6` step
-              and closed by its own bottom padding. Two sibling containers each
-              with their own padding is what left the last card butted against
-              the white More Apps band with nothing between them. */}
-          {gridLayout && (gridSlots.length > 0 || showOverviewPanel || attendanceSlot || feeSlots.length > 0) && (
+          {splitLayout && (calendarSlotKey || deckSlots.length > 0 || showOverviewPanel) && (
             <div className="home-container pt-6 pb-6 space-y-6">
-
-              {gridSlots.length > 0 && (
+              {(calendarSlotKey || deckSlots.length > 0) && (
                 <motion.div
                   variants={cardVariants}
-                  className="home-grid grid grid-cols-1 md:grid-cols-12 items-stretch gap-4 lg:gap-5"
+                  className={`grid grid-cols-1 gap-5 ${calendarSlotKey && deckSlots.length > 0 ? 'lg:grid-cols-3' : ''}`}
                 >
-                  {gridSlots.map(slot => (
+                  {calendarSlotKey && (
                     <section
-                      key={slot.key}
-                      className={`flex flex-col min-w-0 ${spanClassFor(slot)}`}
-                      aria-label={slot.key.replace(/-/g, ' ')}
+                      aria-label={calendarSlotKey === 'calendar' ? 'School work this week' : 'My tasks this week'}
+                      className={`flex flex-col min-w-0 h-[340px] lg:h-[440px] ${deckSlots.length > 0 ? 'lg:col-span-2' : ''}`}
                     >
-                      {slot.heading}
-                      {/* min-h-0 lets an overflow-y-auto card inside actually
-                          scroll instead of growing the row; the min-height is
-                          the floor a short card holds so a row of one list and
-                          one near-empty card doesn't collapse to nothing. */}
-                      <div className="flex-1 min-h-0 md:min-h-[230px]">
-                        {slot.desktopBody ?? slot.body}
+                      {calendarSlotKey === 'calendar' ? schoolWorkHeading : taskCalendarHeading}
+                      <div className="flex-1 min-h-0">
+                        {calendarSlotKey === 'calendar'
+                          ? <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onOpenDay={openSchoolWorkDay} fill />
+                          : <StaffWeeklyCalendarCard itemsByDay={taskItemsByDay} loading={taskCalendarLoading} onOpenDay={openTaskDay} fill />}
                       </div>
                     </section>
-                  ))}
+                  )}
+                  {deckSlots.length > 0 && (
+                    <HomeCardDeck slots={deckSlots} heightClass="h-[408px] lg:h-[440px]" />
+                  )}
                 </motion.div>
               )}
 
-              {/* The standing statistics, never behind a gesture.
-                  At `lg:` they are one panel: attendance, school fees and bus
-                  fees are the same question asked of three ledgers, so they
-                  share a surface, a header and a footer strip instead of
-                  sitting in three cards with three headings and three borders
-                  between them.
-                  Between 768 and 1024 they stay as separate tile cards — a
-                  donut beside its metric rows needs more than a half of
-                  900px. */}
+              {/* The standing statistics, never behind a gesture. At `lg:`
+                  they are one School Overview panel; between 768 and 1024
+                  they stay as separate tile cards. */}
               {isDesktop && showOverviewPanel && (
                 <motion.div variants={cardVariants}>
                   <SchoolOverviewPanel
                     attendance={showAttendanceStat
                       ? { counts: attendanceCounts, subtitle: coordinatorSubtitle }
                       : null}
-                    schoolFees={schoolFeesSummary}
-                    busFees={busFeesSummary}
+                    fees={feeBreakdown}
                     showAttendance={showAttendanceStat}
-                    showSchoolFees={showFeesStat}
-                    showBusFees={showBusFeesStat}
+                    showFees={showFeesStat || showBusFeesStat}
                     today={today}
                   />
                 </motion.div>
               )}
 
-              {!isDesktop && attendanceSlot && (
-                <motion.section variants={cardVariants}>
-                  {attendanceSlot.heading}
-                  {attendanceSlot.body}
+              {!isDesktop && showAttendanceStat && (
+                <motion.section variants={cardVariants} className="flex flex-col h-[330px]">
+                  {slots.find(s => s.key === 'attendance')?.heading}
+                  <div className="flex-1 min-h-0">{slots.find(s => s.key === 'attendance')?.body}</div>
                 </motion.section>
               )}
-              {!isDesktop && feeSlots.length > 0 && (
+              {!isDesktop && (showFeesStat || showBusFeesStat) && (
                 <motion.div
                   variants={cardVariants}
-                  className={`grid gap-4 items-stretch ${feeSlots.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}
+                  className={`grid gap-4 items-stretch ${showFeesStat && showBusFeesStat ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}
                 >
-                  {feeSlots.map(slot => (
-                    <section key={slot.key} className="flex flex-col min-w-0">
-                      {slot.heading}
-                      <div className="flex-1">{slot.body}</div>
+                  {showFeesStat && (
+                    <section className="flex flex-col min-w-0 h-[330px]">
+                      {feeHeading}
+                      <div className="flex-1 min-h-0">{feeBody}</div>
                     </section>
-                  ))}
+                  )}
+                  {showBusFeesStat && (
+                    <section className="flex flex-col min-w-0 h-[330px]">
+                      {busFeeHeading}
+                      <div className="flex-1 min-h-0">{busFeeBody}</div>
+                    </section>
+                  )}
                 </motion.div>
               )}
             </div>

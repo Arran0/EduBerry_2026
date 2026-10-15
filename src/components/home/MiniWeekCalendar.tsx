@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { ArrowUpRight, CheckCircle2 } from 'lucide-react'
 import { SkeletonBar } from './HomeCardSkeletons'
 
 export interface MiniCalendarItem {
@@ -53,12 +53,19 @@ interface MiniWeekCalendarProps {
   /** Staff-only surfaces (e.g. the task calendar) render on the square-cornered
    *  pro-card material instead of the student-facing frosted glass-card. */
   sharp?: boolean
+  /** Clicking the day that is already open follows through to the full
+   *  calendar (the task manager, or the academics school-work calendar) for
+   *  that date. The first click on a day only opens it, as before. */
+  onOpenDay?: (dateKey: string) => void
+  /** Take the parent's height instead of the phone card's fixed 260px — the
+   *  desktop split gives the calendar a fixed-height column of its own. */
+  fill?: boolean
 }
 
 /** The shared week-strip UI for the home carousel's mini calendars: today's
  *  column starts expanded (3x wide-card / 6x narrow-card), clicking another day
  *  swaps which column is expanded; unexpanded columns preview item titles. */
-export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet', sharp = false }: MiniWeekCalendarProps) {
+export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet', sharp = false, onOpenDay, fill = false }: MiniWeekCalendarProps) {
   const c = ACCENTS[accent]
   const rootRef = useRef<HTMLDivElement>(null)
   const [isNarrow, setIsNarrow] = useState(true)
@@ -79,7 +86,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
 
   return (
-    <div ref={rootRef} className={`home-card ${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} h-[260px] overflow-hidden flex flex-col`}>
+    <div ref={rootRef} className={`${fill ? 'h-full rounded-[22px]' : 'home-card h-[260px]'} ${sharp ? 'pro-card' : 'glass-card rounded-[1.4rem]'} overflow-hidden flex flex-col`}>
       {/* The week itself needs no data — the seven columns, their letters and
           their dates are known the moment the card mounts. So the scaffold is
           drawn straight away and only the *entries* are placeholders while the
@@ -100,13 +107,37 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
             return (
               <div
                 key={key}
-                onClick={() => { if (!loading) setExpandedDate(day) }}
+                role="button"
+                tabIndex={loading ? -1 : 0}
+                aria-expanded={isExpanded}
+                aria-label={isExpanded && onOpenDay
+                  ? `Open ${day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} in the full calendar`
+                  : day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                onClick={() => {
+                  if (loading) return
+                  if (isExpanded && onOpenDay) onOpenDay(key)
+                  else setExpandedDate(day)
+                }}
+                onKeyDown={e => {
+                  if (loading || (e.key !== 'Enter' && e.key !== ' ')) return
+                  e.preventDefault()
+                  if (isExpanded && onOpenDay) onOpenDay(key)
+                  else setExpandedDate(day)
+                }}
                 style={{ flex: isExpanded ? expandRatio : 1, transition: 'flex 0.35s ease', minWidth: 0 }}
-                className={`flex flex-col select-none ${loading ? '' : 'cursor-pointer'} ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
+                className={`group/day flex flex-col select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500/60 ${loading ? '' : 'cursor-pointer'} ${!isLast ? (sharp ? 'border-r border-slate-200' : 'border-r border-white/25') : ''} ${isToday ? c.todayBg : ''}`}
               >
-                <div className={`px-1 py-2 text-center flex-shrink-0 transition-colors duration-300 ${isExpanded ? c.headBg : ''}`}>
+                <div className={`relative px-1 py-2 text-center flex-shrink-0 transition-colors duration-300 ${isExpanded ? c.headBg : ''}`}>
                   <p className="text-[9px] md:text-[11px] font-bold uppercase tracking-wide text-slate-500">{DAY_LETTERS[i]}</p>
-                  <p className={`text-sm font-bold leading-tight mt-0.5 ${isToday ? c.todayText : 'text-slate-700'}`}>{day.getDate()}</p>
+                  <p className={`text-sm ${fill ? 'lg:text-base' : ''} font-bold leading-tight mt-0.5 ${isToday ? c.todayText : 'text-slate-700'}`}>{day.getDate()}</p>
+                  {/* The open day's second click goes through to the full
+                      calendar — say so, quietly, where the eye already is. */}
+                  {isExpanded && onOpenDay && !loading && (
+                    <span className={`absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 text-[9px] font-semibold ${c.todayText} opacity-60 group-hover/day:opacity-100 transition-opacity`}>
+                      <span className="hidden sm:inline">Open</span>
+                      <ArrowUpRight size={11} />
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto scrollbar-hide px-1 pb-2 space-y-1 min-w-0">
                   {loading ? (
@@ -130,7 +161,7 @@ export default function MiniWeekCalendar({ itemsByDay, loading, accent = 'violet
                     dayItems.map(item => (
                       <div
                         key={item.id}
-                        className={`flex items-center gap-1 px-1.5 py-1 text-[10px] leading-tight ${sharp ? '' : 'rounded-lg'} ${item.done ? 'bg-emerald-50 text-emerald-700' : (sharp ? 'bg-slate-100 text-slate-600' : 'bg-white/60 text-slate-600')}`}
+                        className={`flex items-center gap-1 px-1.5 py-1 ${fill ? 'text-[10px] lg:text-[11.5px] lg:py-1.5' : 'text-[10px]'} leading-tight ${sharp ? '' : 'rounded-lg'} ${item.done ? 'bg-emerald-50 text-emerald-700' : (sharp ? 'bg-slate-100 text-slate-600' : 'bg-white/60 text-slate-600')}`}
                       >
                         {item.done
                           ? <CheckCircle2 size={10} className="flex-shrink-0 text-emerald-500" />

@@ -14,11 +14,13 @@ interface DatedItem extends MiniCalendarItem {
 interface SchoolWorkMiniCalendarProps {
   userId: string
   classrooms: ClassroomWithDetails[]
+  onOpenDay?: (dateKey: string) => void
+  fill?: boolean
 }
 
 /** Compact week-at-a-glance school work calendar for the home card carousel.
  *  See SchoolWorkManager for the full academics-page version this links out to. */
-export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWorkMiniCalendarProps) {
+export default function SchoolWorkMiniCalendar({ userId, classrooms, onOpenDay, fill }: SchoolWorkMiniCalendarProps) {
   const [items, setItems] = useState<DatedItem[]>([])
   const [loading, setLoading] = useState(true)
   const weekStart = useMemo(() => getWeekStart(new Date()), [])
@@ -71,5 +73,5 @@ export default function SchoolWorkMiniCalendar({ userId, classrooms }: SchoolWor
     return map
   }, [items])
 
-  return <MiniWeekCalendar itemsByDay={itemsByDay} loading={loading} accent="violet" />
+  return <MiniWeekCalendar itemsByDay={itemsByDay} loading={loading} accent="violet" onOpenDay={onOpenDay} fill={fill} />
 }
