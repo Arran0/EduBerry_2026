@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Users, Briefcase, CheckCircle2, XCircle, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Users, Briefcase } from 'lucide-react'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
   fetchStaffAttendanceReportByDate,
@@ -12,7 +11,7 @@ import {
   STUDENT_ABSENT_STATUSES,
 } from '@/lib/attendance'
 import { fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
-import { SkeletonTiles } from './HomeCardSkeletons'
+import AttendanceScopesCard, { AttendanceScope } from './AttendanceScopesCard'
 
 interface Tally { present: number; absent: number; exception: number }
 
@@ -27,73 +26,6 @@ function tally(rows: { status: string }[], present: Set<string>, absent: Set<str
     absent: rows.filter(r => absent.has(r.status)).length,
     exception: rows.filter(r => !present.has(r.status) && !absent.has(r.status)).length,
   }
-}
-
-const TILES = [
-  {
-    key: 'present' as const,
-    icon: <CheckCircle2 size={13} className="text-emerald-600 mb-1" />,
-    label: 'Present',
-    box: 'bg-emerald-50/90 border-emerald-200/60 hover:bg-emerald-100/90 hover:border-emerald-300/70',
-    value: 'text-emerald-700',
-    caption: 'text-emerald-700',
-  },
-  {
-    key: 'absent' as const,
-    icon: <XCircle size={13} className="text-red-600 mb-1" />,
-    label: 'Absent',
-    box: 'bg-red-50/90 border-red-200/60 hover:bg-red-100/90 hover:border-red-300/70',
-    value: 'text-red-700',
-    caption: 'text-red-700',
-  },
-  {
-    key: 'exception' as const,
-    icon: <AlertTriangle size={12} className="text-amber-700 mb-1" />,
-    label: 'Irregular',
-    box: 'bg-amber-50/90 border-amber-200/60 hover:bg-amber-100/90 hover:border-amber-300/70',
-    value: 'text-amber-700',
-    caption: 'text-amber-700',
-  },
-]
-
-/** One labelled block of three tiles. Every tile deep-links into the matching
- *  section of the report it summarises, the same way the admin card does. */
-function Row({
-  icon, label, tally: t, href, tileHrefs,
-}: {
-  icon: React.ReactNode
-  label: string
-  tally: Tally
-  href: string
-  /** Per-tile deep links, keyed by tile. */
-  tileHrefs: Record<'present' | 'absent' | 'exception', string>
-}) {
-  return (
-    <div className="px-4 pt-3 pb-2">
-      <div className="flex items-center justify-between mb-2.5 gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {icon}
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate" title={label}>{label}</span>
-        </div>
-        <Link href={href} className="flex-shrink-0 flex items-center gap-0.5 text-[10px] md:text-[11px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
-          View report <ChevronRight size={11} />
-        </Link>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {TILES.map(tile => (
-          <Link
-            key={tile.key}
-            href={tileHrefs[tile.key]}
-            className={`group flex flex-col items-center justify-center py-2.5 border active:scale-95 transition-all ${tile.box}`}
-          >
-            {tile.icon}
-            <span className={`text-xl font-black leading-none ${tile.value}`}>{t[tile.key]}</span>
-            <span className={`text-[9.5px] md:text-[11px] font-semibold mt-1 ${tile.caption}`}>{tile.label}</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 const CLASS_HREFS = {
@@ -173,40 +105,17 @@ export default function TeacherAttendanceCard({ userId }: TeacherAttendanceCardP
   const classLabel = homeroomNames.length > 0 ? homeroomNames.join(', ') : 'My class'
   const teamLabel = teamNames.length > 0 ? teamNames.join(', ') : 'My team'
 
-  return (
-    <div className="home-card pro-card h-[260px] overflow-hidden flex flex-col">
-      {/* The tiles this settles into, drawn at their real size and in their real
-          tints — the numbers land in boxes that are already where they will be
-          rather than replacing a hole with a card. `rows` matches what this
-          account will actually get: a class teacher sees their homeroom above
-          their team, everyone else sees the team alone. Not knowable until the
-          fetch returns, so the placeholder shows both and the second row drops
-          only if there is no homeroom — the card is a fixed 260px box either
-          way, so nothing outside it can move. */}
-      {loading ? (
-        <SkeletonTiles rows={2} />
-      ) : (
-        <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-slate-200">
-          {hasHomeroom && studentTally && (
-            <Row
-              icon={<Users size={12} className="text-slate-500" />}
-              label={classLabel}
-              tally={studentTally}
-              href="/more/attendance"
-              tileHrefs={CLASS_HREFS}
-            />
-          )}
-          {staffTally && (
-            <Row
-              icon={<Briefcase size={12} className="text-slate-500" />}
-              label={teamLabel}
-              tally={staffTally}
-              href="/more/staff-attendance"
-              tileHrefs={TEAM_HREFS}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  )
+  // Same card as the admin's, in the same design on phone and desktop: the
+  // teacher's class (if they class-teach one) over their team(s). While the
+  // fetch is out it shimmers both rows; the class row drops once it is known
+  // there is no homeroom — the card's box is fixed, so nothing outside moves.
+  const scopes: AttendanceScope[] | null = loading ? null : [
+    ...(hasHomeroom && studentTally ? [{
+      key: 'class', title: classLabel, icon: Users, tally: studentTally, href: '/more/attendance', hrefs: CLASS_HREFS,
+    }] : []),
+    ...(staffTally ? [{
+      key: 'team', title: teamLabel, icon: Briefcase, tally: staffTally, href: '/more/staff-attendance', hrefs: TEAM_HREFS,
+    }] : []),
+  ]
+  return <AttendanceScopesCard scopes={scopes} />
 }

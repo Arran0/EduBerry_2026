@@ -29,7 +29,6 @@ import {
   Users,
   Briefcase,
   CheckCircle2,
-  XCircle,
   AlertTriangle,
   Clock,
   CalendarCheck,
@@ -68,7 +67,7 @@ import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniLi
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
 import OverdueFeesCard from '@/components/home/OverdueFeesCard'
 import NotificationsSummaryCard, { NotificationsCardSkeleton } from '@/components/home/NotificationsSummaryCard'
-import { SkeletonBar, SkeletonTiles } from '@/components/home/HomeCardSkeletons'
+import { SkeletonBar } from '@/components/home/HomeCardSkeletons'
 import {
   createNotificationFeed,
   markNotificationRead,
@@ -91,10 +90,11 @@ import ExamsMiniCard from '@/components/home/ExamsMiniCard'
 import StaffWeeklyCalendarCard from '@/components/home/StaffWeeklyCalendarCard'
 import ExamGradingCard from '@/components/home/ExamGradingCard'
 import TeacherAttendanceCard from '@/components/home/TeacherAttendanceCard'
+import AttendanceScopesCard from '@/components/home/AttendanceScopesCard'
 import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalendar'
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { HomeFeesSummary } from '@/components/home/desktop/FeesInfographicPanel'
-import { AttendanceTally, HomeAttendanceCounts } from '@/components/home/desktop/AttendanceInfographicPanel'
+import { HomeAttendanceCounts } from '@/components/home/desktop/AttendanceInfographicPanel'
 import SchoolOverviewPanel, {
   BUS_FEE_COLOR, FEE_HEAD_COLORS, FeeHeadStat, HomeFeeBreakdown, OTHER_FEE_COLOR,
 } from '@/components/home/desktop/SchoolOverviewPanel'
@@ -371,88 +371,32 @@ function FeeTilesCard({
   )
 }
 
-/** Today's attendance as a phone/tablet card — students over staff, each a
- *  rate, a present/absent/irregular bar that fills in, and three deep links. */
+/** Today's attendance for admins, principals and coordinators — students
+ *  over staff (a coordinator's staff row is their own teams). */
 function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }) {
-  const reduceMotion = useReducedMotion()
   // `null` is "the fetch hasn't come back" — the page never hands this a loaded
-  // zero as null — so it shimmers rather than reporting nothing recorded.
-  if (counts === null) {
-    return (
-      <div className="home-card pro-card h-full rounded-[20px] overflow-hidden flex flex-col">
-        <SkeletonTiles rows={2} />
-      </div>
-    )
-  }
-  const scopes: { title: string; icon: React.ElementType; base: string; tally: AttendanceTally; anchors: [string, string, string] }[] = [
-    {
-      title: 'Students', icon: Users, base: '/more/attendance', tally: counts.students,
-      anchors: ['student-present', 'student-absent', 'student-irregular'],
-    },
-    {
-      title: 'Staff', icon: Briefcase, base: '/more/staff-attendance', tally: counts.staff,
-      anchors: ['staff-present', 'staff-absent', 'staff-exceptions'],
-    },
-  ]
+  // zero as null — so the card shimmers rather than reporting nothing recorded.
   return (
-    <div className="home-card pro-card h-full rounded-[20px] overflow-hidden flex flex-col">
-      {scopes.map((scope, si) => {
-        const Icon = scope.icon
-        const { present, absent, exception } = scope.tally
-        const total = present + absent + exception
-        const parts = [
-          { key: 'present', label: 'Present', value: present, color: '#10b981', ink: 'text-emerald-700', icon: CheckCircle2, anchor: scope.anchors[0] },
-          { key: 'absent', label: 'Absent', value: absent, color: '#ef4444', ink: 'text-red-700', icon: XCircle, anchor: scope.anchors[1] },
-          { key: 'irregular', label: 'Irregular', value: exception, color: '#f59e0b', ink: 'text-amber-700', icon: AlertTriangle, anchor: scope.anchors[2] },
-        ]
-        return (
-          <div key={scope.title} className={`flex-1 min-h-0 px-4 py-3 flex flex-col justify-center ${si === 0 ? 'border-b border-slate-200/80' : ''}`}>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Icon size={12} className="text-slate-500" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{scope.title}</span>
-                <span className="ml-1 text-[13px] font-black text-slate-900 tabular-nums">
-                  {total > 0 ? <AnimatedNumber value={(present / total) * 100} format={n => `${Math.round(n)}%`} delay={si * 0.15} /> : '—'}
-                </span>
-              </span>
-              <Link href={scope.base} className="flex items-center gap-0.5 text-[10.5px] font-semibold text-sky-700 hover:text-sky-800 transition-colors">
-                {total > 0 ? 'View report' : 'Not marked yet'} <ChevronRight size={11} />
-              </Link>
-            </div>
-            <div className="mt-2 h-2 rounded-full bg-slate-200/80 overflow-hidden flex" aria-hidden>
-              {total > 0 && parts.map((part, pi) => part.value > 0 && (
-                <motion.div
-                  key={part.key}
-                  className="h-full"
-                  style={{ background: part.color, width: `${(part.value / total) * 100}%`, transformOrigin: 'left' }}
-                  initial={reduceMotion ? false : { scaleX: 0 }}
-                  animate={{ scaleX: 1 }}
-                  transition={{ duration: reduceMotion ? 0 : 0.7, ease: [0.16, 1, 0.3, 1], delay: si * 0.15 + pi * 0.25 }}
-                />
-              ))}
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              {parts.map(part => {
-                const PartIcon = part.icon
-                return (
-                  <Link
-                    key={part.key}
-                    href={`${scope.base}#${part.anchor}`}
-                    className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white hover:border-slate-300/80 active:scale-95 transition-all"
-                  >
-                    <PartIcon size={12} className={part.ink} />
-                    <span className={`text-base font-black leading-none tabular-nums ${part.ink}`}>
-                      <AnimatedNumber value={part.value} format={countFmt} delay={si * 0.15} />
-                    </span>
-                    <span className={`text-[10px] font-semibold ${part.ink}`}>{part.label}</span>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-    </div>
+    <AttendanceScopesCard
+      scopes={counts === null ? null : [
+        {
+          key: 'students', title: 'Students', icon: Users, tally: counts.students, href: '/more/attendance',
+          hrefs: {
+            present: '/more/attendance#student-present',
+            absent: '/more/attendance#student-absent',
+            exception: '/more/attendance#student-irregular',
+          },
+        },
+        {
+          key: 'staff', title: 'Staff', icon: Briefcase, tally: counts.staff, href: '/more/staff-attendance',
+          hrefs: {
+            present: '/more/staff-attendance#staff-present',
+            absent: '/more/staff-attendance#staff-absent',
+            exception: '/more/staff-attendance#staff-exceptions',
+          },
+        },
+      ]}
+    />
   )
 }
 
@@ -1444,10 +1388,13 @@ export default function HomePage() {
      the calendar has its own column, and the standing statistics have their
      own place below (the School Overview at `lg:`, tile cards at `md:`), so
      the deck skips them rather than showing the same figures twice — for an
-     admin that is attendance and both fee ledgers. */
+     admin that is attendance and both fee ledgers. A coordinator has no
+     School Overview (see below), so their attendance card stays in the deck
+     at every width. */
   const STAT_KEYS: AdminCardView[] = ['attendance', 'fees', 'bus-fees']
+  const statsOutsideDeck = splitLayout && !isCoordinator
   const deckSlots: DeckSlot[] = slots
-    .filter(s => !splitLayout || !STAT_KEYS.includes(s.key))
+    .filter(s => !statsOutsideDeck || !STAT_KEYS.includes(s.key))
     .map(s => ({
       key: s.key,
       label: s.label,
@@ -1459,8 +1406,10 @@ export default function HomePage() {
     }))
 
   /* The combined statistics panel stands in for the separate stat cards at
-     `lg:`, so it appears whenever this account is entitled to any of them. */
-  const showOverviewPanel = showAttendanceStat || showFeesStat || showBusFeesStat
+     `lg:`, for admins and principals. Coordinators don't get it: their one
+     statistic is their own teams' attendance, which reads better as the card
+     in their deck than as a school-wide panel with one half filled. */
+  const showOverviewPanel = !isCoordinator && (showAttendanceStat || showFeesStat || showBusFeesStat)
 
   /* A coordinator's attendance is scoped to their own teams; the panel says
      which, the same way the standalone attendance heading did. */
@@ -1861,7 +1810,7 @@ export default function HomePage() {
                 </motion.div>
               )}
 
-              {!isDesktop && showAttendanceStat && (
+              {!isDesktop && showAttendanceStat && !isCoordinator && (
                 <motion.section variants={cardVariants} className="flex flex-col h-[330px]">
                   {slots.find(s => s.key === 'attendance')?.heading}
                   <div className="flex-1 min-h-0">{slots.find(s => s.key === 'attendance')?.body}</div>
