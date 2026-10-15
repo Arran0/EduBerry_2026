@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { motion, animate, useMotionTemplate, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -62,7 +62,7 @@ import { getShowClassroomsOnHome } from '@/lib/homeClassroomsVisibility'
 import { sampleImageLuminance } from '@/lib/luminance'
 import { fetchRawSetting, saveSetting } from '@/lib/pageConfig'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
-import DailyQuoteCard from '@/components/home/DailyQuoteCard'
+import BannerQuote from '@/components/home/BannerQuote'
 import SchoolWorkMiniCalendar from '@/components/home/SchoolWorkMiniCalendar'
 import LatestAssessmentsMiniList from '@/components/home/LatestAssessmentsMiniList'
 import ReportCardsMiniList from '@/components/home/ReportCardsMiniList'
@@ -106,30 +106,6 @@ import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { useGridColumns } from '@/hooks/useGridColumns'
 import { useMidnightRefresh } from '@/hooks/useMidnightRefresh'
 import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
-
-function QuoteBanner() {
-  const [visible, setVisible] = useState(true)
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 7000)
-    return () => clearTimeout(t)
-  }, [])
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
-          transition={{ duration: 0.45, ease: 'easeInOut' }}
-          className="overflow-hidden"
-        >
-          <div className="home-container pt-5 pb-1">
-            <DailyQuoteCard />
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -586,6 +562,26 @@ export default function HomePage() {
   // Resolved once here rather than branching at each motion.div call site.
   const pageVariants = reduceMotion ? staticContainerVariants : containerVariants
   const cardVariants = reduceMotion ? staticItemVariants : itemVariants
+
+  /* The banner reveal, 0 → 1. One value drives all of it: the band's soft
+     bottom edge (a mask that fades the photo into the page) slides from
+     halfway down to the bottom, the greeting rides that edge down, and
+     everything below the band is carried down with it to its resting place.
+     The page below moves by transform, not by animating the band's height,
+     so the slide is composited rather than re-flowing the document each
+     frame; at rest the transform is dropped altogether. */
+  const bannerReveal = useMotionValue(reduceMotion ? 1 : 0)
+  useEffect(() => {
+    if (reduceMotion) { bannerReveal.set(1); return }
+    if (!bannerReady) return
+    const c = animate(bannerReveal, 1, { duration: 1.15, ease: [0.65, 0, 0.35, 1], delay: 0.08 })
+    return () => c.stop()
+  }, [bannerReady, reduceMotion, bannerReveal])
+  const bannerMaskSolid = useTransform(bannerReveal, [0, 1], [34, 84])
+  const bannerMaskEnd = useTransform(bannerReveal, [0, 1], [50, 100])
+  const bannerMask = useMotionTemplate`linear-gradient(to bottom, #000 ${bannerMaskSolid}%, transparent ${bannerMaskEnd}%)`
+  const belowBannerTransform = useTransform(bannerReveal, p =>
+    p >= 1 ? 'none' : `translateY(calc(${((p - 1) * 0.5).toFixed(4)} * var(--home-banner-h)))`)
 
 
   // The banner photo. Decoded off-screen first so it swaps in complete rather
@@ -1652,55 +1648,29 @@ export default function HomePage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="home">
+      {/* --home-banner-h: the band's height, for the reveal's translate. */}
+      <div data-page-theme="home" style={{ ['--home-banner-h' as string]: `${bannerHeight}px` }}>
         <motion.div variants={pageVariants} initial="hidden" animate="visible">
 
-          {/* ── Immersive full-width welcome banner ──
-              This used to open by animating `height` from 0 to its final value
-              over two seconds, and it only started once a settings fetch and an
-              image decode had both come back. Animating height is a layout
-              animation: every frame re-flowed the whole document, so for two
-              seconds after the data had landed the entire dashboard slid down
-              the screen — and because it began late, the page had already drawn
-              itself once at the wrong offset before it did. That slide is most
-              of what reads as "not smooth" on this page.
-
-              The height is a constant per breakpoint and owes nothing to the
-              network, so the band now occupies its final height from the very
-              first paint and never animates it again. Only the photo fades in
-              over the gradient when it arrives — opacity and transform, which
-              the compositor can do without touching layout. Nothing below the
-              banner moves at any point. */}
-          {/* The reveal: the band's box is its full height from the first
-              paint (nothing below it ever moves), and what slides is a clip
-              over its contents — open to the top half straight away, then
-              eased down to the full band once the photo is ready, so the
-              photo itself is what draws in rather than the theme colour
-              sitting there first. clip-path is composited, like the opacity
-              and transform elsewhere here, so the slide costs no layout. */}
-          <div
-            className="relative w-full"
-            style={{ height: bannerHeight }}
-          >
-          <motion.div
-            className={`absolute inset-0 overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
-            initial={reduceMotion ? false : { clipPath: 'inset(0% 0% 50% 0%)', opacity: 0 }}
-            animate={reduceMotion || bannerReady
-              ? { clipPath: 'inset(0% 0% 0% 0%)', opacity: 1 }
-              : { clipPath: 'inset(0% 0% 50% 0%)', opacity: 0 }}
-            transition={reduceMotion
-              ? { duration: 0 }
-              : {
-                  clipPath: { duration: 1.15, ease: [0.65, 0, 0.35, 1], delay: 0.08 },
-                  opacity: { duration: 0.3, ease: 'easeOut' },
-                }}
-            // Inline, not a class: `.sheen` is unlayered CSS that sets
-            // `position: relative`, which beats Tailwind's `absolute` and
-            // collapsed this layer to zero height — the banner vanished.
-            style={{ position: 'absolute', willChange: 'clip-path' }}
-          >
-            <div className="absolute inset-0">
-
+          {/* ── Welcome banner ──
+              The band's box is its full height from the first paint. What
+              moves is `bannerReveal` (see its note): the photo opens half-way,
+              then its soft bottom edge slides down to the band's foot while
+              the page beneath is carried down with it. The edge is a mask, not
+              a hard cut — the photo dilutes into the page background — and it
+              stays soft at rest. The greeting and the quote of the day sit on
+              their own unmasked layer so they are never faded by it. */}
+          <div className="relative w-full" style={{ height: bannerHeight }}>
+            <motion.div
+              className={`absolute inset-0 overflow-hidden sheen ${reduceMotion ? '' : 'sheen-animate'}`}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: reduceMotion || bannerReady ? 1 : 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.3, ease: 'easeOut' }}
+              // `position` inline, not from a class: `.sheen` is unlayered
+              // CSS that sets `position: relative`, which beats Tailwind's
+              // `absolute` and collapsed this layer to nothing.
+              style={{ position: 'absolute', maskImage: bannerMask, WebkitMaskImage: bannerMask }}
+            >
               {/* Background: the gradient is always there — it is the banner's
                   own placeholder, not a fallback — and a school's photo cross-
                   fades over it once loaded. Rendering the gradient first also
@@ -1774,17 +1744,6 @@ export default function HomePage() {
                 }}
               />
 
-              {/* Layer 2 — white fade for the default gradient only */}
-              {!welcomeBanner && (
-                <div
-                  className="absolute inset-x-0 bottom-0"
-                  style={{
-                    height: '30%',
-                    background: 'linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.22) 45%, rgba(255,255,255,0.35) 100%)',
-                  }}
-                />
-              )}
-
               {/* Layer 3 — graduated dark scrim for dark photos, so the
                   greeting always clears the WCAG contrast bar. */}
               {welcomeBanner && bannerOnDark && (
@@ -1797,25 +1756,23 @@ export default function HomePage() {
                 />
               )}
 
-              {/* Welcome text — pinned inside the blur zone.
-                  The greeting is the user's own name and the clock: both known
-                  the instant the page mounts, neither waiting on anything. It
-                  used to sit out the first 0.9 s and then take another 0.9 s to
-                  fade, so the hero stood empty through the whole load and the
-                  headline arrived last of all — after the cards it is supposed
-                  to introduce. Now it is there from the start, with a short
-                  fade to take the hard edge off. */}
-              <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="home-container pb-7">
+            </motion.div>
+
+            {/* Greeting + quote — rides the sliding edge down. */}
+            <motion.div
+              className="absolute inset-x-0 bottom-0 z-10 pointer-events-none"
+              style={{ transform: belowBannerTransform }}
+            >
+              <div className="home-container pb-10">
                   {(() => {
                     const { line1, icon } = getGreetingData()
                     const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                     return (
                       <motion.div
-                        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                        // Rises into place as the sliding band reaches it.
-                        animate={reduceMotion || bannerReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-                        transition={reduceMotion ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.7 }}
+                        initial={reduceMotion ? false : { opacity: 0 }}
+                        // Fades up as the sliding edge carries it down.
+                        animate={reduceMotion || bannerReady ? { opacity: 1 } : { opacity: 0 }}
+                        transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: 'easeOut', delay: 0.55 }}
                       >
                         <div className="flex items-center gap-1.5 mb-2">
                           {icon}
@@ -1832,21 +1789,16 @@ export default function HomePage() {
                         >
                           Welcome back, {profile?.full_name?.split(' ')[0] || 'User'}.
                         </h1>
+                        <BannerQuote onDark={bannerOnDark} show={reduceMotion || bannerReady} />
                       </motion.div>
                     )
                   })()}
-                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
           </div>
 
-          {/* ── Daily Quote — auto-dismisses after 7 s, collapses gap ──
-              No longer gated on `bannerReady`: the quote comes from a local
-              table keyed on the date, so waiting on a banner settings fetch to
-              show it only meant the row below the hero appeared late and pushed
-              the dashboard down a second time. */}
-          <QuoteBanner />
+          {/* Everything below the band, carried down by the reveal. */}
+          <motion.div style={{ transform: belowBannerTransform }}>
 
           {/* ── Today at a glance — the section under the quote.
               Fixed height at every width, whichever card is up: the deck and
@@ -2071,6 +2023,7 @@ export default function HomePage() {
             </div>
           </motion.div>
 
+          </motion.div>
         </motion.div>
       </div>
 
