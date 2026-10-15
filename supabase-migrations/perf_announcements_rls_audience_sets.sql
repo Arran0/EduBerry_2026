@@ -94,6 +94,17 @@ GRANT EXECUTE ON FUNCTION public.announcement_ids_addressed_to_me()      TO auth
 GRANT EXECUTE ON FUNCTION public.announcement_ids_for_student_audience() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.announcement_ids_for_staff_audience()   TO authenticated;
 
+-- Replacing the policy needs ACCESS EXCLUSIVE on `announcements`. Against a live
+-- database the DROP below will queue behind the app's constant reads of that table —
+-- it timed out doing exactly that when this was first applied. On a running system,
+-- create the helpers in their own transaction, then swap the policy in a second one
+-- that fails fast rather than holding the queue open:
+--
+--   SET LOCAL lock_timeout = '5s';
+--   ALTER POLICY coord_principal_admin_view_all ON public.announcements USING ( ... );
+--
+-- ALTER also avoids the window where the policy does not exist. The DROP/CREATE pair
+-- below is the from-scratch form and is what a fresh environment should run.
 DROP POLICY IF EXISTS coord_principal_admin_view_all ON public.announcements;
 
 CREATE POLICY coord_principal_admin_view_all ON public.announcements
