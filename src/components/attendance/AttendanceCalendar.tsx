@@ -24,7 +24,6 @@ const STATUS_CELL: Record<AttendanceStatus, { bg: string; text: string; border: 
   on_leave: { bg: '#f0f9ff', text: '#075985', border: '#7dd3fc', dot: '#0ea5e9', badge: 'bg-sky-100 text-sky-800 border-sky-200' },
   excused:  { bg: '#f5f3ff', text: '#4c1d95', border: '#c4b5fd', dot: '#7c3aed', badge: 'bg-violet-100 text-violet-800 border-violet-200' },
   on_duty:  { bg: '#f0fdfa', text: '#134e4a', border: '#5eead4', dot: '#14b8a6', badge: 'bg-teal-100 text-teal-800 border-teal-200' },
-  half_day: { bg: '#fff7ed', text: '#7c2d12', border: '#fdba74', dot: '#f97316', badge: 'bg-orange-100 text-orange-800 border-orange-200' },
 }
 
 const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
@@ -34,7 +33,6 @@ const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
   on_leave: <BookOpen size={11} />,
   excused:  <ShieldCheck size={11} />,
   on_duty:  <Briefcase size={11} />,
-  half_day: <span className="text-[9px] font-extrabold leading-none">½</span>,
 }
 
 function monthName(year: number, month: number) {
@@ -159,7 +157,6 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                   { s: 'present'  as AttendanceStatus, label: 'P',  c: '#6ee7b7' },
                   { s: 'absent'   as AttendanceStatus, label: 'A',  c: '#fca5a5' },
                   { s: 'late'     as AttendanceStatus, label: 'L',  c: '#fcd34d' },
-                  { s: 'half_day' as AttendanceStatus, label: 'HD', c: '#fdba74' },
                 ].map(({ s, label, c }) => (
                   <span key={s} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
                     style={{ background: 'rgba(255,255,255,0.15)', color: c }}>
@@ -262,7 +259,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
         {/* ── Legend ── */}
         <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-x-3 gap-y-1.5">
-          {(['present', 'absent', 'late', 'half_day'] as AttendanceStatus[]).map(s => (
+          {(['present', 'absent', 'late'] as AttendanceStatus[]).map(s => (
             <div key={s} className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
               <span className="text-[10px] text-slate-500 font-medium">{ATTENDANCE_STATUS_LABELS[s]}</span>

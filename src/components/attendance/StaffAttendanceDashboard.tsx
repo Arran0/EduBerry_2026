@@ -48,9 +48,9 @@ interface RowState {
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -59,7 +59,6 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
   on_duty:  'bg-teal-500 text-white border-teal-500',
-  half_day: 'bg-orange-500 text-white border-orange-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -68,7 +67,6 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
   on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
-  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -311,6 +309,7 @@ function InlineSheet({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [expandedRemarks, setExpandedRemarks] = useState<Set<string>>(new Set())
 
   const loadSheet = useCallback(async () => {
@@ -343,11 +342,17 @@ function InlineSheet({
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveFailed(false)
     const toSave = rows
       .filter(r => r.changed || !r.leaveLinked)
       .map(r => ({ studentId: r.student.id, status: r.status, remarks: r.remarks || undefined }))
-    if (toSave.length > 0) await bulkMarkAttendance(homeroom.id, date, toSave, staffId)
-    setSaved(true); setSaving(false)
+    // One upsert for the whole class, so a failure means nobody was marked. Reporting
+    // success anyway is what let a rejected status discard a register silently; the
+    // edits are deliberately left on screen so the save can be retried.
+    const ok = toSave.length === 0 || await bulkMarkAttendance(homeroom.id, date, toSave, staffId)
+    setSaving(false)
+    if (!ok) { setSaveFailed(true); return }
+    setSaved(true)
     await loadSheet()
   }
 
@@ -492,8 +497,11 @@ function InlineSheet({
         <span className="text-xs text-[#71717A] flex-1 min-w-0 truncate">
           {markedCount} / {rows.length} student{rows.length !== 1 ? 's' : ''} marked
         </span>
-        {hasChanges && (
+        {hasChanges && !saveFailed && (
           <span className="text-xs text-amber-600 font-medium flex-shrink-0">Unsaved changes</span>
+        )}
+        {saveFailed && (
+          <span className="text-xs font-semibold text-rose-600 flex-shrink-0">Not saved — nothing was recorded. Try again.</span>
         )}
         <button
           onClick={handleSave}

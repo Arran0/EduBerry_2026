@@ -7,7 +7,14 @@ import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
 // Types
 // ============================================
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty' | 'half_day'
+// Mirrors the `attendance_status` enum exactly. It does NOT include 'half_day':
+// that is a staff concept, set by the checkout-cutoff rule, and lives only in
+// `staff_attendance_status` below. Listing it here let the student mark sheets offer
+// an "HD" button whose every write was rejected by Postgres with
+// `invalid input value for enum attendance_status: "half_day"` — and because
+// bulkMarkAttendance upserts the whole class in one statement, one HD pick threw away
+// that entire class's attendance for the day.
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day' | 'e'
 // WFH is kept in the type for backward-compat with existing records and admin overrides,
 // but it is no longer offered as a self-service option for regular staff.
@@ -267,7 +274,6 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   on_leave: 'On Leave (OL)',
   excused: 'Excused',
   on_duty: 'On Duty (OD)',
-  half_day: 'Half Day',
 }
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
@@ -727,11 +733,20 @@ export async function syncLeaveToStudentAttendance(
 
   if (memError || !memberships?.length) return
 
-  // OD leave → Present (student is working, just off-site); half day → half
-  // day; late permit → late; casual/medical → Absent
+  // OD leave → Present (student is working, just off-site); late permit → late;
+  // casual/medical → Absent.
+  //
+  // A half-day permit maps to 'excused', not 'half_day'. Students have no half_day
+  // attendance status — `attendance_status` has never carried one — so the old
+  // mapping wrote a value Postgres rejected outright, and the error below was only
+  // logged. Every approved half-day student leave therefore recorded no attendance
+  // at all. 'excused' is the enum's slot for an authorised absence, which is what a
+  // permit is. Note it does not count toward the present percentage
+  // (STUDENT_PRESENT_STATUSES), so a half day reads as a non-present day rather than
+  // as half of one.
   const attendanceStatus: AttendanceStatus =
     leaveType === 'on_duty' ? 'present'
-      : leaveType === 'half_day' ? 'half_day'
+      : leaveType === 'half_day' ? 'excused'
         : leaveType === 'late' ? 'late'
           : 'absent'
 

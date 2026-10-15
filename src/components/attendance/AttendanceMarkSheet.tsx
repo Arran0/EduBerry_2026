@@ -29,11 +29,11 @@ interface RowState {
   overrideLeave: boolean
 }
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late']
 
 // Short labels for compact status pills
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
 }
 
 // Active pill colours
@@ -44,7 +44,6 @@ const STATUS_ACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-500 text-white border-blue-600 shadow-sm',
   excused:  'bg-purple-500 text-white border-purple-600 shadow-sm',
   on_duty:  'bg-teal-500 text-white border-teal-600 shadow-sm',
-  half_day: 'bg-orange-500 text-white border-orange-600 shadow-sm',
 }
 
 // Inactive pill colours
@@ -55,7 +54,6 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
   on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
-  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 // Row highlight when status is set
@@ -65,7 +63,6 @@ const ROW_BG: Partial<Record<AttendanceStatus, string>> = {
   late:     'bg-amber-50/40',
   on_leave: 'bg-blue-50/30',
   on_duty:  'bg-teal-50/30',
-  half_day: 'bg-orange-50/30',
 }
 
 const LEAVE_STATUS_DOT: Record<string, string> = {
@@ -303,6 +300,7 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [expandedRemarks, setExpandedRemarks] = useState<Set<string>>(new Set())
   const [calendarStudent, setCalendarStudent] = useState<UserProfile | null>(null)
 
@@ -334,12 +332,17 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveFailed(false)
     const toSave = rows
       .filter(r => r.changed || !r.leaveLinked)
       .map(r => ({ studentId: r.student.id, status: r.status, remarks: r.remarks || undefined }))
-    if (toSave.length > 0) await bulkMarkAttendance(homeroomId, date, toSave, markedBy)
-    setSaved(true)
+    // The whole class goes up as one upsert, so this is all-or-nothing: if it fails,
+    // nobody was marked. Saying "Saved" regardless is how a rejected status silently
+    // threw away a morning's register — the teacher saw the confirmation and left.
+    const ok = toSave.length === 0 || await bulkMarkAttendance(homeroomId, date, toSave, markedBy)
     setSaving(false)
+    if (!ok) { setSaveFailed(true); return }
+    setSaved(true)
     await loadSheet()
   }
 
@@ -414,8 +417,13 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
             >
               <CheckSquare size={11} /> Mark All Present
             </button>
-            {hasChanges && (
+            {hasChanges && !saveFailed && (
               <span className="text-[10px] text-amber-600 font-medium">• Unsaved changes</span>
+            )}
+            {saveFailed && (
+              <span className="text-[10px] font-semibold text-rose-600">
+                • Not saved — nothing was recorded. Try again.
+              </span>
             )}
             <button
               onClick={handleSave}
