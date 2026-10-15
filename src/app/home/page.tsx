@@ -95,7 +95,9 @@ import { MiniCalendarItem, getWeekStart } from '@/components/home/MiniWeekCalend
 import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
 import { HomeFeesSummary } from '@/components/home/desktop/FeesInfographicPanel'
 import { AttendanceTally, HomeAttendanceCounts } from '@/components/home/desktop/AttendanceInfographicPanel'
-import SchoolOverviewPanel, { FeeHeadStat, HomeFeeBreakdown } from '@/components/home/desktop/SchoolOverviewPanel'
+import SchoolOverviewPanel, {
+  BUS_FEE_COLOR, FEE_HEAD_COLORS, FeeHeadStat, HomeFeeBreakdown, OTHER_FEE_COLOR,
+} from '@/components/home/desktop/SchoolOverviewPanel'
 import HomeCardDeck, { DeckSlot } from '@/components/home/HomeCardDeck'
 import AnimatedNumber from '@/components/charts/AnimatedNumber'
 import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
@@ -477,11 +479,6 @@ function AttendanceTilesCard({ counts }: { counts: HomeAttendanceCounts | null }
     </div>
   )
 }
-
-/** Fee-head colours for the overview bar — distinct hues, none of them the
- *  bus orange. */
-const FEE_HEAD_COLORS = ['#14b8a6', '#6366f1', '#eab308', '#ec4899', '#8b5cf6', '#06b6d4', '#84cc16', '#64748b']
-const BUS_FEE_COLOR = '#f97316'
 
 /** This device's copy of the school's banner URL — see the banner effect. */
 const BANNER_CACHE_KEY = 'home_welcome_banner_url'
@@ -900,23 +897,48 @@ export default function HomePage() {
     setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
 
     const names = new Map(((feeHeads ?? []) as { id: string; name: string }[]).map(h => [h.id, h.name]))
-    const heads: FeeHeadStat[] = [...byHead.entries()]
+    /* Five named heads at most, largest first; the rest fold into "Other
+       fees" rather than being handed an invented sixth hue. Bus fee keeps its
+       own slot (orange) at the end. The palette is the validated categorical
+       set (dataviz validator: lightness, chroma, CVD and normal-vision
+       separation all pass in this order). */
+    const ranked = [...byHead.entries()]
       .filter(([, t]) => t.collected + t.outstanding + t.today > 0)
       .sort((a, b) => (b[1].collected + b[1].outstanding) - (a[1].collected + a[1].outstanding))
-      .map(([id, t], i) => ({
-        id,
-        name: id === '__other' ? 'Other fees' : (names.get(id) ?? 'Fee'),
-        color: FEE_HEAD_COLORS[i % FEE_HEAD_COLORS.length],
-        collected: t.collected,
-        outstanding: t.outstanding,
-        todayCollection: t.today,
-        studentsWithDues: t.dues.size,
+    const named = ranked.filter(([id]) => id !== '__other').slice(0, FEE_HEAD_COLORS.length)
+    const folded = ranked.filter(([id]) => !named.some(([n]) => n === id))
+    const heads: FeeHeadStat[] = named.map(([id, t], i) => ({
+      id,
+      memberIds: [id],
+      name: names.get(id) ?? 'Fee',
+      color: FEE_HEAD_COLORS[i],
+      collected: t.collected,
+      outstanding: t.outstanding,
+      todayCollection: t.today,
+      studentsWithDues: t.dues.size,
+      todayHref: '/more/fees?section=collection',
+      duesHref: '/more/fees?section=issued&filter=outstanding',
+    }))
+    if (folded.length > 0) {
+      const dues = new Set<string>()
+      folded.forEach(([, t]) => t.dues.forEach(d => dues.add(d)))
+      heads.push({
+        id: '__other',
+        memberIds: folded.map(([id]) => id),
+        name: 'Other fees',
+        color: OTHER_FEE_COLOR,
+        collected: folded.reduce((n, [, t]) => n + t.collected, 0),
+        outstanding: folded.reduce((n, [, t]) => n + t.outstanding, 0),
+        todayCollection: folded.reduce((n, [, t]) => n + t.today, 0),
+        studentsWithDues: dues.size,
         todayHref: '/more/fees?section=collection',
         duesHref: '/more/fees?section=issued&filter=outstanding',
-      }))
+      })
+    }
     if (bCollected + bOutstanding + bTodayCollection > 0) {
       heads.push({
         id: '__bus',
+        memberIds: ['__bus'],
         name: 'Bus fee',
         color: BUS_FEE_COLOR,
         collected: bCollected,

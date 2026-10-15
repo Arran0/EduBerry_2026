@@ -530,66 +530,36 @@ body {
   100% { transform: translateX(260%); }
 }
 
-/* The two follow-up tiles under the bar: a deep gradient (white on the
-   700-level ends holds 5:1+), a glass bubble for the icon, a watermark of the
-   same icon, and a light that sweeps across on hover. */
-.fee-tile {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  isolation: isolate;
-  padding: 0.9rem 1rem 0.95rem;
-  border-radius: 20px;
-  background:
-    radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.22), transparent 55%),
-    linear-gradient(135deg, var(--ft-from), var(--ft-to));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-    0 14px 28px -16px var(--ft-to),
-    0 2px 6px rgba(15, 23, 42, 0.10);
-  transition: box-shadow 0.3s ease;
+/* The two follow-ups beside the fee headline: quiet and compact — a hairline
+   card, a slate icon chip, the figure leading. */
+.fee-mini {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.5rem 0.6rem 0.5rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
-.fee-tile:hover {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-    0 22px 38px -18px var(--ft-to),
-    0 2px 6px rgba(15, 23, 42, 0.12);
+.fee-mini:hover {
+  background: #fff;
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 6px 14px -10px rgba(15, 23, 42, 0.35);
 }
-.fee-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.6); }
-.fee-tile::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
-  transform: translateX(-120%);
-  transition: transform 0.9s cubic-bezier(0.65, 0, 0.35, 1);
-  pointer-events: none;
-}
-.fee-tile:hover::after { transform: translateX(120%); }
-.fee-tile-mark {
-  position: absolute;
-  right: -14px;
-  bottom: -18px;
-  color: rgba(255, 255, 255, 0.13);
-  transform: rotate(-12deg);
-  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.fee-tile:hover .fee-tile-mark { transform: rotate(-4deg) scale(1.08); }
-.fee-tile-bubble {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 9999px;
+.fee-mini:active { transform: scale(0.98); }
+.fee-mini:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.6); }
+.fee-mini-icon {
+  flex-shrink: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.1), 0 4px 10px -4px rgba(0, 0, 0, 0.25);
+  color: rgb(71 85 105);
+  background: rgba(226, 232, 240, 0.8);
 }
 
 /* School Overview on glass: the sheet is a .lg-deck with a larger radius;
@@ -636,7 +606,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .fee-stripes,
   .fee-glint::after { animation: none; }
-  .fee-tile::after { display: none; }
 }
 
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work

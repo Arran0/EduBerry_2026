@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useId, useMemo, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   BarChart3,
   Briefcase,
-  ArrowUpRight,
   CalendarCheck,
+  ChevronLeft,
   ChevronRight,
   CreditCard,
   Users,
@@ -17,6 +17,7 @@ import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
 import { AttendanceTally, HomeAttendanceCounts } from './AttendanceInfographicPanel'
 import { SkeletonBar } from '../HomeCardSkeletons'
 import { HomeFeesSummary } from './FeesInfographicPanel'
+import { fetchCollectionYears, fetchMonthlyCollections, MonthlyCollections } from '@/lib/feeCollectionTimeline'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Data
@@ -25,6 +26,9 @@ import { HomeFeesSummary } from './FeesInfographicPanel'
 /** One fee head's slice of the year's ledger. Bus fee is one of these. */
 export interface FeeHeadStat {
   id: string
+  /** The fee_head ids this entry stands for — one, or several for the
+   *  folded "Other fees". Payments are mapped onto heads through these. */
+  memberIds: string[]
   name: string
   color: string
   collected: number
@@ -276,60 +280,337 @@ function AttendanceDial({
    Fees — one ledger, broken down by head
    ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * A follow-up from the fee bar as a deep-tinted tile: the figure large on a
- * gradient, a glass bubble for the icon, a watermark of the same icon, and a
- * light that sweeps across on hover. White on the 700-level gradient ends
- * holds 5:1 or better.
- */
-function FeeActionTile({
-  href, icon: Icon, from, to, eyebrow, value, format, loading, delay, detail, detailDot, title,
+/** Fee-head colours — the validated categorical set in fixed order (blue,
+ *  aqua, yellow, magenta, violet); bus fee is always orange and whatever folds
+ *  into "Other fees" is a neutral. Checked with the dataviz palette validator:
+ *  lightness band, chroma, colour-blind and normal-vision separation all pass
+ *  in this order. Below 3:1 against white for three of them, so every chart
+ *  here names its colours in visible text (legend, tooltip, table). */
+export const FEE_HEAD_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#6250d6']
+export const BUS_FEE_COLOR = '#eb6834'
+export const OTHER_FEE_COLOR = '#8a909b'
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** One of the two follow-ups: quiet, compact, neutral — the figure leads. */
+function FeeMiniButton({
+  href, icon: Icon, value, format, label, loading, title, delay, dot,
 }: {
+  /** The selected fee head's colour, marked on the icon. */
+  dot?: string
   href: string
   icon: React.ElementType
-  from: string
-  to: string
-  eyebrow: string
   value: number
   format: (n: number) => string
+  label: string
   loading: boolean
-  delay: number
-  detail: string
-  detailDot?: string
   title?: string
+  delay: number
+}) {
+  return (
+    <Link href={href} title={title} className="fee-mini group/fm">
+      <span className="fee-mini-icon relative">
+        <Icon size={14} />
+        {dot && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white" style={{ background: dot }} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-bold text-slate-900 tabular-nums leading-none">
+          {loading ? <SkeletonBar w={48} h={13} cool /> : <AnimatedNumber value={value} format={format} delay={delay} />}
+        </span>
+        <span className="block text-[10.5px] font-medium text-slate-500 mt-1 truncate">{label}</span>
+      </span>
+      <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all group-hover/fm:text-slate-600 group-hover/fm:translate-x-0.5" />
+    </Link>
+  )
+}
+
+interface ChartSeries { id: string; name: string; color: string; memberIds: string[] }
+
+/** A rounded-up axis maximum on a fine ladder, so the tallest month fills
+ *  most of the plot rather than stopping halfway up it. */
+function niceMax(v: number): number {
+  if (v <= 0) return 1
+  const p = Math.pow(10, Math.floor(Math.log10(v)))
+  for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p
+  return 10 * p
+}
+
+/**
+ * The year's collection month by month, Jan → Dec, stacked by fee head in
+ * the same colours as the bar above (the chips above are its legend). Steps
+ * between years with the switcher in its header. Hovering a month reads it
+ * out; selecting a head above dims every other head here too.
+ */
+function MonthlyCollectionChart({
+  heads, activeId,
+}: {
+  heads: FeeHeadStat[]
+  activeId: string | null
 }) {
   const reduceMotion = useReducedMotion()
+  const thisYear = new Date().getFullYear()
+  const thisMonth = new Date().getMonth()
+  const [years, setYears] = useState<number[]>([thisYear])
+  const [year, setYear] = useState(thisYear)
+  const [data, setData] = useState<MonthlyCollections | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [hoverMonth, setHoverMonth] = useState<number | null>(null)
+  const cache = useRef(new Map<number, MonthlyCollections>())
+
+  useEffect(() => {
+    fetchCollectionYears().then(setYears).catch(err => console.error('Failed to load collection years:', err))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const hit = cache.current.get(year)
+    if (hit) { setData(hit); setFailed(false); return }
+    setData(null)
+    setFailed(false)
+    fetchMonthlyCollections(year)
+      .then(d => { cache.current.set(year, d); if (!cancelled) setData(d) })
+      .catch(err => {
+        console.error('Failed to load monthly collections:', err)
+        if (!cancelled) setFailed(true)
+      })
+    return () => { cancelled = true }
+  }, [year])
+
+  // The chart's series: the overview's heads, plus bus fee and "Other fees"
+  // if this year's ledger doesn't carry them but an earlier year's payments do.
+  const series: ChartSeries[] = useMemo(() => {
+    const list: ChartSeries[] = heads.map(h => ({ id: h.id, name: h.name, color: h.color, memberIds: h.memberIds }))
+    if (!list.some(s => s.id === '__other')) {
+      const busAt = list.findIndex(s => s.id === '__bus')
+      const other = { id: '__other', name: 'Other fees', color: OTHER_FEE_COLOR, memberIds: [] }
+      if (busAt === -1) list.push(other)
+      else list.splice(busAt, 0, other)
+    }
+    if (!list.some(s => s.id === '__bus')) list.push({ id: '__bus', name: 'Bus fee', color: BUS_FEE_COLOR, memberIds: ['__bus'] })
+    return list
+  }, [heads])
+
+  const months = useMemo(() => {
+    if (!data) return null
+    const owner = new Map<string, string>()
+    series.forEach(s => s.memberIds.forEach(m => owner.set(m, s.id)))
+    return data.map(raw => {
+      const by = new Map<string, number>()
+      for (const [head, amt] of Object.entries(raw)) {
+        const sid = owner.get(head) ?? '__other'
+        by.set(sid, (by.get(sid) ?? 0) + amt)
+      }
+      const segs = series.map(s => ({ series: s, value: by.get(s.id) ?? 0 })).filter(x => x.value > 0)
+      return { segs, total: segs.reduce((n, x) => n + x.value, 0) }
+    })
+  }, [data, series])
+
+  const yearTotal = months?.reduce((n, m) => n + m.total, 0) ?? 0
+  const activeSeries = series.find(s => s.id === activeId) ?? null
+  const shownTotal = activeSeries && months
+    ? months.reduce((n, m) => n + (m.segs.find(x => x.series.id === activeSeries.id)?.value ?? 0), 0)
+    : yearTotal
+  // Series drawn here that have no chip above (an earlier year's bus fee or
+  // folded heads) — named in a small legend of their own.
+  const extras = months
+    ? series.filter(s => !heads.some(h => h.id === s.id) && months.some(m => m.segs.some(x => x.series.id === s.id)))
+    : []
+  const peak = months ? Math.max(0, ...months.map(m => m.total)) : 0
+  const top = niceMax(peak)
+  const idx = years.indexOf(year)
+  const canPrev = idx > 0
+  const canNext = idx !== -1 && idx < years.length - 1
+  const hovered = hoverMonth !== null && months ? months[hoverMonth] : null
+
   return (
-    <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 220, damping: 20, delay }}
-      whileHover={reduceMotion ? undefined : { y: -3 }}
-      whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-    >
-      <Link
-        href={href}
-        title={title}
-        className="fee-tile group/ft"
-        style={{ ['--ft-from' as string]: from, ['--ft-to' as string]: to }}
-      >
-        <Icon aria-hidden className="fee-tile-mark" size={96} strokeWidth={1.4} />
-        <span className="relative flex items-start justify-between gap-2">
-          <span className="fee-tile-bubble">
-            <Icon size={17} />
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Monthly collection</p>
+          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+            {months
+              ? <><AnimatedNumber value={shownTotal} format={fmtINR} className="font-bold text-slate-800" /> collected in {year}{activeSeries ? ` · ${activeSeries.name}` : ''}</>
+              : <SkeletonBar w={120} h={10} cool />}
+          </p>
+          {extras.length > 0 && (
+            <p className="mt-1 flex flex-wrap gap-x-3 text-[10.5px] text-slate-500">
+              {extras.map(x => (
+                <span key={x.id} className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-[2px]" style={{ background: x.color }} />{x.name}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+        {/* Year switcher — a small glass capsule. */}
+        <div className="lg-pill flex items-center h-8 px-1 flex-shrink-0" role="group" aria-label="Year">
+          <button
+            type="button"
+            onClick={() => canPrev && setYear(years[idx - 1])}
+            disabled={!canPrev}
+            aria-label="Previous year"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-slate-600 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="relative w-12 h-5 overflow-hidden text-center">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={year}
+                className="absolute inset-0 text-[12.5px] font-bold text-slate-800 tabular-nums leading-5"
+                initial={{ y: 14, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -14, opacity: 0 }}
+                transition={{ duration: 0.22, ease: EASE }}
+                aria-live="polite"
+              >
+                {year}
+              </motion.span>
+            </AnimatePresence>
           </span>
-          <ArrowUpRight size={18} className="text-white/70 transition-transform duration-300 group-hover/ft:translate-x-0.5 group-hover/ft:-translate-y-0.5 group-hover/ft:text-white" />
-        </span>
-        <span className="relative mt-3 block text-[10.5px] font-bold uppercase tracking-[0.12em] text-white/85">{eyebrow}</span>
-        <span className="relative mt-1 block font-display text-[1.75rem] xl:text-[2rem] font-black leading-none text-white tabular-nums">
-          {loading ? <SkeletonBar w={70} h={24} className="opacity-40" /> : <AnimatedNumber value={value} format={format} delay={delay} />}
-        </span>
-        <span className="relative mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-white/85 truncate">
-          {detailDot && <span className="w-2 h-2 rounded-full ring-2 ring-white/60 flex-shrink-0" style={{ background: detailDot }} />}
-          <span className="truncate">{loading ? '' : detail}</span>
-        </span>
-      </Link>
-    </motion.div>
+          <button
+            type="button"
+            onClick={() => canNext && setYear(years[idx + 1])}
+            disabled={!canNext}
+            aria-label="Next year"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-slate-600 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* The plot: a recessive axis at left, twelve stacked columns. */}
+      <div className="relative mt-3 flex-1 min-h-[150px] flex" onMouseLeave={() => setHoverMonth(null)}>
+        <div className="relative w-11 flex-shrink-0 text-[10px] text-slate-400 tabular-nums" aria-hidden>
+          <div className="absolute inset-x-0 top-0 bottom-5">
+            {[1, 0.5, 0].map(f => (
+              <span key={f} className="absolute right-2 -translate-y-1/2 leading-none" style={{ top: `${(1 - f) * 100}%` }}>
+                {months && peak > 0 ? fmtINR(top * f) : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="relative flex-1 min-w-0">
+          {/* Gridlines. */}
+          <div className="absolute inset-x-0 top-0 bottom-5 pointer-events-none" aria-hidden>
+            {[0, 0.5, 1].map(f => (
+              <span key={f} className={`absolute inset-x-0 border-t ${f === 1 ? 'border-slate-300' : 'border-dashed border-slate-200'}`} style={{ top: `${f * 100}%` }} />
+            ))}
+          </div>
+
+          <div className="absolute inset-0 grid grid-cols-12 gap-1">
+            {MONTHS.map((label, m) => {
+              const month = months?.[m]
+              const future = year === thisYear && m > thisMonth
+              const isHover = hoverMonth === m
+              return (
+                <div
+                  key={m}
+                  className={`relative flex flex-col items-center rounded-lg transition-colors ${isHover ? 'bg-slate-100/80' : ''}`}
+                  onMouseEnter={() => setHoverMonth(m)}
+                >
+                  <div className="relative flex-1 w-full flex justify-center pb-5">
+                    <div className="relative h-full w-full max-w-[26px]">
+                      {!months ? (
+                        !failed && (
+                          <div className="absolute inset-x-0 bottom-0 rounded-t-[4px] overflow-hidden" style={{ height: `${25 + ((m * 37) % 50)}%` }}>
+                            <SkeletonBar w="100%" h="100%" cool rounded={false} delay={m * 0.04} />
+                          </div>
+                        )
+                      ) : month && month.total > 0 ? (
+                        <motion.div
+                          key={`${year}-${m}`}
+                          className="absolute inset-x-0 bottom-0 flex flex-col-reverse gap-[2px]"
+                          style={{ height: `${(month.total / top) * 100}%`, transformOrigin: 'bottom' }}
+                          initial={reduceMotion ? false : { scaleY: 0 }}
+                          animate={{ scaleY: 1 }}
+                          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 22, delay: 0.1 + m * 0.045 }}
+                        >
+                          {month.segs.map((seg, i) => (
+                            <span
+                              key={seg.series.id}
+                              className={`block w-full min-h-[2px] transition-opacity duration-200 ${i === month.segs.length - 1 ? 'rounded-t-[4px]' : ''}`}
+                              style={{
+                                flexGrow: seg.value,
+                                flexBasis: 0,
+                                background: seg.series.color,
+                                opacity: activeId && seg.series.id !== activeId ? 0.22 : 1,
+                              }}
+                            />
+                          ))}
+                        </motion.div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span
+                    className={`absolute bottom-0 h-4 text-[10px] leading-4 tabular-nums ${year === thisYear && m === thisMonth ? 'font-bold text-slate-900' : future ? 'text-slate-300' : 'font-medium text-slate-500'}`}
+                  >
+                    {label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Month read-out. */}
+          <AnimatePresence>
+            {hovered && hoverMonth !== null && (
+              <motion.div
+                key="tip"
+                role="status"
+                className="lg-tooltip absolute top-0 z-20 pointer-events-none min-w-[170px]"
+                initial={{ opacity: 0, y: 4, x: '-50%', left: `${((hoverMonth + 0.5) / 12) * 100}%` }}
+                animate={{ opacity: 1, y: 0, x: '-50%', left: `${Math.min(Math.max((hoverMonth + 0.5) / 12, 0.14), 0.86) * 100}%` }}
+                exit={{ opacity: 0, y: 4, x: '-50%' }}
+                transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+              >
+                <p className="flex items-baseline justify-between gap-3 text-[11px]">
+                  <span className="font-bold text-slate-900">{MONTHS_LONG[hoverMonth]} {year}</span>
+                  <span className="font-bold text-slate-900 tabular-nums">{fmtINRExact(hovered.total)}</span>
+                </p>
+                {hovered.segs.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {[...hovered.segs].reverse().map(seg => (
+                      <p key={seg.series.id} className="flex items-center justify-between gap-3 text-[10.5px] tabular-nums">
+                        <span className="flex items-center gap-1.5 text-slate-600">
+                          <span className="w-2 h-2 rounded-sm" style={{ background: seg.series.color }} />
+                          {seg.series.name}
+                        </span>
+                        <span className="font-semibold text-slate-800">{fmtINR(seg.value)}</span>
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-0.5 text-[10.5px] text-slate-500">Nothing collected</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {months && yearTotal === 0 && (
+            <p className="absolute inset-x-0 top-1/3 text-center text-xs font-medium text-slate-400">No collections recorded in {year}</p>
+          )}
+          {failed && (
+            <p className="absolute inset-x-0 top-1/3 text-center text-xs font-medium text-slate-400">Couldn&apos;t load {year}&apos;s collections</p>
+          )}
+        </div>
+      </div>
+
+      {/* The same figures as a table, for screen readers. */}
+      {months && (
+        <table className="sr-only">
+          <caption>Fee collection by month, {year}</caption>
+          <thead><tr><th>Month</th><th>Collected</th></tr></thead>
+          <tbody>
+            {months.map((mo, m) => (
+              <tr key={m}><td>{MONTHS_LONG[m]}</td><td>{fmtINRExact(mo.total)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   )
 }
 
@@ -342,17 +623,16 @@ interface BarPiece {
 }
 
 /**
- * The year's fees as one bar: everything collected on the left, everything
- * still owed on the right, and inside each half a band per fee head in that
- * head's colour (solid where it has been paid, striped and drifting where it
- * is still owed). The seam between the halves is the collection rate.
+ * The fee side of the overview, in two halves.
  *
- * Pointing at any band — or at a head in the legend — selects that head: the
- * other bands step back, a tooltip reads off its collected and outstanding
- * figures, and the headline, Today's Collection and Students with Dues all
- * glide to that head's numbers. Leaving returns them to the whole school.
- * A click on a legend chip pins the selection, which is how a touch screen
- * (no hover) gets the same read-out.
+ * Top: the year's collected figure and rate, the two follow-ups (today's
+ * collection, students with dues) as quiet buttons beside it, and one bar —
+ * collected on the left, owed on the right, banded by fee head — with the
+ * heads named in a row of chips under it. Pointing at a band or a chip
+ * selects that head: the headline, the rate and both follow-ups glide to its
+ * figures. A click on a chip pins it (the touch-screen way in).
+ *
+ * Bottom: the month-by-month collection chart for a calendar year.
  */
 function FeeLedger({ fees, loading }: {
   fees: HomeFeeBreakdown | null
@@ -360,6 +640,7 @@ function FeeLedger({ fees, loading }: {
 }) {
   const reduceMotion = useReducedMotion()
   const [hoverId, setHoverId] = useState<string | null>(null)
+  const [barHover, setBarHover] = useState(false)
   const [pinnedId, setPinnedId] = useState<string | null>(null)
   const activeId = hoverId ?? pinnedId
   const heads = useMemo(() => fees?.heads ?? [], [fees])
@@ -380,8 +661,8 @@ function FeeLedger({ fees, loading }: {
     return [...collected, ...outstanding]
   }, [heads, billed])
 
-  // Where the hovered head's bands sit, for the tooltip's anchor: the middle
-  // of its widest band.
+  // The tooltip's anchor: the middle of the hovered head's widest band, kept
+  // off the ends so the one-line read-out never runs past the card.
   const tooltipAt = useMemo(() => {
     if (!active) return null
     let acc = 0
@@ -390,11 +671,10 @@ function FeeLedger({ fees, loading }: {
       if (p.head.id === active.id && (!best || p.share > best.share)) best = { mid: acc + p.share / 2, share: p.share }
       acc += p.share
     }
-    // Kept off the ends so the one-line read-out never runs past the card.
     return best ? Math.min(Math.max(best.mid, 0.3), 0.7) : null
   }, [active, pieces])
 
-  const shown = active ?? null
+  const shown = active
   const shownCollected = shown ? shown.collected : (total?.collected ?? 0)
   const shownOutstanding = shown ? shown.outstanding : (total?.outstanding ?? 0)
   const shownBilled = shownCollected + shownOutstanding
@@ -421,8 +701,8 @@ function FeeLedger({ fees, loading }: {
         </Link>
       </div>
 
-      {/* Headline — whole school, or the selected head. */}
-      <div className="flex items-end justify-between gap-4">
+      {/* ── Top half ── */}
+      <div className="flex items-start justify-between gap-5">
         <div className="min-w-0">
           <div className="h-4 mb-1 relative overflow-hidden">
             <AnimatePresence mode="popLayout" initial={false}>
@@ -439,9 +719,16 @@ function FeeLedger({ fees, loading }: {
               </motion.p>
             </AnimatePresence>
           </div>
-          <p className="font-display text-[2rem] xl:text-[2.3rem] font-black leading-none text-slate-900 tabular-nums" title={fmtINRExact(shownCollected)}>
-            {loading ? <SkeletonBar w={140} h={30} cool /> : <AnimatedNumber value={shownCollected} format={fmtINR} delay={0.25} />}
-          </p>
+          <div className="flex items-baseline gap-2.5">
+            <p className="font-display text-[1.9rem] xl:text-[2.1rem] font-black leading-none text-slate-900 tabular-nums" title={fmtINRExact(shownCollected)}>
+              {loading ? <SkeletonBar w={130} h={28} cool /> : <AnimatedNumber value={shownCollected} format={fmtINR} delay={0.25} />}
+            </p>
+            {!loading && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[12px] font-bold tabular-nums">
+                <AnimatedNumber value={shownRate} format={pctFmt} delay={0.4} />
+              </span>
+            )}
+          </div>
           <p className="mt-1.5 text-xs text-slate-500 tabular-nums">
             {loading ? <SkeletonBar w={160} h={10} cool /> : (
               <>
@@ -451,25 +738,108 @@ function FeeLedger({ fees, loading }: {
             )}
           </p>
         </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-display text-[1.6rem] font-black leading-none tabular-nums" style={{ color: shown?.color ?? '#0f766e' }}>
-            {loading ? <SkeletonBar w={52} h={22} cool /> : <AnimatedNumber value={shownRate} format={pctFmt} delay={0.4} />}
-          </p>
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">collected</p>
+        <div className="w-[13.5rem] flex-shrink-0 space-y-1.5">
+          <FeeMiniButton
+            href={todayHref}
+            icon={CalendarCheck}
+            value={shownToday}
+            format={fmtINR}
+            label="Today's collection"
+            dot={shown?.color}
+            loading={loading}
+            delay={0.45}
+            title={`Today's collection: ${fmtINRExact(shownToday)}`}
+          />
+          <FeeMiniButton
+            href={duesHref}
+            icon={Users}
+            value={shownDues}
+            format={countFmt}
+            label="Students with dues"
+            dot={shown?.color}
+            loading={loading}
+            delay={0.5}
+          />
         </div>
       </div>
 
-      {/* The bar. Room above it for the selected head's read-out. */}
-      <div className="relative mt-11" onMouseLeave={() => setHoverId(null)}>
+      {/* The bar. */}
+      <div
+        className="relative mt-4"
+        onMouseEnter={() => setBarHover(true)}
+        onMouseLeave={() => { setHoverId(null); setBarHover(false) }}
+      >
+        <div className="relative h-3.5 rounded-full bg-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)]">
+          {loading ? (
+            <div className="absolute inset-0 rounded-full overflow-hidden"><SkeletonBar w="100%" h="100%" cool /></div>
+          ) : billed <= 0 ? (
+            <p className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-500">Nothing billed yet this year</p>
+          ) : (
+            <motion.div
+              className="absolute inset-0 flex gap-[2px] rounded-full overflow-hidden"
+              initial={reduceMotion ? false : { clipPath: 'inset(0 100% 0 0 round 9999px)' }}
+              animate={{ clipPath: 'inset(0 0% 0 0 round 9999px)' }}
+              transition={reduceMotion ? { duration: 0 } : { duration: 1.3, delay: 0.2, ease: [0.65, 0, 0.35, 1] }}
+            >
+              {pieces.map(p => {
+                const left = offset
+                offset += p.share
+                const dim = activeId !== null && p.head.id !== activeId
+                const lift = activeId !== null && p.head.id === activeId
+                return (
+                  <motion.button
+                    key={`${p.kind}-${p.head.id}`}
+                    type="button"
+                    tabIndex={-1}
+                    aria-hidden
+                    onMouseEnter={() => setHoverId(p.head.id)}
+                    onClick={() => setPinnedId(id => (id === p.head.id ? null : p.head.id))}
+                    className={`relative h-full min-w-0 ${p.kind === 'outstanding' ? 'fee-stripes' : 'fee-solid'}`}
+                    style={{ flex: `${p.share} 1 0%`, ['--fee-c' as string]: p.head.color }}
+                    initial={reduceMotion ? false : { opacity: 0, scaleY: 0.4 }}
+                    animate={{ opacity: dim ? 0.25 : 1, scaleY: lift ? 1.35 : 1 }}
+                    transition={{
+                      opacity: { duration: 0.2 },
+                      scaleY: reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 380, damping: 22, delay: lift || dim ? 0 : 0.25 + left * 1.2 },
+                    }}
+                    title={`${p.head.name} · ${p.kind}: ${fmtINRExact(p.value)}`}
+                  />
+                )
+              })}
+              {!reduceMotion && (
+                <span
+                  aria-hidden
+                  className="fee-glint absolute inset-y-0 left-0 pointer-events-none"
+                  style={{ width: `${rate}%` }}
+                />
+              )}
+            </motion.div>
+          )}
+
+          {/* The seam between paid and owed — the collection rate. */}
+          {!loading && billed > 0 && (
+            <motion.div
+              aria-hidden
+              className="absolute -top-1 -bottom-1 w-[3px] -ml-[1.5px] rounded-full bg-slate-900 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] z-10 pointer-events-none"
+              initial={reduceMotion ? false : { left: '0%', opacity: 0 }}
+              animate={{ left: `${rate}%`, opacity: 1 }}
+              transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 60, damping: 16, delay: 0.5 }}
+            />
+          )}
+        </div>
+
+        {/* Read-out for a band pointed at — under the bar, over the chips. */}
         <AnimatePresence>
-          {active && tooltipAt !== null && (
+          {active && barHover && tooltipAt !== null && (
             <motion.div
               key="tip"
               role="status"
-              className="lg-tooltip absolute bottom-full mb-2.5 z-20 whitespace-nowrap pointer-events-none flex items-center gap-2 text-[11px] tabular-nums"
-              initial={{ opacity: 0, x: '-50%', y: 6, scale: 0.96, left: `${tooltipAt * 100}%` }}
+              className="lg-tooltip absolute top-full mt-2 z-20 whitespace-nowrap pointer-events-none flex items-center gap-2 text-[11px] tabular-nums"
+              initial={{ opacity: 0, x: '-50%', y: -4, scale: 0.96, left: `${tooltipAt * 100}%` }}
               animate={{ opacity: 1, x: '-50%', y: 0, scale: 1, left: `${tooltipAt * 100}%` }}
-              exit={{ opacity: 0, x: '-50%', y: 6, scale: 0.96 }}
+              exit={{ opacity: 0, x: '-50%', y: -4, scale: 0.96 }}
               transition={{ type: 'spring', stiffness: 420, damping: 32 }}
             >
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: active.color }} />
@@ -483,122 +853,15 @@ function FeeLedger({ fees, loading }: {
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="relative h-5 rounded-full bg-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)]">
-          {loading ? (
-            <div className="absolute inset-0 rounded-full overflow-hidden"><SkeletonBar w="100%" h="100%" cool /></div>
-          ) : billed <= 0 ? (
-            <p className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-500">Nothing billed yet this year</p>
-          ) : (
-            <motion.div
-              className="absolute inset-0 flex rounded-full overflow-hidden"
-              initial={reduceMotion ? false : { clipPath: 'inset(0 100% 0 0 round 9999px)' }}
-              animate={{ clipPath: 'inset(0 0% 0 0 round 9999px)' }}
-              transition={reduceMotion ? { duration: 0 } : { duration: 1.4, delay: 0.2, ease: [0.65, 0, 0.35, 1] }}
-            >
-              {pieces.map((p, i) => {
-                const left = offset
-                offset += p.share
-                const dim = activeId !== null && p.head.id !== activeId
-                const lift = activeId !== null && p.head.id === activeId
-                return (
-                  <motion.button
-                    key={`${p.kind}-${p.head.id}`}
-                    type="button"
-                    tabIndex={-1}
-                    aria-hidden
-                    onMouseEnter={() => setHoverId(p.head.id)}
-                    onClick={() => setPinnedId(id => (id === p.head.id ? null : p.head.id))}
-                    className={`relative h-full flex-shrink-0 ${p.kind === 'outstanding' ? 'fee-stripes' : 'fee-solid'} ${i > 0 ? 'border-l border-white/70' : ''}`}
-                    style={{
-                      width: `${p.share * 100}%`,
-                      // Solid where paid; striped where still owed.
-                      ['--fee-c' as string]: p.head.color,
-                    }}
-                    initial={reduceMotion ? false : { opacity: 0, scaleY: 0.4 }}
-                    animate={{ opacity: dim ? 0.28 : 1, scaleY: lift ? 1.3 : 1 }}
-                    transition={{
-                      opacity: { duration: 0.2 },
-                      scaleY: reduceMotion
-                        ? { duration: 0 }
-                        : { type: 'spring', stiffness: 380, damping: 22, delay: lift || dim ? 0 : 0.25 + left * 1.3 },
-                    }}
-                    title={`${p.head.name} · ${p.kind}: ${fmtINRExact(p.value)}`}
-                  />
-                )
-              })}
-              {/* A glint that sweeps the paid half now and then. */}
-              {!reduceMotion && (
-                <span
-                  aria-hidden
-                  className="fee-glint absolute inset-y-0 left-0 pointer-events-none"
-                  style={{ width: `${(billed > 0 ? (total!.collected / billed) : 0) * 100}%` }}
-                />
-              )}
-            </motion.div>
-          )}
-
-          {/* The seam between paid and owed — the collection rate. */}
-          {!loading && billed > 0 && (
-            <motion.div
-              aria-hidden
-              className="absolute -top-1.5 -bottom-1.5 w-[3px] -ml-[1.5px] rounded-full bg-slate-900 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] z-10 pointer-events-none"
-              initial={reduceMotion ? false : { left: '0%', opacity: 0 }}
-              animate={{ left: `${rate}%`, opacity: 1 }}
-              transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 60, damping: 16, delay: 0.5 }}
-            />
-          )}
-        </div>
-        <div className="mt-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          <span>Collected</span>
-          <span>Outstanding</span>
-        </div>
       </div>
 
-      {/* The two follow-ups, right under the bar and keyed to the selection:
-          deep-tinted tiles with a glass bubble, the figure large, and the
-          context it needs (whose figure it is; what is still owed). */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <FeeActionTile
-          href={todayHref}
-          icon={CalendarCheck}
-          from="#047857"
-          to="#0e7490"
-          eyebrow="Today's collection"
-          value={shownToday}
-          format={fmtINR}
-          loading={loading}
-          delay={0.55}
-          detail={shown ? shown.name : 'All fee heads'}
-          detailDot={shown?.color}
-          title={`Today's collection: ${fmtINRExact(shownToday)}`}
-        />
-        <FeeActionTile
-          href={duesHref}
-          icon={Users}
-          from="#c2410c"
-          to="#be123c"
-          eyebrow="Students with dues"
-          value={shownDues}
-          format={countFmt}
-          loading={loading}
-          delay={0.65}
-          detail={`${fmtINR(shownOutstanding)} outstanding${shown ? ` · ${shown.name}` : ''}`}
-          detailDot={shown?.color}
-        />
-      </div>
-
-      {/* Per head — names the bar's colours, gives each head its own
-          paid-vs-owed line, and is the keyboard and touch way to select one
-          (a click pins it). */}
+      {/* Chips — the colours named (for the bar and the chart below), and the
+          keyboard/touch way to select a head. */}
       {!loading && heads.length > 0 && (
-        <div
-          className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 min-h-0 -mx-1.5 px-1.5"
-          role="group"
-          aria-label="Fee heads"
-        >
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Fee heads">
           {heads.map((h, i) => {
             const billedH = h.collected + h.outstanding
-            const rateH = billedH > 0 ? (h.collected / billedH) * 100 : 0
+            const rateH = billedH > 0 ? Math.round((h.collected / billedH) * 100) : 0
             const isActive = activeId === h.id
             return (
               <motion.button
@@ -610,40 +873,27 @@ function FeeLedger({ fees, loading }: {
                 onFocus={() => setHoverId(h.id)}
                 onBlur={() => setHoverId(null)}
                 onClick={() => setPinnedId(id => (id === h.id ? null : h.id))}
-                initial={reduceMotion ? false : { opacity: 0, x: -8 }}
-                animate={{ opacity: activeId !== null && !isActive ? 0.5 : 1, x: 0 }}
-                transition={{ duration: 0.35, delay: reduceMotion || activeId !== null ? 0 : 0.8 + i * 0.07 }}
-                className={`w-full text-left px-2.5 py-2 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${isActive ? 'bg-white shadow-sm' : 'hover:bg-white/70'} ${pinnedId === h.id ? 'ring-1 ring-slate-300' : ''}`}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: activeId !== null && !isActive ? 0.55 : 1, y: 0 }}
+                transition={{ duration: 0.3, delay: reduceMotion || activeId !== null ? 0 : 0.7 + i * 0.05 }}
+                className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${isActive ? 'bg-white border-slate-300 text-slate-900 shadow-sm' : 'bg-slate-50/80 border-slate-200 text-slate-600 hover:bg-white'} ${pinnedId === h.id ? 'ring-1 ring-slate-400' : ''}`}
               >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 min-w-0 text-[12px] font-semibold text-slate-700">
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: h.color }} />
-                    <span className="truncate">{h.name}</span>
-                  </span>
-                  <span className="flex-shrink-0 text-[11px] tabular-nums text-slate-500">
-                    <span className="font-bold text-slate-800">{fmtINR(h.collected)}</span> of {fmtINR(billedH)}
-                    <span className="ml-1.5 font-bold" style={{ color: h.color }}>{Math.round(rateH)}%</span>
-                  </span>
-                </span>
-                <span className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-slate-200/80">
-                  <motion.span
-                    className="fee-solid h-full block"
-                    style={{ ['--fee-c' as string]: h.color, width: `${rateH}%`, transformOrigin: 'left' }}
-                    initial={reduceMotion ? false : { scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.9, ease: EASE, delay: reduceMotion ? 0 : 0.9 + i * 0.07 }}
-                  />
-                  <span className="fee-stripes h-full block flex-1" style={{ ['--fee-c' as string]: h.color }} />
-                </span>
+                <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: h.color }} />
+                {h.name}
+                <span className="tabular-nums text-slate-500 font-medium">{rateH}%</span>
               </motion.button>
             )
           })}
         </div>
       )}
+
+      {/* ── Bottom half ── */}
+      <div className="mt-4 pt-4 border-t border-slate-200/80 flex-1 min-h-0 flex flex-col">
+        <MonthlyCollectionChart heads={heads} activeId={activeId} />
+      </div>
     </div>
   )
 }
-
 /* ──────────────────────────────────────────────────────────────────────────
    The panel
    ────────────────────────────────────────────────────────────────────────── */
