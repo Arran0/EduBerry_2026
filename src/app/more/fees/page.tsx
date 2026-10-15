@@ -44,7 +44,7 @@ import CollectionCenter, {
 
 // ssr:false because each of these is a client screen that reads Supabase on
 // mount; server-rendering them buys a flash of empty tables and nothing else.
-const ConfigSection    = dynamic(() => import('@/components/fees/sections/ConfigSection'), { ssr: false, loading: () => <Loading /> })
+const FeeGridSection   = dynamic(() => import('@/components/fees/grid/FeeGridSection'), { ssr: false, loading: () => <Loading /> })
 const LateFeeSettings  = dynamic(() => import('@/components/fees/sections/LateFeeSettingsSection'), { ssr: false, loading: () => <Loading /> })
 const FeeSettingsPanel = dynamic(() => import('@/components/settings/FeeSettingsPanel'), { ssr: false, loading: () => <Loading /> })
 
@@ -144,7 +144,7 @@ function FeesInner() {
                 </button>
               </div>
             )}
-            {perms.canAny('fees.view', 'fees.config.manage') ? <ConfigSection /> : (
+            {perms.canAny('fees.view', 'fees.config.manage') ? <FeeGridSection /> : (
               <p className="px-3 py-10 text-[12.5px] text-[#8C8878] text-center">
                 You do not have permission to see the price list.
               </p>

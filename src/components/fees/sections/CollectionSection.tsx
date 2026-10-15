@@ -21,7 +21,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Ban, Check, Clock, FileText, Loader2, Play, Printer,
+  AlertTriangle, ArrowLeft, Ban, Clock, FileText, Loader2, Printer,
   Receipt, RotateCcw, Search, Sparkles, X,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
@@ -38,11 +38,10 @@ import { supabase } from '@/lib/supabase'
 import { DEFAULT_FEE_SETTINGS, fetchFeeSettings, type PaymentRuleSettings } from '@/lib/fees/settings'
 import { buildReceipt, printSpec } from '@/components/fees/statements/invoiceGenerate'
 import { downloadStatement } from '@/components/fees/statements/generate'
-import { fetchFeeConfig, setAutogen, type FeeConfigBundle } from '@/lib/fees/config'
 import {
   cancelInvoice, fetchAllocations, fetchInvoices, fetchPayments, fetchProfileList,
-  generateInvoices, reversePayment,
-  type CollectResult, type GenerateResult, type InvoiceRow, type InvoiceStatus,
+  reversePayment,
+  type CollectResult, type InvoiceRow, type InvoiceStatus,
   type PaymentRow, type ProfileListRow,
 } from '@/lib/fees/invoices'
 
@@ -83,7 +82,6 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
   const [people, setPeople] = useState<ProfileListRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [extraNames, setExtraNames] = useState<Map<string, string>>(new Map())
-  const [config, setConfig] = useState<FeeConfigBundle | null>(null)
   const [rules, setRules] = useState<PaymentRuleSettings>(DEFAULT_FEE_SETTINGS.payment_rules)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -101,7 +99,6 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
   const [cancelling, setCancelling] = useState<InvoiceRow | null>(null)
 
   // The two popups this screen owns.
-  const [generating, setGenerating] = useState(false)
   const [cheques, setCheques] = useState(false)
 
   const showAmounts = !perms.amountsHidden
@@ -111,16 +108,14 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
     if (!year) return
     setLoading(true)
     try {
-      const [list, inv, settings, cfg] = await Promise.all([
+      const [list, inv, settings] = await Promise.all([
         fetchProfileList(year.id),
         fetchInvoices({ academicYearId: year.id }),
         fetchFeeSettings(year.id),
-        fetchFeeConfig(year.id),
       ])
       setPeople(list)
       setInvoices(inv)
       setRules(settings.payment_rules)
-      setConfig(cfg)
 
       // Almost every bill belongs to somebody with a fee profile, so the roster
       // names them. The handful that do not — a profile archived mid-session —
@@ -285,14 +280,13 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
           </>
         )}
         {perms.can('fees.invoice.generate') && (
-          <button onClick={() => setGenerating(true)}
-                  className={ADMIN.ghostBtn}>
+          // Bills are issued from the fee grid now, where the cells they lock
+          // can be seen.
+          <Link href="/more/fees?tab=config" className={ADMIN.ghostBtn}>
             <Sparkles size={13} />
-            {/* "Generate bills" and "Cheques" beside a search field do not fit
-                on a 360px row. The icons carry the short form. */}
-            <span className="sm:hidden">Generate</span>
-            <span className="max-sm:hidden">Generate bills</span>
-          </button>
+            <span className="sm:hidden">Issue</span>
+            <span className="max-sm:hidden">Issue fees</span>
+          </Link>
         )}
         <button onClick={() => setCheques(true)} className={ADMIN.ghostBtn}>
           <Clock size={13} /> Cheques
@@ -568,22 +562,6 @@ export default function CollectionSection({ filter, onFilterChange, onChanged }:
       )}
 
       {/* ── Popups ──────────────────────────────────────────────────────── */}
-      {generating && (
-        <FeeToolModal title="Generate bills" subtitle="Preview first — it writes nothing"
-                      icon={<Sparkles size={15} />} onClose={() => setGenerating(false)}>
-          {config ? (
-            <GenerationPanel
-              config={config}
-              canAutogen={perms.can('fees.invoice.autogen')}
-              showAmounts={showAmounts}
-              onDone={() => void afterWrite()}
-            />
-          ) : (
-            <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
-          )}
-        </FeeToolModal>
-      )}
-
       {cheques && (
         <FeeToolModal title="Cheques and drafts" subtitle="What the school is holding"
                       icon={<Clock size={15} />} onClose={() => setCheques(false)}>
@@ -657,139 +635,6 @@ function Panel({
       </div>
       {isEmpty ? <p className="px-4 py-6 text-[12.5px] text-[#8C8878]">{empty}</p> : <div>{children}</div>}
     </div>
-  )
-}
-
-// ── Generating bills ────────────────────────────────────────────────────────
-function GenerationPanel({
-  config, canAutogen, showAmounts, onDone,
-}: {
-  config: FeeConfigBundle
-  canAutogen: boolean
-  showAmounts: boolean
-  onDone: () => void
-}) {
-  const [preview, setPreview] = useState<Record<string, GenerateResult>>({})
-  const [generating, setGenerating] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const published = config.structures.filter(s => s.status === 'published')
-  const rows = config.installments
-    .filter(i => published.some(s => s.id === i.structure_id))
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-
-  const structureName = (id: string) => config.structures.find(s => s.id === id)?.name ?? '—'
-
-  const run = async (installmentId: string, commit: boolean) => {
-    setGenerating(installmentId); setError(null)
-    try {
-      const result = await generateInvoices(installmentId, commit)
-      if (commit) {
-        setPreview(p => { const next = { ...p }; delete next[installmentId]; return next })
-        onDone()
-      } else {
-        setPreview(p => ({ ...p, [installmentId]: result }))
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not generate those bills.')
-    } finally {
-      setGenerating(null)
-    }
-  }
-
-  if (rows.length === 0) {
-    return (
-      <div className={`${ADMIN.card} p-5`}>
-        <p className="text-[12.5px] text-[#6B675A]">
-          No published structure has an installment to bill. Build the price list in{' '}
-          <Link href="/more/fees?tab=config" className="underline">Fee Configuration</Link>, then publish it.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      <p className="text-[11px] text-[#8C8878]">
-        Preview first — it counts exactly what a run would do without writing anything. Running
-        twice never bills a family twice.
-      </p>
-
-      {error && (
-        <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-4 py-3">{error}</div>
-      )}
-
-      {rows.map(i => {
-        const p = preview[i.id]
-        const busy = generating === i.id
-        return (
-          <div key={i.id} className="bg-white border border-[#E3DFD3] p-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[200px]">
-                <div className="text-[12.5px] font-medium text-[#18181B]">
-                  {i.name} <span className="text-[#8C8878] font-normal">· {structureName(i.structure_id)}</span>
-                </div>
-                <div className="text-[11px] text-[#8C8878]">
-                  due {fmtDate(i.due_date)}
-                  {i.percent !== null ? ` · ${Number(i.percent)}% of the year` : ''}
-                  {i.amount !== null ? ` · ${inr(i.amount, showAmounts)}` : ''}
-                </div>
-              </div>
-
-              {canAutogen && (
-                <button
-                  onClick={() => void setAutogen(i.id, !i.autogen_enabled, i.autogen_days_before).then(onDone)}
-                  title={i.autogen_enabled
-                    ? `Generates itself ${i.autogen_days_before} days before the due date`
-                    : 'Generated by hand'}
-                  className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-1 ${
-                    i.autogen_enabled
-                      ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                      : 'bg-white text-[#8C8878] border border-[#E3DFD3] hover:border-[#C9C4B4]'
-                  }`}
-                >
-                  {i.autogen_enabled ? `Auto −${i.autogen_days_before}d` : 'Manual'}
-                </button>
-              )}
-
-              {p ? (
-                <button onClick={() => void run(i.id, true)} disabled={busy || p.will_create === 0}
-                        className={ADMIN.darkBtn}>
-                  {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                  Generate {p.will_create}
-                </button>
-              ) : (
-                <button onClick={() => void run(i.id, false)} disabled={busy} className={ADMIN.ghostBtn}>
-                  {busy ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                  Preview
-                </button>
-              )}
-            </div>
-
-            {p && (
-              <div className="mt-2.5 pt-2.5 border-t border-[#F0ECE2] text-[11px] text-[#6B675A] space-y-1">
-                <p>
-                  <strong className="text-[#18181B]">{p.will_create}</strong> new bill
-                  {p.will_create === 1 ? '' : 's'} at {inr(p.per_student, showAmounts)} each
-                  {showAmounts && p.total_amount > 0 ? ` — ${inr(p.total_amount)} in total` : ''}.
-                </p>
-                {Object.keys(p.by_group).length > 0 && (
-                  <p>By group: {Object.entries(p.by_group).map(([g, n]) => `${g} ${n}`).join(' · ')}</p>
-                )}
-                {p.already_billed > 0 && <p>Skipping {p.already_billed} already billed.</p>}
-                {p.skipped_rte > 0 && <p>Skipping {p.skipped_rte} RTE.</p>}
-                {p.skipped_joined_late > 0 && (
-                  <p>Skipping {p.skipped_joined_late} who joined after this term ended.</p>
-                )}
-                {p.will_create === 0 && (
-                  <p className="text-[#8C8878]">Nothing to do — everyone eligible already has this bill.</p>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </>
   )
 }
 
