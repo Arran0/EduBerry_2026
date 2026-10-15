@@ -8,7 +8,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
@@ -274,7 +274,7 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
               { icon: CheckCircle2, label: 'Present',  val: yearlySummary.present,   color: '#10b981', bg: '#ecfdf5' },
               { icon: XCircle,      label: 'Absent',   val: yearlySummary.absent,    color: '#f43f5e', bg: '#fff1f2' },
               { icon: Briefcase,    label: 'Late',     val: yearlySummary.late,      color: '#f59e0b', bg: '#fffbeb' },
-              { icon: BookOpen,     label: 'Excused',  val: yearlySummary.excused,   color: '#a855f7', bg: '#faf5ff' },
+              { icon: BookOpen,     label: 'Half Day', val: yearlySummary.half_day,  color: '#f97316', bg: '#fff7ed' },
             ].map(({ icon: Icon, label, val, color, bg }) => (
               <div key={label} className="flex flex-col items-center gap-1 py-3 px-1">
                 <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>
@@ -370,6 +370,7 @@ const STUDENT_STATUS_ICON: Record<string, React.ReactNode> = {
   present:  <CheckCircle2 size={13} className="text-emerald-500" />,
   absent:   <AlertCircle size={13} className="text-red-500" />,
   late:     <Clock size={13} className="text-amber-500" />,
+  half_day: <MinusCircle size={13} className="text-orange-500" />,
   on_leave: <Plane size={13} className="text-blue-500" />,
   on_duty:  <Briefcase size={13} className="text-violet-500" />,
   excused:  <BookOpen size={13} className="text-purple-500" />,
@@ -379,6 +380,7 @@ const STUDENT_STATUS_PILL: Record<string, string> = {
   present:  'bg-emerald-50 text-emerald-700 border-emerald-200',
   absent:   'bg-red-50 text-red-700 border-red-200',
   late:     'bg-amber-50 text-amber-700 border-amber-200',
+  half_day: 'bg-orange-50 text-orange-700 border-orange-200',
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
   on_duty:  'bg-violet-50 text-violet-700 border-violet-200',
   excused:  'bg-purple-50 text-purple-700 border-purple-200',
@@ -386,10 +388,9 @@ const STUDENT_STATUS_PILL: Record<string, string> = {
 
 // Genuine irregularities only — late counts as present (shown at the top of
 // the Present tab) and on_leave/on_duty count as absent/present respectively,
-// the same split the staff report uses. That leaves 'excused', which is where an
-// approved half-day permit lands; students have no 'half_day' attendance status,
-// so the bucket that used to sit here could never hold anything.
-const IRREGULAR_ORDER = ['excused'] as const
+// the same split the staff report uses. Half day (and the rarely-used
+// "excused") are what's actually left to review.
+const IRREGULAR_ORDER = ['half_day', 'excused'] as const
 
 const PRESENT_PAGE_SIZE = 30
 const HOMEROOM_PAGE_SIZE = 30
@@ -915,7 +916,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const absentCount = absentGroup.length
   const lateGroup = useMemo(() => grouped['late'] ?? [], [grouped])
   const onDutyGroup = useMemo(() => grouped['on_duty'] ?? [], [grouped])
-  const irregularCount = grouped['excused']?.length ?? 0
+  const irregularCount = (grouped['half_day']?.length ?? 0) + (grouped['excused']?.length ?? 0)
   // Present total including the late/on-duty rows folded in above (those are
   // fetched in full, unlike the paged 'present' rows).
   const presentFullTotal = presentTotal + lateGroup.length + onDutyGroup.length

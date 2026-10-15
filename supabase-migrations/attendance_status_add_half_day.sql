@@ -1,0 +1,28 @@
+-- Give students the half-day attendance status their UI has always offered.
+--
+-- `AttendanceStatus` in src/lib/attendance.ts has carried 'half_day' for a long time,
+-- and the student mark sheets, calendar and attendance page were all built around it.
+-- The enum never had it. So an HD pick was rejected with
+--
+--   invalid input value for enum attendance_status: "half_day"
+--
+-- and because bulkMarkAttendance sends a whole class as one upsert, the rejection took
+-- the entire register with it while the teacher was shown "Saved".
+--
+-- The code was written in anticipation of this value: fetchStudentNonPresentByDate
+-- filters with `neq present` specifically "so it never errors if a newer enum value
+-- (e.g. half_day, on_duty) hasn't been migrated onto the live database yet", and
+-- fetchAttendanceSummary has always returned a half_day counter that could not fill.
+-- This closes that gap rather than removing the feature.
+--
+-- Nothing server-side needs to learn the new value: student_attendance_tally and
+-- homeroom_attendance_counts both bucket by
+-- `NOT IN ('present','late','on_duty','absent','on_leave')`, so half_day lands in
+-- "irregular" on its own.
+--
+-- Credit: a half day counts 0.5 toward the student's attendance percentage and stays
+-- in the denominator, matching how staff half days are credited. That rule lives in
+-- studentPresentPct() and is covered by src/lib/studentPresentPct.test.ts — it is the
+-- number printed on certificates, so it is pinned by tests rather than left implicit.
+
+ALTER TYPE public.attendance_status ADD VALUE IF NOT EXISTS 'half_day';

@@ -675,13 +675,29 @@ export async function fetchLeaveStats(userId: string): Promise<LeaveStats> {
 // Approve/Reject Leave
 // ============================================
 
+/**
+ * Outcome of a leave decision. `ok` is whether the decision itself saved;
+ * `attendanceSynced` is whether the matching attendance rows were written. The
+ * second can be false while the first is true — the decision stands, but somebody
+ * has to mark that attendance by hand.
+ */
+export interface LeaveDecisionResult {
+  ok: boolean
+  attendanceSynced: boolean
+}
+
 export async function processLeaveApproval(
   approvalId: string,
   approverId: string,
   decision: 'approved' | 'rejected',
   comments?: string,
   attachmentFile?: File
-): Promise<boolean> {
+): Promise<LeaveDecisionResult> {
+  // The attendance write is a side effect of the decision, not part of it. A
+  // decision that saved is saved, so a failed sync must not roll it back — but it
+  // must not be invisible either: before this, the sync only console.error'd, so an
+  // approval whose attendance never landed looked exactly like one that worked.
+  let attendanceSynced = true
   let attachment_url: string | null = null
   let attachment_name: string | null = null
 
@@ -706,7 +722,7 @@ export async function processLeaveApproval(
 
   if (updateError || !approval) {
     console.error('Failed to update approval:', updateError)
-    return false
+    return { ok: false, attendanceSynced: false }
   }
 
   // Sync application status via SECURITY DEFINER RPC so all approver roles
@@ -744,28 +760,26 @@ export async function processLeaveApproval(
         .single()
 
       if (applicant) {
-        if (isStaffRole(applicant.role)) {
-          await syncLeaveToStaffAttendance(
-            approval.leave_application_id,
-            app.applicant_id,
-            app.start_date,
-            app.end_date,
-            app.leave_type
-          )
-        } else {
-          await syncLeaveToStudentAttendance(
-            approval.leave_application_id,
-            app.applicant_id,
-            app.start_date,
-            app.end_date,
-            app.leave_type
-          )
-        }
+        attendanceSynced = isStaffRole(applicant.role)
+          ? await syncLeaveToStaffAttendance(
+              approval.leave_application_id,
+              app.applicant_id,
+              app.start_date,
+              app.end_date,
+              app.leave_type
+            )
+          : await syncLeaveToStudentAttendance(
+              approval.leave_application_id,
+              app.applicant_id,
+              app.start_date,
+              app.end_date,
+              app.leave_type
+            )
       }
     }
   }
 
-  return true
+  return { ok: true, attendanceSynced }
 }
 
 // ============================================

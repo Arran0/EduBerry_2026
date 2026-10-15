@@ -48,9 +48,9 @@ interface RowState {
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late']
+const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_day']
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD',
+  present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
 }
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present:  'bg-green-500 text-white border-green-500',
@@ -59,6 +59,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   on_leave: 'bg-blue-500 text-white border-blue-500',
   excused:  'bg-purple-500 text-white border-purple-500',
   on_duty:  'bg-teal-500 text-white border-teal-500',
+  half_day: 'bg-orange-500 text-white border-orange-500',
 }
 const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   present:  'border-green-200 text-green-600 hover:bg-green-50',
@@ -67,6 +68,7 @@ const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
   on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
   excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
   on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
+  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,6 +114,7 @@ function StudentCalendarDialog({
   const [selectedApp, setSelectedApp] = useState<LeaveApplicationWithDetails | null>(null)
   const [deciding, setDeciding] = useState(false)
   const [decisionComment, setDecisionComment] = useState('')
+  const [decisionWarning, setDecisionWarning] = useState<string | null>(null)
 
   const loadLeaveApps = useCallback(async () => {
     setLeaveLoading(true)
@@ -126,13 +129,19 @@ function StudentCalendarDialog({
     const myApproval = app.approvals.find(a => a.approver_id === viewerId && a.status === 'pending')
     if (!myApproval) return
     setDeciding(true)
-    const ok = await processLeaveApproval(myApproval.id, viewerId, decision, decisionComment || undefined)
+    setDecisionWarning(null)
+    const res = await processLeaveApproval(myApproval.id, viewerId, decision, decisionComment || undefined)
     setDeciding(false)
-    if (ok) {
-      setDecisionComment('')
-      setSelectedApp(null)
-      await loadLeaveApps()
+    if (!res.ok) return
+    setDecisionComment('')
+    await loadLeaveApps()
+    if (!res.attendanceSynced) {
+      // Saved, but the attendance rows it should have written are missing. Hold the
+      // panel open with the warning instead of closing on a half-done job.
+      setDecisionWarning('Decision saved, but attendance was not updated for these dates. Please mark it manually.')
+      return
     }
+    setSelectedApp(null)
   }
 
   return (
@@ -267,6 +276,11 @@ function StudentCalendarDialog({
                     rows={2}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 resize-none"
                   />
+                  {decisionWarning && (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-medium text-amber-800">
+                      {decisionWarning}
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDecide(selectedApp, 'approved')}
@@ -346,9 +360,8 @@ function InlineSheet({
     const toSave = rows
       .filter(r => r.changed || !r.leaveLinked)
       .map(r => ({ studentId: r.student.id, status: r.status, remarks: r.remarks || undefined }))
-    // One upsert for the whole class, so a failure means nobody was marked. Reporting
-    // success anyway is what let a rejected status discard a register silently; the
-    // edits are deliberately left on screen so the save can be retried.
+    // One upsert for the whole class, so a failure means nobody was marked. The edits
+    // are deliberately left on screen so the save can be retried rather than lost.
     const ok = toSave.length === 0 || await bulkMarkAttendance(homeroom.id, date, toSave, staffId)
     setSaving(false)
     if (!ok) { setSaveFailed(true); return }

@@ -7,14 +7,13 @@ import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
 // Types
 // ============================================
 
-// Mirrors the `attendance_status` enum exactly. It does NOT include 'half_day':
-// that is a staff concept, set by the checkout-cutoff rule, and lives only in
-// `staff_attendance_status` below. Listing it here let the student mark sheets offer
-// an "HD" button whose every write was rejected by Postgres with
-// `invalid input value for enum attendance_status: "half_day"` — and because
-// bulkMarkAttendance upserts the whole class in one statement, one HD pick threw away
-// that entire class's attendance for the day.
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty'
+// Mirrors the `attendance_status` enum. 'half_day' was added to that enum only in
+// October 2026 — before that it sat in this union without existing in the database,
+// so every student marked HD was rejected with
+// `invalid input value for enum attendance_status: "half_day"`, and because
+// bulkMarkAttendance upserts a class in one statement it took the whole register
+// with it. Keep this union and the enum in step.
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'excused' | 'on_duty' | 'half_day'
 export type StaffAttendanceStatus = 'present' | 'absent' | 'late' | 'on_leave' | 'wfh' | 'half_day' | 'e'
 // WFH is kept in the type for backward-compat with existing records and admin overrides,
 // but it is no longer offered as a self-service option for regular staff.
@@ -274,6 +273,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   on_leave: 'On Leave (OL)',
   excused: 'Excused',
   on_duty: 'On Duty (OD)',
+  half_day: 'Half Day',
 }
 
 export const STAFF_ATTENDANCE_STATUS_LABELS: Record<StaffAttendanceStatus, string> = {
@@ -611,12 +611,34 @@ export async function fetchAttendanceSummary(
     if (r.status in counts) counts[r.status as AttendanceStatus]++
   }
 
-  const total_days = records.length
-  // Present percentage excludes on_leave and on_duty days from denominator
-  const denominator = total_days - counts.on_leave - counts.on_duty
-  const present_pct = denominator > 0 ? Math.round((counts.present / denominator) * 100) : 0
+  return { total_days: records.length, ...counts, present_pct: studentPresentPct(records.length, counts) }
+}
 
-  return { total_days, ...counts, present_pct }
+/** The status tallies {@link studentPresentPct} needs. */
+export interface StudentDayCounts {
+  present: number
+  half_day: number
+  on_leave: number
+  on_duty: number
+}
+
+/**
+ * A student's attendance percentage, as printed on their certificates.
+ *
+ * Approved leave and on-duty days are not school days for this student, so they
+ * leave the denominator rather than counting against them. A half day earns half
+ * credit and stays in the denominator — the student was here for part of it. That
+ * matches how staff half days are credited (see fetchStaffAttendanceStats).
+ *
+ * 'late' is deliberately not credited, as it never has been here. Note that is at
+ * odds with STUDENT_PRESENT_STATUSES, which does treat late as present; reconciling
+ * the two would move every student's percentage, so it is left as its own decision.
+ */
+export function studentPresentPct(totalDays: number, counts: StudentDayCounts): number {
+  const denominator = totalDays - counts.on_leave - counts.on_duty
+  if (denominator <= 0) return 0
+  const credited = counts.present + counts.half_day * 0.5
+  return Math.round((credited / denominator) * 100)
 }
 
 // ============================================
@@ -724,29 +746,22 @@ export async function syncLeaveToStudentAttendance(
   startDate: string,
   endDate: string,
   leaveType?: string
-): Promise<void> {
+): Promise<boolean> {
   // Find all homerooms the student belongs to
   const { data: memberships, error: memError } = await supabase
     .from('homeroom_members')
     .select('homeroom_id')
     .eq('student_id', studentId)
 
-  if (memError || !memberships?.length) return
+  // No homerooms is nothing to write, not a failure. A lookup that errored is.
+  if (memError) { console.error('syncLeaveToStudentAttendance membership error:', memError); return false }
+  if (!memberships.length) return true
 
-  // OD leave → Present (student is working, just off-site); late permit → late;
-  // casual/medical → Absent.
-  //
-  // A half-day permit maps to 'excused', not 'half_day'. Students have no half_day
-  // attendance status — `attendance_status` has never carried one — so the old
-  // mapping wrote a value Postgres rejected outright, and the error below was only
-  // logged. Every approved half-day student leave therefore recorded no attendance
-  // at all. 'excused' is the enum's slot for an authorised absence, which is what a
-  // permit is. Note it does not count toward the present percentage
-  // (STUDENT_PRESENT_STATUSES), so a half day reads as a non-present day rather than
-  // as half of one.
+  // OD leave → Present (student is working, just off-site); half day → half
+  // day; late permit → late; casual/medical → Absent
   const attendanceStatus: AttendanceStatus =
     leaveType === 'on_duty' ? 'present'
-      : leaveType === 'half_day' ? 'excused'
+      : leaveType === 'half_day' ? 'half_day'
         : leaveType === 'late' ? 'late'
           : 'absent'
 
@@ -765,13 +780,14 @@ export async function syncLeaveToStudentAttendance(
     }
   }
 
-  if (rows.length === 0) return
+  if (rows.length === 0) return true
 
   const { error } = await supabase
     .from('attendance_records')
     .upsert(rows, { onConflict: 'homeroom_id,student_id,date' })
 
-  if (error) console.error('syncLeaveToStudentAttendance error:', error)
+  if (error) { console.error('syncLeaveToStudentAttendance error:', error); return false }
+  return true
 }
 
 export async function syncLeaveToStaffAttendance(
@@ -780,7 +796,7 @@ export async function syncLeaveToStaffAttendance(
   startDate: string,
   endDate: string,
   leaveType?: string
-): Promise<void> {
+): Promise<boolean> {
   const dates = getDatesBetween(startDate, endDate)
   // On Duty auto-marks Present, Half Day Permit auto-marks Half Day, Late
   // Permit auto-marks Late, and any other approved leave auto-marks Absent —
@@ -798,13 +814,14 @@ export async function syncLeaveToStaffAttendance(
     leave_application_id: leaveApplicationId,
   }))
 
-  if (rows.length === 0) return
+  if (rows.length === 0) return true
 
   const { error } = await supabase
     .from('staff_attendance_records')
     .upsert(rows, { onConflict: 'staff_id,date' })
 
-  if (error) console.error('syncLeaveToStaffAttendance error:', error)
+  if (error) { console.error('syncLeaveToStaffAttendance error:', error); return false }
+  return true
 }
 
 // ============================================

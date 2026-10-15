@@ -86,12 +86,20 @@ export default function ApproverDecisionPanel({
     if (deciding) return
     setDeciding(decision)
     setError(null)
-    const ok = await processLeaveApproval(
+    const res = await processLeaveApproval(
       approval.id, currentUserId, decision, comments, file ?? undefined
     )
-    if (!ok) {
+    if (!res.ok) {
       setDeciding(null)
       setError('Could not save that decision. Please try again.')
+      return
+    }
+    if (!res.attendanceSynced) {
+      // The decision is saved and must not be retried — but the attendance rows it
+      // should have written are missing, so the card stays put and says so rather
+      // than disappearing on a half-done job.
+      setDeciding(null)
+      setError('Decision saved, but attendance was not updated for these dates. Please mark it manually.')
       return
     }
     // Left spinning on success — the host removes or re-renders this card.
