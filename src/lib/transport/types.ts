@@ -316,6 +316,9 @@ export interface AssignmentInput {
 
 export type TransportRunStatus =
   | 'scheduled' | 'boarding' | 'in_progress' | 'completed' | 'cancelled' | 'missed'
+  // Started, never closed out. The tick ends a run that is hours past its window
+  // rather than treating it as live forever — see transport_tick's abandon backstop.
+  | 'abandoned'
 
 export type TransportTelemetryState = 'unknown' | 'live' | 'stale' | 'offline'
 
@@ -342,6 +345,7 @@ export const RUN_STATUS_LABELS: Record<TransportRunStatus, string> = {
   completed: 'Finished',
   cancelled: 'Cancelled',
   missed: 'Did not run',
+  abandoned: 'Ended unclosed',
 }
 
 export const ALERT_TYPE_LABELS: Record<TransportAlertType, string> = {

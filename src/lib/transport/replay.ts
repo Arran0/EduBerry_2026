@@ -94,7 +94,10 @@ export async function fetchRunHistory(
       vehicle:transport_vehicles!vehicle_id(id, registration_no, display_name, capacity),
       driver:profiles!driver_id(id, full_name, avatar_url),
       attendant:profiles!attendant_id(id, full_name, avatar_url)`)
-    .in('status', ['completed', 'cancelled', 'missed'])
+    // 'abandoned' is a finished run too — one the tick closed out because it sat
+    // hours past its window. Leaving it out would hide exactly the trips a reviewer
+    // most wants to find in History.
+    .in('status', ['completed', 'cancelled', 'missed', 'abandoned'])
     .order('service_date', { ascending: false })
     .order('scheduled_start_at', { ascending: false })
     .limit(opts.limit ?? 60)
