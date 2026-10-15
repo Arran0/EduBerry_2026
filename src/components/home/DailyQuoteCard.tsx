@@ -99,8 +99,10 @@ export default function DailyQuoteCard() {
   }, [fullText, reduceMotion])
 
   return (
+    // Full width on a phone, 80% and centred from md: — the pill spans the
+    // dashboard below it rather than sitting as a stub at its left edge.
     // Wrapper paddingLeft = PR so the portrait's left half sits outside the pill
-    <div className="relative md:max-w-[70ch]" style={{ paddingLeft: PR }}>
+    <div className="relative w-full md:w-[80%] md:mx-auto" style={{ paddingLeft: PR }}>
 
       {/* Circle portrait — centre on stadium left edge */}
       <div
@@ -132,11 +134,10 @@ export default function DailyQuoteCard() {
               over it. Without that the pill grew a line mid-animation and took
               the dashboard down with it. */}
           <p
-            className="relative text-slate-800 leading-snug min-h-[1.3em]"
+            className="relative text-slate-800 leading-snug min-h-[1.3em] text-[15px] md:text-[18px]"
             style={{
               fontFamily: "'Caveat', cursive",
               fontWeight: 700,
-              fontSize: '15px',
               textAlign: 'justify',
               textAlignLast: 'left',
               wordSpacing: '0.05em',

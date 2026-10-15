@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ClipboardList, ChevronRight } from 'lucide-react'
 import { ClassroomWithDetails, ClassroomAssessment, fetchAssessments } from '@/lib/classrooms'
 import { SkeletonRows } from './HomeCardSkeletons'
+import { useReportContent } from './useReportContent'
 
 interface MiniAssessment {
   assessment: ClassroomAssessment
@@ -24,12 +25,14 @@ function formatDate(dateStr: string | null): string {
 }
 
 interface LatestAssessmentsMiniListProps {
+  /** Reports, once loaded, whether the card has anything to show. */
+  onContent?: (has: boolean) => void
   classrooms: ClassroomWithDetails[]
 }
 
 /** The 5 most recently released assessments across a student's classrooms,
  *  each a button leading to that classroom's assessments tab. */
-export default function LatestAssessmentsMiniList({ classrooms }: LatestAssessmentsMiniListProps) {
+export default function LatestAssessmentsMiniList({ classrooms, onContent }: LatestAssessmentsMiniListProps) {
   const [items, setItems] = useState<MiniAssessment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -58,6 +61,7 @@ export default function LatestAssessmentsMiniList({ classrooms }: LatestAssessme
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [classrooms])
+  useReportContent(loading, items.length > 0, onContent)
 
   return (
     <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col">

@@ -10,6 +10,7 @@ import {
 } from '@/lib/classrooms'
 import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
 import { SkeletonRows } from './HomeCardSkeletons'
+import { useReportContent } from './useReportContent'
 
 interface ReportCardGroup {
   title: string
@@ -18,6 +19,8 @@ interface ReportCardGroup {
 }
 
 interface ReportCardsMiniListProps {
+  /** Reports, once loaded, whether the card has anything to show. */
+  onContent?: (has: boolean) => void
   userId: string
 }
 
@@ -25,7 +28,7 @@ interface ReportCardsMiniListProps {
  *  the student's most recent academic year, each opening the full report
  *  card section on the academics page. Buttons are revealed a few at a time
  *  (see useAutoLoadMore) instead of rendering the whole list at once. */
-export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps) {
+export default function ReportCardsMiniList({ userId, onContent }: ReportCardsMiniListProps) {
   const [groups, setGroups] = useState<ReportCardGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [year, setYear] = useState<string | null>(null)
@@ -56,6 +59,7 @@ export default function ReportCardsMiniList({ userId }: ReportCardsMiniListProps
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [userId])
+  useReportContent(loading, groups.length > 0, onContent)
 
   const { visibleCount, containerRef, handleScroll } = useAutoLoadMore({
     total: groups.length,

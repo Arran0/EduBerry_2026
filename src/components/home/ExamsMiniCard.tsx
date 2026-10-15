@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { FileSpreadsheet, Clock, Trophy, ChevronRight } from 'lucide-react'
 import { fetchExamsForStudent, type ExamStudentSummary } from '@/lib/exam'
 import { SkeletonRows } from './HomeCardSkeletons'
+import { useReportContent } from './useReportContent'
 
 function examTime(e: ExamStudentSummary): number | null {
   const t = e.start_at ?? e.due_at
@@ -22,12 +23,14 @@ function formatWhen(ts: number): string {
 }
 
 interface ExamsMiniCardProps {
+  /** Reports, once loaded, whether the card has anything to show. */
+  onContent?: (has: boolean) => void
   userId: string
 }
 
 /** Student exam snapshot: the next upcoming exam (highlighted if within ~10h)
  *  and the most recent released result. */
-export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
+export default function ExamsMiniCard({ userId, onContent }: ExamsMiniCardProps) {
   const [upcoming, setUpcoming] = useState<ExamStudentSummary | null>(null)
   const [latestResult, setLatestResult] = useState<ExamStudentSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -54,6 +57,7 @@ export default function ExamsMiniCard({ userId }: ExamsMiniCardProps) {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [userId])
+  useReportContent(loading, !!(upcoming || latestResult), onContent)
 
   const upcomingTs = upcoming ? examTime(upcoming) : null
   const soon = upcomingTs !== null && (upcomingTs - Date.now()) < 10 * 3_600_000

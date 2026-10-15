@@ -1126,6 +1126,35 @@ export default function HomePage() {
   const notificationsEmpty = !notifLoading && announcementsLoaded
     && notifItems.length === 0 && unreadAnnouncements.length === 0
 
+  /* The one exception to THE LAYOUT RULE: the swipeable deck. A deck card
+     with nothing in it is a stop the rotation makes for no reason, so only
+     Notifications is shown empty (and hands on after 3 s); every other deck
+     card stays out of the strip until it is known to have something. The
+     deck can afford this where the grid could not: Notifications is always
+     its first card, so a card joining later lands behind the one on screen
+     and nothing visible moves. Cards that load their own data report in
+     through `onContent`; the rest are judged here from the page's data. */
+  const [selfReported, setSelfReported] = useState<Partial<Record<AdminCardView, boolean>>>({})
+  const reportContent = useCallback((key: AdminCardView) => (has: boolean) => {
+    setSelfReported(prev => (prev[key] === has ? prev : { ...prev, [key]: has }))
+  }, [])
+  const deckHasContent = (key: AdminCardView): boolean => {
+    switch (key) {
+      case 'notifications':
+      case 'attendance':
+      case 'teacher-attendance':
+      case 'fees':
+      case 'bus-fees':
+        // Notifications by the rule above; the rest are standing figures —
+        // a reading of zero is still a reading.
+        return true
+      case 'grading': return gradingLoaded && gradingQueues.length > 0
+      case 'overdue-fees': return overdueFeesLoaded && overdueFees.length > 0
+      case 'task-calendar': return !taskCalendarLoading && taskItemsByDay.size > 0
+      default: return selfReported[key] === true
+    }
+  }
+
   const slots: HomeSlot[] = []
 
   if (showNotifSlot) {
@@ -1274,7 +1303,7 @@ export default function HomePage() {
       key: 'calendar',
       label: 'school work',
       heading: schoolWorkHeading,
-      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onOpenDay={openSchoolWorkDay} />,
+      body: <SchoolWorkMiniCalendar userId={user.id} classrooms={classrooms} onOpenDay={openSchoolWorkDay} onContent={reportContent('calendar')} />,
     })
   }
 
@@ -1290,7 +1319,7 @@ export default function HomePage() {
           title="Assessments"
         />
       ),
-      body: <LatestAssessmentsMiniList classrooms={classrooms} />,
+      body: <LatestAssessmentsMiniList classrooms={classrooms} onContent={reportContent('assessments')} />,
     })
   }
 
@@ -1307,7 +1336,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/academics?section=reportcards" className="text-rose-600 hover:text-rose-700" />}
         />
       ),
-      body: <ReportCardsMiniList userId={user.id} />,
+      body: <ReportCardsMiniList userId={user.id} onContent={reportContent('report-cards')} />,
     })
   }
 
@@ -1324,7 +1353,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/timetable" className="text-indigo-600 hover:text-indigo-700" />}
         />
       ),
-      body: <TodayTimetableCard userId={user.id} />,
+      body: <TodayTimetableCard userId={user.id} onContent={reportContent('timetable')} />,
     })
   }
 
@@ -1341,7 +1370,7 @@ export default function HomePage() {
           action={<ViewAllLink href="/more/exam" className="text-purple-600 hover:text-purple-700" />}
         />
       ),
-      body: <ExamsMiniCard userId={user.id} />,
+      body: <ExamsMiniCard userId={user.id} onContent={reportContent('exams')} />,
     })
   }
 
@@ -1408,6 +1437,7 @@ export default function HomePage() {
       body: s.body,
       accent: SLOT_ACCENTS[s.key],
       quickAdvance: s.key === 'notifications' && notificationsEmpty,
+      hidden: !deckHasContent(s.key),
     }))
 
   /* The combined statistics panel stands in for the separate stat cards at
@@ -1642,7 +1672,10 @@ export default function HomePage() {
                   clipPath: { duration: 1.15, ease: [0.65, 0, 0.35, 1], delay: 0.08 },
                   opacity: { duration: 0.3, ease: 'easeOut' },
                 }}
-            style={{ willChange: 'clip-path' }}
+            // Inline, not a class: `.sheen` is unlayered CSS that sets
+            // `position: relative`, which beats Tailwind's `absolute` and
+            // collapsed this layer to zero height — the banner vanished.
+            style={{ position: 'absolute', willChange: 'clip-path' }}
           >
             <div className="absolute inset-0">
 
@@ -1966,7 +1999,9 @@ export default function HomePage() {
 
           {/* ── More Apps (full-bleed). Background is a fixed white, matching
               the sticky footer below — no custom background image here. ── */}
-          <motion.div variants={cardVariants}>
+          {/* Breathing room above the band, at every width — it used to sit
+              hard against whatever section came before it. */}
+          <motion.div variants={cardVariants} className="mt-8 lg:mt-12">
             <div className="relative w-full overflow-hidden bg-white">
               {/* Content */}
               <div className="relative z-10 home-container py-5">

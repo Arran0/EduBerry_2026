@@ -5,6 +5,7 @@ import {
   ClassroomWithDetails, FileStatus, fetchClassroomFilesBatch, fetchProgressForStudent,
 } from '@/lib/classrooms'
 import { fetchStudentHomeroomTasks } from '@/lib/smartboard'
+import { useReportContent } from './useReportContent'
 import MiniWeekCalendar, { MiniCalendarItem, addDays, formatDateKey, getWeekStart } from './MiniWeekCalendar'
 
 interface DatedItem extends MiniCalendarItem {
@@ -16,11 +17,13 @@ interface SchoolWorkMiniCalendarProps {
   classrooms: ClassroomWithDetails[]
   onOpenDay?: (dateKey: string) => void
   fill?: boolean
+  /** Reports, once loaded, whether the week has any work in it. */
+  onContent?: (has: boolean) => void
 }
 
 /** Compact week-at-a-glance school work calendar for the home card carousel.
  *  See SchoolWorkManager for the full academics-page version this links out to. */
-export default function SchoolWorkMiniCalendar({ userId, classrooms, onOpenDay, fill }: SchoolWorkMiniCalendarProps) {
+export default function SchoolWorkMiniCalendar({ userId, classrooms, onOpenDay, fill, onContent }: SchoolWorkMiniCalendarProps) {
   const [items, setItems] = useState<DatedItem[]>([])
   const [loading, setLoading] = useState(true)
   const weekStart = useMemo(() => getWeekStart(new Date()), [])
@@ -63,6 +66,7 @@ export default function SchoolWorkMiniCalendar({ userId, classrooms, onOpenDay, 
   }, [classrooms, userId, weekStart])
 
   useEffect(() => { loadData() }, [loadData])
+  useReportContent(loading, items.length > 0, onContent)
 
   const itemsByDay = useMemo(() => {
     const map = new Map<string, MiniCalendarItem[]>()

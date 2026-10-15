@@ -14,6 +14,7 @@ import {
 import { applyOverrides, todayISO } from '@/lib/timetable/overrides'
 import type { EntryOverride } from '@/lib/timetable/overrides'
 import { SkeletonRows } from './HomeCardSkeletons'
+import { useReportContent } from './useReportContent'
 
 interface Period {
   slot: PeriodSlot
@@ -32,12 +33,14 @@ function formatTime(t: string | null): string {
 }
 
 interface TodayTimetableCardProps {
+  /** Reports, once loaded, whether the card has anything to show. */
+  onContent?: (has: boolean) => void
   userId: string
 }
 
 /** Compact view of the student's periods for today, opening the full
  *  timetable app on tap. */
-export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) {
+export default function TodayTimetableCard({ userId, onContent }: TodayTimetableCardProps) {
   const [periods, setPeriods] = useState<Period[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -77,6 +80,7 @@ export default function TodayTimetableCard({ userId }: TodayTimetableCardProps) 
   }, [userId])
 
   const hasAny = periods && periods.some(p => p.entry?.subject_id)
+  useReportContent(loading, !!hasAny, onContent)
 
   return (
     <Link href="/more/timetable">

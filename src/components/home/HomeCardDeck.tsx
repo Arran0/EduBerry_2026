@@ -20,6 +20,10 @@ export interface DeckSlot {
   body: React.ReactNode
   accent: string
   quickAdvance?: boolean
+  /** Nothing to show (yet). The card stays mounted — so a card that loads its
+   *  own data can still fetch, and can appear in place without a remount once
+   *  it has something — but it is out of the strip and the pager. */
+  hidden?: boolean
 }
 
 interface HomeCardDeckProps {
@@ -45,8 +49,9 @@ const INERT_ATTR = { inert: '' } as unknown as { inert?: boolean }
 /** A slide that recedes a little as it leaves centre — the depth cue that
  *  makes the strip read as cards on a sheet of glass, not a filmstrip. */
 function Slide({
-  index, dragX, width, active, total, label, children,
+  index, dragX, width, active, total, label, hidden = false, children,
 }: {
+  hidden?: boolean
   index: number
   dragX: MotionValue<number>
   width: number
@@ -66,7 +71,7 @@ function Slide({
       aria-hidden={!active}
       {...(active ? {} : INERT_ATTR)}
       className="h-full flex flex-col px-3 sm:px-4 pt-3.5"
-      style={{ width: width || '100%', flexShrink: 0, scale, opacity }}
+      style={{ width: width || '100%', flexShrink: 0, scale, opacity, display: hidden ? 'none' : undefined }}
     >
       {children}
     </motion.div>
@@ -87,7 +92,9 @@ function Slide({
  * for reduced motion, the pause control (WCAG 2.2.2), or a pointer/focus
  * inside the deck.
  */
-export default function HomeCardDeck({ slots, heightClass, ariaLabel = 'Today at a glance' }: HomeCardDeckProps) {
+export default function HomeCardDeck({ slots: allSlots, heightClass, ariaLabel = 'Today at a glance' }: HomeCardDeckProps) {
+  // The cards actually in the strip; hidden ones are rendered but skipped.
+  const slots = allSlots.filter(s => !s.hidden)
   const uid = useId()
   const reduceMotion = useReducedMotion()
   const hasHover = useHasHover()
@@ -274,7 +281,7 @@ export default function HomeCardDeck({ slots, heightClass, ariaLabel = 'Today at
     el.style.setProperty('--lg-y', `${e.clientY - r.top}px`)
   }
 
-  if (slots.length === 0) return null
+  if (allSlots.length === 0) return null
 
   return (
     <div className={`relative ${heightClass}`}>
@@ -309,20 +316,24 @@ export default function HomeCardDeck({ slots, heightClass, ariaLabel = 'Today at
           style={{ touchAction: 'pan-y' }}
         >
           <motion.div className="flex h-full" style={{ x: dragX }}>
-            {slots.map((slot, idx) => (
+            {allSlots.map(slot => {
+              const idx = slots.indexOf(slot)
+              return (
               <Slide
                 key={slot.key}
-                index={idx}
+                index={Math.max(idx, 0)}
                 dragX={dragX}
                 width={width}
-                active={idx === activeIdx}
+                active={idx !== -1 && idx === activeIdx}
+                hidden={idx === -1}
                 total={slots.length}
                 label={slot.label}
               >
                 {slot.heading}
                 <div className="flex-1 min-h-0">{slot.body}</div>
               </Slide>
-            ))}
+              )
+            })}
           </motion.div>
         </div>
 

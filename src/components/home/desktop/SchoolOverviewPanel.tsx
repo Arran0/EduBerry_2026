@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   BarChart3,
   Briefcase,
+  ArrowUpRight,
   CalendarCheck,
   ChevronRight,
   CreditCard,
@@ -50,16 +51,22 @@ const countFmt = (n: number) => Math.round(n).toLocaleString('en-IN')
 const pctFmt = (n: number) => `${Math.round(n)}%`
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Attendance — rings that sweep in
+   Attendance — a dial per population
    ────────────────────────────────────────────────────────────────────────── */
 
+const TICKS = 60
+
 /**
- * The present / absent / irregular split as one ring, each arc drawing on in
- * turn from where the last one stopped — a single continuous sweep round the
- * dial — with the rate counting up in the hole. Hovering a row (or an arc)
- * lifts that arc and dims the rest.
+ * One population's day as a dial.
+ *
+ * The ring is the present / absent / irregular split: gradient arcs with
+ * rounded ends and a gap between them, winding on one after another from 12
+ * o'clock while the whole ring turns into place. Around it a ring of ticks
+ * lights up to the attendance rate, tick by tick, in step with the figure
+ * counting up on the glass disc in the middle. Hovering a row lifts its arc,
+ * dims the others and puts that row's count on the disc.
  */
-function AttendanceRing({
+function AttendanceDial({
   title, icon: Icon, tally, reportHref, hrefs, loading, delay,
 }: {
   title: string
@@ -71,6 +78,7 @@ function AttendanceRing({
   delay: number
 }) {
   const reduceMotion = useReducedMotion()
+  const gid = useId().replace(/:/g, '')
   const [hover, setHover] = useState<number | null>(null)
   const present = tally?.present ?? 0
   const absent = tally?.absent ?? 0
@@ -78,26 +86,33 @@ function AttendanceRing({
   const total = present + absent + exception
   const rate = total > 0 ? (present / total) * 100 : 0
 
-  const size = 128
-  const stroke = 12
-  const r = (size - stroke) / 2
+  const size = 148
+  const c = size / 2
+  const stroke = 13
+  const r = c - 16 - stroke / 2
   const C = 2 * Math.PI * r
   const rows = [
-    { label: 'Present', value: present, color: PRESENT, href: hrefs.present },
-    { label: 'Absent', value: absent, color: ABSENT, href: hrefs.absent },
-    { label: 'Irregular', value: exception, color: IRREGULAR, href: hrefs.exception },
+    { label: 'Present', value: present, color: PRESENT, light: '#6ee7b7', href: hrefs.present },
+    { label: 'Absent', value: absent, color: ABSENT, light: '#fca5a5', href: hrefs.absent },
+    { label: 'Irregular', value: exception, color: IRREGULAR, light: '#fcd34d', href: hrefs.exception },
   ]
+  const nonZero = rows.filter(row => row.value > 0).length
+  // Round caps reach stroke/2 past each end, so the drawn dash is shortened
+  // by a stroke plus the visible gap; a lone segment is a closed ring.
+  const trim = nonZero > 1 ? stroke + 5 : 0
   let acc = 0
   const arcs = rows.map(row => {
     const f = total > 0 ? row.value / total : 0
-    const arc = { ...row, f, offset: acc }
+    const len = nonZero > 1 ? Math.max(f * C - trim, 0.01) : f * C
+    const arc = { ...row, f, len, start: acc * C + trim / 2 }
     acc += f
     return arc
   })
+  const litTicks = Math.round((rate / 100) * TICKS)
 
   return (
-    <div className="flex-1 min-w-0 p-4 xl:p-5">
-      <div className="flex items-center justify-between mb-3">
+    <div className="lg-content flex-1 min-w-0 p-4 xl:p-5 flex flex-col">
+      <div className="flex items-center justify-between mb-2">
         <span className="flex items-center gap-1.5">
           <Icon size={13} className="text-slate-500" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</span>
@@ -110,85 +125,115 @@ function AttendanceRing({
         </Link>
       </div>
 
-      <div className="flex items-center gap-4 xl:gap-5">
+      <div className="flex-1 flex items-center gap-4">
         <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-          {/* A soft halo that breathes once the ring has drawn. */}
-          {!loading && total > 0 && !reduceMotion && (
-            <motion.div
-              aria-hidden
-              className="absolute inset-2 rounded-full"
-              style={{ background: `radial-gradient(circle, ${PRESENT}33, transparent 70%)` }}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: [0, 0.9, 0.45], scale: [0.6, 1.12, 1] }}
-              transition={{ duration: 1.6, delay: delay + 0.9, ease: 'easeOut' }}
-            />
-          )}
-          <svg
+          <motion.svg
             width={size}
             height={size}
             viewBox={`0 0 ${size} ${size}`}
             role="img"
             aria-label={`${title} attendance today: ${present} present, ${absent} absent, ${exception} irregular out of ${total}.`}
-            style={{ transform: 'rotate(-90deg)' }}
-            className="relative"
+            initial={reduceMotion ? false : { rotate: -150, opacity: 0, scale: 0.85 }}
+            animate={{ rotate: -90, opacity: 1, scale: 1 }}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 70, damping: 15, delay }}
           >
-            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke} />
+            <defs>
+              {rows.map((row, i) => (
+                <linearGradient key={row.label} id={`${gid}-g${i}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor={row.light} />
+                  <stop offset="100%" stopColor={row.color} />
+                </linearGradient>
+              ))}
+            </defs>
+
+            {/* Tick ring — lights up to the rate. */}
+            {Array.from({ length: TICKS }).map((_, i) => {
+              const a = (i / TICKS) * Math.PI * 2
+              const lit = !loading && i < litTicks
+              const r1 = c - 4
+              const r2 = c - (i % 5 === 0 ? 10 : 8)
+              return (
+                <motion.line
+                  key={i}
+                  x1={c + r1 * Math.cos(a)} y1={c + r1 * Math.sin(a)}
+                  x2={c + r2 * Math.cos(a)} y2={c + r2 * Math.sin(a)}
+                  strokeWidth={i % 5 === 0 ? 2 : 1.4}
+                  strokeLinecap="round"
+                  initial={{ stroke: '#e2e8f0' }}
+                  animate={{ stroke: lit ? PRESENT : '#e2e8f0' }}
+                  transition={{ duration: 0.25, delay: reduceMotion ? 0 : delay + 0.45 + i * (1.3 / TICKS) }}
+                />
+              )
+            })}
+
+            {/* Track. */}
+            <circle cx={c} cy={c} r={r} fill="none" stroke="#eef2f7" strokeWidth={stroke} />
+
             {!loading && arcs.map((arc, i) => arc.f > 0 && (
               <motion.circle
                 key={arc.label}
-                cx={size / 2}
-                cy={size / 2}
+                cx={c}
+                cy={c}
                 r={r}
                 fill="none"
-                stroke={arc.color}
-                strokeLinecap="butt"
-                strokeDashoffset={-arc.offset * C}
+                stroke={`url(#${gid}-g${i})`}
+                strokeLinecap={nonZero > 1 ? 'round' : 'butt'}
+                strokeDashoffset={-arc.start}
                 initial={{
-                  strokeDasharray: reduceMotion ? `${arc.f * C} ${C}` : `0 ${C}`,
+                  strokeDasharray: reduceMotion ? `${arc.len} ${C}` : `0 ${C}`,
                   strokeWidth: stroke,
                   opacity: 1,
                 }}
                 animate={{
-                  strokeDasharray: `${arc.f * C} ${C}`,
-                  strokeWidth: hover === i ? stroke + 4 : stroke,
-                  opacity: hover !== null && hover !== i ? 0.3 : 1,
+                  strokeDasharray: `${arc.len} ${C}`,
+                  strokeWidth: hover === i ? stroke + 5 : stroke,
+                  opacity: hover !== null && hover !== i ? 0.25 : 1,
                 }}
                 transition={{
                   strokeDasharray: reduceMotion
                     ? { duration: 0 }
-                    : { duration: 0.9 * arc.f + 0.25, delay: delay + 0.15 + arc.offset * 0.9, ease: EASE },
-                  strokeWidth: { duration: 0.18 },
+                    : { duration: 0.55 + arc.f * 0.9, delay: delay + 0.35 + (arc.start / C) * 1.1, ease: EASE },
+                  strokeWidth: { type: 'spring', stiffness: 500, damping: 26 },
                   opacity: { duration: 0.18 },
                 }}
+                style={{ filter: hover === i ? `drop-shadow(0 0 6px ${arc.color}88)` : undefined }}
                 onMouseEnter={() => setHover(i)}
                 onMouseLeave={() => setHover(h => (h === i ? null : h))}
               />
             ))}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+          </motion.svg>
+
+          {/* The glass disc in the middle. */}
+          <motion.div
+            className="lg-disc absolute flex flex-col items-center justify-center text-center pointer-events-none"
+            style={{ inset: 16 + stroke + 5 }}
+            initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 14, delay: delay + 0.25 }}
+          >
             {loading ? (
-              <SkeletonBar w={44} h={18} cool />
+              <SkeletonBar w={40} h={16} cool />
             ) : total > 0 ? (
               <>
-                <span className="font-display text-[1.6rem] font-black leading-none text-slate-900 tabular-nums">
+                <span className="font-display text-[1.45rem] font-black leading-none tabular-nums" style={{ color: hover !== null ? rows[hover].color : '#0f172a' }}>
                   {hover !== null
                     ? countFmt(rows[hover].value)
-                    : <AnimatedNumber value={rate} format={pctFmt} delay={delay + 0.2} />}
+                    : <AnimatedNumber value={rate} format={pctFmt} delay={delay + 0.45} duration={1.4} />}
                 </span>
-                <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
                   {hover !== null ? rows[hover].label : 'present'}
                 </span>
               </>
             ) : (
               <>
-                <span className="font-display text-[1.4rem] font-black leading-none text-slate-400">—</span>
-                <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 leading-tight">not marked<br />yet</span>
+                <span className="font-display text-[1.3rem] font-black leading-none text-slate-400">—</span>
+                <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 leading-tight">not marked</span>
               </>
             )}
-          </div>
+          </motion.div>
         </div>
 
-        <div className="flex-1 min-w-0 space-y-1.5">
+        <div className="flex-1 min-w-0 space-y-1">
           {arcs.map((arc, i) => (
             <Link
               key={arc.label}
@@ -197,25 +242,25 @@ function AttendanceRing({
               onMouseLeave={() => setHover(h => (h === i ? null : h))}
               onFocus={() => setHover(i)}
               onBlur={() => setHover(h => (h === i ? null : h))}
-              className={`block rounded-xl px-2.5 py-1.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${hover === i ? 'bg-white shadow-sm -translate-y-px' : 'hover:bg-white/70'}`}
+              className={`block rounded-xl px-2.5 py-1.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${hover === i ? 'bg-white shadow-sm -translate-y-px' : 'hover:bg-white/80'}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-700">
-                  <span className="w-2 h-2 rounded-full" style={{ background: arc.color }} />
+                  <span className="w-2 h-2 rounded-full" style={{ background: `linear-gradient(135deg, ${arc.light}, ${arc.color})` }} />
                   {arc.label}
                 </span>
-                <span className="text-sm font-bold text-slate-900 tabular-nums">
-                  {loading ? <SkeletonBar w={22} h={12} cool /> : <AnimatedNumber value={arc.value} format={countFmt} delay={delay + 0.15 + i * 0.12} />}
+                <span className="text-sm font-black text-slate-900 tabular-nums">
+                  {loading ? <SkeletonBar w={22} h={12} cool /> : <AnimatedNumber value={arc.value} format={countFmt} delay={delay + 0.35 + i * 0.12} />}
                 </span>
               </div>
-              <div className="mt-1 h-1 rounded-full bg-slate-200/80 overflow-hidden">
+              <div className="mt-1 h-1 rounded-full bg-slate-200/70 overflow-hidden">
                 {!loading && (
                   <motion.div
                     className="h-full rounded-full"
-                    style={{ background: arc.color, transformOrigin: 'left' }}
+                    style={{ background: `linear-gradient(90deg, ${arc.light}, ${arc.color})`, transformOrigin: 'left' }}
                     initial={reduceMotion ? false : { scaleX: 0 }}
                     animate={{ scaleX: arc.f }}
-                    transition={reduceMotion ? { duration: 0 } : { duration: 0.9, delay: delay + 0.3 + i * 0.12, ease: EASE }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 0.9, delay: delay + 0.5 + i * 0.12, ease: EASE }}
                   />
                 )}
               </div>
@@ -230,6 +275,63 @@ function AttendanceRing({
 /* ──────────────────────────────────────────────────────────────────────────
    Fees — one ledger, broken down by head
    ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A follow-up from the fee bar as a deep-tinted tile: the figure large on a
+ * gradient, a glass bubble for the icon, a watermark of the same icon, and a
+ * light that sweeps across on hover. White on the 700-level gradient ends
+ * holds 5:1 or better.
+ */
+function FeeActionTile({
+  href, icon: Icon, from, to, eyebrow, value, format, loading, delay, detail, detailDot, title,
+}: {
+  href: string
+  icon: React.ElementType
+  from: string
+  to: string
+  eyebrow: string
+  value: number
+  format: (n: number) => string
+  loading: boolean
+  delay: number
+  detail: string
+  detailDot?: string
+  title?: string
+}) {
+  const reduceMotion = useReducedMotion()
+  return (
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 220, damping: 20, delay }}
+      whileHover={reduceMotion ? undefined : { y: -3 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+    >
+      <Link
+        href={href}
+        title={title}
+        className="fee-tile group/ft"
+        style={{ ['--ft-from' as string]: from, ['--ft-to' as string]: to }}
+      >
+        <Icon aria-hidden className="fee-tile-mark" size={96} strokeWidth={1.4} />
+        <span className="relative flex items-start justify-between gap-2">
+          <span className="fee-tile-bubble">
+            <Icon size={17} />
+          </span>
+          <ArrowUpRight size={18} className="text-white/70 transition-transform duration-300 group-hover/ft:translate-x-0.5 group-hover/ft:-translate-y-0.5 group-hover/ft:text-white" />
+        </span>
+        <span className="relative mt-3 block text-[10.5px] font-bold uppercase tracking-[0.12em] text-white/85">{eyebrow}</span>
+        <span className="relative mt-1 block font-display text-[1.75rem] xl:text-[2rem] font-black leading-none text-white tabular-nums">
+          {loading ? <SkeletonBar w={70} h={24} className="opacity-40" /> : <AnimatedNumber value={value} format={format} delay={delay} />}
+        </span>
+        <span className="relative mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-white/85 truncate">
+          {detailDot && <span className="w-2 h-2 rounded-full ring-2 ring-white/60 flex-shrink-0" style={{ background: detailDot }} />}
+          <span className="truncate">{loading ? '' : detail}</span>
+        </span>
+      </Link>
+    </motion.div>
+  )
+}
 
 interface BarPiece {
   head: FeeHeadStat
@@ -252,12 +354,9 @@ interface BarPiece {
  * A click on a legend chip pins the selection, which is how a touch screen
  * (no hover) gets the same read-out.
  */
-function FeeLedger({ fees, loading, beside }: {
+function FeeLedger({ fees, loading }: {
   fees: HomeFeeBreakdown | null
   loading: boolean
-  /** Sharing the row with attendance at `xl:` — the head list goes to one
-   *  column there, two where the ledger has the full width. */
-  beside: boolean
 }) {
   const reduceMotion = useReducedMotion()
   const [hoverId, setHoverId] = useState<string | null>(null)
@@ -308,7 +407,7 @@ function FeeLedger({ fees, loading, beside }: {
   let offset = 0
 
   return (
-    <div className="p-4 xl:p-5 min-w-0 flex flex-col h-full">
+    <div className="lg-content p-4 xl:p-5 min-w-0 flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
         <span className="flex items-center gap-1.5">
           <CreditCard size={13} className="text-slate-500" />
@@ -455,47 +554,45 @@ function FeeLedger({ fees, loading, beside }: {
         </div>
       </div>
 
-      {/* The two follow-ups, right under the bar and keyed to the selection. */}
+      {/* The two follow-ups, right under the bar and keyed to the selection:
+          deep-tinted tiles with a glass bubble, the figure large, and the
+          context it needs (whose figure it is; what is still owed). */}
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <Link
+        <FeeActionTile
           href={todayHref}
-          className="fee-action group/fa"
+          icon={CalendarCheck}
+          from="#047857"
+          to="#0e7490"
+          eyebrow="Today's collection"
+          value={shownToday}
+          format={fmtINR}
+          loading={loading}
+          delay={0.55}
+          detail={shown ? shown.name : 'All fee heads'}
+          detailDot={shown?.color}
           title={`Today's collection: ${fmtINRExact(shownToday)}`}
-        >
-          <span className="fee-action-icon bg-emerald-500/10 text-emerald-700">
-            <CalendarCheck size={16} />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-lg font-black text-slate-900 tabular-nums leading-none">
-              {loading ? <SkeletonBar w={60} h={16} cool /> : <AnimatedNumber value={shownToday} format={fmtINR} delay={0.5} />}
-            </span>
-            <span className="block text-[11px] font-semibold text-slate-500 mt-1 truncate">
-              Today&apos;s collection{shown ? ` · ${shown.name}` : ''}
-            </span>
-          </span>
-          <ChevronRight size={15} className="ml-auto text-slate-300 group-hover/fa:text-slate-600 group-hover/fa:translate-x-0.5 transition-all" />
-        </Link>
-        <Link href={duesHref} className="fee-action group/fa">
-          <span className="fee-action-icon bg-amber-500/10 text-amber-700">
-            <Users size={16} />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-lg font-black text-slate-900 tabular-nums leading-none">
-              {loading ? <SkeletonBar w={36} h={16} cool /> : <AnimatedNumber value={shownDues} format={countFmt} delay={0.55} />}
-            </span>
-            <span className="block text-[11px] font-semibold text-slate-500 mt-1 truncate">
-              Students with dues{shown ? ` · ${shown.name}` : ''}
-            </span>
-          </span>
-          <ChevronRight size={15} className="ml-auto text-slate-300 group-hover/fa:text-slate-600 group-hover/fa:translate-x-0.5 transition-all" />
-        </Link>
+        />
+        <FeeActionTile
+          href={duesHref}
+          icon={Users}
+          from="#c2410c"
+          to="#be123c"
+          eyebrow="Students with dues"
+          value={shownDues}
+          format={countFmt}
+          loading={loading}
+          delay={0.65}
+          detail={`${fmtINR(shownOutstanding)} outstanding${shown ? ` · ${shown.name}` : ''}`}
+          detailDot={shown?.color}
+        />
       </div>
+
       {/* Per head — names the bar's colours, gives each head its own
           paid-vs-owed line, and is the keyboard and touch way to select one
           (a click pins it). */}
       {!loading && heads.length > 0 && (
         <div
-          className={`mt-4 grid grid-cols-1 lg:grid-cols-2 ${beside ? 'xl:grid-cols-1 2xl:grid-cols-2' : ''} gap-x-4 gap-y-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1.5 px-1.5`}
+          className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 min-h-0 -mx-1.5 px-1.5"
           role="group"
           aria-label="Fee heads"
         >
@@ -564,59 +661,85 @@ export interface SchoolOverviewPanelProps {
 }
 
 /**
- * The admin's standing statistics as one panel: today's attendance on the
- * left, the year's fees on the right.
+ * The admin's standing statistics as one Liquid Glass panel: today's
+ * attendance as two dials in the narrow column, the year's fees in the wide
+ * one.
  *
- * Fees are one ledger now rather than a school column and a bus column — bus
- * fee is simply one of the heads in the bar — so "how much is in, how much is
- * owed" has one answer, with the per-head detail a hover away.
+ * The sheet is glass — a lensing surface with a specular rim and a highlight
+ * that follows the pointer, over ambient colour — and the dials and the
+ * ledger sit on it as solid content cards, so nothing is read off the glass.
+ * Fees are one ledger, bus fee simply one of its heads, and get the larger
+ * share of the width: the ledger is the half with the most to say.
  */
 export default function SchoolOverviewPanel({
   attendance, fees, showAttendance, showFees, today,
 }: SchoolOverviewPanelProps) {
+  const reduceMotion = useReducedMotion()
   const attendanceLoading = attendance !== null && attendance.counts === null
   const both = showAttendance && showFees
 
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return
+    const el = e.currentTarget
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--lg-x', `${e.clientX - r.left}px`)
+    el.style.setProperty('--lg-y', `${e.clientY - r.top}px`)
+  }
+
   return (
-    <div className="pro-card overview-card overflow-hidden rounded-[22px]">
-      {/* Header band, over a slow aurora in the page's own colours. */}
-      <div className="overview-aurora relative flex items-center justify-between gap-3 px-4 xl:px-5 py-3.5 border-b border-slate-200/80">
-        <div className="relative flex items-center gap-3 min-w-0">
-          <div className="icon-chip w-8 h-8 flex-shrink-0 bg-gradient-to-br from-emerald-400 to-teal-500">
-            <BarChart3 size={15} className="relative z-10 text-white drop-shadow-sm" />
-          </div>
-          <div className="min-w-0">
-            <p className="eyebrow text-slate-500 mb-1">Today</p>
-            <h2 className="font-display text-[1.2rem] font-bold leading-none headline text-slate-900 truncate">
-              School Overview
-            </h2>
-          </div>
-        </div>
-        <div className="relative flex items-center gap-2 flex-shrink-0">
-          {attendance?.subtitle && (
-            <span className="hidden xl:inline text-[11px] font-medium text-slate-500 truncate max-w-[18rem]">
-              {attendance.subtitle}
-            </span>
-          )}
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <span className="relative flex w-1.5 h-1.5">
-              <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60" />
-              <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            </span>
-            <span className="text-[10px] font-semibold text-emerald-700">Live</span>
-          </span>
-          <span className="text-xs font-medium text-slate-500 tabular-nums">{today}</span>
-        </div>
+    <div className="relative">
+      {/* Ambient light for the glass to bend. */}
+      <div aria-hidden className="lg-ambient lg-ambient-overview">
+        <span style={{ background: '#10b981' }} />
+        <span style={{ background: '#0ea5e9' }} />
+        <span style={{ background: '#f59e0b' }} />
       </div>
 
-      <div className={`grid grid-cols-1 ${both ? 'xl:grid-cols-12' : ''}`}>
-        {showAttendance && (
-          <section
-            className={`min-w-0 ${both ? 'xl:col-span-5' : ''}`}
-            aria-label="Attendance today"
-          >
-            <div className="flex flex-col sm:flex-row xl:flex-col 2xl:flex-row divide-y sm:divide-y-0 sm:divide-x xl:divide-x-0 xl:divide-y 2xl:divide-y-0 2xl:divide-x divide-slate-200/80">
-              <AttendanceRing
+      <motion.div
+        className="lg-deck lg-panel"
+        onPointerMove={onPointerMove}
+        initial={reduceMotion ? false : { opacity: 0, y: 16, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={reduceMotion ? { duration: 0 } : { duration: 0.7, ease: EASE }}
+      >
+        {/* Header — sits straight on the glass. */}
+        <div className="relative z-[3] flex items-center justify-between gap-3 px-5 pt-4 pb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="icon-chip w-9 h-9 flex-shrink-0 bg-gradient-to-br from-emerald-400 to-teal-500">
+              <BarChart3 size={16} className="relative z-10 text-white drop-shadow-sm" />
+            </div>
+            <div className="min-w-0">
+              <p className="eyebrow text-slate-500 mb-1">Today</p>
+              <h2 className="font-display text-[1.3rem] font-bold leading-none headline text-slate-900 truncate">
+                School Overview
+              </h2>
+            </div>
+          </div>
+          <div className="lg-pill flex items-center gap-2.5 h-8 px-3 flex-shrink-0">
+            {attendance?.subtitle && (
+              <span className="hidden xl:inline text-[11px] font-medium text-slate-600 truncate max-w-[16rem]">
+                {attendance.subtitle}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <span className="relative flex w-1.5 h-1.5">
+                <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60" />
+                <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-[10.5px] font-bold text-emerald-700">Live</span>
+            </span>
+            <span className="w-px h-3.5 bg-slate-300" />
+            <span className="text-xs font-semibold text-slate-600 tabular-nums">{today}</span>
+          </div>
+        </div>
+
+        <div className={`relative z-[3] grid grid-cols-1 gap-3 px-3 pb-3 ${both ? 'xl:grid-cols-12' : ''}`}>
+          {showAttendance && (
+            <section
+              className={`min-w-0 flex flex-col lg:flex-row gap-3 ${both ? 'xl:col-span-4 xl:flex-col' : ''}`}
+              aria-label="Attendance today"
+            >
+              <AttendanceDial
                 loading={attendanceLoading}
                 icon={Users}
                 title="Students"
@@ -627,9 +750,9 @@ export default function SchoolOverviewPanel({
                   absent: '/more/attendance#student-absent',
                   exception: '/more/attendance#student-irregular',
                 }}
-                delay={0}
+                delay={0.1}
               />
-              <AttendanceRing
+              <AttendanceDial
                 loading={attendanceLoading}
                 icon={Briefcase}
                 title="Staff"
@@ -640,21 +763,18 @@ export default function SchoolOverviewPanel({
                   absent: '/more/staff-attendance#staff-absent',
                   exception: '/more/staff-attendance#staff-exceptions',
                 }}
-                delay={0.25}
+                delay={0.3}
               />
-            </div>
-          </section>
-        )}
+            </section>
+          )}
 
-        {showFees && (
-          <section
-            aria-label="Fee collection"
-            className={`min-w-0 border-slate-200/80 ${both ? 'border-t xl:border-t-0 xl:border-l xl:col-span-7' : ''}`}
-          >
-            <FeeLedger fees={fees} loading={fees === null} beside={both} />
-          </section>
-        )}
-      </div>
+          {showFees && (
+            <section aria-label="Fee collection" className={`min-w-0 ${both ? 'xl:col-span-8' : ''}`}>
+              <FeeLedger fees={fees} loading={fees === null} />
+            </section>
+          )}
+        </div>
+      </motion.div>
     </div>
   )
 }
