@@ -11,12 +11,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Lock, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Layers, Lock, Plus } from 'lucide-react'
 import { gradeLabel } from '@/lib/grades'
 import {
   NO_GRADE_LABEL, gridRows, indexLocks, indexRates, lockKey, rateKey, rowId,
   type ChargeRow, type Gender, type GridRowKey, type GroupRow, type HeadRow,
-  type IssueCellRow, type IssueRow, type RateEdit, type RateRow, type StudentLite, type TermRow,
+  type IssueCellRow, type IssueRow, type Progress, type RateEdit, type RateRow, type StudentLite, type TermRow,
 } from '@/lib/fees/grid'
 import { BOY, GIRL, shortDate } from './kit'
 import type { IssueScope } from './IssuePanel'
@@ -34,7 +34,7 @@ const HAIR = 'border-[#F0ECE2]'
 
 export default function FeeGrid({
   terms, heads, groups, rates, cells, charges, issues, students, scope, canEdit,
-  onCommit, onAddGroup, onEditGroup, onOpenCharge, onEditTerm, onEditHead,
+  optins, termProgress, onCommit, onSplit, onOptIns, onOpenCharge, onEditTerm, onEditHead,
 }: {
   terms: TermRow[]
   heads: HeadRow[]
@@ -46,9 +46,13 @@ export default function FeeGrid({
   students: StudentLite[]
   scope: IssueScope | null
   canEdit: boolean
+  /** Optional head id → its opt-in list. */
+  optins: Map<string, Set<string>>
+  termProgress: Map<string, Progress>
   onCommit: (edit: RateEdit) => Promise<void>
-  onAddGroup: (grade: number) => void
-  onEditGroup: (g: GroupRow) => void
+  /** Open the split sheet for a grade — to split it, or to change its groups. */
+  onSplit: (grade: number) => void
+  onOptIns: (head: HeadRow) => void
   onOpenCharge: (c: ChargeRow) => void
   onEditTerm: (t: TermRow) => void
   onEditHead: (h: HeadRow) => void
@@ -81,6 +85,21 @@ export default function FeeGrid({
     return m
   }, [students, groups])
 
+  // Grades that are split into groups, and anyone in them no group covers.
+  const splitGrades = useMemo(() => new Set(groups.map(g => g.grade)), [groups])
+  const unassigned = useMemo(() => {
+    const m = new Map<number, { sections: Set<string>; n: number }>()
+    for (const s of students) {
+      if (s.grade === null || !splitGrades.has(s.grade)) continue
+      const sec = (s.section ?? '').trim().toUpperCase()
+      if (groups.some(g => g.grade === s.grade && g.sections.includes(sec))) continue
+      const e = m.get(s.grade) ?? { sections: new Set<string>(), n: 0 }
+      e.sections.add(sec || 'no section'); e.n += 1
+      m.set(s.grade, e)
+    }
+    return m
+  }, [students, groups, splitGrades])
+
   // "Other" chips: a charge shows in every grade row its students come from.
   const chargesByRow = useMemo(() => {
     const m = new Map<string, ChargeRow[]>()
@@ -103,9 +122,12 @@ export default function FeeGrid({
   }
 
   const tableRef = useRef<HTMLTableElement>(null)
-  const focusCell = (r: number, c: number) => {
-    const el = tableRef.current?.querySelector<HTMLInputElement>(`input[data-r="${r}"][data-c="${c}"]`)
-    if (el) { el.focus(); el.select() }
+  /** Move to the same column `dr` rows away, stepping over split grades' header rows. */
+  const focusCell = (r: number, c: number, dr: number) => {
+    for (let k = r + dr; k >= 0 && k < rows.length; k += dr) {
+      const el = tableRef.current?.querySelector<HTMLInputElement>(`input[data-r="${k}"][data-c="${c}"]`)
+      if (el) { el.focus(); el.select(); return }
+    }
   }
 
   if (terms.length === 0 && heads.length === 0) {
@@ -142,7 +164,10 @@ export default function FeeGrid({
                     <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-white group-hover:text-[#B8983C] group-disabled:group-hover:text-white">
                       {t.name}
                     </span>
-                    <span className="block text-[10px] font-normal text-[#A1A1AA] tabular-nums">Due {shortDate(t.due_date)}</span>
+                    <span className="block text-[10px] font-normal text-[#A1A1AA] tabular-nums">
+                      Due {shortDate(t.due_date)}
+                      <TermState p={termProgress.get(t.id)} />
+                    </span>
                   </button>
                 </th>
               ))}
@@ -175,6 +200,13 @@ export default function FeeGrid({
                       </span>
                     )}
                   </button>
+                  {col.head.optional && (
+                    <button onClick={() => onOptIns(col.head)}
+                            title="Optional — billed only to students on its opt-in list. Open the list."
+                            className="ml-1.5 align-middle inline-flex items-center gap-1 border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#B8983C] hover:bg-[#B8983C] hover:text-[#27272A]">
+                      Opt-in {optins.get(col.head.id)?.size ?? 0}
+                    </button>
+                  )}
                 </th>
               ))}
             </tr>
@@ -189,16 +221,56 @@ export default function FeeGrid({
               const head = row.grade === null ? 'bg-[#FAF8F2]' : group ? 'bg-[#FDFCF9]' : 'bg-white'
               // A heavier rule above each grade, so a grade and its groups read as one block.
               const top = !group && r > 0 ? 'border-t border-t-[#D6D2C4]' : ''
+
+              // A split grade's own row prices nobody: it becomes the header
+              // its groups hang from, and says so across the price columns.
+              if (!group && row.grade !== null && splitGrades.has(row.grade)) {
+                const grade = row.grade
+                const nGroups = groups.filter(g => g.grade === grade).length
+                const miss = unassigned.get(grade)
+                return (
+                  <tr key={id}>
+                    <th scope="row"
+                        className={`sticky left-0 z-10 text-left font-normal px-3 py-1.5 border-r border-b border-r-[#E3DFD3] border-b-[#E3DFD3] bg-[#F4F1E7] ${top}`}>
+                      <button onClick={() => onSplit(grade)} disabled={!canEdit} className="w-full text-left group">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-[12.5px] font-bold text-[#18181B] truncate">{gradeLabel(grade)}</span>
+                          <Layers size={11} className="text-[#B8983C] flex-shrink-0" />
+                        </span>
+                        <span className="block text-[10.5px] text-[#6B675A] group-hover:text-[#18181B] group-hover:underline">
+                          {nGroups} group{nGroups === 1 ? '' : 's'}{canEdit ? ' · edit' : ''}
+                        </span>
+                      </button>
+                    </th>
+                    <td colSpan={(termHeads.length === 0 ? terms.length : 0) + columns.length}
+                        className={`px-3 py-1.5 border-b border-b-[#E3DFD3] bg-[#F4F1E7] ${top} text-[11px] text-[#8C8878]`}>
+                      {miss ? (
+                        <button onClick={() => onSplit(grade)}
+                                className="inline-flex items-center gap-1.5 text-[#A93232] font-semibold hover:underline">
+                          <AlertTriangle size={12} />
+                          Section{miss.sections.size === 1 ? '' : 's'} {Array.from(miss.sections).join(', ')} ({miss.n} student{miss.n === 1 ? '' : 's'}) {miss.sections.size === 1 ? 'is' : 'are'} in no group and will not be billed — put {miss.sections.size === 1 ? 'it' : 'them'} in a group
+                        </button>
+                      ) : (
+                        <span>Priced by its groups below</span>
+                      )}
+                    </td>
+                    <td className={`px-2 py-1 border-b border-b-[#E3DFD3] bg-[#F4F1E7] ${top} align-middle`}>
+                      <OtherChips list={rowCharges} issued={issuedCharge} onOpen={onOpenCharge} />
+                    </td>
+                  </tr>
+                )
+              }
+
               return (
                 <tr key={id} className="group/row">
                   <th scope="row"
                       className={`sticky left-0 z-10 text-left font-normal px-3 py-1 border-r border-b border-r-[#E3DFD3] border-b-[#F0ECE2] ${head} ${top}`}>
                     {group ? (
-                      <button onClick={() => canEdit && onEditGroup(group)} className="flex items-start gap-1.5 text-left w-full pl-2.5 border-l-2 border-[#B8983C]">
+                      <button onClick={() => canEdit && onSplit(group.grade)} className="flex items-start gap-1.5 text-left w-full pl-2.5 border-l-2 border-[#B8983C]">
                         <span className="min-w-0">
                           <span className="block text-[12px] font-semibold text-[#3F3F46] truncate">{group.name}</span>
                           <span className="block text-[10.5px] text-[#8C8878] truncate">
-                            {group.sections.join(', ') || '—'} · {n}
+                            Section{group.sections.length === 1 ? '' : 's'} {group.sections.join(', ') || '—'} · {n}
                           </span>
                         </span>
                       </button>
@@ -214,9 +286,9 @@ export default function FeeGrid({
                         </div>
                         {row.grade !== null && canEdit && (
                           <button
-                            onClick={() => onAddGroup(row.grade as number)}
-                            title={`Split ${gradeLabel(row.grade)} into a group by section`}
-                            aria-label={`Add a group to ${gradeLabel(row.grade)}`}
+                            onClick={() => onSplit(row.grade as number)}
+                            title={`Split ${gradeLabel(row.grade)} into groups by section`}
+                            aria-label={`Split ${gradeLabel(row.grade)} into groups`}
                             className="w-6 h-6 flex items-center justify-center border border-[#E3DFD3] text-[#8C8878]
                                        hover:border-[#27272A] hover:bg-[#27272A] hover:text-[#B8983C] transition-colors flex-shrink-0
                                        sm:opacity-0 sm:group-hover/row:opacity-100 focus:opacity-100"
@@ -245,14 +317,14 @@ export default function FeeGrid({
                             {(['male', 'female'] as const).map((g, gi) => (
                               <AmountCell key={g} value={valueOf(g)} locked={locked} disabled={!canEdit}
                                 r={r} c={c * 2 + gi} mark={g === 'male' ? 'B' : 'G'} markColor={g === 'male' ? BOY : GIRL}
-                                onNav={dr => focusCell(r + dr, c * 2 + gi)}
+                                onNav={dr => focusCell(r, c * 2 + gi, dr)}
                                 onCommit={amount => onCommit({ ...row, head_id: col.head.id, term_id: col.termId, gender: g, amount })} />
                             ))}
                           </div>
                         ) : (
                           <AmountCell value={valueOf('any')} locked={locked} disabled={!canEdit}
                             r={r} c={c * 2}
-                            onNav={dr => focusCell(r + dr, c * 2)}
+                            onNav={dr => focusCell(r, c * 2, dr)}
                             onCommit={amount => onCommit({ ...row, head_id: col.head.id, term_id: col.termId, gender: 'any', amount })} />
                         )}
                       </td>
@@ -260,26 +332,7 @@ export default function FeeGrid({
                   })}
 
                   <td className={`px-2 py-1 border-b ${HAIR} ${top} align-middle`}>
-                    <div className="flex flex-wrap gap-1 max-w-[300px]">
-                      {rowCharges.map(ch => {
-                        const issued = issuedCharge.has(ch.id)
-                        const fine = ch.kind === 'fine'
-                        const tone = fine ? 'text-[#A93232] border-[#EFCCCC]' : 'text-[#7A6220] border-[#E7D9AE]'
-                        const fill = issued ? (fine ? 'bg-[#FCECEC]' : 'bg-[#FAF3DF]') : 'bg-white border-dashed'
-                        return (
-                          <button
-                            key={ch.id}
-                            onClick={() => onOpenCharge(ch)}
-                            title={`${fine ? 'Fine' : 'Other fee'} · ${ch.title} · ₹${ch.amount.toLocaleString('en-IN')} · ${issued ? 'issued' : 'draft'}`}
-                            className={`inline-flex items-center gap-1 max-w-[200px] border px-1.5 py-[3px] text-[10.5px] font-semibold
-                                        leading-none hover:border-current transition-colors ${tone} ${fill}`}
-                          >
-                            {issued && <Check size={10} className="flex-shrink-0" strokeWidth={3} />}
-                            <span className="truncate">{ch.title}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <OtherChips list={rowCharges} issued={issuedCharge} onOpen={onOpenCharge} />
                   </td>
                 </tr>
               )
@@ -300,6 +353,41 @@ export default function FeeGrid({
         <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 border border-dashed border-[#B8983C]" /> Draft other fee</span>
         <span className="ml-auto max-sm:hidden">Enter moves down · Esc cancels</span>
       </div>
+    </div>
+  )
+}
+
+/** How much of a term is issued, said plainly beside its due date. */
+function TermState({ p }: { p?: Progress }) {
+  if (!p || p.issued === 0) return null
+  if (p.issued >= p.priced) return <span className="ml-1.5 text-[#86C79F]">· issued</span>
+  return <span className="ml-1.5 text-[#D9BE6E]">· issued {p.issuedRows}/{p.rows} rows</span>
+}
+
+function OtherChips({ list, issued, onOpen }: {
+  list: ChargeRow[]; issued: Set<string>; onOpen: (c: ChargeRow) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1 max-w-[300px]">
+      {list.map(ch => {
+        const done = issued.has(ch.id)
+        const fine = ch.kind === 'fine'
+        const tone = fine ? 'text-[#A93232] border-[#EFCCCC]' : 'text-[#7A6220] border-[#E7D9AE]'
+        const fill = done ? (fine ? 'bg-[#FCECEC]' : 'bg-[#FAF3DF]') : 'bg-white border-dashed'
+        return (
+          <button
+            key={ch.id}
+            onClick={() => onOpen(ch)}
+            title={`${fine ? 'Fine' : ch.optional ? 'Optional fee' : 'Other fee'} · ${ch.title} · ₹${ch.amount.toLocaleString('en-IN')} · ${done ? 'issued' : 'draft'}`}
+            className={`inline-flex items-center gap-1 max-w-[200px] border px-1.5 py-[3px] text-[10.5px] font-semibold
+                        leading-none hover:border-current transition-colors ${tone} ${fill}`}
+          >
+            {done && <Check size={10} className="flex-shrink-0" strokeWidth={3} />}
+            <span className="truncate">{ch.title}</span>
+            {ch.optional && <span className="text-[8.5px] font-bold uppercase opacity-70">opt</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }

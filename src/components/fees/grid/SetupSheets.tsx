@@ -9,7 +9,7 @@ import { ADMIN } from '@/components/fees/ui'
 import { Segmented } from '@/components/fees/shell'
 import { gradeLabel } from '@/lib/grades'
 import {
-  deleteGroup, deleteHead, deleteTerm, saveGroup, saveHead, saveTerm,
+  deleteHead, deleteTerm, saveGradeSplit, saveHead, saveTerm,
   type Frequency, type GroupRow, type HeadRow, type StudentLite, type TermRow,
 } from '@/lib/fees/grid'
 import { Aside, ErrorNote, FeeSheet, Field, Pick } from './kit'
@@ -109,6 +109,7 @@ export function TermSheet({
 
 // ── Head ────────────────────────────────────────────────────────────────
 type Split = 'same' | 'split'
+type Payers = 'all' | 'optin'
 
 export function HeadSheet({
   open, onClose, yearId, head, nextSort, locked, onSaved,
@@ -119,6 +120,7 @@ export function HeadSheet({
   const [name, setName] = useState('')
   const [frequency, setFrequency] = useState<Frequency>('term')
   const [split, setSplit] = useState<Split>('same')
+  const [payers, setPayers] = useState<Payers>('all')
   const { busy, error, run } = useBusy()
 
   useEffect(() => {
@@ -126,12 +128,14 @@ export function HeadSheet({
     setName(head?.name ?? '')
     setFrequency(head?.frequency ?? 'term')
     setSplit(head?.gender_split ? 'split' : 'same')
+    setPayers(head?.optional ? 'optin' : 'all')
   }, [open, head])
 
   const save = () => run(async () => {
     if (name.trim().length < 2) throw new Error('Name the fee head — Tuition, Bus, Uniform…')
     await saveHead(yearId, {
-      id: head?.id, name, frequency, gender_split: split === 'split', sort: head?.sort ?? nextSort,
+      id: head?.id, name, frequency, gender_split: split === 'split', optional: payers === 'optin',
+      sort: head?.sort ?? nextSort,
     })
     onSaved(); onClose()
   })
@@ -176,10 +180,21 @@ export function HeadSheet({
         </div>
       </Field>
 
+      <Field
+        label="Who pays"
+        hint={payers === 'all'
+          ? 'Everyone in a priced row is billed.'
+          : 'Optional: only students on this head’s opt-in list are billed — bus, lunch, a club. Keep the list from the grid’s column header.'}
+      >
+        <Segmented<Payers> fill value={payers} onChange={setPayers}
+          options={[{ key: 'all', label: 'Everyone' }, { key: 'optin', label: 'Only those who opt in' }]} />
+      </Field>
+
       {locked && (
         <Aside tone="good">
           <Lock size={11} className="inline mr-1 -mt-0.5" />
-          Fees under this head have been issued. You can rename it, but how it is collected is locked.
+          Some fees under this head have already been issued. You can rename it and change who pays,
+          but how it is collected stays as it is until those issues are undone.
         </Aside>
       )}
       <ErrorNote>{error}</ErrorNote>
@@ -187,114 +202,187 @@ export function HeadSheet({
   )
 }
 
-// ── Group ───────────────────────────────────────────────────────────────
-export function GroupSheet({
-  open, onClose, yearId, grade, group, groups, students, locked, onSaved,
+// ── Splitting a grade into groups ───────────────────────────────────────
+/**
+ * One sheet for a grade's whole split. Groups are defined together, and every
+ * section of the grade must land in exactly one of them before it saves — a
+ * half-split grade would leave students priced by nothing. With no groups the
+ * grade is a single row again.
+ */
+export function SplitSheet({
+  open, onClose, yearId, grade, groups, students, locked, onSaved,
 }: {
   open: boolean; onClose: () => void; yearId: string; grade: number
-  group: GroupRow | null; groups: GroupRow[]; students: StudentLite[]; locked: boolean
-  onSaved: () => void
+  groups: GroupRow[]; students: StudentLite[]; locked: boolean
+  onSaved: (created: { name: string; id: string }[], firstSplit: boolean) => void
 }) {
-  const [name, setName] = useState('')
-  const [sections, setSections] = useState<string[]>([])
+  interface Draft { key: string; id?: string; name: string }
+  const existing = useMemo(() => groups.filter(g => g.grade === grade).sort((a, b) => a.sort - b.sort), [groups, grade])
+  const [drafts, setDrafts] = useState<Draft[]>([])
+  const [owner, setOwner] = useState<Record<string, string>>({})
   const [extra, setExtra] = useState('')
+  const [tried, setTried] = useState(false)
   const { busy, error, run } = useBusy()
-
-  const gradeGroups = groups.filter(g => g.grade === grade)
 
   useEffect(() => {
     if (!open) return
-    setName(group?.name ?? `Group ${String.fromCharCode(65 + gradeGroups.filter(g => g.id !== group?.id).length)}`)
-    setSections(group?.sections ?? [])
-    setExtra('')
+    setTried(false); setExtra('')
+    if (existing.length) {
+      setDrafts(existing.map(g => ({ key: g.id, id: g.id, name: g.name })))
+      const o: Record<string, string> = {}
+      existing.forEach(g => g.sections.forEach(sec => { o[sec] = g.id }))
+      setOwner(o)
+    } else {
+      setDrafts([{ key: 'n1', name: 'Group A' }, { key: 'n2', name: 'Group B' }])
+      setOwner({})
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, group])
+  }, [open, grade])
 
-  const known = useMemo(() => {
-    const s = new Set<string>()
-    for (const st of students) if (st.grade === grade && st.section) s.add(st.section.trim().toUpperCase())
-    for (const g of gradeGroups) g.sections.forEach(x => s.add(x))
-    sections.forEach(x => s.add(x))
-    return Array.from(s).sort()
+  const sections = useMemo(() => {
+    const set = new Set<string>()
+    for (const st of students) if (st.grade === grade && st.section) set.add(st.section.trim().toUpperCase())
+    existing.forEach(g => g.sections.forEach(x => set.add(x)))
+    Object.keys(owner).forEach(x => set.add(x))
+    return Array.from(set).sort()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students, grade, groups, sections])
+  }, [students, grade, existing, owner])
 
-  const takenBy = (sec: string) => gradeGroups.find(g => g.id !== group?.id && g.sections.includes(sec))
-  const countIn = (sec: string) => students.filter(s => s.grade === grade && (s.section ?? '').trim().toUpperCase() === sec).length
+  const countIn = (sec: string) =>
+    students.filter(s => s.grade === grade && (s.section ?? '').trim().toUpperCase() === sec).length
 
-  const toggle = (sec: string) =>
-    setSections(cur => cur.includes(sec) ? cur.filter(x => x !== sec) : [...cur, sec].sort())
+  const unassigned = sections.filter(sec => !drafts.some(d => d.key === owner[sec]))
+  const empty = drafts.filter(d => !sections.some(sec => owner[sec] === d.key))
+  const names = drafts.map(d => d.name.trim().toLowerCase())
+  const dupName = names.some((n, i) => n && names.indexOf(n) !== i)
+  const problem = drafts.length === 1 ? 'A split needs at least two groups. To price the whole grade together, remove the split.'
+    : drafts.some(d => !d.name.trim()) ? 'Every group needs a name.'
+    : dupName ? 'Two groups have the same name.'
+    : unassigned.length ? `Put ${unassigned.join(', ')} in a group — every section must belong to one.`
+    : empty.length ? `${empty.map(e => e.name || 'A group').join(', ')} has no sections. Give it one or remove it.`
+    : null
 
-  const addExtra = () => {
+  const addGroup = () => setDrafts(d => [...d, { key: `n${Date.now()}`, name: `Group ${String.fromCharCode(65 + d.length)}` }])
+  const removeGroup = (key: string) => {
+    setDrafts(d => d.filter(x => x.key !== key))
+    setOwner(o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== key)))
+  }
+  const addSection = () => {
     const v = extra.trim().toUpperCase()
-    if (v && !sections.includes(v)) toggle(v)
+    if (v && !sections.includes(v)) setOwner(o => ({ ...o, [v]: '' }))
     setExtra('')
   }
 
   const save = () => run(async () => {
-    if (!name.trim()) throw new Error('Name the group.')
-    if (sections.length === 0) throw new Error('Give the group at least one section.')
-    await saveGroup(yearId, { id: group?.id, grade, name, sections, sort: group?.sort ?? gradeGroups.length + 1 })
-    onSaved(); onClose()
+    setTried(true)
+    if (problem) throw new Error(problem)
+    const next = drafts.map(d => ({
+      id: d.id, name: d.name, sections: sections.filter(sec => owner[sec] === d.key),
+    }))
+    const created = await saveGradeSplit(yearId, grade, existing, next)
+    onSaved(created, existing.length === 0); onClose()
   })
 
-  const remove = () => run(async () => {
-    if (!group) return
-    await deleteGroup(group.id)
-    onSaved(); onClose()
+  const unsplit = () => run(async () => {
+    await saveGradeSplit(yearId, grade, existing, [])
+    onSaved([], false); onClose()
   })
 
   return (
     <FeeSheet
-      open={open} onClose={onClose} icon={<Layers size={15} />}
-      title={group ? `${gradeLabel(grade)} · ${group.name}` : `New group in ${gradeLabel(grade)}`}
-      subtitle="A group gets its own row in the grid and prices the sections you give it"
-      footer={<Footer onDelete={group && !locked ? remove : undefined} onCancel={onClose}
-                      onSave={save} busy={busy} saveLabel={group ? 'Save group' : 'Add group'} />}
-    >
-      <Field label="Name">
-        <input value={name} onChange={e => setName(e.target.value)} className={ADMIN.inputPlain} placeholder="Science stream" />
-      </Field>
-
-      <Field label="Sections" hint="A section can belong to only one group. Sections left out stay on the grade’s own row.">
-        <div className="bg-white border border-[#E3DFD3] p-2.5">
-          <div className="flex flex-wrap gap-1.5">
-            {known.length === 0 && (
-              <span className="text-[12px] text-[#8C8878]">No sections found for this grade yet — add one below.</span>
-            )}
-            {known.map(sec => {
-              const other = takenBy(sec)
-              return (
-                <Pick key={sec} on={sections.includes(sec)} onClick={() => toggle(sec)} disabled={!!other}
-                      title={other ? `Already in ${other.name}` : `${countIn(sec)} students`}>
-                  {sec}
-                  <span className="font-semibold normal-case tracking-normal opacity-60">
-                    {other ? `in ${other.name}` : countIn(sec)}
-                  </span>
-                </Pick>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-[#F0ECE2]">
-            <input
-              value={extra}
-              onChange={e => setExtra(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExtra() } }}
-              className={`${ADMIN.inputPlain} flex-1`}
-              placeholder="Another section, e.g. E"
-            />
-            <button type="button" className={ADMIN.ghostBtn} disabled={!extra.trim()} onClick={addExtra}>Add</button>
-          </div>
+      open={open} onClose={onClose} size="lg" icon={<Layers size={15} />}
+      title={existing.length ? `${gradeLabel(grade)} — groups` : `Split ${gradeLabel(grade)} into groups`}
+      subtitle="Each group gets its own row in the grid and its own prices"
+      footer={locked ? (
+        <div className="flex justify-end"><button onClick={onClose} className={ADMIN.ghostBtn}>Close</button></div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {existing.length > 0 && (
+            <button onClick={unsplit} disabled={busy}
+                    className={`${ADMIN.ghostBtn} hover:!text-[#A93232] hover:!border-[#EFCCCC]`}>
+              <Trash2 size={13} /> Remove split
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
+          <button onClick={save} disabled={busy} className={ADMIN.darkBtn}>
+            {busy && <Loader2 size={13} className="animate-spin" />} Save groups
+          </button>
         </div>
-      </Field>
-
+      )}
+    >
       {locked && (
         <Aside tone="good">
           <Lock size={11} className="inline mr-1 -mt-0.5" />
-          This group has issued fees and cannot be deleted until they are undone.
+          Fees have been issued to {gradeLabel(grade)}, so its groups are locked. Undo those issues to change who is in which group.
         </Aside>
       )}
-      <ErrorNote>{error}</ErrorNote>
+
+      <Field label="Groups">
+        <div className="bg-white border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
+          {drafts.map((d, i) => (
+            <div key={d.key} className="flex items-center gap-2 px-2.5 py-2">
+              <span className="w-5 text-[10px] font-bold text-[#B8983C] tabular-nums">{i + 1}</span>
+              <input value={d.name} disabled={locked}
+                     onChange={e => setDrafts(ds => ds.map(x => x.key === d.key ? { ...x, name: e.target.value } : x))}
+                     className={`${ADMIN.inputPlain} flex-1`} placeholder="Science stream" />
+              <span className="text-[11px] text-[#8C8878] tabular-nums w-[72px] text-right">
+                {(n => `${n} student${n === 1 ? '' : 's'}`)(sections.filter(sec => owner[sec] === d.key).reduce((a, sec) => a + countIn(sec), 0))}
+              </span>
+              {!locked && (
+                <button onClick={() => removeGroup(d.key)} aria-label={`Remove ${d.name}`}
+                        className="w-7 h-7 flex items-center justify-center text-[#C9C4B4] hover:text-[#A93232]">
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+          {!locked && (
+            <button onClick={addGroup} className="w-full text-left px-2.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#6B675A] hover:text-[#18181B] hover:bg-[#FAF8F2]">
+              + Add a group
+            </button>
+          )}
+        </div>
+      </Field>
+
+      <Field label="Which group each section belongs to"
+             hint="Every section must be in exactly one group."
+             error={tried && problem ? problem : undefined}>
+        <div className="bg-white border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
+          {sections.length === 0 && (
+            <p className="px-3 py-3 text-[12px] text-[#8C8878]">No sections found for this grade yet — add one below.</p>
+          )}
+          {sections.map(sec => {
+            const missing = !drafts.some(d => d.key === owner[sec])
+            return (
+              <div key={sec} className={`flex flex-wrap items-center gap-2 px-2.5 py-2 ${missing && tried ? 'bg-[#FCECEC]' : ''}`}>
+                <span className="w-[86px] flex-shrink-0">
+                  <span className="text-[12.5px] font-bold text-[#18181B]">Section {sec}</span>
+                  <span className="block text-[10.5px] text-[#8C8878] tabular-nums">{countIn(sec)} student{countIn(sec) === 1 ? '' : 's'}</span>
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {drafts.map(d => (
+                    <Pick key={d.key} on={owner[sec] === d.key} disabled={locked}
+                          onClick={() => setOwner(o => ({ ...o, [sec]: d.key }))}>
+                      {d.name || 'Unnamed'}
+                    </Pick>
+                  ))}
+                </div>
+                {missing && <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-[#A93232]">No group</span>}
+              </div>
+            )
+          })}
+          {!locked && (
+            <div className="flex items-center gap-1.5 px-2.5 py-2">
+              <input value={extra} onChange={e => setExtra(e.target.value)}
+                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection() } }}
+                     className={`${ADMIN.inputPlain} flex-1`} placeholder="A section with no students yet, e.g. E" />
+              <button type="button" className={ADMIN.ghostBtn} disabled={!extra.trim()} onClick={addSection}>Add</button>
+            </div>
+          )}
+        </div>
+      </Field>
+      <ErrorNote>{error && error !== problem ? error : null}</ErrorNote>
     </FeeSheet>
   )
 }

@@ -19,21 +19,47 @@ import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN } from '@/components/fees/ui'
 import { Loading, Notice, SectionBar, TitledPanel } from '@/components/fees/shell'
 import {
-  cloneGrid, fetchGrid, fetchStudents, rateKey, sessionMonths, setRates,
-  type ChargeRow, type GridBundle, type GroupRow, type HeadRow, type IssueRow,
+  cloneGrid, defaultMonthDue, fetchGrid, fetchStudents, issueProgress, monthLabel, rateKey,
+  saveMonthDues, sessionMonths, setRates, type Progress,
+  type ChargeRow, type GridBundle, type HeadRow, type IssueRow,
   type RateEdit, type StudentLite, type TermRow,
 } from '@/lib/fees/grid'
 import FeeGrid from './FeeGrid'
 import ChargeSheet from './ChargeSheet'
-import { GroupSheet, HeadSheet, TermSheet } from './SetupSheets'
+import { HeadSheet, SplitSheet, TermSheet } from './SetupSheets'
+import OptInSheet from './OptInSheet'
 import { IssueBar, IssueSheet, IssuesLog, UndoSheet, emptyScope, type IssueScope } from './IssuePanel'
 import { shortDate } from './kit'
 
 const EMPTY: GridBundle = {
   terms: [], heads: [], groups: [], rates: [], charges: [], issues: [], cells: [], fineCategories: [],
+  optins: new Map(), months: new Map(), chargeBilled: new Map(),
+}
+
+/** "Issued" only when every priced cell is; otherwise how far it has got. */
+function IssuedChip({ p, kind }: { p?: Progress; kind: 'term' | 'head' }) {
+  if (!p) return null
+  if (p.months.length > 0) {
+    const label = p.months.length <= 2 ? p.months.map(m => monthLabel(m, false)).join(', ') : `${p.months.length} months`
+    return <span className={`${chip} bg-[#EAF5EE] text-[#1F6B42] border-[#C6E3D2]`} title={p.months.map(m => monthLabel(m)).join(', ')}>
+      <Lock size={8} className="inline -mt-px" /> {label}
+    </span>
+  }
+  if (p.issued === 0) return null
+  if (p.issued >= p.priced) {
+    return <span className={`${chip} bg-[#EAF5EE] text-[#1F6B42] border-[#C6E3D2]`}><Lock size={8} className="inline -mt-px" /> Issued</span>
+  }
+  return (
+    <span className={`${chip} bg-[#FAF3DF] text-[#7A6220] border-[#E7D9AE]`}
+          title={`Issued for ${p.issuedRows} of ${p.rows} priced rows${kind === 'head' ? ' across its terms' : ''}`}>
+      Part · {p.issuedRows}/{p.rows} rows
+    </span>
+  )
 }
 
 type ChargeState = { kind: 'other' | 'fine'; charge: ChargeRow | null } | null
+
+const EMPTY_SET: Set<string> = new Set()
 
 const chip = 'inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] border leading-none whitespace-nowrap'
 
@@ -48,7 +74,8 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
 
   const [termSheet, setTermSheet] = useState<{ term: TermRow | null } | null>(null)
   const [headSheet, setHeadSheet] = useState<{ head: HeadRow | null } | null>(null)
-  const [groupSheet, setGroupSheet] = useState<{ grade: number; group: GroupRow | null } | null>(null)
+  const [splitGrade, setSplitGrade] = useState<number | null>(null)
+  const [optHead, setOptHead] = useState<HeadRow | null>(null)
   const [chargeSheet, setChargeSheet] = useState<ChargeState>(null)
   const [issueOpen, setIssueOpen] = useState(false)
   const [undo, setUndo] = useState<IssueRow | null>(null)
@@ -125,7 +152,23 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
 
   const termLocked = (t: TermRow) => data.cells.some(c => c.term_id === t.id)
   const headLocked = (h: HeadRow) => data.cells.some(c => c.head_id === h.id)
-  const groupLocked = (g: GroupRow) => data.cells.some(c => c.group_id === g.id)
+  const gradeLocked = (grade: number) => data.cells.some(c => c.grade === grade)
+  const progress = useMemo(() => issueProgress(data), [data])
+
+  /**
+   * A grade's first split starts each new group on the grade's own prices,
+   * so splitting never empties a row that was already priced.
+   */
+  const afterSplit = async (grade: number, created: { id: string }[], firstSplit: boolean) => {
+    if (year && firstSplit && created.length) {
+      const base = data.rates.filter(r => r.grade === grade && r.group_id === null)
+      const edits = created.flatMap(g => base.map(r => ({
+        grade, group_id: g.id, head_id: r.head_id, term_id: r.term_id, gender: r.gender, amount: r.amount,
+      })))
+      try { await setRates(year.id, edits) } catch { /* the split stands; prices can be typed in */ }
+    }
+    refresh()
+  }
 
   const refresh = () => { void load(true) }
 
@@ -134,6 +177,12 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
   if (!year) {
     return <Notice>No academic sessions exist yet. Add one in Fee Settings → Sessions.</Notice>
   }
+
+  // The open charge, re-read after every refresh so the sheet never shows a
+  // stale copy (an opt-in list saved from inside it, say).
+  const openCharge = chargeSheet?.charge
+    ? data.charges.find(c => c.id === chargeSheet.charge!.id) ?? chargeSheet.charge
+    : null
 
   const headRows = [...data.heads].sort((a, b) =>
     (a.frequency === b.frequency ? 0 : a.frequency === 'term' ? -1 : 1) || a.sort - b.sort || a.name.localeCompare(b.name))
@@ -148,7 +197,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       )}
 
       {/* ── The grid's shape: terms and fee heads ──────────────────────── */}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start">
+      <div className="grid gap-3 lg:grid-cols-3 items-start">
         <TitledPanel
           title="Terms" count={data.terms.length || undefined}
           right={canEdit && (
@@ -164,14 +213,18 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
                     className="w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-[7px] text-left border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
               <span className="text-[12.5px] font-semibold text-[#18181B] truncate">{t.name}</span>
               <span className="text-[11px] text-[#6B675A] tabular-nums">due {shortDate(t.due_date)}</span>
-              <span className="w-[62px] text-right">
-                {termLocked(t) && (
-                  <span className={`${chip} bg-[#EAF5EE] text-[#1F6B42] border-[#C6E3D2]`}><Lock size={8} className="inline -mt-px" /> Issued</span>
-                )}
+              <span className="min-w-[62px] text-right">
+                <IssuedChip p={progress.term.get(t.id)} kind="term" />
               </span>
             </button>
           ))}
         </TitledPanel>
+
+        <MonthsPanel
+          yearId={year.id} months={months} dues={data.months} cells={data.cells} canEdit={canEdit}
+          hasMonthly={data.heads.some(h => h.frequency === 'monthly')}
+          onSaved={refresh} onError={msg => setToast(msg)}
+        />
 
         <TitledPanel
           title="Fee heads" count={data.heads.length || undefined}
@@ -184,15 +237,26 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
           {headRows.length === 0 ? (
             <p className="px-3 py-4 text-[12px] text-[#8C8878]">Tuition, Bus, Uniform, ID card, Water bottle — anything the school charges.</p>
           ) : (
-            <div className="grid sm:grid-cols-2">
+            <div>
               {headRows.map(h => (
-                <button key={h.id} onClick={() => canEdit && setHeadSheet({ head: h })}
-                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-[7px] text-left border-b border-[#F0ECE2] sm:odd:border-r hover:bg-[#FAF8F2]">
-                  <span className="text-[12.5px] font-semibold text-[#18181B] truncate flex items-center gap-1.5">
-                    {h.name}
-                    {headLocked(h) && <Lock size={10} className="text-[#1F6B42] flex-shrink-0" />}
-                  </span>
-                  <span className="flex items-center gap-1">
+                <div key={h.id}
+                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-[7px] border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
+                  <button onClick={() => canEdit && setHeadSheet({ head: h })} className="text-left min-w-0">
+                    <span className="block text-[12.5px] font-semibold text-[#18181B] truncate">{h.name}</span>
+                    {h.optional && (
+                      <span className="block text-[10.5px] text-[#8C8878]">
+                        Optional · {data.optins.get(h.id)?.size ?? 0} opted in
+                      </span>
+                    )}
+                  </button>
+                  <span className="flex items-center gap-1 flex-wrap justify-end">
+                    <IssuedChip p={progress.head.get(h.id)} kind="head" />
+                    {h.optional && (
+                      <button onClick={() => setOptHead(h)} title="Open the opt-in list"
+                              className={`${chip} bg-white text-[#7A6220] border-[#B8983C] hover:bg-[#FAF3DF]`}>
+                        Opt-in list
+                      </button>
+                    )}
                     {h.gender_split && (
                       <span className={`${chip} bg-white text-[#52525B] border-[#E3DFD3]`}>B/G</span>
                     )}
@@ -202,7 +266,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
                       {h.frequency === 'monthly' ? 'Monthly' : 'Term-wise'}
                     </span>
                   </span>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -213,7 +277,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       <div className="mt-3">
         <IssueBar
           scope={scope} setScope={setScope}
-          terms={data.terms} heads={data.heads} groups={data.groups} months={months}
+          terms={data.terms} heads={data.heads} groups={data.groups} months={months} monthDue={data.months}
           canIssue={canIssue} onReview={() => setIssueOpen(true)}
         />
       </div>
@@ -222,7 +286,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       <div className="mt-5">
         <SectionBar
           title="Fee grid"
-          hint={<>Session {year.code} · type a price into a cell · <Plus size={10} className="inline -mt-px" /> beside a grade splits it into groups by section</>}
+          hint={<>Session {year.code} · type a price into a cell · <Plus size={10} className="inline -mt-px" /> beside a grade splits it into groups by section · every section must land in a group</>}
           actions={
             <>
               {canEdit && (
@@ -247,9 +311,10 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
           terms={data.terms} heads={data.heads} groups={data.groups} rates={data.rates}
           cells={data.cells} charges={data.charges} issues={data.issues} students={students}
           scope={scope} canEdit={canEdit}
+          optins={data.optins} termProgress={progress.term}
           onCommit={commitRate}
-          onAddGroup={grade => setGroupSheet({ grade, group: null })}
-          onEditGroup={g => setGroupSheet({ grade: g.grade, group: g })}
+          onSplit={grade => setSplitGrade(grade)}
+          onOptIns={h => setOptHead(h)}
           onOpenCharge={c => setChargeSheet({ kind: c.kind, charge: c })}
           onEditTerm={t => setTermSheet({ term: t })}
           onEditHead={h => setHeadSheet({ head: h })}
@@ -280,17 +345,30 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
         head={headSheet?.head ?? null} nextSort={data.heads.length + 1}
         locked={headSheet?.head ? headLocked(headSheet.head) : false} onSaved={refresh}
       />
-      {groupSheet && (
-        <GroupSheet
-          open onClose={() => setGroupSheet(null)} yearId={year.id}
-          grade={groupSheet.grade} group={groupSheet.group} groups={data.groups} students={students}
-          locked={groupSheet.group ? groupLocked(groupSheet.group) : false} onSaved={refresh}
+      {splitGrade !== null && (
+        <SplitSheet
+          open onClose={() => setSplitGrade(null)} yearId={year.id}
+          grade={splitGrade} groups={data.groups} students={students}
+          locked={gradeLocked(splitGrade)}
+          onSaved={(created, first) => void afterSplit(splitGrade, created, first)}
+        />
+      )}
+      {optHead && (
+        <OptInSheet
+          open onClose={() => setOptHead(null)} yearId={year.id}
+          target={{ head_id: optHead.id }}
+          title={`${optHead.name} — opt-in list`}
+          subtitle={`Optional ${optHead.frequency === 'monthly' ? 'monthly' : 'term-wise'} fee. Only ticked students are billed when it is issued.`}
+          students={students} current={data.optins.get(optHead.id) ?? new Set()} canEdit={canEdit}
+          onSaved={refresh}
         />
       )}
       <ChargeSheet
         open={!!chargeSheet} onClose={() => setChargeSheet(null)} yearId={year.id}
-        kind={chargeSheet?.kind ?? 'other'} charge={chargeSheet?.charge ?? null}
-        issue={chargeSheet?.charge ? liveIssueFor(chargeSheet.charge.id) : null}
+        kind={chargeSheet?.kind ?? 'other'} charge={openCharge}
+        issue={openCharge ? liveIssueFor(openCharge.id) : null}
+        optins={openCharge ? data.optins.get(openCharge.id) ?? EMPTY_SET : EMPTY_SET}
+        billed={openCharge ? data.chargeBilled.get(openCharge.id) ?? EMPTY_SET : EMPTY_SET}
         students={students} fineCategories={data.fineCategories}
         canEdit={chargeSheet?.kind === 'fine' ? canFine : canEdit}
         canIssue={chargeSheet?.kind === 'fine' ? canFine : canIssue}
@@ -340,7 +418,7 @@ function CloneLink({
     try {
       const r = await cloneGrid(from, yearId)
       setConfirm(false)
-      onDone(`Copied ${r.terms} terms, ${r.heads} heads, ${r.groups} groups and ${r.rates} prices.`)
+      onDone(`Copied ${r.terms} terms, ${r.heads} heads, ${r.groups} groups, ${r.rates} prices and ${r.months} month due dates.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not copy.')
     } finally {
@@ -369,5 +447,77 @@ function CloneLink({
       )}
       {error && <span className="basis-full text-center text-[#A93232]">{error}</span>}
     </div>
+  )
+}
+
+/**
+ * When each month's fees fall due. Monthly heads are issued against these
+ * dates, so issuing never asks for one. A month without a date falls due on
+ * the 10th; a month already issued keeps its date.
+ */
+function MonthsPanel({
+  yearId, months, dues, cells, canEdit, hasMonthly, onSaved, onError,
+}: {
+  yearId: string
+  months: string[]
+  dues: Map<string, string>
+  cells: { bill_month: string | null }[]
+  canEdit: boolean
+  hasMonthly: boolean
+  onSaved: () => void
+  onError: (msg: string) => void
+}) {
+  const issued = useMemo(() => new Set(cells.map(c => c.bill_month).filter(Boolean) as string[]), [cells])
+  const [day, setDay] = useState('10')
+  const [busy, setBusy] = useState(false)
+
+  const save = async (rows: { month: string; due_date: string }[]) => {
+    setBusy(true)
+    try { await saveMonthDues(yearId, rows); onSaved() }
+    catch (e) { onError(e instanceof Error ? e.message : 'Could not save that date.') }
+    finally { setBusy(false) }
+  }
+
+  const applyDay = () => {
+    const d = Math.min(Math.max(Number(day) || 10, 1), 28)
+    void save(months.filter(m => !issued.has(m)).map(m => ({ month: m, due_date: `${m.slice(0, 8)}${String(d).padStart(2, '0')}` })))
+  }
+
+  return (
+    <TitledPanel title="Monthly due dates">
+      {!hasMonthly && (
+        <p className="px-3 pt-2.5 text-[11px] text-[#8C8878]">Used by monthly heads such as Bus. Add one to start billing by month.</p>
+      )}
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-[#F0ECE2]">
+          <span className="text-[11.5px] text-[#52525B]">Every month on day</span>
+          <input type="number" min={1} max={28} value={day} onChange={e => setDay(e.target.value)}
+                 className={`${ADMIN.inputPlain} !w-[54px] !py-[4px] text-center tabular-nums`} />
+          <button onClick={applyDay} disabled={busy} className={`${ADMIN.ghostBtn} !py-[5px]`}>Apply</button>
+          <span className="text-[10.5px] text-[#A8A395]">Issued months keep theirs</span>
+        </div>
+      )}
+      <div className="grid grid-cols-2">
+        {months.map((m, i) => {
+          const due = dues.get(m) ?? defaultMonthDue(m)
+          const locked = issued.has(m)
+          return (
+            <label key={m}
+                   className={`flex items-center gap-2 px-3 py-[5px] border-b border-[#F0ECE2] ${i % 2 === 0 ? 'border-r' : ''}`}>
+              <span className="text-[11.5px] font-semibold text-[#18181B] w-[64px] flex-shrink-0">{monthLabel(m)}</span>
+              {locked || !canEdit ? (
+                <span className="text-[11px] text-[#6B675A] tabular-nums flex items-center gap-1">
+                  {shortDate(due)} {locked && <Lock size={9} className="text-[#1F6B42]" />}
+                </span>
+              ) : (
+                <input type="date" defaultValue={due} key={due}
+                       onBlur={e => { if (e.target.value && e.target.value !== due) void save([{ month: m, due_date: e.target.value }]) }}
+                       className="min-w-0 flex-1 bg-transparent text-[11px] text-[#6B675A] tabular-nums focus:outline-none focus:text-[#18181B]" />
+              )}
+            </label>
+          )
+        })}
+      </div>
+    </TitledPanel>
   )
 }

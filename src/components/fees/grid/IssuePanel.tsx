@@ -12,7 +12,7 @@ import { ADMIN, INVOICE_CHIP } from '@/components/fees/ui'
 import { CELL, Col, List, ListHead, Row, Segmented, StatStrip } from '@/components/fees/shell'
 import { GRADE_OPTIONS, gradeShortLabel } from '@/lib/grades'
 import {
-  NO_GRADE_LABEL, gridRows, issueBlockers, issueGrid, monthLabel, rowId, rowLabel, undoIssue,
+  NO_GRADE_LABEL, defaultMonthDue, gridRows, issueBlockers, issueGrid, monthLabel, rowId, rowLabel, undoIssue,
   type Blocker, type GridRowKey, type GroupRow, type HeadRow, type IssueRow, type IssueSummary, type TermRow,
 } from '@/lib/fees/grid'
 import { Aside, ErrorNote, FeeSheet, Field, Pick, rupees, shortDate } from './kit'
@@ -28,18 +28,17 @@ export interface IssueScope {
   headIds: Set<string>
   /** Empty = every row. */
   rowIds: Set<string>
-  due: string
 }
 
 export function emptyScope(terms: TermRow[], months: string[]): IssueScope {
   return {
     mode: 'term', termId: terms[0]?.id ?? null, month: months[0] ?? null,
-    headIds: new Set(), rowIds: new Set(), due: '',
+    headIds: new Set(), rowIds: new Set(),
   }
 }
 
 export function IssueBar({
-  scope, setScope, terms, heads, groups, months, canIssue, onReview,
+  scope, setScope, terms, heads, groups, months, monthDue, canIssue, onReview,
 }: {
   scope: IssueScope
   setScope: (s: IssueScope) => void
@@ -47,6 +46,8 @@ export function IssueBar({
   heads: HeadRow[]
   groups: GroupRow[]
   months: string[]
+  /** Month → the due date set for it, if any. Issuing uses it, or the 10th. */
+  monthDue: Map<string, string>
   canIssue: boolean
   onReview: () => void
 }) {
@@ -71,10 +72,10 @@ export function IssueBar({
 
   const ready = scope.mode === 'term' ? !!scope.termId : !!scope.month
   const period = scope.mode === 'term' ? term?.name ?? 'No term' : scope.month ? monthLabel(scope.month) : 'No month'
-  const due = scope.due
-    ? shortDate(scope.due)
-    : scope.mode === 'term' ? (term ? shortDate(term.due_date) : '—')
-    : scope.month ? shortDate(`${scope.month.slice(0, 8)}10`) : '—'
+  // The due date is never asked for here: a term carries its own, and so does
+  // a month (set beside the terms, the 10th if nobody set one).
+  const due = scope.mode === 'term' ? (term ? shortDate(term.due_date) : '—')
+    : scope.month ? shortDate(monthDue.get(scope.month) ?? defaultMonthDue(scope.month)) : '—'
   const summary = [
     period,
     scope.headIds.size === 0 ? `all ${scope.mode === 'term' ? 'term-wise' : 'monthly'} heads` : `${scope.headIds.size} head${scope.headIds.size === 1 ? '' : 's'}`,
@@ -116,12 +117,10 @@ export function IssueBar({
               {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
             </select>
           )}
-          <label className="flex items-center gap-2 sm:ml-auto">
-            <span className={ADMIN.label}>Due</span>
-            <input type="date" value={scope.due} onChange={e => set({ due: e.target.value })}
-                   title={scope.mode === 'term' ? 'Leave empty to use the term’s due date' : 'Leave empty for the 10th of the month'}
-                   className={`${ADMIN.inputPlain} !w-auto !py-[5px]`} />
-          </label>
+          <span className="sm:ml-auto text-[11px] text-[#6B675A]">
+            <span className={ADMIN.label}>Due</span> <span className="font-bold text-[#18181B] tabular-nums ml-1">{due}</span>
+            <span className="text-[#A8A395]"> · {scope.mode === 'term' ? 'the term’s date' : 'set under monthly due dates'}</span>
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
@@ -166,7 +165,7 @@ export function scopeRequest(scope: IssueScope, groups: GroupRow[]) {
   return {
     term_id: scope.mode === 'term' ? scope.termId : null,
     month: scope.mode === 'month' ? scope.month : null,
-    due_date: scope.due || null,
+    due_date: null,
     head_ids: Array.from(scope.headIds),
     rows: scope.rowIds.size ? rows : null,
   }
@@ -253,6 +252,18 @@ export function IssueSheet({
             <Aside tone="good">
               <Lock size={11} className="inline mr-1 -mt-0.5" />
               {preview.already_issued_cells} cell{preview.already_issued_cells === 1 ? ' was' : 's were'} already issued for this period and will be skipped.
+            </Aside>
+          )}
+          {preview.unassigned > 0 && (
+            <Aside tone="warn">
+              <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
+              {preview.unassigned} student{preview.unassigned === 1 ? ' is' : 's are'} in a section that no group of
+              their grade covers, and will not be billed. Finish that grade’s split first if they should be.
+            </Aside>
+          )}
+          {preview.not_opted > 0 && (
+            <Aside>
+              {preview.not_opted} optional line{preview.not_opted === 1 ? '' : 's'} left off for students not on that fee’s opt-in list.
             </Aside>
           )}
           {preview.no_gender > 0 && (

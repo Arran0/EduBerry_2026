@@ -10,18 +10,20 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  AlertOctagon, Check, Loader2, Lock, Pencil, Receipt, Search, Send, Trash2, Undo2, X,
+  AlertOctagon, Check, ListChecks, Loader2, Lock, Pencil, Receipt, Search, Send, Trash2, Undo2, X,
 } from 'lucide-react'
 import { ADMIN, INVOICE_CHIP } from '@/components/fees/ui'
 import { Segmented } from '@/components/fees/shell'
 import { GRADE_OPTIONS, gradeLabel, gradeShortLabel } from '@/lib/grades'
 import {
-  NO_GRADE_LABEL, deleteCharge, issueCharge, saveCharge,
+  NO_GRADE_LABEL, deleteCharge, issueCharge, saveCharge, setChargeOptional,
   type ChargeFilters, type ChargeRow, type FineCategory, type IssueRow, type StudentLite,
 } from '@/lib/fees/grid'
 import { Aside, ErrorNote, FeeSheet, Field, Pick, rupees, shortDate, todayIso } from './kit'
+import OptInSheet from './OptInSheet'
 
 type GenderFilter = 'all' | 'male' | 'female'
+type Payers = 'all' | 'optin'
 const gkey = (g: number | null) => (g === null ? 'none' : String(g))
 
 function plusDays(iso: string, n: number): string {
@@ -43,7 +45,7 @@ function titleProblem(t: string): string | null {
 
 export default function ChargeSheet({
   open, onClose, yearId, kind, charge, issue, students, fineCategories, canEdit, canIssue,
-  onSaved, onUndo,
+  optins, billed, onSaved, onUndo,
 }: {
   open: boolean
   onClose: () => void
@@ -56,6 +58,9 @@ export default function ChargeSheet({
   fineCategories: FineCategory[]
   canEdit: boolean
   canIssue: boolean
+  /** For an optional fee: who has opted in, and who its live issue has billed. */
+  optins: Set<string>
+  billed: Set<string>
   onSaved: () => void
   onUndo: (issue: IssueRow) => void
 }) {
@@ -65,6 +70,8 @@ export default function ChargeSheet({
   const [due, setDue] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<string | null>(null)
+  const [payers, setPayers] = useState<Payers>('all')
+  const [listOpen, setListOpen] = useState(false)
   const [grades, setGrades] = useState<Set<string>>(new Set())
   const [sections, setSections] = useState<Set<string>>(new Set())
   const [gender, setGender] = useState<GenderFilter>('all')
@@ -86,6 +93,7 @@ export default function ChargeSheet({
     setDue(charge?.due_date ?? plusDays(todayIso(), 14))
     setDescription(charge?.description ?? '')
     setCategory(charge?.fine_category_id ?? null)
+    setPayers(charge?.optional ? 'optin' : 'all')
     const f: ChargeFilters = charge?.filters ?? {}
     setGrades(new Set((f.grades ?? []).map(gkey)))
     setSections(new Set(f.sections ?? []))
@@ -160,7 +168,8 @@ export default function ChargeSheet({
     if (selected.length === 0) { setError('Choose at least one student.'); return }
     setBusy(true); setError(null)
     try {
-      await saveCharge(yearId, {
+      const optional = kind === 'other' && payers === 'optin'
+      const id = await saveCharge(yearId, {
         id: charge?.id, kind, title, description, amount: amountNum, due_date: due,
         student_ids: selected.map(s => s.id),
         filters: {
@@ -169,8 +178,11 @@ export default function ChargeSheet({
           gender: gender === 'all' ? null : gender, picked: Array.from(picked),
         },
         fine_category_id: kind === 'fine' ? category : null,
-        issue: issueNow,
+        // An optional fee bills only opted-in students, and nobody has opted
+        // in to a fee that did not exist a moment ago.
+        issue: issueNow && !optional,
       })
+      if (optional !== (charge?.optional ?? false)) await setChargeOptional(id, optional)
       onSaved(); onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.')
@@ -187,6 +199,10 @@ export default function ChargeSheet({
   }
 
   const noun = kind === 'fine' ? 'fine' : 'fee'
+  const offered = charge?.students.map(x => x.student_id) ?? []
+  const optedIn = offered.filter(id => optins.has(id))
+  const toBill = optedIn.filter(id => !billed.has(id)).length
+  const optionalView = !editing && !!charge?.optional
   const total = amountNum > 0 ? amountNum * selected.length : 0
 
   const footer = editing ? (
@@ -197,9 +213,12 @@ export default function ChargeSheet({
       </span>
       <button onClick={() => (charge ? setEditing(false) : onClose())} className={ADMIN.ghostBtn}>Cancel</button>
       {kind === 'other' && (
-        <button onClick={() => void submit(false)} disabled={busy} className={ADMIN.ghostBtn}>Save draft</button>
+        <button onClick={() => void submit(false)} disabled={busy}
+                className={payers === 'optin' ? ADMIN.darkBtn : ADMIN.ghostBtn}>
+          {payers === 'optin' ? 'Save' : 'Save draft'}
+        </button>
       )}
-      {canIssue && (
+      {canIssue && payers === 'all' && (
         <button onClick={() => void submit(true)} disabled={busy} className={ADMIN.goldBtn}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
           {kind === 'fine' ? 'Issue fine' : 'Save & issue'}
@@ -218,7 +237,20 @@ export default function ChargeSheet({
       {!issue && canEdit && (
         <button onClick={() => setEditing(true)} className={ADMIN.ghostBtn}><Pencil size={12} /> Edit</button>
       )}
-      {!issue && canIssue && charge && (
+      {charge?.optional && (
+        <button onClick={() => setListOpen(true)} className={ADMIN.ghostBtn}>
+          <ListChecks size={13} /> Opt-in list
+        </button>
+      )}
+      {charge?.optional && canIssue && (
+        <button onClick={() => void act(() => issueCharge(charge.id))} disabled={busy || toBill === 0}
+                title={toBill === 0 ? 'Nobody on the opt-in list is waiting to be billed' : undefined}
+                className={ADMIN.goldBtn}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+          Bill {toBill} opted in
+        </button>
+      )}
+      {!issue && canIssue && charge && !charge.optional && (
         <button onClick={() => void act(() => issueCharge(charge.id))} disabled={busy} className={ADMIN.goldBtn}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Issue now
         </button>
@@ -292,11 +324,15 @@ export default function ChargeSheet({
         </div>
       ) : (
         <dl className="grid grid-cols-3 border border-[#E3DFD3] bg-white divide-x divide-[#E3DFD3]">
-          {[
+          {(optionalView ? [
+            { k: 'Per student', v: rupees(amountNum) },
+            { k: 'Due', v: shortDate(due) },
+            { k: 'Opted in', v: `${optedIn.length} of ${offered.length}` },
+          ] : [
             { k: 'Per student', v: rupees(amountNum) },
             { k: 'Due', v: shortDate(due) },
             { k: 'Total', v: rupees(total) },
-          ].map(x => (
+          ]).map(x => (
             <div key={x.k} className="px-3 py-2 min-w-0">
               <dt className={ADMIN.label}>{x.k}</dt>
               <dd className="text-[15px] font-bold tabular-nums text-[#18181B] truncate">{x.v}</dd>
@@ -308,6 +344,16 @@ export default function ChargeSheet({
             </p>
           )}
         </dl>
+      )}
+
+      {editing && kind === 'other' && (
+        <Field label="Optional?"
+               hint={payers === 'all'
+                 ? 'Everyone you pick below is billed.'
+                 : 'The students you pick are offered it; only those you then tick on its opt-in list are billed — a trip, a club, a kit.'}>
+          <Segmented<Payers> fill value={payers} onChange={setPayers}
+            options={[{ key: 'all', label: 'Everyone picked pays' }, { key: 'optin', label: 'Only those who opt in' }]} />
+        </Field>
       )}
 
       {/* Who pays */}
@@ -373,9 +419,15 @@ export default function ChargeSheet({
       {/* The students */}
       <div className="bg-white border border-[#E3DFD3]">
         <div className="flex items-center gap-2 bg-[#27272A] px-3 py-1.5">
-          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">Students</span>
+          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">
+            {(editing ? payers === 'optin' : charge?.optional) ? 'Offered to' : 'Students'}
+          </span>
           <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{selected.length}</span>
-          {total > 0 && <span className="ml-auto text-[11px] font-bold tabular-nums text-white">{rupees(total)}</span>}
+          {total > 0 && (
+            <span className="ml-auto text-[11px] font-bold tabular-nums text-white">
+              {optionalView ? `${rupees(amountNum * optedIn.length)} opted in` : rupees(total)}
+            </span>
+          )}
         </div>
         {selected.length === 0 ? (
           <p className="px-3 py-5 text-[12px] text-[#8C8878]">
@@ -398,7 +450,12 @@ export default function ChargeSheet({
                       <X size={13} />
                     </button>
                   )}
-                  {!editing && issue && <Check size={12} className="text-[#1F6B42]" />}
+                  {optionalView && (billed.has(s.id)
+                    ? <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">Billed</span>
+                    : optins.has(s.id)
+                    ? <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">Opted in</span>
+                    : <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#A8A395]">Not opted</span>)}
+                  {!editing && issue && !charge?.optional && <Check size={12} className="text-[#1F6B42]" />}
                 </div>
               ))}
           </div>
@@ -412,6 +469,17 @@ export default function ChargeSheet({
         </Aside>
       )}
       <ErrorNote>{error}</ErrorNote>
+
+      {charge?.optional && (
+        <OptInSheet
+          open={listOpen} onClose={() => setListOpen(false)} yearId={yearId}
+          target={{ charge_id: charge.id }}
+          title={`${charge.title} — opt-in list`}
+          subtitle="Tick the students who are taking it. Only they are billed."
+          students={selected} current={optins} billed={billed} canEdit={canEdit}
+          onSaved={onSaved}
+        />
+      )}
     </FeeSheet>
   )
 }
