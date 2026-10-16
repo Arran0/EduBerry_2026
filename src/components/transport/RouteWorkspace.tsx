@@ -9,9 +9,8 @@
  */
 
 import React, { useState } from 'react'
-import Link from 'next/link'
 import {
-  Archive, Bus, Clock, ExternalLink, IndianRupee, MapPin, Pencil, Power, RotateCcw, Users, UserRound,
+  Archive, ArrowLeftFromLine, ArrowRightToLine, Bus, Clock, IndianRupee, MapPin, Pencil, Power, RotateCcw, Users, UserRound,
 } from 'lucide-react'
 import { archiveRoute, restoreRoute, setRouteActive } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
@@ -26,7 +25,7 @@ import { BUS, GlassSegments } from './glass'
 export type RouteTab = 'stops' | 'schedules' | 'students' | 'fees'
 
 export default function RouteWorkspace({
-  route, vehicles, crew, riders, onChanged, showOpenLink = false, initialTab = 'stops',
+  route, vehicles, crew, riders, onChanged, tab: controlledTab, onTabChange, initialTab = 'stops',
 }: {
   route: TransportRoute
   vehicles: TransportVehicle[]
@@ -34,10 +33,14 @@ export default function RouteWorkspace({
   /** Active rider count, when the caller already has it. */
   riders?: number
   onChanged: () => void
-  showOpenLink?: boolean
+  /** Control the tab from outside (the Configuration search opens a rider's route on Students). */
+  tab?: RouteTab
+  onTabChange?: (tab: RouteTab) => void
   initialTab?: RouteTab
 }) {
-  const [tab, setTab] = useState<RouteTab>(initialTab)
+  const [ownTab, setOwnTab] = useState<RouteTab>(initialTab)
+  const tab = controlledTab ?? ownTab
+  const setTab = (t: RouteTab) => { setOwnTab(t); onTabChange?.(t) }
   const [editing, setEditing] = useState(false)
 
   const capacity = route.default_vehicle?.capacity ?? 0
@@ -65,6 +68,10 @@ export default function RouteWorkspace({
                 <span className="px-2 py-0.5 rounded-md bg-white/15 text-[11px] font-bold tracking-wide">{route.code}</span>
               )}
               <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${status.cls}`}>{status.text}</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-[10.5px] font-bold">
+                {route.direction === 'inbound' ? <ArrowRightToLine size={11} /> : <ArrowLeftFromLine size={11} />}
+                {route.direction === 'inbound' ? 'To school' : 'From school'}
+              </span>
             </div>
             <h2 className="mt-1.5 font-display text-[1.35rem] sm:text-[1.6rem] font-bold leading-tight headline truncate">{route.name}</h2>
             {route.description && <p className="text-[12px] text-white/70 truncate max-w-xl">{route.description}</p>}
@@ -91,11 +98,6 @@ export default function RouteWorkspace({
             >
               {route.archived_at ? <RotateCcw size={15} /> : <Archive size={15} />}
             </HeaderBtn>
-            {showOpenLink && (
-              <Link href={`/more/bus/routes/${route.id}`} className="w-9 h-9 inline-flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/15 transition" title="Open as a full page" aria-label="Open as a full page">
-                <ExternalLink size={15} />
-              </Link>
-            )}
           </div>
         </div>
 
@@ -120,6 +122,7 @@ export default function RouteWorkspace({
 
       <div className="mt-3.5 mb-3.5 flex justify-center sm:justify-start">
         <GlassSegments
+          stretch
           layoutId={`route-tab-${route.id}`}
           value={tab}
           onChange={setTab}
@@ -136,7 +139,7 @@ export default function RouteWorkspace({
         {tab === 'stops' && <StopEditor route={route} />}
         {tab === 'schedules' && <ScheduleEditor route={route} vehicles={vehicles} crew={crew} />}
         {tab === 'students' && <AssignmentEditor route={route} onChanged={onChanged} />}
-        {tab === 'fees' && <RouteFeesEditor route={route} />}
+        {tab === 'fees' && <RouteFeesEditor route={route} onChanged={onChanged} />}
       </div>
 
       {editing && (

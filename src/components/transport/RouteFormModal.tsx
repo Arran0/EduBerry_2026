@@ -5,7 +5,7 @@ import { Route as RouteIcon } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { createRoute, updateRoute } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
-import type { RouteInput, TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
+import type { RouteInput, TransportDirection, TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
 import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
 
 const COLORS = ['#F97316', '#0EA5E9', '#8B5CF6', '#10B981', '#EF4444', '#EAB308', '#EC4899', '#64748B']
@@ -24,6 +24,7 @@ export default function RouteFormModal({
     code: route?.code ?? '',
     description: route?.description ?? '',
     color: route?.color ?? COLORS[0],
+    direction: route?.direction ?? 'inbound',
     default_vehicle_id: route?.default_vehicle_id ?? '',
     default_driver_id: route?.default_driver_id ?? '',
     default_attendant_id: route?.default_attendant_id ?? '',
@@ -68,7 +69,7 @@ export default function RouteFormModal({
       onClose={onClose}
       size="lg"
       title={route ? 'Edit route' : 'New route'}
-      subtitle="Stops, schedules and students attach to a route"
+      subtitle="One direction, one schedule — stops, riders and fees attach to it"
       icon={<RouteIcon size={18} />}
       iconClassName="bg-orange-100 text-orange-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
@@ -89,6 +90,33 @@ export default function RouteFormModal({
             <TextInput value={form.code ?? ''} onChange={e => set('code', e.target.value)} placeholder="R-07" />
           </Field>
         </FormGrid>
+
+        <Field
+          label="Direction *"
+          hint={route && route.direction !== form.direction
+            ? 'Changing direction moves every rider and the schedule over to the new direction; riders keep their stop.'
+            : 'A route runs one way. A child who rides both ways is put on two routes.'}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ['inbound', 'To school', 'Riders are picked up at their stop'],
+              ['outbound', 'From school', 'Riders are dropped at their stop'],
+            ] as [TransportDirection, string, string][]).map(([key, title, sub]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => set('direction', key)}
+                aria-pressed={form.direction === key}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  form.direction === key ? 'border-[#27272A] bg-[#27272A] text-white' : 'border-[#E4E4E7] bg-white text-[#52525B] hover:border-[#D4D4D8]'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{title}</span>
+                <span className={`block text-[11px] ${form.direction === key ? 'text-white/70' : 'text-[#A1A1AA]'}`}>{sub}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
 
         <Field label="Description">
           <TextArea

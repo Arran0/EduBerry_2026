@@ -52,14 +52,13 @@ export default function BusPage() {
 
 function BusPageContent() {
   const { profile } = useAuth()
-  const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false
 
   return (
     <ProtectedLayout>
       <div data-page-theme="bus">
         {isAdmin
-          ? <AdminBusHub onBack={() => router.push('/')} />
+          ? <AdminBusHub />
           : (
             /*
              * Parents and students see an under-construction notice for now.
@@ -143,13 +142,14 @@ const LEGACY_TAB: Record<string, { tab: SectionKey; panel?: PanelKey }> = {
   payroll:  { tab: 'live' },
 }
 
-function AdminBusHub({ onBack }: { onBack: () => void }) {
+function AdminBusHub() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const panelParam = searchParams.get('panel')
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
+  const routeParam = searchParams.get('route')
 
   // ?tab=payroll used to open a tab that no longer exists here.
   useEffect(() => {
@@ -167,13 +167,15 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 
   const [section, setSection] = useState<SectionKey>(initialTab)
   const [panel, setPanel] = useState<PanelKey | null>(initialPanel)
+  const [routeId, setRouteId] = useState<string | null>(routeParam)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   // One place that writes the URL, so a tab change and a popup open can never
   // disagree about what the address bar says.
-  const syncUrl = useCallback((tab: SectionKey, open: PanelKey | null) => {
+  const syncUrl = useCallback((tab: SectionKey, open: PanelKey | null, route: string | null = null) => {
     const qs = new URLSearchParams()
     if (tab !== 'live') qs.set('tab', tab)
+    if (tab === 'config' && route) qs.set('route', route)
     if (open) qs.set('panel', open)
     const q = qs.toString()
     router.replace(q ? `/more/bus?${q}` : '/more/bus', { scroll: false })
@@ -181,23 +183,31 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 
   const selectSection = (key: SectionKey) => {
     setSection(key)
-    syncUrl(key, panel)
+    syncUrl(key, panel, routeId)
   }
 
   const openPanel = (key: PanelKey) => {
     setPanel(key)
-    syncUrl(section, key)
+    syncUrl(section, key, routeId)
   }
 
   const closePanel = () => {
     setPanel(null)
-    syncUrl(section, null)
+    syncUrl(section, null, routeId)
   }
+
+  // The open route lives in the URL, so a route can be linked to directly.
+  const selectRoute = useCallback((id: string | null) => {
+    setRouteId(id)
+    syncUrl('config', panel, id)
+  }, [syncUrl, panel])
 
   const panelMeta = panel ? PANELS[panel] : null
 
   return (
     <div style={{ minHeight: '100vh' }}>
+      {/* No back button: it cost the banner a whole row, and the app's own
+          navigation already goes back. */}
       <PageBanner
         settingKey="bus_banner"
         defaultBanner={BUS_BANNER_DEFAULT}
@@ -205,7 +215,6 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         title="Transport"
         subtitle="Live fleet, boarding, routes, fees & crew"
         isAdmin
-        onBack={onBack}
         onEditingChange={setBannerEditing}
         maxWidth={ADMIN.shellWidth}
         backgroundIcon={<Bus size={150} className="text-white" />}
@@ -232,7 +241,9 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
               onOpenLedger={() => openPanel('ledger')}
             />
           )}
-          {section === 'config' && <ConfigurationSection onOpenPanel={openPanel} />}
+          {section === 'config' && (
+            <ConfigurationSection onOpenPanel={openPanel} routeId={routeId} onRouteChange={selectRoute} />
+          )}
         </div>
       </div>
 

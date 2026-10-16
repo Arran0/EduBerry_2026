@@ -147,6 +147,13 @@ export interface TransportRoute {
   code: string | null
   description: string | null
   color: string
+  /**
+   * A route runs one way only: to school (`inbound`) or from school
+   * (`outbound`). A child who rides both ways is on two routes.
+   */
+  direction: TransportDirection
+  /** How riders are priced: by their stop, by an amount per student, or not chosen yet. */
+  fee_mode: RouteFeeMode | null
   default_vehicle_id: string | null
   default_driver_id: string | null
   default_attendant_id: string | null
@@ -168,11 +175,15 @@ export interface TransportRoute {
   default_attendant?: Pick<UserProfile, 'id' | 'full_name' | 'avatar_url' | 'role'> | null
 }
 
+export type RouteFeeMode = 'stop' | 'student'
+
 export interface RouteInput {
   name: string
   code?: string | null
   description?: string | null
   color?: string
+  direction?: TransportDirection
+  fee_mode?: RouteFeeMode | null
   default_vehicle_id?: string | null
   default_driver_id?: string | null
   default_attendant_id?: string | null

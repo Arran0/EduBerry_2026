@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Users, Search, Plus, X, MapPin, AlertTriangle, Sunrise, Sunset } from 'lucide-react'
+import { Users, Search, Plus, X, MapPin, AlertTriangle } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   fetchAssignments, endAssignment, updateAssignment, assignStudents,
@@ -15,24 +15,22 @@ import { EmptyNote, GINPUT } from './glass'
 interface Candidate { id: string; full_name: string; avatar_url?: string | null; grade?: number | null; section?: string | null }
 
 const SELECT =
-  'h-8 rounded-lg bg-white border border-slate-200 px-2 text-xs text-slate-800 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 min-w-[8.5rem]'
+  'h-8 rounded-lg bg-white border border-slate-200 px-2 text-xs text-slate-800 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 min-w-[10rem]'
 
-/** Which trips of the day a set of assignments already covers. */
-function covered(rows: AssignedRoute[]): { inbound: boolean; outbound: boolean } {
-  return {
-    inbound: rows.some(r => r.rides_inbound),
-    outbound: rows.some(r => r.rides_outbound),
-  }
-}
+const directionNote = (o: AssignedRoute) =>
+  o.rides_inbound && !o.rides_outbound ? ' (to school)' : !o.rides_inbound && o.rides_outbound ? ' (from school)' : ''
 
 /**
- * Who rides this route, where they get on and off, and which trips of the day.
+ * Who rides this route, and their one stop on it.
  *
- * A child can be on more than one route — the morning bus 2 and the evening
- * bus 10 — so a student already on another route can still be added here. The
- * new assignment defaults to whichever direction they are not yet covered for,
- * and each row carries a To school / From school toggle. Each route a child
- * rides is billed separately (see the Fees tab).
+ * A route runs one way, so a rider has one stop: where they are picked up on a
+ * to-school route, where they are dropped on a from-school route. A child who
+ * rides both ways is on two routes — one each way — so a student already on
+ * another route can still be added here for the other half of their day.
+ *
+ * The stop is stored as the pickup stop either way (it is "their stop" to every
+ * screen that reads it); on a from-school route the drop stop mirrors it,
+ * because that is the column the trip builder reads for that direction.
  */
 export default function AssignmentEditor({ route, onChanged }: { route: TransportRoute; onChanged?: () => void }) {
   const [assignments, setAssignments] = useState<TransportAssignment[]>([])
@@ -43,10 +41,13 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
   const [elsewhere, setElsewhere] = useState<Record<string, AssignedRoute[]>>({})
   const [searching, setSearching] = useState(false)
 
+  const inbound = route.direction === 'inbound'
+  const stopWord = inbound ? 'pickup point' : 'drop point'
+
   const load = useCallback(async () => {
     setLoading(true)
     const [a, s] = await Promise.all([fetchAssignments(route.id), fetchStops(route.id)])
-    setAssignments(a); setStops(s); setLoading(false)
+    setAssignments(a); setStops(s.filter(x => x.kind !== 'school')); setLoading(false)
   }, [route.id])
 
   useEffect(() => { load() }, [load])
@@ -74,29 +75,15 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
   const unassignedStop = assignments.filter(a => !a.pickup_stop_id).length
 
   const add = async (c: Candidate) => {
-    const others = (elsewhere[c.id] ?? []).filter(r => r.route_id !== route.id)
-    const has = covered(others)
-    // Fill the gap: someone already on a morning bus elsewhere joins this one
-    // for the evening, and vice versa. Fully covered or new → both ways.
-    const directions = has.inbound && !has.outbound ? { inbound: false, outbound: true }
-      : has.outbound && !has.inbound ? { inbound: true, outbound: false }
-      : { inbound: true, outbound: true }
-    const res = await assignStudents(route.id, [c.id], {}, directions)
+    const res = await assignStudents(route.id, [c.id], {}, { inbound, outbound: !inbound })
     if (res.success) { setQuery(''); setResults([]); await load(); onChanged?.() }
   }
 
-  const patch = async (a: TransportAssignment, input: Partial<TransportAssignment>) => {
-    setAssignments(as => as.map(x => (x.id === a.id ? { ...x, ...input } : x)))
-    await updateAssignment(a.id, input as never)
-  }
-
-  const toggleDirection = (a: TransportAssignment, dir: 'inbound' | 'outbound') => {
-    const next = dir === 'inbound'
-      ? { rides_inbound: !a.rides_inbound, rides_outbound: a.rides_outbound }
-      : { rides_inbound: a.rides_inbound, rides_outbound: !a.rides_outbound }
-    // Riding neither direction is not riding — end the assignment instead.
-    if (!next.rides_inbound && !next.rides_outbound) return
-    patch(a, next)
+  const setStop = async (a: TransportAssignment, stopId: string | null) => {
+    const patch = { pickup_stop_id: stopId, drop_stop_id: inbound ? null : stopId }
+    setAssignments(as => as.map(x => (x.id === a.id ? { ...x, ...patch } : x)))
+    await updateAssignment(a.id, patch)
+    load()
   }
 
   return (
@@ -116,7 +103,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
         {unassignedStop > 0 && (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
             <MapPin size={12} />
-            {unassignedStop} without a stop — no ETA, no boarding prompt, no grid price
+            {unassignedStop} without a {stopWord} — no ETA, no boarding prompt, no stop price
           </span>
         )}
       </div>
@@ -162,8 +149,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
                       <span className="block text-[11px] text-slate-500 truncate">
                         {r.grade ? `Grade ${r.grade}${r.section ? ` · ${r.section}` : ''}` : 'No class'}
                         {onThis && ' · already on this route'}
-                        {!onThis && others.length > 0 && ` · also on ${others.map(o =>
-                          `${o.route_name}${o.rides_inbound && !o.rides_outbound ? ' (morning)' : !o.rides_inbound && o.rides_outbound ? ' (evening)' : ''}`).join(', ')}`}
+                        {!onThis && others.length > 0 && ` · also on ${others.map(o => `${o.route_name}${directionNote(o)}`).join(', ')}`}
                       </span>
                     </span>
                     {!onThis && <Plus size={15} className="text-slate-400 flex-shrink-0" />}
@@ -177,7 +163,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
 
       {stops.length === 0 && (
         <p className="text-[11.5px] text-amber-600">
-          This route has no stops yet, so riders cannot be given a pickup point. Add stops first.
+          This route has no stops yet, so riders cannot be given a {stopWord}. Add stops first.
         </p>
       )}
 
@@ -187,7 +173,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
         <EmptyNote
           icon={Users}
           title="Nobody rides this route yet"
-          detail="Search above to add students, then give each one a pickup and drop stop."
+          detail={`Search above to add students, then give each one a ${stopWord}.`}
         />
       ) : (
         <ul className="divide-y divide-slate-200/70 rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden">
@@ -202,31 +188,14 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
                 </p>
               </div>
 
-              <div className="lg-pill inline-flex items-center p-0.5" role="group" aria-label="Trips ridden">
-                <DirToggle on={a.rides_inbound} onClick={() => toggleDirection(a, 'inbound')} icon={<Sunrise size={12} />} label="To school" />
-                <DirToggle on={a.rides_outbound} onClick={() => toggleDirection(a, 'outbound')} icon={<Sunset size={12} />} label="From school" />
-              </div>
-
               <label className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pickup</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{stopWord}</span>
                 <select
-                  className={SELECT}
+                  className={`${SELECT} ${a.pickup_stop_id ? '' : '!border-amber-300 !bg-amber-50/60'}`}
                   value={a.pickup_stop_id ?? ''}
-                  onChange={async e => { await patch(a, { pickup_stop_id: e.target.value || null }); load() }}
+                  onChange={e => setStop(a, e.target.value || null)}
                 >
                   <option value="">Not set</option>
-                  {stops.map(s => <option key={s.id} value={s.id}>{s.seq}. {s.name}</option>)}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Drop</span>
-                <select
-                  className={SELECT}
-                  value={a.drop_stop_id ?? ''}
-                  onChange={async e => { await patch(a, { drop_stop_id: e.target.value || null }); load() }}
-                >
-                  <option value="">Same as pickup</option>
                   {stops.map(s => <option key={s.id} value={s.id}>{s.seq}. {s.name}</option>)}
                 </select>
               </label>
@@ -251,7 +220,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
 
       {stops.length > 0 && assignments.length > 0 && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Riders per stop</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Riders per {stopWord}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {stops.map(s => (
               <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/80 border border-slate-200/70 text-slate-700">
@@ -263,20 +232,5 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
         </div>
       )}
     </div>
-  )
-}
-
-function DirToggle({ on, onClick, icon, label }: { on: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={on}
-      title={on ? `Rides ${label.toLowerCase()}` : `Doesn't ride ${label.toLowerCase()}`}
-      className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-semibold transition ${
-        on ? 'bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-sm' : 'text-slate-400 hover:text-slate-700'
-      }`}
-    >
-      {icon}<span className="hidden md:inline">{label}</span>
-    </button>
   )
 }

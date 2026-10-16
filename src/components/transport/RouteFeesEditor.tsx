@@ -1,24 +1,25 @@
 'use client'
 
 /**
- * A trip's fee grid, and what every rider on it will be billed.
+ * How a route is priced, and what every rider on it will be billed.
  *
- * Top: one row per stop — a round-trip price and an optional one-way price.
- * Below: every rider, the amount that grid gives them, and a custom amount that
- * overrides it for that child alone. The figure shown is always the one a bill
- * would carry, with where it came from beside it, so nobody has to work out
- * which rule applied.
+ * The first decision is the route's: price by stop (each stop has a monthly
+ * price and riders pay their stop's) or by student (each rider has their own
+ * amount). Until that is chosen the tab asks nothing else, and the route's
+ * riders are left out of billing runs. Switching later keeps both sets of
+ * amounts — only the chosen one bills.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { IndianRupee, MapPin, Receipt, RotateCcw, Users } from 'lucide-react'
+import { IndianRupee, MapPin, Receipt, UserRound, Users, Wand2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINRExact } from '@/lib/formatMoney'
 import { fetchAssignments, updateAssignment } from '@/lib/transport/assignments'
 import { fetchStops } from '@/lib/transport/stops'
-import { fetchStopFees, resolveRiderFee, saveStopFee, type StopFee } from '@/lib/transport/fees'
-import type { TransportAssignment, TransportRoute, TransportStop } from '@/lib/transport/types'
-import { EmptyNote, GBTN } from './glass'
+import { updateRoute } from '@/lib/transport/routes'
+import { fetchStopFees, resolveRiderFee, riderStopId, saveStopFee, type StopFee } from '@/lib/transport/fees'
+import type { RouteFeeMode, TransportAssignment, TransportRoute, TransportStop } from '@/lib/transport/types'
+import { BUS, EmptyNote, GBTN, GlassSegments } from './glass'
 import BillingRun from './BillingRun'
 
 const MONEY =
@@ -31,7 +32,7 @@ const toNum = (s: string): number | null => {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null
 }
 
-/** A rupee input that saves on blur or Enter, and shows a tick while it does. */
+/** A rupee input that saves on blur or Enter, and flashes green when it has. */
 function MoneyInput({ value, placeholder, onCommit, label }: {
   value: number | null
   placeholder?: string
@@ -39,16 +40,15 @@ function MoneyInput({ value, placeholder, onCommit, label }: {
   label: string
 }) {
   const [draft, setDraft] = useState(value == null ? '' : String(value))
-  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [saved, setSaved] = useState(false)
   useEffect(() => { setDraft(value == null ? '' : String(value)) }, [value])
 
   const commit = async () => {
     const next = toNum(draft)
-    if (next === value || (draft.trim() === '' && value == null)) return
-    setState('saving')
+    if (next === value) return
     await onCommit(next)
-    setState('saved')
-    setTimeout(() => setState('idle'), 1200)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1200)
   }
 
   return (
@@ -57,7 +57,7 @@ function MoneyInput({ value, placeholder, onCommit, label }: {
       <input
         inputMode="decimal"
         aria-label={label}
-        className={`${MONEY} ${state === 'saved' ? '!border-emerald-400' : ''}`}
+        className={`${MONEY} ${saved ? '!border-emerald-400' : ''}`}
         value={draft}
         placeholder={placeholder}
         onChange={e => setDraft(e.target.value.replace(/[^\d.]/g, ''))}
@@ -68,12 +68,16 @@ function MoneyInput({ value, placeholder, onCommit, label }: {
   )
 }
 
-export default function RouteFeesEditor({ route }: { route: TransportRoute }) {
+export default function RouteFeesEditor({ route, onChanged }: { route: TransportRoute; onChanged?: () => void }) {
+  const [mode, setMode] = useState<RouteFeeMode | null>(route.fee_mode ?? null)
   const [stops, setStops] = useState<TransportStop[]>([])
   const [grid, setGrid] = useState<Record<string, StopFee>>({})
   const [riders, setRiders] = useState<TransportAssignment[]>([])
   const [loading, setLoading] = useState(true)
   const [issuing, setIssuing] = useState(false)
+  const [fillAmount, setFillAmount] = useState('')
+
+  useEffect(() => { setMode(route.fee_mode ?? null) }, [route.fee_mode])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,164 +87,197 @@ export default function RouteFeesEditor({ route }: { route: TransportRoute }) {
 
   useEffect(() => { load() }, [load])
 
+  const chooseMode = async (next: RouteFeeMode) => {
+    setMode(next)
+    await updateRoute(route.id, { fee_mode: next })
+    onChanged?.()
+  }
+
   const ridersAt = useMemo(() => {
     const m: Record<string, number> = {}
-    for (const a of riders) {
-      for (const id of new Set([a.pickup_stop_id, a.drop_stop_id].filter(Boolean) as string[])) m[id] = (m[id] ?? 0) + 1
-    }
+    for (const a of riders) { const id = riderStopId(a); if (id) m[id] = (m[id] ?? 0) + 1 }
     return m
   }, [riders])
 
-  const resolved = useMemo(
-    () => riders.map(a => ({ a, fee: resolveRiderFee(a, grid) })),
-    [riders, grid],
-  )
+  const resolved = useMemo(() => riders.map(a => ({ a, fee: resolveRiderFee(a, grid, mode) })), [riders, grid, mode])
   const monthly = resolved.reduce((t, r) => t + (r.fee.amount ?? 0), 0)
-  const missing = resolved.filter(r => r.fee.source === 'missing').length
-  const custom = resolved.filter(r => r.fee.source === 'custom').length
+  const missing = resolved.filter(r => r.fee.amount == null).length
 
-  const setStopFee = async (stopId: string, key: 'amount_round' | 'amount_one_way', v: number | null) => {
-    const cur = grid[stopId] ?? { stop_id: stopId, route_id: route.id, amount_round: null, amount_one_way: null }
-    const next = { ...cur, [key]: v }
-    setGrid(g => ({ ...g, [stopId]: next }))
-    await saveStopFee(stopId, route.id, { amount_round: next.amount_round, amount_one_way: next.amount_one_way })
+  const setStopFee = async (stopId: string, v: number | null) => {
+    setGrid(g => ({ ...g, [stopId]: { stop_id: stopId, route_id: route.id, amount: v } }))
+    await saveStopFee(stopId, route.id, v)
   }
 
-  const setCustom = async (a: TransportAssignment, v: number | null) => {
+  const setStudentFee = async (a: TransportAssignment, v: number | null) => {
     setRiders(rs => rs.map(x => (x.id === a.id ? { ...x, fee_amount: v } : x)))
     await updateAssignment(a.id, { fee_amount: v })
+  }
+
+  const fillEmpty = async () => {
+    const v = toNum(fillAmount)
+    if (v == null) return
+    const empty = riders.filter(a => a.fee_amount == null)
+    setRiders(rs => rs.map(x => (x.fee_amount == null ? { ...x, fee_amount: v } : x)))
+    await Promise.all(empty.map(a => updateAssignment(a.id, { fee_amount: v })))
+    setFillAmount('')
   }
 
   if (loading) {
     return <div className="space-y-2">{[0, 1, 2, 3].map(i => <div key={i} className="h-12 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
   }
 
+  // ── Step one: choose how this route is priced ──────────────────────
+  if (!mode) {
+    return (
+      <div className="py-2">
+        <h3 className="text-[15px] font-bold text-slate-900">How is this route priced?</h3>
+        <p className="mt-0.5 text-[12px] text-slate-500 max-w-xl">
+          Choose once for the route. Its riders are left out of billing until you do. You can switch later — the
+          amounts you entered for the other way are kept.
+        </p>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ModeCard
+            icon={MapPin}
+            title="By stop"
+            detail={`Give each ${route.direction === 'inbound' ? 'pickup' : 'drop'} point a monthly price. Every rider pays the price of their stop — the usual choice when fares follow distance.`}
+            onClick={() => chooseMode('stop')}
+          />
+          <ModeCard
+            icon={UserRound}
+            title="By student"
+            detail="Type a monthly amount for each rider. For schools that agree a fare per family, or where every child pays something different."
+            onClick={() => chooseMode('student')}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
-      {/* Summary */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <GlassSegments
+          layoutId={`fee-mode-${route.id}`}
+          size="sm"
+          value={mode}
+          onChange={chooseMode}
+          items={[
+            { key: 'stop', label: 'Priced by stop', icon: MapPin },
+            { key: 'student', label: 'Priced by student', icon: UserRound },
+          ]}
+        />
+        <button className={GBTN.primary} onClick={() => setIssuing(v => !v)} disabled={riders.length === 0}>
+          <Receipt size={14} /> {issuing ? 'Close' : 'Issue a month'}
+        </button>
+      </div>
+
+      {issuing && <BillingRun routeIds={[route.id]} compact onIssued={load} />}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         <Mini icon={IndianRupee} label="Billed per month" value={fmtINRExact(monthly)} />
         <Mini icon={Users} label="Riders priced" value={`${riders.length - missing}/${riders.length}`} tone={missing > 0 ? 'warn' : undefined} />
-        <Mini icon={MapPin} label="Stops priced" value={`${stops.filter(s => grid[s.id]?.amount_round != null).length}/${stops.length}`} />
-        <Mini icon={Receipt} label="Custom amounts" value={String(custom)} />
+        {mode === 'stop' ? (
+          <Mini icon={MapPin} label="Stops priced" value={`${stops.filter(s => grid[s.id]?.amount != null).length}/${stops.length}`} />
+        ) : (
+          <Mini icon={UserRound} label="Average per rider" value={riders.length - missing > 0 ? fmtINRExact(monthly / (riders.length - missing)) : '—'} />
+        )}
+        <Mini icon={Receipt} label="Bills per month" value={String(riders.length - missing)} />
       </div>
 
-      {/* The grid */}
-      <section>
-        <div className="flex items-end justify-between gap-3 mb-2">
-          <div>
-            <h3 className="text-[13px] font-bold text-slate-900">Fee grid</h3>
-            <p className="text-[11.5px] text-slate-500 leading-snug max-w-xl">
-              Price each stop once. A child riding both ways pays the round-trip price of the dearer of
-              their pickup and drop stops; a child riding one way pays the one-way price (or the
-              round-trip price if no one-way price is set).
-            </p>
-          </div>
-        </div>
-
-        {stops.length === 0 ? (
-          <EmptyNote icon={MapPin} title="No stops to price yet" detail="Add this route's stops on the Stops tab, then come back to set their fees." />
+      {mode === 'stop' ? (
+        stops.length === 0 ? (
+          <EmptyNote icon={MapPin} title="No stops to price yet" detail="Add this route's stops on the Stops tab, then come back to price them." />
         ) : (
-          <div className="rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden">
-            <div className="hidden sm:grid grid-cols-[2.25rem_1fr_5rem_8.5rem_8.5rem] gap-3 items-center px-3 py-2 bg-slate-50/80 border-b border-slate-200/70">
-              <span />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Stop</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">Riders</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Round trip / mo</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">One way / mo</span>
+          <section>
+            <h3 className="mb-2 text-[13px] font-bold text-slate-900">
+              Price per {route.direction === 'inbound' ? 'pickup' : 'drop'} point
+            </h3>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden">
+              <div className="hidden sm:grid grid-cols-[2.25rem_1fr_5rem_8rem_7rem] gap-3 items-center px-3 py-2 bg-slate-50/80 border-b border-slate-200/70 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span /><span>Stop</span><span className="text-center">Riders</span><span className="text-right">Per month</span><span className="text-right">Stop total</span>
+              </div>
+              <ul className="divide-y divide-slate-200/60">
+                {stops.map(s => {
+                  const amt = grid[s.id]?.amount ?? null
+                  const n = ridersAt[s.id] ?? 0
+                  return (
+                    <li key={s.id} className="grid grid-cols-[2.25rem_1fr_7rem] sm:grid-cols-[2.25rem_1fr_5rem_8rem_7rem] gap-x-3 items-center px-3 py-2">
+                      <StopDot seq={s.seq} color={route.color} />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-slate-900 truncate">{s.name}</span>
+                        <span className="block text-[11px] text-slate-500 truncate sm:hidden">{n} rider{n === 1 ? '' : 's'}</span>
+                        {s.landmark && <span className="hidden sm:block text-[11px] text-slate-500 truncate">{s.landmark}</span>}
+                      </span>
+                      <span className="hidden sm:block text-center text-sm tabular-nums text-slate-600">{n}</span>
+                      <MoneyInput label={`Monthly fee for ${s.name}`} value={amt} placeholder="Set price" onCommit={v => setStopFee(s.id, v)} />
+                      <span className="hidden sm:block text-right text-sm font-semibold tabular-nums text-slate-700">
+                        {amt != null && n > 0 ? fmtINRExact(amt * n) : '—'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
-            <ul className="divide-y divide-slate-200/60">
-              {stops.map(s => (
-                <li key={s.id} className="grid grid-cols-[2.25rem_1fr] sm:grid-cols-[2.25rem_1fr_5rem_8.5rem_8.5rem] gap-x-3 gap-y-2 items-center px-3 py-2">
-                  <span className="w-7 h-7 rounded-full text-[11px] font-bold text-white flex items-center justify-center shadow-sm"
-                    style={{ background: `linear-gradient(135deg, ${route.color}, color-mix(in srgb, ${route.color} 70%, black))` }}>
-                    {s.seq}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-slate-900 truncate">{s.name}</span>
-                    {s.landmark && <span className="block text-[11px] text-slate-500 truncate">{s.landmark}</span>}
-                  </span>
-                  <span className="hidden sm:block text-center text-sm tabular-nums text-slate-600">{ridersAt[s.id] ?? 0}</span>
-                  <div className="col-span-2 sm:col-span-1 grid grid-cols-2 sm:contents gap-2">
-                    <MoneyInput
-                      label={`Round trip fee for ${s.name}`}
-                      value={grid[s.id]?.amount_round ?? null}
-                      placeholder="—"
-                      onCommit={v => setStopFee(s.id, 'amount_round', v)}
-                    />
-                    <MoneyInput
-                      label={`One way fee for ${s.name}`}
-                      value={grid[s.id]?.amount_one_way ?? null}
-                      placeholder={grid[s.id]?.amount_round != null ? String(grid[s.id]?.amount_round) : '—'}
-                      onCommit={v => setStopFee(s.id, 'amount_one_way', v)}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
+          </section>
+        )
+      ) : null}
 
-      {/* Riders */}
       <section>
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-2">
-          <div>
-            <h3 className="text-[13px] font-bold text-slate-900">What each rider pays</h3>
-            <p className="text-[11.5px] text-slate-500 leading-snug max-w-xl">
-              From the grid unless you type a custom amount, which applies to that child on this trip only.
-              A child on two trips gets a bill for each.
-            </p>
-          </div>
-          <button className={GBTN.primary} onClick={() => setIssuing(v => !v)} disabled={riders.length === 0}>
-            <Receipt size={14} /> {issuing ? 'Close' : 'Issue a month'}
-          </button>
+        <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+          <h3 className="text-[13px] font-bold text-slate-900">
+            {mode === 'stop' ? 'What each rider pays' : 'Amount per rider'}
+          </h3>
+          {mode === 'student' && riders.some(a => a.fee_amount == null) && (
+            <div className="flex items-center gap-1.5">
+              <div className="relative w-28">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-400 pointer-events-none">₹</span>
+                <input
+                  inputMode="decimal"
+                  aria-label="Amount for riders without one"
+                  className={MONEY}
+                  value={fillAmount}
+                  placeholder="Amount"
+                  onChange={e => setFillAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                  onKeyDown={e => { if (e.key === 'Enter') fillEmpty() }}
+                />
+              </div>
+              <button className={GBTN.secondary} onClick={fillEmpty} disabled={toNum(fillAmount) == null}>
+                <Wand2 size={13} /> Fill empty
+              </button>
+            </div>
+          )}
         </div>
-
-        {issuing && (
-          <div className="mb-3">
-            <BillingRun routeIds={[route.id]} compact onIssued={load} />
-          </div>
-        )}
 
         {riders.length === 0 ? (
           <EmptyNote icon={Users} title="No riders on this route" detail="Add students on the Students tab." />
         ) : (
           <ul className="rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden divide-y divide-slate-200/60">
-            {resolved.map(({ a, fee }) => {
-              const both = a.rides_inbound && a.rides_outbound
-              const trips = both ? 'Both ways' : a.rides_inbound ? 'To school only' : 'From school only'
-              const gridOnly = resolveRiderFee({ ...a, fee_amount: null }, grid)
-              return (
-                <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-                  <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={30} userId={a.student_id} />
-                  <div className="flex-1 min-w-[10rem]">
-                    <p className="text-sm font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</p>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      {trips} · {a.pickup_stop?.name ?? 'no pickup stop'}
-                      {a.drop_stop && a.drop_stop.id !== a.pickup_stop_id ? ` → ${a.drop_stop.name}` : ''}
-                    </p>
-                  </div>
-                  <SourcePill source={fee.source} basis={fee.basis} />
-                  <span className={`w-24 text-right text-sm font-bold tabular-nums ${fee.amount == null ? 'text-amber-600' : 'text-slate-900'}`}>
-                    {fee.amount == null ? 'No price' : fmtINRExact(fee.amount)}
+            {resolved.map(({ a, fee }) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+                <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={30} userId={a.student_id} />
+                <div className="flex-1 min-w-[10rem]">
+                  <p className="text-sm font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {route.direction === 'inbound' ? 'Picked up at ' : 'Dropped at '}
+                    {a.pickup_stop?.name ?? <span className="text-amber-600">no stop set</span>}
+                  </p>
+                </div>
+                {mode === 'stop' ? (
+                  <span className={`w-28 text-right text-sm font-bold tabular-nums ${fee.amount == null ? 'text-amber-600' : 'text-slate-900'}`}>
+                    {fee.amount != null ? fmtINRExact(fee.amount) : riderStopId(a) ? 'Stop unpriced' : 'No stop'}
                   </span>
-                  <div className="w-32 flex items-center gap-1">
+                ) : (
+                  <div className="w-32">
                     <MoneyInput
-                      label={`Custom fee for ${a.student?.full_name ?? 'rider'}`}
+                      label={`Monthly fee for ${a.student?.full_name ?? 'rider'}`}
                       value={a.fee_amount ?? null}
-                      placeholder={gridOnly.amount != null ? `${gridOnly.amount}` : 'Custom'}
-                      onCommit={v => setCustom(a, v)}
+                      placeholder="Amount"
+                      onCommit={v => setStudentFee(a, v)}
                     />
-                    {a.fee_amount != null && (
-                      <button onClick={() => setCustom(a, null)} className="w-7 h-7 flex-shrink-0 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-slate-800 hover:bg-white" title="Back to the grid price" aria-label="Clear custom amount">
-                        <RotateCcw size={13} />
-                      </button>
-                    )}
                   </div>
-                </li>
-              )
-            })}
+                )}
+              </li>
+            ))}
           </ul>
         )}
       </section>
@@ -248,13 +285,29 @@ export default function RouteFeesEditor({ route }: { route: TransportRoute }) {
   )
 }
 
-function SourcePill({ source, basis }: { source: 'custom' | 'grid' | 'missing'; basis: 'round' | 'one_way' | null }) {
-  const cfg = source === 'custom'
-    ? { text: 'Custom', cls: 'bg-[#F5EEDC] text-[#8B6F47] border-[#E9DDBB]' }
-    : source === 'grid'
-      ? { text: basis === 'one_way' ? 'Grid · one way' : 'Grid · round trip', cls: 'bg-slate-50 text-slate-600 border-slate-200' }
-      : { text: 'Set a price', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
-  return <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.text}</span>
+function ModeCard({ icon: Icon, title, detail, onClick }: { icon: React.ElementType; title: string; detail: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="group text-left rounded-2xl border border-slate-200/80 bg-white/80 p-4 transition hover:bg-white hover:border-[#B8983C]/60 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-18px_rgba(15,23,42,.5)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+    >
+      <span className="icon-chip w-10 h-10" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
+        <Icon size={17} className="relative z-10 text-white" />
+      </span>
+      <span className="mt-3 block text-sm font-bold text-slate-900">{title}</span>
+      <span className="mt-1 block text-[12px] leading-snug text-slate-500">{detail}</span>
+      <span className="mt-3 inline-flex text-[12px] font-semibold text-[#8B6F47] group-hover:underline underline-offset-2">Use this →</span>
+    </button>
+  )
+}
+
+function StopDot({ seq, color }: { seq: number; color: string }) {
+  return (
+    <span className="w-7 h-7 rounded-full text-[11px] font-bold text-white flex items-center justify-center shadow-sm"
+      style={{ background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, black))` }}>
+      {seq}
+    </span>
+  )
 }
 
 function Mini({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: string; tone?: 'warn' }) {

@@ -165,7 +165,7 @@ export function GlassButtonGroup({ items, className = '' }: {
  * Segmented control in glass, with a sliding honey-gold thumb — the iOS
  * segmented control, in the bus palette.
  */
-export function GlassSegments<T extends string>({ items, value, onChange, className = '', size = 'md', layoutId }: {
+export function GlassSegments<T extends string>({ items, value, onChange, className = '', size = 'md', layoutId, stretch = false }: {
   items: { key: T; label: string; icon?: LucideIcon; count?: number | null }[]
   value: T
   onChange: (key: T) => void
@@ -173,10 +173,12 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
   size?: 'sm' | 'md'
   /** Unique per control on a page so two thumbs never animate into each other. */
   layoutId: string
+  /** Fill the width on a phone, splitting it evenly and dropping the icons. */
+  stretch?: boolean
 }) {
   const h = size === 'sm' ? 'h-7 text-[12px] px-2.5' : 'h-9 text-[13px] px-3.5'
   return (
-    <div className={`lg-pill inline-flex items-center gap-0.5 p-1 max-w-full overflow-x-auto scrollbar-none ${className}`} role="tablist">
+    <div className={`lg-pill ${stretch ? 'flex w-full sm:inline-flex sm:w-auto' : 'inline-flex'} items-center gap-0.5 p-1 max-w-full overflow-x-auto scrollbar-none ${className}`} role="tablist">
       {items.map(it => {
         const active = it.key === value
         const Icon = it.icon
@@ -186,7 +188,7 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
             role="tab"
             aria-selected={active}
             onClick={() => onChange(it.key)}
-            className={`relative inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-full font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${h} ${
+            className={`relative inline-flex ${stretch ? 'flex-1 sm:flex-none !px-2 sm:!px-3.5' : 'flex-shrink-0'} items-center justify-center gap-1.5 rounded-full font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${h} ${
               active ? 'text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -199,7 +201,7 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
               />
             )}
             <span className="relative z-10 inline-flex items-center gap-1.5">
-              {Icon && <Icon size={size === 'sm' ? 13 : 14} className={active ? 'text-[#E9DDBB]' : ''} />}
+              {Icon && <Icon size={size === 'sm' ? 13 : 14} className={`${active ? 'text-[#E9DDBB]' : ''} ${stretch ? 'hidden sm:block' : ''}`} />}
               {it.label}
               {it.count != null && (
                 <span className={`tabular-nums text-[10.5px] font-bold ${active ? 'text-white/70' : 'text-slate-400'}`}>{it.count}</span>

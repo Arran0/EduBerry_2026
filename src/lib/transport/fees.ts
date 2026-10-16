@@ -1,38 +1,36 @@
 /**
  * Bus fees, priced from the route.
  *
- * Two inputs decide what a rider is billed for a trip (a route they are
- * assigned to):
+ * Every route runs one way (to school or from school) and is priced one of two
+ * ways, chosen on its Fees tab:
  *
- *   1. A custom amount on their assignment (`fee_amount`) — wins outright.
- *   2. The route's fee grid — one row per stop, a round-trip amount and an
- *      optional one-way amount. Both ways → the round-trip rate of the dearer
- *      of their pickup and drop stops. One way → that direction's stop at the
- *      one-way rate, falling back to the round-trip rate.
+ *   - by stop: each stop has a monthly price, and a rider pays their stop's;
+ *   - by student: each rider has their own monthly amount
+ *     (`transport_student_assignments.fee_amount`).
  *
- * A child on two trips holds two assignments and so gets two bills, one per
- * route per month. `bus_fees.billing_period` plus a partial unique index stop
- * the same month being billed twice (see transport_r6_a_fee_grid.sql).
+ * Until a route's pricing is chosen its riders are not billed. A child on two
+ * routes (to school on bus 2, home on bus 10) holds two assignments and gets
+ * two bills, one per route per month. `bus_fees.billing_period` plus a partial
+ * unique index stop the same month being billed twice
+ * (see transport_r6_a_fee_grid.sql and transport_r6_b_route_direction_fee_mode.sql).
  */
 
 import { supabase } from '../supabase'
-import type { TransportAssignment } from './types'
+import type { RouteFeeMode, TransportAssignment } from './types'
 
 export interface StopFee {
   stop_id: string
   route_id: string
-  amount_round: number | null
-  amount_one_way: number | null
+  amount: number | null
 }
 
-export type FeeSource = 'custom' | 'grid' | 'missing'
+/** Where a rider's amount came from — or why there is none. */
+export type FeeSource = 'stop' | 'student' | 'missing' | 'unset'
 
 export interface ResolvedFee {
   amount: number | null
   source: FeeSource
-  /** Which grid column produced the amount, for the "why" read-out. */
-  basis: 'round' | 'one_way' | null
-  /** The stop the grid price was read from. */
+  /** The stop the price was read from, in stop mode. */
   stopId: string | null
 }
 
@@ -43,21 +41,19 @@ const num = (v: unknown): number | null => {
 }
 
 export async function fetchStopFees(routeId?: string): Promise<Record<string, StopFee>> {
-  let q = supabase.from('transport_stop_fees').select('stop_id, route_id, amount_round, amount_one_way')
+  let q = supabase.from('transport_stop_fees').select('stop_id, route_id, amount')
   if (routeId) q = q.eq('route_id', routeId)
   const { data, error } = await q
   if (error) { console.error('fetchStopFees failed:', error); return {} }
   const out: Record<string, StopFee> = {}
-  for (const r of (data ?? []) as StopFee[]) {
-    out[r.stop_id] = { ...r, amount_round: num(r.amount_round), amount_one_way: num(r.amount_one_way) }
-  }
+  for (const r of (data ?? []) as StopFee[]) out[r.stop_id] = { ...r, amount: num(r.amount) }
   return out
 }
 
 export async function saveStopFee(
   stopId: string,
   routeId: string,
-  amounts: { amount_round: number | null; amount_one_way: number | null },
+  amount: number | null,
 ): Promise<{ success: boolean; error?: string }> {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
@@ -65,7 +61,7 @@ export async function saveStopFee(
     .upsert({
       stop_id: stopId,
       route_id: routeId,
-      ...amounts,
+      amount,
       updated_by: user?.id ?? null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'stop_id' })
@@ -73,35 +69,26 @@ export async function saveStopFee(
   return { success: true }
 }
 
-type FeeInputs = Pick<TransportAssignment,
-  'pickup_stop_id' | 'drop_stop_id' | 'rides_inbound' | 'rides_outbound' | 'fee_amount'>
+type FeeInputs = Pick<TransportAssignment, 'pickup_stop_id' | 'drop_stop_id' | 'fee_amount'>
 
-/** What this rider owes for this trip per month, and where the number came from. */
-export function resolveRiderFee(a: FeeInputs, grid: Record<string, StopFee>): ResolvedFee {
-  const custom = num(a.fee_amount)
-  if (custom != null) return { amount: custom, source: 'custom', basis: null, stopId: null }
+/** The rider's own stop: where they board a to-school bus or leave a from-school one. */
+export const riderStopId = (a: Pick<TransportAssignment, 'pickup_stop_id' | 'drop_stop_id'>) =>
+  a.pickup_stop_id ?? a.drop_stop_id ?? null
 
-  const pickup = a.pickup_stop_id
-  const drop = a.drop_stop_id ?? a.pickup_stop_id
-  const both = a.rides_inbound && a.rides_outbound
-
-  if (both) {
-    let best: { amount: number; stopId: string } | null = null
-    for (const id of [pickup, drop]) {
-      const v = id ? grid[id]?.amount_round ?? null : null
-      if (id && v != null && (!best || v > best.amount)) best = { amount: v, stopId: id }
-    }
-    return best
-      ? { amount: best.amount, source: 'grid', basis: 'round', stopId: best.stopId }
-      : { amount: null, source: 'missing', basis: null, stopId: null }
+/** What this rider owes per month on this route, and where the number came from. */
+export function resolveRiderFee(
+  a: FeeInputs,
+  grid: Record<string, StopFee>,
+  mode: RouteFeeMode | null | undefined,
+): ResolvedFee {
+  if (!mode) return { amount: null, source: 'unset', stopId: null }
+  if (mode === 'student') {
+    const v = num(a.fee_amount)
+    return v == null ? { amount: null, source: 'missing', stopId: null } : { amount: v, source: 'student', stopId: null }
   }
-
-  const stopId = a.rides_inbound ? pickup : drop
-  if (!stopId) return { amount: null, source: 'missing', basis: null, stopId: null }
-  const row = grid[stopId]
-  if (row?.amount_one_way != null) return { amount: row.amount_one_way, source: 'grid', basis: 'one_way', stopId }
-  if (row?.amount_round != null) return { amount: row.amount_round, source: 'grid', basis: 'round', stopId }
-  return { amount: null, source: 'missing', basis: null, stopId: null }
+  const stopId = riderStopId(a)
+  const v = stopId ? grid[stopId]?.amount ?? null : null
+  return v == null ? { amount: null, source: 'missing', stopId } : { amount: v, source: 'stop', stopId }
 }
 
 // ── Billing runs ────────────────────────────────────────────────────────────
@@ -122,7 +109,7 @@ interface AssignmentLite extends FeeInputs {
   route_id: string
   student_id: string
   student: { full_name: string } | null
-  route: { name: string; active: boolean; archived_at: string | null } | null
+  route: { name: string; active: boolean; archived_at: string | null; fee_mode: RouteFeeMode | null } | null
 }
 
 /** `'2026-10'` → `'October 2026'`. */
@@ -143,9 +130,9 @@ export function currentPeriod(d = new Date()): string {
 export async function previewBills(period: string, routeIds?: string[]): Promise<BillableRider[]> {
   let aq = supabase
     .from('transport_student_assignments')
-    .select(`id, route_id, student_id, pickup_stop_id, drop_stop_id, rides_inbound, rides_outbound, fee_amount,
+    .select(`id, route_id, student_id, pickup_stop_id, drop_stop_id, fee_amount,
       student:profiles!student_id(full_name),
-      route:transport_routes!route_id(name, active, archived_at)`)
+      route:transport_routes!route_id(name, active, archived_at, fee_mode)`)
     .is('ended_on', null)
   if (routeIds?.length) aq = aq.in('route_id', routeIds)
 
@@ -170,7 +157,7 @@ export async function previewBills(period: string, routeIds?: string[]): Promise
       route_name: a.route?.name ?? 'Route',
       student_id: a.student_id,
       student_name: a.student?.full_name ?? 'Unknown',
-      fee: resolveRiderFee(a, grid),
+      fee: resolveRiderFee(a, grid, a.route?.fee_mode),
       alreadyBilled: taken.has(`${a.route_id}:${a.student_id}`),
     }))
     .sort((x, y) => x.route_name.localeCompare(y.route_name) || x.student_name.localeCompare(y.student_name))

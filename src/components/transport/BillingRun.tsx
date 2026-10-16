@@ -56,9 +56,10 @@ export default function BillingRun({ routeIds, compact = false, onIssued }: {
   }, [])
 
   const byRoute = useMemo(() => {
-    const m = new Map<string, { name: string; ready: number; billed: number; missing: number; total: number }>()
+    const m = new Map<string, { name: string; ready: number; billed: number; missing: number; total: number; unset: boolean }>()
     for (const r of rows ?? []) {
-      const cur = m.get(r.route_id) ?? { name: r.route_name, ready: 0, billed: 0, missing: 0, total: 0 }
+      const cur = m.get(r.route_id) ?? { name: r.route_name, ready: 0, billed: 0, missing: 0, total: 0, unset: false }
+      if (r.fee.source === 'unset') cur.unset = true
       if (r.alreadyBilled) cur.billed++
       else if (r.fee.amount == null || r.fee.amount <= 0) cur.missing++
       else { cur.ready++; cur.total += r.fee.amount }
@@ -71,6 +72,7 @@ export default function BillingRun({ routeIds, compact = false, onIssued }: {
   const total = byRoute.reduce((n, r) => n + r.total, 0)
   const missing = byRoute.reduce((n, r) => n + r.missing, 0)
   const billed = byRoute.reduce((n, r) => n + r.billed, 0)
+  const unsetRoutes = byRoute.filter(r => r.unset).length
 
   const issue = async () => {
     if (!rows || ready === 0) return
@@ -120,12 +122,15 @@ export default function BillingRun({ routeIds, compact = false, onIssued }: {
             {!compact || byRoute.length > 1 ? (
               <div className="rounded-xl border border-slate-200/70 overflow-hidden">
                 <div className="grid grid-cols-[1fr_4rem_4rem_4rem_6rem] gap-2 px-3 py-1.5 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  <span>Trip</span><span className="text-center">To bill</span><span className="text-center">Done</span><span className="text-center">No price</span><span className="text-right">Amount</span>
+                  <span>Route</span><span className="text-center">To bill</span><span className="text-center">Done</span><span className="text-center">No price</span><span className="text-right">Amount</span>
                 </div>
                 <ul className="max-h-56 overflow-y-auto divide-y divide-slate-200/60">
                   {byRoute.map(r => (
                     <li key={r.id} className="grid grid-cols-[1fr_4rem_4rem_4rem_6rem] gap-2 px-3 py-1.5 text-[12.5px] tabular-nums">
-                      <span className="truncate font-medium text-slate-800">{r.name}</span>
+                      <span className="truncate font-medium text-slate-800">
+                        {r.name}
+                        {r.unset && <span className="ml-1.5 text-[10.5px] font-semibold text-amber-700">· pricing not chosen</span>}
+                      </span>
                       <span className="text-center text-slate-700">{r.ready}</span>
                       <span className="text-center text-slate-400">{r.billed}</span>
                       <span className={`text-center ${r.missing ? 'font-semibold text-amber-600' : 'text-slate-400'}`}>{r.missing}</span>
@@ -142,6 +147,11 @@ export default function BillingRun({ routeIds, compact = false, onIssued }: {
                 {billed > 0 && <> · <span className="text-slate-500">{billed} already billed</span></>}
                 {missing > 0 && (
                   <> · <span className="inline-flex items-center gap-1 font-semibold text-amber-700"><AlertTriangle size={12} />{missing} without a price — skipped</span></>
+                )}
+                {unsetRoutes > 0 && (
+                  <span className="block text-[11px] text-slate-500">
+                    {unsetRoutes === 1 && routeIds?.length === 1 ? 'Choose' : `${unsetRoutes} route${unsetRoutes === 1 ? '' : 's'} need you to choose`} by-stop or by-student pricing on the route&apos;s Fees tab first.
+                  </span>
                 )}
               </p>
               <button className={GBTN.primary} onClick={issue} disabled={busy || ready === 0}>

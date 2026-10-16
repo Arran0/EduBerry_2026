@@ -19,29 +19,35 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, Bus, IdCard, IndianRupee, Map as MapIcon, MapPin, MessageCircle, Pencil, Phone, Plus,
-  Radio, Receipt, Route as RouteIcon, ScanLine, Search, ShieldCheck, SlidersHorizontal, Trash2, Users, X,
+  Radio, Receipt, Route as RouteIcon, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINR } from '@/lib/formatMoney'
-import { fetchRouteCounts, fetchRoutes } from '@/lib/transport/routes'
+import { fetchRouteCounts, fetchRoutes, fetchRouteSearchIndex, type RouteSearchIndex } from '@/lib/transport/routes'
 import { complianceWarnings, deleteVehicle, fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { deleteTransportStaff, fetchCrewCandidates, fetchTransportStaff } from '@/lib/transport/staff'
 import { currentPeriod, previewBills, type BillableRider } from '@/lib/transport/fees'
 import { mapProviderStatus } from '@/lib/transport/mapTiles'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
 import { STAFF_KIND_LABELS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
-import RouteWorkspace from '../RouteWorkspace'
+import RouteWorkspace, { type RouteTab } from '../RouteWorkspace'
+import RouteNavigator from '../RouteNavigator'
 import RouteFormModal from '../RouteFormModal'
 import VehicleFormModal from '../VehicleFormModal'
 import CrewFormModal from '../CrewFormModal'
 import BillingRun from '../BillingRun'
 import {
-  BUS, CardHead, Content, EmptyNote, GBTN, GINPUT, GlassPanel, GlassTileButton,
+  BUS, CardHead, Content, EmptyNote, GBTN, GlassPanel, GlassTileButton,
 } from '../glass'
 
 export type ConnectionKey = 'whatsapp' | 'gps' | 'scan'
 
-export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (key: ConnectionKey) => void }) {
+export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChange }: {
+  onOpenPanel: (key: ConnectionKey) => void
+  /** The open route, held by the page so it survives in the URL (`?route=`). */
+  routeId: string | null
+  onRouteChange: (routeId: string | null) => void
+}) {
   const [routes, setRoutes] = useState<TransportRoute[]>([])
   const [counts, setCounts] = useState<{ stops: Record<string, number>; students: Record<string, number> }>({ stops: {}, students: {} })
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
@@ -49,24 +55,37 @@ export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (ke
   const [candidates, setCandidates] = useState<Awaited<ReturnType<typeof fetchCrewCandidates>>>([])
   const [billing, setBilling] = useState<BillableRider[] | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [index, setIndex] = useState<RouteSearchIndex | null>(null)
+  const [tab, setTab] = useState<RouteTab>('stops')
+  const selectedId = routeId
+  const setSelectedId = onRouteChange
   const [newRoute, setNewRoute] = useState(false)
   const [editVehicle, setEditVehicle] = useState<TransportVehicle | null | undefined>(undefined)
   const [editCrew, setEditCrew] = useState<TransportStaff | null | undefined>(undefined)
   const routesRef = useRef<HTMLDivElement>(null)
 
+  /** Open a route, optionally on a given tab. */
+  const openRoute = useCallback((id: string, t?: RouteTab) => {
+    setSelectedId(id)
+    if (t) setTab(t)
+  }, [setSelectedId])
+
   /** Open a route from a bus or crew row, and bring the route panel into view. */
   const pickRoute = useCallback((id: string) => {
-    setSelectedId(id)
+    openRoute(id)
     routesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  }, [openRoute])
+
+  // Kept in a ref so loadRoutes can default the selection without depending on it.
+  const selectedRef = useRef(selectedId)
+  useEffect(() => { selectedRef.current = selectedId }, [selectedId])
 
   const loadRoutes = useCallback(async () => {
-    const [r, c] = await Promise.all([fetchRoutes(true), fetchRouteCounts()])
-    setRoutes(r); setCounts(c)
-    setSelectedId(cur => (cur && r.some(x => x.id === cur) ? cur : r.find(x => !x.archived_at)?.id ?? r[0]?.id ?? null))
-  }, [])
+    const [r, c, ix] = await Promise.all([fetchRoutes(true), fetchRouteCounts(), fetchRouteSearchIndex()])
+    setRoutes(r); setCounts(c); setIndex(ix)
+    const cur = selectedRef.current
+    if (!cur || !r.some(x => x.id === cur)) setSelectedId(r.find(x => !x.archived_at)?.id ?? r[0]?.id ?? null)
+  }, [setSelectedId])
 
   const loadFleet = useCallback(async () => {
     const [v, c, cand] = await Promise.all([fetchVehicles(), fetchTransportStaff(), fetchCrewCandidates()])
@@ -85,13 +104,6 @@ export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (ke
 
   const live = routes.filter(r => !r.archived_at)
   const selected = routes.find(r => r.id === selectedId) ?? null
-  const q = query.trim().toLowerCase()
-  const shownRoutes = useMemo(() => {
-    const list = routes.filter(r => !q || r.name.toLowerCase().includes(q) || (r.code ?? '').toLowerCase().includes(q))
-    // Running first, then paused, then archived; by name within each.
-    const rank = (r: TransportRoute) => (r.archived_at ? 2 : r.active ? 0 : 1)
-    return list.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-  }, [routes, q])
 
   const totals = useMemo(() => {
     const riders = live.reduce((n, r) => n + (counts.students[r.id] ?? 0), 0)
@@ -140,61 +152,48 @@ export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (ke
 
       {/* ── Routes ────────────────────────────────────────────────── */}
       <div ref={routesRef} className="scroll-mt-4">
-      <GlassPanel
-        eyebrow="Routes & trips"
-        title="Routes"
-        icon={RouteIcon}
-        delay={0.04}
-        actions={<button className={GBTN.primary} onClick={() => setNewRoute(true)}><Plus size={14} /> New route</button>}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)] gap-3">
-          <Content className="p-2.5 self-start lg:sticky lg:top-4">
-            <div className="relative mb-2">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input className={`${GINPUT} pl-8 pr-8`} value={query} onChange={e => setQuery(e.target.value)} placeholder="Find a route" />
-              {query && (
-                <button onClick={() => setQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-800" aria-label="Clear"><X size={14} /></button>
-              )}
-            </div>
-            {loading ? (
-              <div className="space-y-1.5">{[0, 1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
-            ) : routes.length === 0 ? (
-              <EmptyNote icon={RouteIcon} title="No routes yet" detail="A route is an ordered list of stops, a bus and a driver. Create the first one." />
-            ) : (
-              <ul className="space-y-1 max-h-[28rem] lg:max-h-[calc(100vh-14rem)] overflow-y-auto pr-0.5">
-                {shownRoutes.map(r => (
-                  <RouteListItem
-                    key={r.id}
-                    route={r}
-                    riders={counts.students[r.id] ?? 0}
-                    stops={counts.stops[r.id] ?? 0}
-                    selected={r.id === selectedId}
-                    onClick={() => setSelectedId(r.id)}
-                  />
-                ))}
-                {shownRoutes.length === 0 && <p className="px-2 py-4 text-center text-xs text-slate-500">No route matches “{query}”.</p>}
-              </ul>
-            )}
-          </Content>
-
-          <div className="min-w-0">
-            {selected ? (
-              <RouteWorkspace
-                key={selected.id}
-                route={selected}
-                vehicles={vehicles}
-                crew={crew}
-                riders={counts.students[selected.id] ?? 0}
-                onChanged={onRouteChanged}
-                showOpenLink
-              />
-            ) : !loading && (
-              <Content className="h-full flex items-center justify-center">
-                <EmptyNote icon={RouteIcon} title="Pick a route" detail="Choose a route on the left to set its stops, schedules, riders and fees." />
-              </Content>
-            )}
-          </div>
+      <GlassPanel eyebrow="Routes & trips" title="Routes" icon={RouteIcon} delay={0.04}>
+        <div className="px-0.5 pb-3">
+          {loading ? (
+            <div className="h-10 rounded-full bg-white/60 animate-pulse" />
+          ) : (
+            <RouteNavigator
+              routes={routes}
+              index={index}
+              riders={counts.students}
+              selectedId={selectedId}
+              onSelect={openRoute}
+              onNew={() => setNewRoute(true)}
+            />
+          )}
         </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            <div className="h-40 rounded-[18px] bg-white/60 animate-pulse" />
+            <div className="h-80 rounded-[18px] bg-white/60 animate-pulse" />
+          </div>
+        ) : selected ? (
+          <RouteWorkspace
+            key={selected.id}
+            route={selected}
+            vehicles={vehicles}
+            crew={crew}
+            riders={counts.students[selected.id] ?? 0}
+            onChanged={onRouteChanged}
+            tab={tab}
+            onTabChange={setTab}
+          />
+        ) : (
+          <Content>
+            <EmptyNote
+              icon={RouteIcon}
+              title="No routes yet"
+              detail="A route runs one way — to school or from school — with its own stops, bus, driver, schedule and riders. Create the first one."
+              action={<button className={GBTN.primary} onClick={() => setNewRoute(true)}><Plus size={14} /> New route</button>}
+            />
+          </Content>
+        )}
       </GlassPanel>
       </div>
 
@@ -320,8 +319,8 @@ export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (ke
         <Content className="p-3 sm:p-4">
           <p className="mb-3 text-[12px] leading-snug text-slate-600 max-w-3xl">
             One bill per rider per route, priced from each route&apos;s fee grid or the rider&apos;s custom amount
-            (set both on a route&apos;s <span className="font-semibold">Fees</span> tab above). A child on a morning
-            route and a different evening route gets a bill for each. Running a month twice only bills whoever
+            (choose by-stop or by-student pricing on each route&apos;s <span className="font-semibold">Fees</span> tab above).
+            A child on a to-school route and a from-school route gets a bill for each. Running a month twice only bills whoever
             was missed the first time.
           </p>
           <BillingRun onIssued={loadBilling} />
@@ -359,7 +358,8 @@ export default function ConfigurationSection({ onOpenPanel }: { onOpenPanel: (ke
           onSaved={async id => {
             setNewRoute(false)
             await loadRoutes()
-            if (id) setSelectedId(id)
+            // A new route is empty, so open it where the work starts: its stops.
+            if (id) openRoute(id, 'stops')
           }}
         />
       )}
@@ -396,48 +396,6 @@ function Tile({ icon: Icon, value, label, sub, tone }: {
         {sub && <span className={`block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
       </span>
     </div>
-  )
-}
-
-function RouteListItem({ route: r, riders, stops, selected, onClick }: {
-  route: TransportRoute; riders: number; stops: number; selected: boolean; onClick: () => void
-}) {
-  const cap = r.default_vehicle?.capacity ?? 0
-  const over = cap > 0 && riders > cap
-  return (
-    <li>
-      <button
-        onClick={onClick}
-        className={`w-full flex items-stretch gap-2.5 rounded-xl p-2.5 text-left transition ${
-          selected ? 'bg-white shadow-[0_8px_20px_-12px_rgba(15,23,42,.45)] ring-1 ring-[#B8983C]/50' : 'hover:bg-white/80'
-        } ${r.archived_at ? 'opacity-60' : ''}`}
-      >
-        <span className="w-1.5 rounded-full flex-shrink-0" style={{ background: r.active && !r.archived_at ? r.color : '#D4D4D8' }} />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5 min-w-0">
-            {r.code && <span className="text-[11px] font-bold text-slate-400 flex-shrink-0">{r.code}</span>}
-            <span className="truncate text-sm font-semibold text-slate-900">{r.name}</span>
-            {r.archived_at ? (
-              <span className="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wider text-slate-400">Archived</span>
-            ) : !r.active ? (
-              <span className="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wider text-amber-600">Paused</span>
-            ) : null}
-          </span>
-          <span className="block truncate text-[11px] text-slate-500">
-            {r.default_vehicle ? vehicleLabel(r.default_vehicle) : 'No bus'} · {r.default_driver?.full_name ?? 'No driver'}
-          </span>
-          <span className="mt-1.5 flex items-center gap-2">
-            <span className="relative flex-1 h-1.5 rounded-full bg-slate-200/80 overflow-hidden">
-              <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${cap ? Math.min(100, (riders / cap) * 100) : 0}%`, background: over ? '#f43f5e' : r.color }} />
-            </span>
-            <span className={`text-[10.5px] font-semibold tabular-nums ${over ? 'text-rose-600' : 'text-slate-500'}`}>
-              {riders}{cap ? `/${cap}` : ''}
-            </span>
-            <span className="text-[10.5px] text-slate-400 tabular-nums">· {stops} stops</span>
-          </span>
-        </span>
-      </button>
-    </li>
   )
 }
 
