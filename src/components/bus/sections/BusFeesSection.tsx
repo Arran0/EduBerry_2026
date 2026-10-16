@@ -3,15 +3,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, ChevronDown, Archive,
-  Trash2, Calendar, Users, Wallet, Layers,
+  Plus, Check, Ban, QrCode, X, Tag, Pencil, ListChecks, Search, ChevronRight, Archive,
+  Trash2, Wallet,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import FeeCollectionSummary, { formatINR, SummaryCardKey } from '@/components/bus/FeeCollectionSummary'
 import FeeIssueModal from '@/components/bus/FeeIssueModal'
 import BusFeeHeadFormModal from '@/components/bus/BusFeeHeadFormModal'
-import MonthlyDraftModal from '@/components/bus/MonthlyDraftModal'
-import DraftDetailView from '@/components/bus/DraftDetailView'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import BusCollectionSection from '@/components/bus/sections/BusCollectionSection'
 import BusRecordPaymentModal from '@/components/bus/BusRecordPaymentModal'
@@ -20,21 +18,23 @@ import YearToggler from '@/components/fees/YearToggler'
 import { ADMIN, Sheet, SHEET } from '@/components/bus/adminUI'
 import { UserProfile } from '@/lib/supabase'
 import {
-  BusTrip, BusFee, BusFeeHead, BusFeeDraft, PendingPayment, BusCollectionRow,
-  fetchAllFees, fetchTrips, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
+  BusFee, BusFeeHead, PendingPayment, BusCollectionRow,
+  fetchAllFees, fetchAssignablePassengers, summarizeFees, setFeeStatus, cancelFee,
   fetchPendingPayments, verifyPayment, rejectPayment,
   fetchBusFeeHeads, setBusFeeHeadActive, deleteBusFeeHead,
-  fetchBusFeeDrafts, deleteBusFeeDraft, fetchBusCollectionReport,
+  fetchBusCollectionReport,
   academicYearOf, currentAcademicYear, listBusAcademicYears,
 } from '@/lib/bus'
 
-type SectionKey = 'issued' | 'heads' | 'drafts' | 'collection'
+// Bulk issue (monthly drafts) used to live here too. Bills are now raised from
+// each route's fee grid in Configuration, which knows every rider's stops and
+// trips, so a hand-assembled draft list had nothing left to do.
+type SectionKey = 'issued' | 'heads' | 'collection'
 
 const SECTIONS = [
   { key: 'collection' as const, label: 'Collection', icon: <Wallet size={15} /> },
   { key: 'issued' as const, label: 'Issued Fees', icon: <ListChecks size={15} /> },
   { key: 'heads' as const, label: 'Fee Heads', icon: <Tag size={15} /> },
-  { key: 'drafts' as const, label: 'Bulk Issue', icon: <Layers size={15} /> },
 ]
 
 type IssuedFilter = 'all' | 'collected' | 'outstanding' | 'cancelled' | 'partial'
@@ -55,12 +55,6 @@ function matchIssuedFilter(f: BusFee, key: IssuedFilter): boolean {
     case 'partial': return f.status === 'partial'
     case 'cancelled': return f.status === 'cancelled'
   }
-}
-
-function formatDraftMonth(ym: string): string {
-  const [y, m] = ym.split('-')
-  return new Date(Number(y), Number(m) - 1, 1)
-    .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 }
 
 // Billed / collected / outstanding figures for a fee head — collected in green,
@@ -86,18 +80,16 @@ interface BusFeesSectionProps {
 export default function BusFeesSection({ initialSection, initialFilter }: BusFeesSectionProps) {
   const [loading, setLoading] = useState(true)
   const [fees, setFees] = useState<BusFee[]>([])
-  const [trips, setTrips] = useState<BusTrip[]>([])
   const [assignable, setAssignable] = useState<UserProfile[]>([])
   const [heads, setHeads] = useState<BusFeeHead[]>([])
   const [pending, setPending] = useState<PendingPayment[]>([])
-  const [drafts, setDrafts] = useState<BusFeeDraft[]>([])
   const [busPayments, setBusPayments] = useState<BusCollectionRow[]>([])
 
   // Academic year scoping — only the 4 summary cards use this; all other lists show all years.
   const [acadYear, setAcadYear] = useState<string>(currentAcademicYear())
   const [acadYears, setAcadYears] = useState<string[]>([currentAcademicYear()])
 
-  const VALID_SECTIONS: SectionKey[] = ['collection', 'issued', 'heads', 'drafts']
+  const VALID_SECTIONS: SectionKey[] = ['collection', 'issued', 'heads']
   const VALID_FILTERS: IssuedFilter[] = ['all', 'collected', 'outstanding', 'cancelled', 'partial']
   const [section, setSection] = useState<SectionKey>(
     initialSection && VALID_SECTIONS.includes(initialSection as SectionKey)
@@ -111,26 +103,22 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [inactiveQuery, setInactiveQuery] = useState('')
-  const [draftSearch, setDraftSearch] = useState('')
 
   const [showIssue, setShowIssue] = useState(false)
   const [showNewHead, setShowNewHead] = useState(false)
   const [editHead, setEditHead] = useState<BusFeeHead | null>(null)
-  const [showNewDraft, setShowNewDraft] = useState(false)
-  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingHeadId, setDeletingHeadId] = useState<string | null>(null)
   const [recordingFee, setRecordingFee] = useState<BusFee | null>(null)
   const [statementPassenger, setStatementPassenger] = useState<UserProfile | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [f, t, a, h, p, dr, pay] = await Promise.all([
-      fetchAllFees(), fetchTrips(), fetchAssignablePassengers(), fetchBusFeeHeads(),
-      fetchPendingPayments(), fetchBusFeeDrafts(), fetchBusCollectionReport(),
+    const [f, a, h, p, pay] = await Promise.all([
+      fetchAllFees(), fetchAssignablePassengers(), fetchBusFeeHeads(),
+      fetchPendingPayments(), fetchBusCollectionReport(),
     ])
-    setFees(f); setTrips(t); setAssignable(a); setHeads(h); setPending(p); setDrafts(dr)
+    setFees(f); setAssignable(a); setHeads(h); setPending(p)
     setBusPayments(pay)
     setLoading(false)
   }, [])
@@ -139,7 +127,7 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
   useEffect(() => { listBusAcademicYears().then(setAcadYears) }, [])
 
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [statusFilter, headFilter, query])
-  useEffect(() => { setDeletingId(null); setExpandedDraftId(null); setDeletingHeadId(null) }, [section])
+  useEffect(() => { setDeletingHeadId(null) }, [section])
 
   const toggleHeadActive = async (head: BusFeeHead) => {
     setHeads(prev => prev.map(h => h.id === head.id ? { ...h, active: !h.active } : h))
@@ -167,15 +155,6 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
     if (result.success) {
       setFees(prev => prev.map(f => f.id === feeId ? { ...f, status: action === 'paid' ? 'paid' : 'cancelled' } : f))
     }
-    setBusyId(null)
-  }
-
-  const handleDeleteDraft = async (draftId: string) => {
-    if (deletingId !== draftId) { setDeletingId(draftId); return }
-    setBusyId(draftId); setDeletingId(null)
-    if (expandedDraftId === draftId) setExpandedDraftId(null)
-    await deleteBusFeeDraft(draftId)
-    setDrafts(prev => prev.filter(d => d.id !== draftId))
     setBusyId(null)
   }
 
@@ -256,13 +235,6 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
   const matchingInactive = iq === '' ? [] : inactiveHeads.filter(h =>
     h.name.toLowerCase().includes(iq) || (h.description ?? '').toLowerCase().includes(iq)
   )
-
-  const dq = draftSearch.trim().toLowerCase()
-  const filteredDrafts = useMemo(() => dq === '' ? drafts : drafts.filter(d =>
-    d.title.toLowerCase().includes(dq) ||
-    formatDraftMonth(d.month).toLowerCase().includes(dq) ||
-    (d.route?.name ?? '').toLowerCase().includes(dq)
-  ), [drafts, dq])
 
   // One Excel-style fee-head line — mirrors the Fee Manager's FeeHeadRow:
   // a clean desktop ledger row plus a stacked card below `sm`.
@@ -579,140 +551,6 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
           )}
         </>
 
-      /* ══ BULK ISSUE ══════════════════════════════════════════════ */
-      ) : section === 'drafts' ? (
-        <>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className={ADMIN.label}>Bulk issue</h2>
-            <button onClick={() => setShowNewDraft(true)} className={ADMIN.darkBtn}>
-              <Plus size={14} /> New Bulk Issue
-            </button>
-          </div>
-
-          {/* Search bar */}
-          {drafts.length > 0 && (
-            <div className="relative mb-4">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-              <input type="text" value={draftSearch} onChange={e => setDraftSearch(e.target.value)}
-                className={ADMIN.input} placeholder="Search by title, month, or trip…" />
-              {draftSearch && (
-                <button onClick={() => setDraftSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#27272A]">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
-          ) : drafts.length === 0 ? (
-            <div className={`${ADMIN.card} shadow-sm p-8 text-center`}>
-              <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-[#27272A] flex items-center justify-center">
-                <Layers size={28} className="text-[#B8983C]" strokeWidth={1.6} />
-              </div>
-              <p className="text-sm text-[#71717A] mb-4 max-w-sm mx-auto">
-                No bulk issues yet. Create one to add students and set individual fees before issuing them all at once.
-              </p>
-              <button onClick={() => setShowNewDraft(true)} className={`${ADMIN.darkBtn} mx-auto`}>
-                <Plus size={14} /> New Bulk Issue
-              </button>
-            </div>
-          ) : filteredDrafts.length === 0 ? (
-            <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
-              Nothing matches &ldquo;{draftSearch}&rdquo;.
-            </div>
-          ) : (
-            <Sheet
-              columns={
-                <>
-                  <span className="flex-1 ml-12 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title / Month</span>
-                  <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Students</span>
-                  <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0 pl-3">Status</span>
-                  <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
-                </>
-              }
-            >
-              {filteredDrafts.map(d => {
-                const isIssued = d.status === 'issued'
-                const isBusy = busyId === d.id
-                const confirmingDelete = deletingId === d.id
-                const count = d.passenger_count ?? 0
-                const isExpanded = expandedDraftId === d.id
-                const barColor = isIssued ? 'bg-emerald-500' : 'bg-[#B8983C]'
-                return (
-                  <React.Fragment key={d.id}>
-                    <div className={`${SHEET.row} ${isExpanded ? 'bg-[#FAFAFA]' : ''}`}>
-                      <div className={`${SHEET.bar} ${barColor}`} />
-                      <button
-                        onClick={() => setExpandedDraftId(isExpanded ? null : d.id)}
-                        className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 px-3 py-2.5 text-left"
-                        title={isExpanded ? 'Collapse' : 'Expand to view & edit students'}
-                      >
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isIssued ? 'bg-emerald-50' : 'bg-[#27272A]'}`}>
-                          {isExpanded
-                            ? <ChevronDown size={16} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />
-                            : <Layers size={16} className={isIssued ? 'text-emerald-500' : 'text-[#B8983C]'} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[#18181B] text-sm truncate">{d.title}</p>
-                          <p className="text-[11px] text-[#71717A] truncate">
-                            <span className="inline-flex items-center gap-1"><Calendar size={10} /> {formatDraftMonth(d.month)}</span>
-                            {d.route?.name ? ` · ${d.route.name}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}
-                          </p>
-                        </div>
-                        <span className="w-16 sm:w-24 flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0">
-                          <Users size={11} /> {count}<span className="hidden sm:inline">&nbsp;student{count === 1 ? '' : 's'}</span>
-                        </span>
-                        <span className="w-24 flex-shrink-0 pl-3 hidden sm:block">
-                          {isIssued ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wide">Issued</span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4F4F5] text-[#71717A] font-bold uppercase tracking-wide">Draft</span>
-                          )}
-                        </span>
-                      </button>
-                      <div className="w-auto sm:w-28 flex items-center justify-end gap-1.5 flex-shrink-0 pr-2">
-                        <button onClick={() => setExpandedDraftId(isExpanded ? null : d.id)} disabled={isBusy}
-                          className={`${ADMIN.ghostBtn} !px-2.5 !py-1.5`} title={isExpanded ? 'Collapse' : 'Expand'}>
-                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                        {confirmingDelete ? (
-                          <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
-                            className="flex items-center gap-1 px-2.5 bg-rose-600 text-white text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
-                            <Trash2 size={13} /> <span className="hidden sm:inline">Confirm</span>
-                          </button>
-                        ) : (
-                          <button onClick={() => handleDeleteDraft(d.id)} disabled={isBusy}
-                            className="flex items-center justify-center px-2.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-rose-600 hover:border-rose-200 text-xs font-semibold py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                            title="Delete">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Inline expanded editor — work the student list without leaving the page */}
-                    {isExpanded && (
-                      <div className="border-b border-[#F4F4F5] bg-[#FAFAFA] px-3 sm:px-4 py-4">
-                        <DraftDetailView
-                          embedded
-                          draft={d}
-                          trips={trips}
-                          feeHeads={heads}
-                          assignable={assignable}
-                          onBack={() => setExpandedDraftId(null)}
-                          onIssued={() => { setExpandedDraftId(null); load() }}
-                          onDraftUpdated={updated => setDrafts(prev => prev.map(x => x.id === updated.id ? updated : x))}
-                        />
-                      </div>
-                    )}
-                  </React.Fragment>
-                )
-              })}
-            </Sheet>
-          )}
-        </>
-
       /* ══ COLLECTION REPORT ══════════════════════════════════════ */
       ) : section === 'collection' ? (
         <BusCollectionSection />
@@ -820,20 +658,6 @@ export default function BusFeesSection({ initialSection, initialFilter }: BusFee
             head={editHead}
             onClose={() => { setShowNewHead(false); setEditHead(null) }}
             onSaved={() => { setShowNewHead(false); setEditHead(null); load() }}
-          />
-        )}
-        {showNewDraft && (
-          <MonthlyDraftModal
-            key="monthly-draft"
-            trips={trips}
-            feeHeads={heads}
-            onClose={() => setShowNewDraft(false)}
-            onSaved={saved => {
-              setDrafts(prev => [saved, ...prev])
-              setShowNewDraft(false)
-              setSection('drafts')
-              setExpandedDraftId(saved.id)
-            }}
           />
         )}
         {statementPassenger && (

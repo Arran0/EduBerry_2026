@@ -5,23 +5,22 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Bus, IndianRupee, CreditCard, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
-  SlidersHorizontal,
+  Bus, CreditCard, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
+  SlidersHorizontal, MessageCircle, ScanLine, History, ShieldAlert,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { ADMIN, HubTabs } from '@/components/bus/adminUI'
+import { ADMIN } from '@/components/bus/adminUI'
 import Modal from '@/components/workspace/Modal'
-import { PANEL_TITLES, type PanelKey } from '@/components/transport/ManageLauncher'
-const ManageLauncher = dynamic(() => import('@/components/transport/ManageLauncher'))
+import { GlassSegments } from '@/components/transport/glass'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const OperationsSection = dynamic(() => import('@/components/transport/sections/OperationsSection'))
+const ConfigurationSection = dynamic(() => import('@/components/transport/sections/ConfigurationSection'))
 const SafetySection     = dynamic(() => import('@/components/transport/sections/SafetySection'))
-const RoutesSection     = dynamic(() => import('@/components/transport/sections/RoutesSection'))
-const FleetSection      = dynamic(() => import('@/components/transport/sections/FleetSection'))
 const BusFeesSection    = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
 const WhatsAppPanel = dynamic(() =>
   import('@/components/transport/sections/IntegrationsSection').then(m => m.WhatsAppPanel))
@@ -82,30 +81,44 @@ function BusPageContent() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Admin hub — two tabs, everything else behind "Manage"
+// Admin hub — Operations and Configuration
 //
-// This was nine tabs across, then four. It is now two, because Live and
-// Insights were answering one question between them: an admin watching a bus
-// had to leave the map to learn whether the fleet is generally punctual, and
-// leave the numbers to find out where the bus is. They are one screen.
+// Two tabs, split by what the admin is doing: watching (Operations — the map,
+// today's trips, what needs attention, the fee position by month) or setting
+// up (Configuration — routes with their stops, riders and fee grids, the fleet,
+// the crew, monthly billing, and the connections).
 //
-// Driver payroll is gone from here entirely. Paying drivers is a finance job
-// that happens monthly; it shares a word with transport and nothing else. It
-// still lives at /more/bus/payroll for whoever runs it.
+// There is no "Manage" popup any more. Routes, fleet and crew were three
+// popups that only make sense together, so they are one page now; Replay and
+// Incidents sit above the map they belong to; WhatsApp, GPS and Scan still
+// open in their own popups from the foot of Configuration, because they are
+// opened once a term. The fee ledger (collection, issued fees, fee heads) is
+// a popup from the fee chart on Operations.
 //
-// What remains is split by how often it is opened: Operations many times a
-// day, fees weekly, and everything else — routes, fleet, crew, WhatsApp, GPS,
-// scanning, replay, incidents — behind one Manage button.
+// Driver payroll lives at /more/bus/payroll.
 // ──────────────────────────────────────────────────────────────
 
-type SectionKey = 'live' | 'fees'
+type SectionKey = 'live' | 'config'
 
 const SECTIONS = [
-  { key: 'live' as const, label: 'Operations', icon: <Radio size={15} /> },
-  { key: 'fees' as const, label: 'Bus Fees', icon: <IndianRupee size={15} /> },
+  { key: 'live' as const, label: 'Operations', icon: Radio },
+  { key: 'config' as const, label: 'Configuration', icon: SlidersHorizontal },
 ]
 
 const SECTION_KEYS = SECTIONS.map(s => s.key)
+
+type PanelKey = 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents' | 'ledger'
+
+const PANELS: Record<PanelKey, { title: string; subtitle: string; icon: LucideIcon }> = {
+  whatsapp: { title: 'WhatsApp', subtitle: 'Message templates and the sending account', icon: MessageCircle },
+  gps: { title: 'GPS', subtitle: 'Hardware already fitted to the buses', icon: Radio },
+  scan: { title: 'Scan', subtitle: 'Cards, fobs and QR — only if you want them', icon: ScanLine },
+  replay: { title: 'Replay', subtitle: 'Scrub a finished trip, and export the open data feed', icon: History },
+  incidents: { title: 'Incidents', subtitle: 'SOS events and their frozen snapshots', icon: ShieldAlert },
+  ledger: { title: 'Bus fee ledger', subtitle: 'Collection, issued fees and fee heads', icon: Wallet },
+}
+
+const PANEL_KEYS = Object.keys(PANELS) as PanelKey[]
 
 /**
  * Old `?tab=` values, kept working.
@@ -113,26 +126,22 @@ const SECTION_KEYS = SECTIONS.map(s => s.key)
  * `/home` links to `?tab=fees&section=issued&filter=outstanding`, the payroll
  * sub-pages link back to `?tab=payroll`, and `/more/bus/fees` redirects to
  * `?tab=fees`. Those are live links in the app and in whatever anyone has
- * bookmarked; a rename that breaks them is a rename that shipped a bug. The
- * five that became popups now open as popups over the Live tab.
+ * bookmarked; a rename that breaks them is a rename that shipped a bug.
  */
 const LEGACY_TAB: Record<string, { tab: SectionKey; panel?: PanelKey }> = {
-  // Insights merged into Operations.
   insights: { tab: 'live' },
   reports:  { tab: 'live' },
-  routes:   { tab: 'live', panel: 'routes' },
-  fleet:    { tab: 'live', panel: 'fleet' },
-  crew:     { tab: 'live', panel: 'crew' },
+  fees:     { tab: 'live', panel: 'ledger' },
+  routes:   { tab: 'config' },
+  fleet:    { tab: 'config' },
+  crew:     { tab: 'config' },
+  configuration: { tab: 'config' },
   history:  { tab: 'live', panel: 'replay' },
   replay:   { tab: 'live', panel: 'replay' },
   safety:   { tab: 'live', panel: 'incidents' },
-  setup:    { tab: 'live', panel: 'whatsapp' },
-  // Payroll left this page; send its old links to the page that still has it.
+  setup:    { tab: 'config', panel: 'whatsapp' },
   payroll:  { tab: 'live' },
 }
-
-const PANEL_KEYS: PanelKey[] =
-  ['routes', 'fleet', 'crew', 'whatsapp', 'gps', 'scan', 'replay', 'incidents']
 
 function AdminBusHub({ onBack }: { onBack: () => void }) {
   const router = useRouter()
@@ -142,9 +151,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   const feesSectionParam = searchParams.get('section')
   const feesFilterParam  = searchParams.get('filter')
 
-  // ?tab=payroll used to open a tab that no longer exists here. Redirect
-  // rather than silently showing Operations: someone following that link wants
-  // payroll, and /more/bus/payroll is where it lives now.
+  // ?tab=payroll used to open a tab that no longer exists here.
   useEffect(() => {
     if (tabParam === 'payroll') router.replace('/more/bus/payroll')
   }, [tabParam, router])
@@ -160,7 +167,6 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
 
   const [section, setSection] = useState<SectionKey>(initialTab)
   const [panel, setPanel] = useState<PanelKey | null>(initialPanel)
-  const [manageOpen, setManageOpen] = useState(false)
   const [bannerEditing, setBannerEditing] = useState(false)
 
   // One place that writes the URL, so a tab change and a popup open can never
@@ -179,7 +185,6 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
   }
 
   const openPanel = (key: PanelKey) => {
-    setManageOpen(false)
     setPanel(key)
     syncUrl(section, key)
   }
@@ -189,7 +194,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
     syncUrl(section, null)
   }
 
-  const panelMeta = panel ? PANEL_TITLES[panel] : null
+  const panelMeta = panel ? PANELS[panel] : null
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -198,7 +203,7 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         defaultBanner={BUS_BANNER_DEFAULT}
         icon={<Bus size={26} className="text-white" />}
         title="Transport"
-        subtitle="Live fleet, boarding, exceptions & bus fees"
+        subtitle="Live fleet, boarding, routes, fees & crew"
         isAdmin
         onBack={onBack}
         onEditingChange={setBannerEditing}
@@ -206,41 +211,33 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         backgroundIcon={<Bus size={150} className="text-white" />}
       />
 
-      <div className={`${ADMIN.shell} px-4 sm:px-6 lg:px-8 pb-10`}>
+      <div className={`${ADMIN.shell} px-4 sm:px-6 lg:px-8 pb-12`}>
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Hub toggler — four tabs plus the Manage button, overlapping the banner */}
-          <div className="relative z-10 -mt-6 sm:-mt-7 mb-5 flex items-stretch gap-2.5">
-            <HubTabs tabs={SECTIONS} value={section} onChange={selectSection} className="flex-1 min-w-0" />
-            <button
-              onClick={() => setManageOpen(true)}
-              className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-[#E4E4E7] bg-white px-4 shadow-sm text-sm font-semibold text-[#52525B] transition-colors hover:border-[#B8983C] hover:text-[#27272A]"
-            >
-              <SlidersHorizontal size={15} />
-              <span className="hidden sm:inline">Manage</span>
-            </button>
+          {/* Tab switch — a glass segmented control, overlapping the banner */}
+          <div className="relative z-10 -mt-6 sm:-mt-7 mb-6 flex justify-center sm:justify-start">
+            <GlassSegments
+              layoutId="bus-hub-tab"
+              items={SECTIONS}
+              value={section}
+              onChange={selectSection}
+              className="!bg-white/75 shadow-[0_12px_30px_-14px_rgba(15,23,42,.45)]"
+            />
           </div>
 
-          {section === 'live' && <OperationsSection />}
-          {section === 'fees' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
+          {section === 'live' && (
+            <OperationsSection
+              onOpenPanel={openPanel}
+              onOpenLedger={() => openPanel('ledger')}
+            />
+          )}
+          {section === 'config' && <ConfigurationSection onOpenPanel={openPanel} />}
         </div>
       </div>
 
-      <Modal
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        title="Manage transport"
-        subtitle="Setup and records — the things you open occasionally"
-        icon={SlidersHorizontal}
-        size="lg"
-      >
-        <ManageLauncher onPick={openPanel} />
-      </Modal>
-
       {/* One modal, whichever panel is open. Mounted only while open, so a
-          section's queries fire when it is actually shown rather than on every
-          page load — which is the whole reason these are popups and not tabs. */}
+          panel's queries fire when it is actually shown. */}
       <Modal
         open={panel !== null}
         onClose={closePanel}
@@ -250,14 +247,12 @@ function AdminBusHub({ onBack }: { onBack: () => void }) {
         size="xl"
         fullHeight
       >
-        {panel === 'routes' && <RoutesSection />}
-        {panel === 'fleet' && <FleetSection only="vehicles" />}
-        {panel === 'crew' && <FleetSection only="crew" />}
         {panel === 'whatsapp' && <WhatsAppPanel />}
         {panel === 'gps' && <DevicesPanel />}
         {panel === 'scan' && <ScanPanel />}
         {panel === 'replay' && <ReplayPanel />}
         {panel === 'incidents' && <SafetySection />}
+        {panel === 'ledger' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
       </Modal>
     </div>
   )

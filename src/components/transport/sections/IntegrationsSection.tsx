@@ -5,7 +5,7 @@ import {
   MessageCircle, Radio, Plus, Trash2, KeyRound, Copy, Check, Loader2, ExternalLink,
   CreditCard, Download, Globe, RefreshCw, Search, Ban,
 } from 'lucide-react'
-import { ADMIN, SegTabs, SHEET, Sheet } from '@/components/bus/adminUI'
+import { ADMIN, SegTabs, SHEET, Sheet, EmptyRow } from '@/components/bus/adminUI'
 import { supabase } from '@/lib/supabase'
 import {
   createSource, deleteSource, fetchSources, rotateSourceSecret, sourceHealth,
@@ -23,7 +23,6 @@ import { fetchAssignableStudents } from '@/lib/transport/assignments'
 import QRCode from 'qrcode'
 import type { TransportVehicle } from '@/lib/transport/types'
 import { Field, FormError, Select, TextInput } from '../formUI'
-import { EmptyRow } from './FleetSection'
 
 type Tab = 'whatsapp' | 'devices' | 'cards' | 'gtfs'
 

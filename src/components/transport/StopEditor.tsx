@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 import {
   MapPin, Trash2, ArrowUp, ArrowDown, LocateFixed, School, Loader2, Route as RouteIcon,
 } from 'lucide-react'
-import { ADMIN } from '@/components/bus/adminUI'
 import { acquirePosition } from '@/lib/gpsAcquisition'
 import {
   fetchStops, createStop, updateStop, deleteStop, reorderStops, nextSeq,
@@ -14,13 +13,14 @@ import {
 import { updateRoute } from '@/lib/transport/routes'
 import type { LatLng, TransportRoute, TransportRoutePath, TransportStop } from '@/lib/transport/types'
 import { Field, TextInput } from './formUI'
+import { GBTN } from './glass'
 
 // Leaflet touches `window` at import time, so the map can only load client-side.
 const TransportMap = dynamic(() => import('./TransportMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[380px] rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-center">
-      <Loader2 className="animate-spin text-[#A1A1AA]" size={20} />
+    <div className="h-[380px] lg:h-[460px] rounded-[16px] bg-slate-100/70 flex items-center justify-center">
+      <Loader2 className="animate-spin text-slate-400" size={20} />
     </div>
   ),
 })
@@ -121,7 +121,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_20rem] gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_19rem] gap-4">
       <div className="space-y-2">
         <TransportMap
           stops={mapStops}
@@ -133,25 +133,25 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
           }
           path={inboundPath?.polyline ?? null}
           pathColor={route.color}
-          height={420}
-          className="rounded-xl overflow-hidden border border-[#E4E4E7]"
+          heightClass="h-[380px] lg:h-[460px]"
+          className="rounded-[16px] overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.06),0_14px_28px_-20px_rgba(15,23,42,.45)]"
         />
-        <p className="text-[11px] text-[#A1A1AA]">
+        <p className="text-[11px] text-slate-500">
           Click the map to add a stop. Drag a pin to move it. The shaded circle is the
           stop&apos;s geofence — Round 2 uses it to detect arrival automatically.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button className={ADMIN.ghostBtn} onClick={captureHere} disabled={capture.running || busy}>
+          <button className={GBTN.secondary} onClick={captureHere} disabled={capture.running || busy}>
             {capture.running ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
             Add stop at my location
           </button>
-          <button className={ADMIN.ghostBtn} onClick={buildPath} disabled={busy || stops.length < 2}>
+          <button className={GBTN.secondary} onClick={buildPath} disabled={busy || stops.length < 2}>
             <RouteIcon size={14} /> Draw path through stops
           </button>
         </div>
         {capture.message && <p className="text-[11px] text-amber-600">{capture.message}</p>}
         {inboundPath?.source === 'stops' && (
-          <p className="text-[11px] text-[#A1A1AA]">
+          <p className="text-[11px] text-slate-500">
             The path is currently a straight line through the stops
             {inboundPath.length_m ? ` (${(inboundPath.length_m / 1000).toFixed(1)} km)` : ''} —
             good enough to show the shape, but widen the corridor before relying on it
@@ -161,37 +161,38 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
       </div>
 
       <div className="space-y-2">
-        <p className={ADMIN.label}>Stops ({stops.length})</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Stops · {stops.length}</p>
 
         {loading ? (
-          <div className="text-xs text-[#A1A1AA] py-6 text-center">Loading stops…</div>
+          <div className="space-y-1.5">{[0, 1, 2, 3].map(i => <div key={i} className="h-10 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
         ) : stops.length === 0 ? (
-          <div className="border border-dashed border-[#E4E4E7] rounded-xl px-4 py-8 text-center">
-            <MapPin size={20} className="mx-auto text-[#A1A1AA] mb-2" />
-            <p className="text-sm font-semibold text-[#52525B]">No stops yet</p>
-            <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+          <div className="border border-dashed border-slate-300 rounded-2xl px-4 py-8 text-center">
+            <MapPin size={20} className="mx-auto text-slate-400 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">No stops yet</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
               Click the map to place the first one, in the order the bus drives to school.
             </p>
           </div>
         ) : (
-          <div className="space-y-1.5 max-h-[26rem] overflow-y-auto pr-0.5">
+          <div className="space-y-1.5 max-h-[28rem] overflow-y-auto pr-0.5">
             {stops.map((s, i) => (
               <div
                 key={s.id}
-                className={`border rounded-lg px-2.5 py-2 cursor-pointer transition-colors ${
-                  s.id === selectedId ? 'border-[#27272A] bg-[#FAFAFA]' : 'border-[#E4E4E7] hover:border-[#D4D4D8]'
+                className={`border rounded-xl px-2.5 py-2 cursor-pointer transition ${
+                  s.id === selectedId ? 'border-[#B8983C]/60 bg-white shadow-[0_8px_18px_-12px_rgba(15,23,42,.4)]' : 'border-slate-200/80 bg-white/70 hover:bg-white'
                 }`}
                 onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
               >
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#27272A] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  <span className="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-sm"
+                    style={{ background: `linear-gradient(135deg, ${route.color}, color-mix(in srgb, ${route.color} 70%, black))` }}>
                     {s.kind === 'school' ? '🏫' : s.seq}
                   </span>
-                  <span className="flex-1 min-w-0 text-sm text-[#27272A] truncate">{s.name}</span>
+                  <span className="flex-1 min-w-0 text-sm text-slate-900 truncate">{s.name}</span>
                   <button
                     onClick={e => { e.stopPropagation(); move(s.id, -1) }}
                     disabled={i === 0 || busy}
-                    className="p-1 text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30"
+                    className="p-1 text-slate-400 hover:text-slate-900 disabled:opacity-30"
                     aria-label="Move up"
                   >
                     <ArrowUp size={12} />
@@ -199,7 +200,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
                   <button
                     onClick={e => { e.stopPropagation(); move(s.id, 1) }}
                     disabled={i === stops.length - 1 || busy}
-                    className="p-1 text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30"
+                    className="p-1 text-slate-400 hover:text-slate-900 disabled:opacity-30"
                     aria-label="Move down"
                   >
                     <ArrowDown size={12} />
@@ -222,7 +223,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
                       />
                     </Field>
                     <div>
-                      <span className={ADMIN.label}>Geofence radius — {s.radius_m} m</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Geofence radius — {s.radius_m} m</span>
                       <input
                         type="range"
                         min={25}
@@ -232,14 +233,14 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
                         onChange={e => patchStop(s.id, { radius_m: Number(e.target.value) })}
                         className="w-full mt-1.5 accent-[#B8983C]"
                       />
-                      <p className="text-[11px] text-[#A1A1AA]">
+                      <p className="text-[11px] text-slate-500">
                         Too tight and a busy road makes the bus miss its own stop; too wide
                         and it registers arrival a street early.
                       </p>
                     </div>
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <button
-                        className="text-[11px] font-semibold text-[#71717A] hover:text-emerald-600 flex items-center gap-1"
+                        className="text-[11px] font-semibold text-slate-500 hover:text-emerald-600 flex items-center gap-1"
                         onClick={async () => {
                           await patchStop(s.id, { kind: s.kind === 'school' ? 'stop' : 'school' })
                           await updateRoute(route.id, { school_stop_id: s.kind === 'school' ? null : s.id })
@@ -249,7 +250,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
                         {s.kind === 'school' ? 'Not the school' : 'This is the school'}
                       </button>
                       <button
-                        className="text-[11px] font-semibold text-[#A1A1AA] hover:text-rose-600 flex items-center gap-1"
+                        className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 flex items-center gap-1"
                         onClick={async () => {
                           if (!confirm(`Delete “${s.name}”? Students assigned to it lose their stop.`)) return
                           await deleteStop(s.id)

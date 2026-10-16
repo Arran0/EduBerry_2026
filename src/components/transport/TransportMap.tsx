@@ -13,11 +13,12 @@
  * default marker asset paths break under webpack.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Polygon, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '@/lib/transport/types'
+import { OSM_TILES, defaultTiles } from '@/lib/transport/mapTiles'
 
 function makeIcon(html: string, size: number) {
   return L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
@@ -31,6 +32,43 @@ const BUS_ICON = makeIcon(
    <style>@keyframes busPulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.5);opacity:0}}</style>`,
   44,
 )
+
+/**
+ * A live bus on the fleet map: a route-coloured disc with the bus glyph, a
+ * soft pulse while it is reporting, and a dark ring when it is the selected
+ * one. Built per render because the colour and state vary per bus; Leaflet
+ * only swaps the DOM when the HTML actually changes.
+ */
+function fleetBusIcon(color: string, opts: { selected?: boolean; live?: boolean; late?: boolean }) {
+  const ring = opts.selected ? '#18181B' : '#fff'
+  const size = opts.selected ? 46 : 40
+  const pulse = opts.live
+    ? `<span style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:busPulse 1.8s ease-out infinite;"></span>`
+    : ''
+  const badge = opts.late
+    ? '<span style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #fff;"></span>'
+    : ''
+  return makeIcon(
+    `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
+       ${pulse}
+       <span style="position:relative;width:${size - 10}px;height:${size - 10}px;border-radius:50%;background:linear-gradient(150deg,${color},color-mix(in srgb, ${color} 70%, black));border:3px solid ${ring};box-shadow:0 4px 12px rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;font-size:${opts.selected ? 17 : 15}px;${opts.live ? '' : 'filter:grayscale(.65);opacity:.85;'}">🚌</span>
+       ${badge}
+     </div>
+     <style>@keyframes busPulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.5);opacity:0}}</style>`,
+    size,
+  )
+}
+
+export interface MapBus {
+  id: string
+  lat: number
+  lng: number
+  label: string
+  detail?: string
+  color?: string
+  live?: boolean
+  late?: boolean
+}
 
 const ME_ICON = makeIcon(
   `<div style="width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.45);"></div>`,
@@ -76,6 +114,10 @@ export interface TransportMapProps {
   path?: LatLng[] | null
   pathColor?: string
   bus?: { lat: number; lng: number; label?: string } | null
+  /** The fleet view: several buses, each clickable. */
+  buses?: MapBus[]
+  selectedBusId?: string | null
+  onBusClick?: (busId: string) => void
   me?: { lat: number; lng: number; accuracy?: number } | null
   /** Draw each stop's geofence. Off in read-only contexts where it is clutter. */
   showFences?: boolean
@@ -144,7 +186,7 @@ function KeepSized() {
  * Deliberately not on every render: re-fitting as the admin edits would yank
  * the viewport away from whatever they are working on.
  */
-function FitStops({ stops }: { stops: MapStop[] }) {
+function FitStops({ stops }: { stops: { lat: number; lng: number }[] }) {
   const map = useMap()
   const done = useRef(false)
   useEffect(() => {
@@ -159,6 +201,40 @@ function FitStops({ stops }: { stops: MapStop[] }) {
   return null
 }
 
+/**
+ * The base map, with a fallback.
+ *
+ * Mapbox when a token is configured. If Mapbox refuses tiles — a revoked
+ * token, a URL restriction that does not list this domain — a handful of
+ * errors in a row swaps the layer to OpenStreetMap so the admin still has a map.
+ */
+function BaseTiles() {
+  const [tiles, setTiles] = useState(defaultTiles)
+  const errors = useRef(0)
+  return (
+    <TileLayer
+      key={tiles.provider}
+      attribution={tiles.attribution}
+      url={tiles.url}
+      tileSize={tiles.tileSize}
+      zoomOffset={tiles.zoomOffset}
+      maxZoom={tiles.maxZoom}
+      {...(tiles.subdomains ? { subdomains: tiles.subdomains } : {})}
+      eventHandlers={{
+        tileerror: () => {
+          if (tiles.provider !== 'mapbox') return
+          errors.current += 1
+          if (errors.current >= 4) {
+            console.warn('Mapbox tiles are being refused — falling back to OpenStreetMap tiles. Check NEXT_PUBLIC_MAPBOX_TOKEN.')
+            setTiles(OSM_TILES)
+          }
+        },
+        tileload: () => { errors.current = 0 },
+      }}
+    />
+  )
+}
+
 export default function TransportMap({
   stops = [],
   selectedStopId = null,
@@ -168,6 +244,9 @@ export default function TransportMap({
   path,
   pathColor = '#B8983C',
   bus = null,
+  buses,
+  selectedBusId = null,
+  onBusClick,
   me = null,
   showFences = true,
   height = 380,
@@ -182,9 +261,17 @@ export default function TransportMap({
   // Centre priority: the bus, then the selected stop, then the first stop, then
   // the viewer, then a neutral default (India centroid) so an empty route still
   // renders a usable map instead of the middle of the Atlantic.
+  const selectedBus = useMemo(
+    () => buses?.find(b => b.id === selectedBusId) ?? null,
+    [buses, selectedBusId],
+  )
+  const firstBus = buses && buses.length > 0 ? buses[0] : null
+
   const center: [number, number] = bus
     ? [bus.lat, bus.lng]
-    : selected
+    : firstBus
+      ? [firstBus.lat, firstBus.lng]
+      : selected
       ? [selected.lat, selected.lng]
       : stops.length > 0
         ? [stops[0].lat, stops[0].lng]
@@ -205,15 +292,11 @@ export default function TransportMap({
         style={{ height: '100%', width: '100%', cursor: onMapClick ? 'crosshair' : undefined }}
       >
         <KeepSized />
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
+        <BaseTiles />
 
-        <FitStops stops={stops} />
+        <FitStops stops={stops.length > 0 ? stops : (buses ?? [])} />
         {selected && <PanTo point={{ lat: selected.lat, lng: selected.lng }} />}
+        {selectedBus && <PanTo point={{ lat: selectedBus.lat, lng: selectedBus.lng }} />}
         {onMapClick && <ClickCatcher onMapClick={onMapClick} />}
 
         {path && path.length > 1 && (
@@ -263,6 +346,21 @@ export default function TransportMap({
             <Popup>{bus.label ?? 'Bus'}</Popup>
           </Marker>
         )}
+
+        {buses?.map(b => (
+          <Marker
+            key={b.id}
+            position={[b.lat, b.lng]}
+            icon={fleetBusIcon(b.color ?? '#B8983C', { selected: b.id === selectedBusId, live: b.live, late: b.late })}
+            zIndexOffset={b.id === selectedBusId ? 1000 : 0}
+            eventHandlers={{ click: () => onBusClick?.(b.id) }}
+          >
+            <Popup>
+              <span className="font-semibold">{b.label}</span>
+              {b.detail && <><br /><span className="text-xs">{b.detail}</span></>}
+            </Popup>
+          </Marker>
+        ))}
 
         {me && (
           <>

@@ -62,6 +62,20 @@ export async function fetchActiveRuns(): Promise<TransportRun[]> {
   return (data as unknown as TransportRun[]) || []
 }
 
+/**
+ * Every run on today's service date, finished ones included — the operations
+ * trip list, where a completed trip still has a rider count worth showing.
+ */
+export async function fetchTodayRuns(): Promise<TransportRun[]> {
+  const { data, error } = await supabase
+    .from('transport_trip_runs')
+    .select(RUN_SELECT)
+    .eq('service_date', todayISO())
+    .order('scheduled_start_at', { ascending: true })
+  if (error) { console.error('fetchTodayRuns failed:', error); return [] }
+  return (data as unknown as TransportRun[]) || []
+}
+
 export async function fetchRun(runId: string): Promise<TransportRun | null> {
   const { data, error } = await supabase
     .from('transport_trip_runs')

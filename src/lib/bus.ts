@@ -71,6 +71,8 @@ export interface BusFee {
   amount: number
   description: string | null
   due_date: string | null
+  /** `YYYY-MM` for bills raised by a monthly billing run; null when issued by hand. */
+  billing_period?: string | null
   status: BusFeeStatus
   upi_reference: string
   created_by: string | null
@@ -130,30 +132,11 @@ export interface FeeCollectionSummary {
 }
 
 // ============================================
-// Trips
-// ============================================
-
-export async function fetchTrips(): Promise<BusTrip[]> {
-  const { data, error } = await supabase
-    .from('transport_routes')
-    .select(`*, default_driver:profiles!default_driver_id(${PROFILE_COLS})`)
-    .order('name', { ascending: true })
-  if (error) { console.error('fetchTrips failed:', error); return [] }
-  return (data as BusTrip[]) || []
-}
-
-// Route CRUD used to live here. It now belongs to src/lib/transport/routes.ts,
-// which writes the full route model (path, colour, deviation threshold) rather
-// than the four columns the old trip template had. `fetchTrips` survives only
-// because the fee screens still want a flat list of routes to pick from.
-
-// ============================================
 // Passengers
 //
-// Assignment management now lives in src/lib/transport/assignments.ts against
-// the renamed transport_student_assignments table. What remains here is only
-// what the bus-fee draft importer still reads, and it is no longer exported:
-// a second way to read the roster is how two screens come to disagree.
+// Assignment management lives in src/lib/transport/assignments.ts, and monthly
+// bills are raised from each route's fee grid (src/lib/transport/fees.ts).
+// What remains here is the picker for a one-off fee issued by hand.
 // ============================================
 
 /**
@@ -172,27 +155,6 @@ export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchAssignablePassengers failed:', error); return [] }
   return (data as UserProfile[]) || []
-}
-
-/** A route rider with the per-route fee + pickup label the admin set. */
-interface TripPassengerDetail {
-  passenger_id: string
-  fee_amount: number | null
-  location: string | null
-  passenger?: UserProfile | null
-}
-
-/** Riders with their fee amount + pickup label, used by "Import trip" in a Bulk
- *  Issue. Aliased back to the old field names so the fee screens are untouched. */
-async function fetchTripPassengersDetailed(tripId: string): Promise<TripPassengerDetail[]> {
-  const { data, error } = await supabase
-    .from('transport_student_assignments')
-    .select(`passenger_id:student_id, fee_amount, location:location_label, passenger:profiles!student_id(${PROFILE_COLS})`)
-    .eq('route_id', tripId)
-    .is('ended_on', null)
-  if (error) { console.error('fetchTripPassengersDetailed failed:', error); return [] }
-  const rows = (data as unknown as TripPassengerDetail[]) || []
-  return rows.sort((a, b) => (a.passenger?.full_name ?? '').localeCompare(b.passenger?.full_name ?? ''))
 }
 
 // ============================================
@@ -694,240 +656,3 @@ export async function upsertDriverBankAccount(input: DriverBankAccountInput): Pr
 
 export type { PayoutConfig } from './salary'
 export { fetchPayoutConfig, savePayoutConfig } from './salary'
-
-// ============================================
-// Monthly Fee Drafts
-// ============================================
-
-export type BusFeeDraftStatus = 'draft' | 'issued'
-
-export interface BusFeeDraft {
-  id: string
-  title: string
-  month: string
-  route_id: string | null
-  fee_head_id: string | null
-  description: string | null
-  due_date: string | null
-  status: BusFeeDraftStatus
-  issued_at: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  route?: Pick<BusTrip, 'id' | 'name'> | null
-  fee_head?: Pick<BusFeeHead, 'id' | 'name'> | null
-  passenger_count?: number
-}
-
-export interface BusFeeDraftInput {
-  title: string
-  month: string
-  route_id?: string | null
-  fee_head_id?: string | null
-  description?: string | null
-  due_date?: string | null
-}
-
-export interface BusFeeDraftPassenger {
-  id: string
-  draft_id: string
-  passenger_id: string
-  amount: number | null
-  description: string | null
-  created_at: string
-  passenger?: UserProfile | null
-}
-
-export async function fetchBusFeeDrafts(): Promise<BusFeeDraft[]> {
-  const { data, error } = await supabase
-    .from('bus_fee_drafts')
-    .select('*, route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
-    .order('month', { ascending: false })
-  if (error) { console.error('fetchBusFeeDrafts failed:', error); return [] }
-
-  const drafts = (data as BusFeeDraft[]) || []
-  if (drafts.length === 0) return []
-
-  const ids = drafts.map(d => d.id)
-  const { data: counts } = await supabase
-    .from('bus_fee_draft_passengers')
-    .select('draft_id')
-    .in('draft_id', ids)
-
-  const countMap: Record<string, number> = {}
-  for (const r of (counts || []) as { draft_id: string }[]) {
-    countMap[r.draft_id] = (countMap[r.draft_id] ?? 0) + 1
-  }
-
-  return drafts.map(d => ({ ...d, passenger_count: countMap[d.id] ?? 0 }))
-}
-
-export async function fetchBusFeeDraft(draftId: string): Promise<BusFeeDraft | null> {
-  const { data, error } = await supabase
-    .from('bus_fee_drafts')
-    .select('*, route:transport_routes!route_id(id, name), fee_head:bus_fee_heads!fee_head_id(id, name)')
-    .eq('id', draftId)
-    .single()
-  if (error) { console.error('fetchBusFeeDraft failed:', error); return null }
-
-  const draft = data as BusFeeDraft
-  const { data: counts } = await supabase
-    .from('bus_fee_draft_passengers')
-    .select('draft_id')
-    .eq('draft_id', draftId)
-
-  return { ...draft, passenger_count: (counts || []).length }
-}
-
-export async function createBusFeeDraft(input: BusFeeDraftInput): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('bus_fee_drafts')
-    .insert({ ...input, created_by: user?.id })
-    .select('id')
-    .single()
-  if (error) { console.error('createBusFeeDraft failed:', error); return { success: false, error: error.message } }
-  return { success: true, id: data.id }
-}
-
-export async function updateBusFeeDraft(draftId: string, input: Partial<BusFeeDraftInput>): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('bus_fee_drafts').update(input).eq('id', draftId)
-  if (error) { console.error('updateBusFeeDraft failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function deleteBusFeeDraft(draftId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('bus_fee_drafts').delete().eq('id', draftId)
-  if (error) { console.error('deleteBusFeeDraft failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function fetchDraftPassengersWithAmounts(draftId: string): Promise<BusFeeDraftPassenger[]> {
-  const { data, error } = await supabase
-    .from('bus_fee_draft_passengers')
-    .select(`*, passenger:profiles!passenger_id(${PROFILE_COLS})`)
-    .eq('draft_id', draftId)
-    .order('created_at', { ascending: true })
-  if (error) { console.error('fetchDraftPassengersWithAmounts failed:', error); return [] }
-  return (data as unknown as BusFeeDraftPassenger[]) || []
-}
-
-export async function addDraftPassenger(draftId: string, passengerId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('bus_fee_draft_passengers')
-    .insert({ draft_id: draftId, passenger_id: passengerId })
-  if (error) { console.error('addDraftPassenger failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** Pull every passenger from a linked trip into a Bulk Issue, carrying each
- *  passenger's per-trip fee amount (→ amount) and location (→ note). Existing
- *  draft rows are refreshed; rows the admin already edited keep their values
- *  unless the trip has a value to fill an empty cell. */
-export async function importTripPassengersIntoDraft(
-  draftId: string,
-  tripId: string,
-): Promise<{ success: boolean; added: number; error?: string }> {
-  const tripPax = await fetchTripPassengersDetailed(tripId)
-  if (tripPax.length === 0) return { success: true, added: 0 }
-
-  const { data: existing, error: exErr } = await supabase
-    .from('bus_fee_draft_passengers')
-    .select('passenger_id, amount, description')
-    .eq('draft_id', draftId)
-  if (exErr) { console.error('importTripPassengersIntoDraft fetch failed:', exErr); return { success: false, added: 0, error: exErr.message } }
-
-  const existingMap = new Map(
-    (existing || []).map((r: { passenger_id: string; amount: number | null; description: string | null }) => [r.passenger_id, r]),
-  )
-
-  const rows = tripPax.map(p => {
-    const cur = existingMap.get(p.passenger_id)
-    return {
-      draft_id: draftId,
-      passenger_id: p.passenger_id,
-      // Only fill empty cells from the trip so manual edits are never clobbered.
-      amount: (cur?.amount ?? null) != null ? cur!.amount : p.fee_amount,
-      description: (cur?.description && cur.description.trim()) ? cur.description : p.location,
-    }
-  })
-
-  const added = rows.filter(r => !existingMap.has(r.passenger_id)).length
-  const { error } = await supabase
-    .from('bus_fee_draft_passengers')
-    .upsert(rows, { onConflict: 'draft_id,passenger_id' })
-  if (error) { console.error('importTripPassengersIntoDraft upsert failed:', error); return { success: false, added: 0, error: error.message } }
-  return { success: true, added }
-}
-
-export async function removeDraftPassenger(draftId: string, passengerId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('bus_fee_draft_passengers')
-    .delete()
-    .eq('draft_id', draftId)
-    .eq('passenger_id', passengerId)
-  if (error) { console.error('removeDraftPassenger failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-export async function updateDraftPassengerFee(
-  draftId: string,
-  passengerId: string,
-  amount: number | null,
-  description?: string | null,
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('bus_fee_draft_passengers')
-    .update({ amount, description: description ?? null })
-    .eq('draft_id', draftId)
-    .eq('passenger_id', passengerId)
-  if (error) { console.error('updateDraftPassengerFee failed:', error); return { success: false, error: error.message } }
-  return { success: true }
-}
-
-/** Issue individual fees to every student in a draft and mark it as issued. */
-export async function issueDraft(draftId: string): Promise<{ success: boolean; count?: number; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { data: draft, error: draftErr } = await supabase
-    .from('bus_fee_drafts')
-    .select('*')
-    .eq('id', draftId)
-    .single()
-  if (draftErr || !draft) { console.error('issueDraft fetch draft failed:', draftErr); return { success: false, error: 'Draft not found' } }
-
-  const { data: rows, error: pErr } = await supabase
-    .from('bus_fee_draft_passengers')
-    .select('passenger_id, amount, description')
-    .eq('draft_id', draftId)
-  if (pErr) { console.error('issueDraft fetch passengers failed:', pErr); return { success: false, error: pErr.message } }
-
-  const passengers = (rows || []) as { passenger_id: string; amount: number | null; description: string | null }[]
-  if (passengers.length === 0) return { success: false, error: 'No students in this draft' }
-
-  const missing = passengers.filter(p => !p.amount || Number(p.amount) <= 0)
-  if (missing.length > 0) {
-    return { success: false, error: `${missing.length} student${missing.length === 1 ? ' has' : 's have'} no fee amount set` }
-  }
-
-  const fees = passengers.map(p => ({
-    passenger_id: p.passenger_id,
-    route_id: (draft.route_id as string | null) ?? null,
-    fee_head_id: (draft.fee_head_id as string | null) ?? null,
-    amount: p.amount!,
-    description: p.description || (draft.description as string | null) || (draft.title as string),
-    due_date: (draft.due_date as string | null) ?? null,
-    created_by: user?.id,
-  }))
-
-  const { error: feesErr } = await supabase.from('bus_fees').insert(fees)
-  if (feesErr) { console.error('issueDraft insert fees failed:', feesErr); return { success: false, error: feesErr.message } }
-
-  const { error: updateErr } = await supabase
-    .from('bus_fee_drafts')
-    .update({ status: 'issued', issued_at: new Date().toISOString() })
-    .eq('id', draftId)
-  if (updateErr) { console.error('issueDraft update status failed:', updateErr); return { success: false, error: updateErr.message } }
-
-  return { success: true, count: passengers.length }
-}

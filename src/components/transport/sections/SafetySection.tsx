@@ -4,12 +4,11 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertOctagon, ShieldCheck, MapPin, Users, Clock, ChevronDown, Loader2,
 } from 'lucide-react'
-import { ADMIN } from '@/components/bus/adminUI'
+import { ADMIN, EmptyRow } from '@/components/bus/adminUI'
 import {
   fetchIncidents, formatClock, resolveIncident,
   INCIDENT_LABELS, type TransportIncident,
 } from '@/lib/transport/runs'
-import { EmptyRow } from './FleetSection'
 
 /**
  * The incident console.

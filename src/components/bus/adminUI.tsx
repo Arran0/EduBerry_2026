@@ -175,3 +175,16 @@ export function SegTabs<T extends string>({
     </div>
   )
 }
+
+/** An empty-state row for a Sheet or a panel: icon, title, one line of help. */
+export function EmptyRow({ icon, title, detail }: { icon: React.ReactNode; title: string; detail: string }) {
+  return (
+    <div className="px-4 py-10 text-center">
+      <div className="mx-auto w-10 h-10 rounded-full bg-[#F4F4F5] text-[#A1A1AA] flex items-center justify-center mb-2">
+        {icon}
+      </div>
+      <p className="text-sm font-semibold text-[#52525B]">{title}</p>
+      <p className="text-xs text-[#A1A1AA] mt-0.5 max-w-sm mx-auto">{detail}</p>
+    </div>
+  )
+}

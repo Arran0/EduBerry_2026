@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, ChevronRight, Clock, Download, Gauge, Radio, TrendingUp, Users,
 } from 'lucide-react'
-import { ADMIN, SHEET, Sheet, SheetRowSkeleton } from '@/components/bus/adminUI'
+import { ADMIN, SHEET, Sheet, SheetRowSkeleton, EmptyRow } from '@/components/bus/adminUI'
 import DonutChart from '@/components/charts/DonutChart'
 import MetricBars from '@/components/charts/MetricBars'
 import {
@@ -29,7 +29,6 @@ import {
 import { csvFile } from '@/lib/zip'
 import { downloadBlob } from '@/lib/transport/gtfs'
 import { DIRECTION_LABELS } from '@/lib/transport/types'
-import { EmptyRow } from './FleetSection'
 
 type Tab = 'ontime' | 'utilisation' | 'stops' | 'gps' | 'mismatch'
 
