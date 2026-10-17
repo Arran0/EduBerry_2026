@@ -2541,15 +2541,51 @@ export async function fetchStudentNonPresentByDate(
   return hydrateStudentEntries(data ?? [])
 }
 
+/** Strips the characters PostgREST's `or=(…)` / `in.(…)` syntax treats as structure. */
+function sanitiseReportSearch(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/[,()*%\\]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Student ids whose name or email matches a report search. Resolved up front
+ * so the paged query below can filter in the database: filtering only the rows
+ * already on screen made anyone past the first page look like "no results"
+ * until "Show more" happened to pull them in.
+ */
+async function searchStudentIds(term: string): Promise<string[]> {
+  const like = `%${term}%`
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'student')
+    .or(`full_name.ilike.${like},email.ilike.${like}`)
+    .limit(200)
+  if (error) {
+    console.error('searchStudentIds error:', error)
+    return []
+  }
+  return (data ?? []).map(r => r.id as string)
+}
+
 // Present students for a date, paged so a whole-school list never loads at once.
+// `search` narrows it to students whose name or email matches, in the database,
+// so a match on page five is found without paging through one to four.
 export async function fetchStudentPresentByDate(
   date: string,
   homeroom: HomeroomScope,
   offset: number,
-  limit: number
+  limit: number,
+  search?: string | null
 ): Promise<{ rows: StudentAttendanceEntry[]; total: number }> {
   const ids = homeroomScopeIds(homeroom)
   if (ids && ids.length === 0) return { rows: [], total: 0 }
+
+  const term = sanitiseReportSearch(search)
+  let studentIds: string[] | null = null
+  if (term) {
+    studentIds = await searchStudentIds(term)
+    if (studentIds.length === 0) return { rows: [], total: 0 }
+  }
 
   let q = supabase
     .from('attendance_records')
@@ -2559,6 +2595,7 @@ export async function fetchStudentPresentByDate(
     .order('student_id', { ascending: true })
     .range(offset, offset + limit - 1)
   if (ids) q = ids.length === 1 ? q.eq('homeroom_id', ids[0]) : q.in('homeroom_id', ids)
+  if (studentIds) q = q.in('student_id', studentIds)
 
   const { data, error, count } = await q
   if (error) {
@@ -2628,10 +2665,31 @@ export async function fetchHomeroomAttendanceCountsByDate(
   date: string,
   homeroom: HomeroomScope,
   offset: number,
-  limit: number
+  limit: number,
+  search?: string | null
 ): Promise<{ rows: HomeroomAttendanceCounts[]; total: number }> {
   const scopeIds = homeroomScopeIds(homeroom)
   if (scopeIds && scopeIds.length === 0) return { rows: [], total: 0 }
+
+  // A search matches the homeroom's name or section, or its class teacher's
+  // name — in the database, over every homeroom, not just the page on screen.
+  const term = sanitiseReportSearch(search)
+  let searchExpr: string | null = null
+  if (term) {
+    const like = `%${term}%`
+    const { data: teachers } = await supabase
+      .from('profiles')
+      .select('id')
+      .neq('role', 'student')
+      .ilike('full_name', like)
+      .limit(50)
+    const teacherIds = (teachers ?? []).map(t => t.id as string)
+    searchExpr = [
+      `name.ilike.${like}`,
+      `section.ilike.${like}`,
+      ...(teacherIds.length ? [`class_teacher_id.in.(${teacherIds.join(',')})`] : []),
+    ].join(',')
+  }
 
   // Homerooms that had already expired before the reported date can never have
   // attendance on it — leaving them out keeps last year's classes off the list.
@@ -2649,7 +2707,12 @@ export async function fetchHomeroomAttendanceCountsByDate(
       .order('name', { ascending: true })
       .range(offset, offset + limit - 1)
     if (scopeIds) q = scopeIds.length === 1 ? q.eq('id', scopeIds[0]) : q.in('id', scopeIds)
-    if (scopeToActive) q = q.or(`expiry_date.is.null,expiry_date.gte.${date}`)
+    // Both filters are ORs of their own, so they are nested under one AND
+    // rather than sent as two `or` parameters.
+    const active = `or(expiry_date.is.null,expiry_date.gte.${date})`
+    if (scopeToActive && searchExpr) q = q.or(`and(${active},or(${searchExpr}))`)
+    else if (scopeToActive) q = q.or(`expiry_date.is.null,expiry_date.gte.${date}`)
+    else if (searchExpr) q = q.or(searchExpr)
     return q
   }
 

@@ -512,7 +512,9 @@ export default function LeaveApplicationCard({
   )
 
   const cardSurface = (
-    <div className="glass-strong rounded-2xl overflow-hidden">
+    // Solid, not frosted: this card is mostly shown inside popups, and a
+    // backdrop-filtered layer under a popup is what made Chrome flash black.
+    <div className="rounded-2xl overflow-hidden bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)]">
       {/* Type accent bar */}
       <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
 
@@ -613,14 +615,16 @@ export default function LeaveApplicationCard({
           {showDeleteConfirm && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              className="lg-scrim fixed inset-0 z-50 flex items-center justify-center p-4"
               onClick={() => setShowDeleteConfirm(false)}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+                role="alertdialog"
+                aria-modal="true"
+                className="lg-popup rounded-[24px] w-full max-w-sm p-5"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3 mb-3">

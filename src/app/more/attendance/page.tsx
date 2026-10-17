@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'react'
+import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -8,9 +8,10 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, XCircle, BookOpen, Briefcase, TrendingUp, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, BookOpen, Briefcase, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search, Check } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
+import DonutChart from '@/components/charts/DonutChart'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
 const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
 // The whole Student OD / Leave app, hosted here in a popup. Loaded on demand —
@@ -18,8 +19,9 @@ const AttendanceCalendar       = dynamic(() => import('@/components/attendance/A
 const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveModal'), {
   ssr: false,
   // Covers the gap while the chunk arrives, so the button feels like it fired.
+  // A plain dim, like the popup it stands in for — no backdrop-filter.
   loading: () => (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 backdrop-blur-md">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/50">
       <div className="spinner" />
     </div>
   ),
@@ -42,59 +44,138 @@ import {
   ATTENDANCE_STATUS_LABELS,
 } from '@/lib/attendance'
 
-// ─── Student View skeletons ───────────────────────────────────────────────────
+/** The same width the Staff Attendance app uses, banner and body alike. */
+const MAX_W = 'max-w-7xl'
 
-/** Placeholder for the academic-year overview stats bar while it loads. */
-function YearlySummarySkeleton() {
+const PRESENT_C = '#10b981'
+const ABSENT_C = '#f43f5e'
+const LATE_C = '#f59e0b'
+const HALF_C = '#f97316'
+
+// ─── Liquid Glass pieces ──────────────────────────────────────────────────────
+// The home page's material: a glass sheet with colour under it, and solid
+// content cards riding on top (.lg-sheet / .lg-content in globals.css). The
+// sheet here carries no backdrop-filter — popups open over this page, and a
+// blurred layer under a fading popup is what made Chrome flash black.
+
+/** Blurred colour under a sheet, in the page's accent and a status hue. */
+function Ambient({ colors = ['var(--page-gradient-from, #7c3aed)', PRESENT_C] }: { colors?: string[] }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
-        <div className="skeleton w-3.5 h-3.5 rounded" />
-        <div className="skeleton h-2.5 w-40 rounded" />
-      </div>
-      <div className="grid grid-cols-4 divide-x divide-slate-100">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col items-center gap-2 py-3 px-1">
-            <div className="skeleton w-7 h-7 rounded-xl" />
-            <div className="skeleton h-4 w-6 rounded" />
-            <div className="skeleton h-2 w-10 rounded" />
-          </div>
-        ))}
-      </div>
-      <div className="px-4 pb-3 pt-3 border-t border-slate-100 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="skeleton h-2 w-24 rounded" />
-          <div className="skeleton h-2 w-8 rounded" />
-        </div>
-        <div className="skeleton h-2 w-full rounded-full" />
+    <div aria-hidden className="absolute inset-0 overflow-hidden rounded-[inherit] pointer-events-none">
+      <div className="lg-ambient">
+        {colors.map((c, i) => <span key={i} style={{ background: c }} />)}
       </div>
     </div>
   )
 }
 
-/** Placeholder for the monthly calendar while homerooms/records load. */
+interface SegmentOption<T extends string> {
+  key: T
+  label: React.ReactNode
+  icon?: React.ElementType
+  /** Trailing figure, e.g. a tab's count. */
+  count?: React.ReactNode
+  /** Colour for the count when this option is selected. */
+  tone?: string
+  title?: string
+}
+
+/**
+ * iOS-style segmented control: a recessed capsule and a white thumb that
+ * slides to the picked option. The slide is the one piece of motion on the
+ * page — it shows which way the view just changed.
+ */
+function Segmented<T extends string>({
+  options, value, onChange, className = '', fill = false, ariaLabel,
+}: {
+  options: SegmentOption<T>[]
+  value: T
+  onChange: (v: T) => void
+  className?: string
+  /** Stretch every option to an equal share of the width. */
+  fill?: boolean
+  ariaLabel?: string
+}) {
+  const id = useId()
+  return (
+    <div role="group" aria-label={ariaLabel} className={`lg-seg ${fill ? 'w-full' : ''} ${className}`}>
+      {options.map(o => {
+        const active = o.key === value
+        const Icon = o.icon
+        return (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => onChange(o.key)}
+            aria-pressed={active}
+            title={o.title}
+            className={`lg-seg-btn isolate px-2.5 py-1 text-xs ${fill ? 'flex-1 min-w-0' : ''}`}
+          >
+            {active && (
+              <motion.span
+                layoutId={`seg-${id}`}
+                className="lg-seg-thumb"
+                transition={{ type: 'spring', stiffness: 520, damping: 38 }}
+              />
+            )}
+            {Icon && <Icon size={12} className="flex-shrink-0" />}
+            <span className="truncate">{o.label}</span>
+            {o.count != null && (
+              <span
+                className="tabular-nums font-bold"
+                style={{ color: active ? o.tone : '#94a3b8' }}
+              >
+                {o.count}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Student View skeletons ───────────────────────────────────────────────────
+
+/** Placeholder for the academic-year overview while it loads. */
+function YearlySummarySkeleton() {
+  return (
+    <div className="lg-content p-3">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="skeleton h-2.5 w-28 rounded" />
+        <div className="skeleton h-4 w-12 rounded-full" />
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="skeleton w-[104px] h-[104px] rounded-full flex-shrink-0" />
+        <div className="flex-1 space-y-2.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <div className="skeleton h-2.5 w-16 rounded" />
+              <div className="skeleton h-3 w-6 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Placeholder for the monthly calendar — the card's own shape, in grey. */
 function CalendarSkeleton() {
   return (
-    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-      <div className="bg-gradient-to-r from-violet-700 to-purple-600 px-4 sm:px-5 py-4 flex items-center justify-between">
-        <div className="w-8 h-8 rounded-xl bg-white/15" />
-        <div className="h-4 w-28 rounded bg-white/20" />
-        <div className="w-8 h-8 rounded-xl bg-white/15" />
+    <div className="rounded-[20px] overflow-hidden bg-white ring-1 ring-slate-900/[0.06]">
+      <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-4 w-36 rounded" />
+          <div className="skeleton h-3 w-44 rounded-full" />
+        </div>
+        <div className="skeleton w-8 h-8 rounded-full" />
+        <div className="skeleton w-8 h-8 rounded-full" />
       </div>
-      <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="py-2 flex justify-center">
-            <div className="skeleton h-2 w-6 rounded" />
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 bg-white">
+      <div className="grid grid-cols-7 gap-1 px-1.5 pb-1.5 pt-6">
         {Array.from({ length: 35 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-14 border-b border-r border-slate-100 last:border-r-0 flex items-center justify-center"
-          >
-            <div className="skeleton w-7 h-7 rounded-lg" />
+          <div key={i} className="h-[52px] rounded-xl bg-slate-50 flex items-center justify-center">
+            <div className="skeleton w-6 h-6 rounded-lg" />
           </div>
         ))}
       </div>
@@ -105,20 +186,19 @@ function CalendarSkeleton() {
 /** Full first-paint placeholder mirroring the student attendance layout. */
 function StudentAttendanceSkeleton() {
   return (
-    <div className="space-y-3 sm:space-y-4">
-      {/* Homeroom context card */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl">
-        <div className="skeleton w-9 h-9 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-2.5 w-32 rounded" />
-          <div className="skeleton h-2 w-24 rounded" />
+    <div className="lg-sheet p-2 sm:p-2.5">
+      <div className="relative grid gap-2 sm:gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        <div className="space-y-2 sm:space-y-2.5 lg:order-2">
+          <div className="lg-content flex items-center gap-2.5 px-3 py-2.5">
+            <div className="skeleton w-8 h-8 rounded-[10px]" />
+            <div className="flex-1 space-y-2">
+              <div className="skeleton h-2.5 w-32 rounded" />
+              <div className="skeleton h-2 w-24 rounded" />
+            </div>
+          </div>
+          <YearlySummarySkeleton />
         </div>
-        <div className="skeleton h-6 w-16 rounded-lg" />
-      </div>
-      <YearlySummarySkeleton />
-      <div>
-        <div className="skeleton h-2.5 w-28 rounded mb-2" />
-        <CalendarSkeleton />
+        <div className="lg:order-1"><CalendarSkeleton /></div>
       </div>
     </div>
   )
@@ -147,6 +227,55 @@ interface LeaveHost {
 const LeaveHostContext = React.createContext<LeaveHost | null>(null)
 
 // ─── Student View ─────────────────────────────────────────────────────────────
+
+function homeroomSubtitle(hr: Homeroom): string {
+  return [
+    hr.grade != null && hr.grade !== undefined ? `Grade ${hr.grade}` : '',
+    hr.section ? `Section ${hr.section}` : '',
+  ].filter(Boolean).join(' · ')
+}
+
+/** The year so far: a ring for the rate, the four tallies read off beside it. */
+function YearOverview({ summary }: { summary: AttendanceSummary }) {
+  const pct = summary.present_pct
+  const rateTone = pct >= 85 ? 'text-emerald-700 bg-emerald-50' : pct >= 75 ? 'text-amber-700 bg-amber-50' : 'text-rose-700 bg-rose-50'
+  const rows = [
+    { label: 'Present',  value: summary.present,  color: PRESENT_C },
+    { label: 'Absent',   value: summary.absent,   color: ABSENT_C },
+    { label: 'Late',     value: summary.late,     color: LATE_C },
+    { label: 'Half day', value: summary.half_day, color: HALF_C },
+  ]
+  const marked = rows.reduce((n, r) => n + r.value, 0)
+  return (
+    <div className="lg-content p-3 animate-fade-in">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-[12px] font-semibold text-slate-500">This academic year</p>
+        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums ${rateTone}`}>
+          {pct}% attendance
+        </span>
+      </div>
+      <div className="flex items-center gap-4">
+        <DonutChart
+          size={104}
+          thickness={12}
+          centerValue={marked > 0 ? `${pct}%` : '—'}
+          centerLabel={marked > 0 ? 'present' : 'no records'}
+          ariaLabel={`This academic year: ${summary.present} present, ${summary.absent} absent, ${summary.late} late, ${summary.half_day} half days.`}
+          segments={rows.map(r => ({ label: r.label, value: r.value, color: r.color }))}
+        />
+        <dl className="flex-1 min-w-0 space-y-1.5">
+          {rows.map(r => (
+            <div key={r.label} className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }} />
+              <dt className="flex-1 text-[12px] text-slate-500 truncate">{r.label}</dt>
+              <dd className="text-[13px] font-bold text-slate-900 tabular-nums">{r.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  )
+}
 
 function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studentId: string; readOnly?: boolean; refreshKey?: number }) {
   const router = useRouter()
@@ -192,12 +321,15 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
 
   if (homerooms.length === 0) {
     return (
-      <div className="py-16 text-center px-6">
-        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-          <ClipboardList size={28} className="text-slate-300" />
+      <div className="lg-sheet py-14 text-center px-6">
+        <Ambient />
+        <div className="relative">
+          <div className="w-14 h-14 rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/[0.06] flex items-center justify-center mx-auto mb-3">
+            <ClipboardList size={24} className="text-slate-300" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700 mb-1">No homeroom yet</p>
+          <p className="text-xs text-slate-500">Attendance shows here once an administrator adds you to a homeroom.</p>
         </div>
-        <p className="text-sm font-semibold text-slate-600 mb-1">No homeroom assigned</p>
-        <p className="text-xs text-slate-400">Contact your administrator to be added to a homeroom.</p>
       </div>
     )
   }
@@ -205,143 +337,125 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
   const selectedHomeroom = homerooms.find(h => h.id === selectedHomeroomId)
 
   return (
-    <div className="space-y-3 sm:space-y-4 animate-fade-in">
+    // One glass sheet: the calendar is the reading surface, so on a desktop it
+    // takes the wide column and the homeroom and the year's tally stack in a
+    // narrow one beside it; on a phone they stack above it.
+    <div className="lg-sheet p-2 sm:p-2.5 animate-fade-in">
+      <Ambient />
+      <div className="relative grid gap-2 sm:gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
+        <div className="space-y-2 sm:space-y-2.5 lg:order-2">
 
-      {/* ── Homeroom selector (multiple) ── */}
-      {homerooms.length > 1 ? (
-        <div className="bg-white border border-[#D4D4D8] rounded-xl p-3">
-          <p className="text-[10px] font-bold text-[#525252] uppercase tracking-widest mb-2 px-0.5">
-            Your Homerooms
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-            {homerooms.map((hr: Homeroom) => {
-              const active = selectedHomeroomId === hr.id
-              return (
-                <button
-                  key={hr.id}
-                  onClick={() => handleHomeroomSelect(hr.id)}
-                  aria-pressed={active}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-colors text-left ${
-                    active
-                      ? 'bg-violet-600 text-white border-violet-600'
-                      : 'bg-white text-[#18181B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
-                  }`}
-                >
-                  <Home size={14} className={`flex-shrink-0 ${active ? 'text-white/80' : 'text-violet-500'}`} />
-                  <div className="flex-1 min-w-0">
-                    <span className={`block text-sm font-semibold truncate ${active ? 'text-white' : 'text-[#18181B]'}`}>{hr.name}</span>
-                    {(hr.grade || hr.section || hr.academic_year) && (
-                      <span className={`block text-[11px] truncate ${active ? 'text-violet-200' : 'text-[#A1A1AA]'}`}>
-                        {hr.grade && hr.section ? `Grade ${hr.grade} · Section ${hr.section}` : hr.grade ? `Grade ${hr.grade}` : hr.section ?? ''}
-                        {hr.academic_year ? (hr.grade || hr.section ? ` · AY ${hr.academic_year}` : `AY ${hr.academic_year}`) : ''}
+          {/* ── Homeroom ── */}
+          {homerooms.length > 1 ? (
+            <div className="lg-content p-1.5">
+              <p className="px-2 pt-1 pb-1.5 text-[12px] font-semibold text-slate-500">Your homerooms</p>
+              <div className="space-y-0.5">
+                {homerooms.map((hr: Homeroom) => {
+                  const active = selectedHomeroomId === hr.id
+                  const sub = [homeroomSubtitle(hr), hr.academic_year ? `AY ${hr.academic_year}` : ''].filter(Boolean).join(' · ')
+                  return (
+                    <button
+                      key={hr.id}
+                      onClick={() => handleHomeroomSelect(hr.id)}
+                      aria-pressed={active}
+                      className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl text-left transition-colors ${
+                        active ? 'bg-slate-900/[0.05]' : 'hover:bg-slate-900/[0.03]'
+                      }`}
+                    >
+                      <span
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center flex-shrink-0"
+                        style={active
+                          ? { background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }
+                          : { background: '#f1f5f9' }}
+                      >
+                        <Home size={13} className={active ? 'text-white' : 'text-slate-400'} />
                       </span>
-                    )}
-                  </div>
-                  {active && <CheckCircle2 size={15} className="text-white/80 flex-shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : selectedHomeroom && (
-        /* Single homeroom — context card */
-        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white border border-[#D4D4D8] rounded-xl">
-          <Home size={15} className="text-violet-500 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-[#18181B] truncate">{selectedHomeroom.name}</p>
-            {selectedHomeroom.grade && selectedHomeroom.section && (
-              <p className="text-[11px] text-[#A1A1AA]">Grade {selectedHomeroom.grade} · Section {selectedHomeroom.section}</p>
-            )}
-          </div>
-          {selectedHomeroom.academic_year && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] font-medium flex-shrink-0">
-              AY {selectedHomeroom.academic_year}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* ── Yearly quick-stats bar ── */}
-      {!yearlySummary && selectedHomeroomId && <YearlySummarySkeleton />}
-      {yearlySummary && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden animate-fade-in">
-          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
-            <TrendingUp size={13} className="text-violet-500" />
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Academic Year Overview</p>
-          </div>
-          <div className="grid grid-cols-4 divide-x divide-slate-100">
-            {[
-              { icon: CheckCircle2, label: 'Present',  val: yearlySummary.present,   color: '#10b981', bg: '#ecfdf5' },
-              { icon: XCircle,      label: 'Absent',   val: yearlySummary.absent,    color: '#f43f5e', bg: '#fff1f2' },
-              { icon: Briefcase,    label: 'Late',     val: yearlySummary.late,      color: '#f59e0b', bg: '#fffbeb' },
-              { icon: BookOpen,     label: 'Half Day', val: yearlySummary.half_day,  color: '#f97316', bg: '#fff7ed' },
-            ].map(({ icon: Icon, label, val, color, bg }) => (
-              <div key={label} className="flex flex-col items-center gap-1 py-3 px-1">
-                <div className="w-7 h-7 rounded-xl flex items-center justify-center mb-0.5" style={{ background: bg }}>
-                  <Icon size={13} style={{ color }} />
-                </div>
-                <span className="text-lg font-extrabold text-slate-800 leading-none">{val}</span>
-                <span className="text-[9px] font-medium text-slate-400">{label}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-semibold text-slate-900 truncate">{hr.name}</span>
+                        {sub && <span className="block text-[11px] text-slate-400 truncate">{sub}</span>}
+                      </span>
+                      {active && <Check size={15} className="text-slate-900 flex-shrink-0" />}
+                    </button>
+                  )
+                })}
               </div>
-            ))}
-          </div>
-          {/* Percentage bar */}
-          <div className="px-4 pb-3 pt-1 border-t border-slate-100">
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1.5">
-              <span className="font-medium">Attendance rate</span>
-              <span className="font-bold text-violet-600">{yearlySummary.present_pct}%</span>
             </div>
-            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${yearlySummary.present_pct}%`,
-                  background: yearlySummary.present_pct >= 85 ? '#10b981' : yearlySummary.present_pct >= 75 ? '#f59e0b' : '#f43f5e',
-                }}
-              />
+          ) : selectedHomeroom && (
+            <div className="lg-content flex items-center gap-2.5 px-3 py-2.5">
+              <span
+                className="w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0 shadow-sm"
+                style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }}
+              >
+                <Home size={15} className="text-white" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-semibold text-slate-900 truncate leading-tight">{selectedHomeroom.name}</p>
+                {homeroomSubtitle(selectedHomeroom) && (
+                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{homeroomSubtitle(selectedHomeroom)}</p>
+                )}
+              </div>
+              {selectedHomeroom.academic_year && (
+                <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-semibold flex-shrink-0 tabular-nums">
+                  AY {selectedHomeroom.academic_year}
+                </span>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Monthly calendar ── */}
-      {selectedHomeroomId && (
-        <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">Monthly Calendar</p>
-          <AttendanceCalendar
-            studentId={studentId}
-            homeroomId={selectedHomeroomId}
-            year={year}
-            month={month}
-            refreshKey={refreshKey}
-            onMonthChange={handleMonthChange}
-            onAppOpen={app => leaveHost
-              ? leaveHost.openApplication(app)
-              : router.push(`/more/leave?openApp=${app.id}`)}
-            onEmptyDayClick={readOnly ? undefined : dateStr => setApplyLeaveDate(dateStr)}
-          />
+          {/* ── The year so far ── */}
+          {!yearlySummary && selectedHomeroomId && <YearlySummarySkeleton />}
+          {yearlySummary && <YearOverview summary={yearlySummary} />}
         </div>
-      )}
+
+        {/* ── Monthly calendar ── */}
+        {selectedHomeroomId && (
+          <div className="lg:order-1 min-w-0">
+            <AttendanceCalendar
+              studentId={studentId}
+              homeroomId={selectedHomeroomId}
+              year={year}
+              month={month}
+              refreshKey={refreshKey}
+              onMonthChange={handleMonthChange}
+              onAppOpen={app => leaveHost
+                ? leaveHost.openApplication(app)
+                : router.push(`/more/leave?openApp=${app.id}`)}
+              onEmptyDayClick={readOnly ? undefined : dateStr => setApplyLeaveDate(dateStr)}
+            />
+          </div>
+        )}
+      </div>
 
       {/* ── Apply-for-leave confirmation ── */}
-      {applyLeaveDate && (
+      {applyLeaveDate && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          className="lg-scrim fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in"
           onClick={() => setApplyLeaveDate(null)}
         >
-          <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div>
-              <p className="font-bold text-slate-800 text-sm">Apply for OD / Leave?</p>
-              <p className="text-xs text-slate-500 mt-1">
-                {new Date(applyLeaveDate + 'T12:00:00').toLocaleDateString('en-US', {
-                  weekday: 'long', month: 'long', day: 'numeric',
-                })}
-              </p>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Apply for OD or leave"
+            className="lg-popup w-full max-w-xs rounded-[22px] p-4 space-y-3.5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0">
+                <CalendarDays size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="font-bold text-slate-900 text-[15px] leading-tight">Apply for OD / leave?</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {new Date(applyLeaveDate + 'T12:00:00').toLocaleDateString('en-US', {
+                    weekday: 'long', month: 'long', day: 'numeric',
+                  })}
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setApplyLeaveDate(null)}
-                className="flex-1 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className="flex-1 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Cancel
               </button>
@@ -351,15 +465,15 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
                   else router.push(`/more/leave?newLeave=${applyLeaveDate}`)
                   setApplyLeaveDate(null)
                 }}
-                className="flex-1 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors"
+                className="flex-1 py-2 text-sm font-semibold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors"
               >
                 Apply
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-
     </div>
   )
 }
@@ -377,13 +491,13 @@ const STUDENT_STATUS_ICON: Record<string, React.ReactNode> = {
 }
 
 const STUDENT_STATUS_PILL: Record<string, string> = {
-  present:  'bg-emerald-50 text-emerald-700 border-emerald-200',
-  absent:   'bg-red-50 text-red-700 border-red-200',
-  late:     'bg-amber-50 text-amber-700 border-amber-200',
-  half_day: 'bg-orange-50 text-orange-700 border-orange-200',
-  on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
-  on_duty:  'bg-violet-50 text-violet-700 border-violet-200',
-  excused:  'bg-purple-50 text-purple-700 border-purple-200',
+  present:  'bg-emerald-50 text-emerald-700 ring-emerald-600/15',
+  absent:   'bg-red-50 text-red-700 ring-red-600/15',
+  late:     'bg-amber-50 text-amber-700 ring-amber-600/20',
+  half_day: 'bg-orange-50 text-orange-700 ring-orange-600/15',
+  on_leave: 'bg-blue-50 text-blue-700 ring-blue-600/15',
+  on_duty:  'bg-violet-50 text-violet-700 ring-violet-600/15',
+  excused:  'bg-purple-50 text-purple-700 ring-purple-600/15',
 }
 
 // Genuine irregularities only — late counts as present (shown at the top of
@@ -394,6 +508,8 @@ const IRREGULAR_ORDER = ['half_day', 'excused'] as const
 
 const PRESENT_PAGE_SIZE = 30
 const HOMEROOM_PAGE_SIZE = 30
+/** How long typing settles before a search goes to the database. */
+const SEARCH_DEBOUNCE_MS = 250
 
 /** The homeroom the report is currently scoped to, as the picker names it. */
 interface HomeroomFilterRef {
@@ -422,15 +538,25 @@ const ANCHOR_SECTION: Record<string, ReportSection> = {
 }
 
 // ── Shared list chrome ────────────────────────────────────────────────────────
-// The same hairline-bordered surfaces the staff report uses, so both attendance
-// screens read as one system: thin zinc rules, flat fills, no floating cards.
 
-function RowList({ children }: { children: React.ReactNode }) {
-  return <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">{children}</div>
+/**
+ * A list of student rows. One column on phones and laptops; two from xl up, so
+ * a wide screen shows twice the students rather than twice the whitespace.
+ * Hairlines are the 1px gaps of the grid showing the track colour through.
+ */
+function RowList({ count, children }: { count: number; children: React.ReactNode }) {
+  return (
+    <div className="grid xl:grid-cols-2 gap-px bg-slate-100 rounded-xl overflow-hidden ring-1 ring-slate-900/[0.06]">
+      {children}
+      {/* An odd count leaves the last cell of the two-column grid empty —
+          fill it so the track colour doesn't show as a grey block. */}
+      {count % 2 === 1 && <div aria-hidden className="hidden xl:block bg-white" />}
+    </div>
+  )
 }
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">{children}</p>
+  return <p className="text-sm text-slate-500 bg-slate-50 ring-1 ring-slate-900/[0.05] px-3 py-3 rounded-xl">{children}</p>
 }
 
 function LoadMoreButton({
@@ -440,11 +566,11 @@ function LoadMoreButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md disabled:opacity-60"
+      className="mt-2 w-full py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl disabled:opacity-60"
     >
       {loading
         ? 'Loading…'
-        : <>Show more <span className="text-[#A1A1AA]">({total - shown} remaining)</span></>}
+        : <>Show more <span className="font-normal text-slate-400">({total - shown} remaining)</span></>}
     </button>
   )
 }
@@ -452,12 +578,12 @@ function LoadMoreButton({
 /** Small status heading above a grouped list — icon, label, count. */
 function GroupLabel({ status, count }: { status: string; count: number }) {
   return (
-    <div className="flex items-center gap-1.5 mb-2">
+    <div className="flex items-center gap-1.5 mb-1.5 px-0.5">
       {STUDENT_STATUS_ICON[status]}
-      <span className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">
+      <span className="text-[12px] font-semibold text-slate-600">
         {ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status}
       </span>
-      <span className="text-[11px] text-[#A1A1AA]">({count})</span>
+      <span className="text-[11px] text-slate-400 tabular-nums">{count}</span>
     </div>
   )
 }
@@ -513,23 +639,27 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
   return (
     <>
       {/* Single-line, compact row — keeps ~20 students on screen at once. */}
-      <div className="flex items-center gap-2.5 px-2.5 sm:px-4 py-1.5 bg-white hover:bg-[#FAFAF9] transition-colors">
+      <div className="flex items-center gap-2.5 px-2.5 sm:px-3 py-1.5 bg-white hover:bg-slate-50 transition-colors min-w-0">
         <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={26} userId={student.id} />
         <button
           onClick={handleOpenModal}
-          className="flex-1 min-w-0 flex items-baseline gap-1.5 text-left"
+          title={`Open ${student.full_name}'s attendance calendar`}
+          className="group flex-1 min-w-0 flex items-baseline gap-1.5 text-left"
         >
-          <span className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-violet-600 hover:underline">
+          <span className="text-[13px] font-semibold text-slate-900 truncate leading-tight group-hover:text-violet-700">
             {student.full_name}
           </span>
-          {subtitle && <span className="text-[11px] text-[#A1A1AA] truncate hidden sm:inline">· {subtitle}</span>}
+          {subtitle && <span className="text-[11px] text-slate-400 truncate hidden sm:inline">{subtitle}</span>}
         </button>
         {showStreak && (
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+          <span
+            title={`${streak} school day${streak === 1 ? '' : 's'} absent in a row`}
+            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-1 flex-shrink-0 tabular-nums ${streak! >= 3 ? 'bg-red-50 text-red-600 ring-red-600/20' : 'bg-amber-50 text-amber-600 ring-amber-600/20'}`}
+          >
             {streak}d
           </span>
         )}
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ring-1 flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
           {ATTENDANCE_STATUS_LABELS[entry.status]}
         </span>
       </div>
@@ -539,45 +669,52 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
           {showModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              transition={{ duration: 0.16 }}
+              // Plain dim, no backdrop-filter — see .lg-popup in globals.css.
+              className="lg-scrim fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4"
               onClick={() => setShowModal(false)}
             >
               <motion.div
-                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                initial={{ scale: 0.97, opacity: 0, y: 16 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.96, opacity: 0, y: 16 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                exit={{ scale: 0.97, opacity: 0, y: 12, transition: { duration: 0.14, ease: 'easeIn' } }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${student.full_name}'s attendance`}
+                className="lg-popup rounded-[26px] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-                  <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={32} userId={student.id} />
+                <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
+                  <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-sm truncate">{student.full_name}</p>
-                    {subtitle && <p className="text-[11px] text-slate-500">{subtitle}</p>}
+                    <p className="font-bold text-slate-900 text-[15px] truncate leading-tight">{student.full_name}</p>
+                    {subtitle && <p className="text-[11px] text-slate-500 truncate mt-0.5">{subtitle}</p>}
                   </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ring-1 flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
+                    {ATTENDANCE_STATUS_LABELS[entry.status]}
+                  </span>
                   <button
                     onClick={() => setShowModal(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    aria-label="Close"
+                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all"
                   >
-                    <X size={16} />
+                    <X size={15} strokeWidth={2.5} />
                   </button>
                 </div>
-                {homerooms.length > 1 && (
-                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
-                    {homerooms.map(hr => (
-                      <button
-                        key={hr.id}
-                        onClick={() => setHomeroomId(hr.id)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${homeroomId === hr.id ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                      >
-                        {hr.name}
-                      </button>
-                    ))}
+                {homerooms.length > 1 && homeroomId && (
+                  <div className="px-4 pt-3 flex-shrink-0 overflow-x-auto scrollbar-hide">
+                    <Segmented
+                      ariaLabel="Homeroom"
+                      value={homeroomId}
+                      onChange={setHomeroomId}
+                      options={homerooms.map(hr => ({ key: hr.id, label: hr.name }))}
+                    />
                   </div>
                 )}
-                <div className="overflow-y-auto flex-1 px-4 py-4">
+                <div className="overflow-y-auto overscroll-contain flex-1 p-3 sm:p-4">
                   {loadingHomerooms ? (
-                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>
+                    <CalendarSkeleton />
                   ) : homeroomId ? (
                     <AttendanceCalendar
                       studentId={student.id}
@@ -606,9 +743,9 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
 /** Placeholder rows for the student-wise report body while it loads. */
 function ReportBodySkeleton() {
   return (
-    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+    <div className="grid xl:grid-cols-2 gap-px bg-slate-100 rounded-xl overflow-hidden ring-1 ring-slate-900/[0.06]">
       {Array.from({ length: 10 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-2.5 px-2.5 sm:px-4 py-2">
+        <div key={i} className="flex items-center gap-2.5 px-2.5 sm:px-3 py-2 bg-white">
           <div className="skeleton w-[26px] h-[26px] rounded-full flex-shrink-0" />
           <div className="skeleton h-2.5 w-2/5 rounded" />
           <div className="flex-1" />
@@ -622,9 +759,9 @@ function ReportBodySkeleton() {
 /** Placeholder rows for the homeroom-wise report body while it loads. */
 function HomeroomReportSkeleton() {
   return (
-    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+    <div className="rounded-xl overflow-hidden ring-1 ring-slate-900/[0.06] divide-y divide-slate-100 bg-white">
       {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-2 px-2.5 sm:px-4 h-9">
+        <div key={i} className="flex items-center gap-2 px-2.5 sm:px-3 h-9">
           <div className="skeleton h-2.5 w-1/3 rounded" />
           <div className="flex-1" />
           {Array.from({ length: 3 }).map((__, j) => (
@@ -639,17 +776,16 @@ function HomeroomReportSkeleton() {
 // ─── Homeroom-wise report ─────────────────────────────────────────────────────
 
 const HOMEROOM_COUNT_STYLES: Record<ReportSection, string> = {
-  present:   'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200',
-  absent:    'text-red-700 bg-red-50 hover:bg-red-100 border-red-200',
-  irregular: 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200',
+  present:   'text-emerald-700 bg-emerald-50 hover:bg-emerald-100',
+  absent:    'text-red-700 bg-red-50 hover:bg-red-100',
+  irregular: 'text-amber-700 bg-amber-50 hover:bg-amber-100',
 }
 
-/** Inline tabs shared by the report body — Absent / Present / Irregular. */
-const REPORT_TABS: { key: ReportSection; label: string; color: string }[] = [
-  { key: 'absent',    label: 'Absent',    color: 'border-red-600 text-red-600' },
-  { key: 'present',   label: 'Present',   color: 'border-emerald-600 text-emerald-600' },
-  { key: 'irregular', label: 'Irregular', color: 'border-amber-500 text-amber-600' },
-]
+const SECTION_TONE: Record<ReportSection, string> = {
+  present: '#047857',
+  absent: '#b91c1c',
+  irregular: '#b45309',
+}
 
 /** One homeroom's tallies. The name and every count are buttons that jump into
  *  the student-wise view scoped to this homeroom (and to the matching section). */
@@ -664,9 +800,10 @@ function HomeroomCountsRow({
     row.grade != null ? `Grade ${row.grade}` : '',
     row.section ? `Sec ${row.section}` : '',
   ].filter(Boolean).join(' · ')
+  const rate = row.marked > 0 ? Math.round((row.present / row.marked) * 100) : null
 
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 h-9 bg-white hover:bg-[#FAFAF9] transition-colors">
+    <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-9 bg-white hover:bg-slate-50 transition-colors">
       <div
         role="button"
         tabIndex={0}
@@ -674,10 +811,10 @@ function HomeroomCountsRow({
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(row, null) } }}
         className="group flex-1 min-w-0 flex items-center gap-1.5 text-left cursor-pointer"
       >
-        <span className="text-sm font-semibold text-[#18181B] truncate group-hover:text-violet-600 group-hover:underline">
+        <span className="text-[13px] font-semibold text-slate-900 truncate group-hover:text-violet-700">
           {row.homeroom_name}
         </span>
-        {subtitle && <span className="text-[11px] text-[#A1A1AA] truncate hidden sm:inline">· {subtitle}</span>}
+        {subtitle && <span className="text-[11px] text-slate-400 truncate hidden sm:inline">{subtitle}</span>}
         {row.class_teacher && (
           <div className="items-center gap-1 min-w-0 flex-shrink-0 hidden md:flex">
             <Avatar
@@ -687,14 +824,27 @@ function HomeroomCountsRow({
               size={16}
               userId={row.class_teacher.id}
             />
-            <span className="text-[11px] text-[#A1A1AA] truncate max-w-[8rem]">{row.class_teacher.full_name}</span>
+            <span className="text-[11px] text-slate-400 truncate max-w-[9rem]">{row.class_teacher.full_name}</span>
           </div>
         )}
-        <ChevronsRight size={12} className="text-[#D4D4D8] group-hover:text-violet-500 flex-shrink-0" />
+        <ChevronsRight size={12} className="text-slate-300 group-hover:text-violet-500 flex-shrink-0" />
+      </div>
+
+      {/* Rate — present share of whoever was marked; desktop only. */}
+      <div className="hidden md:flex items-center gap-1.5 w-24 flex-shrink-0" title={rate == null ? 'Not marked' : `${rate}% present`}>
+        <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+          {rate != null && (
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${rate}%`, background: rate >= 85 ? PRESENT_C : rate >= 75 ? LATE_C : ABSENT_C }}
+            />
+          )}
+        </div>
+        <span className="w-8 text-right text-[11px] font-semibold text-slate-500 tabular-nums">{rate == null ? '—' : `${rate}%`}</span>
       </div>
 
       {row.marked === 0 ? (
-        <span className="text-[11px] text-[#A1A1AA] font-medium px-2 whitespace-nowrap">Not marked</span>
+        <span className="w-[9rem] sm:w-[13rem] text-center text-[11px] text-slate-400 font-medium whitespace-nowrap flex-shrink-0">Not marked</span>
       ) : (
         (['present', 'absent', 'irregular'] as const).map(section => (
           <button
@@ -702,7 +852,7 @@ function HomeroomCountsRow({
             onClick={() => onOpen(row, section)}
             disabled={row[section] === 0}
             title={`View ${section} students in ${row.homeroom_name}`}
-            className={`w-11 sm:w-16 h-6 rounded-md border text-xs font-bold leading-none transition-colors flex-shrink-0 disabled:opacity-40 disabled:pointer-events-none ${HOMEROOM_COUNT_STYLES[section]}`}
+            className={`w-11 sm:w-16 h-6 rounded-lg text-xs font-bold leading-none tabular-nums transition-colors flex-shrink-0 disabled:opacity-35 disabled:pointer-events-none ${HOMEROOM_COUNT_STYLES[section]}`}
           >
             {row[section]}
           </button>
@@ -750,26 +900,49 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
   // One list at a time in the student view, the same way the staff report works.
   const [activeTab, setActiveTab] = useState<ReportSection>('absent')
-  // Free-text filter over whatever the active view is showing.
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  // `query` is what is in the box; `searchTerm` is the same text once typing
+  // has settled, and it is what goes to the database. Lists that arrive whole
+  // (absent, irregular) are filtered as you type; the paged ones (present
+  // students, homerooms) are searched server-side, so a match that has not
+  // been paged in yet is still found — it used to read "no results" until
+  // "Show more" happened to pull it in.
   const [query, setQuery] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(query.trim()), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [query])
+  /** A new day, scope or view starts with an empty box — cleared together, so
+   *  no fetch ever pairs the new scope with the old text. */
+  const clearSearch = () => { setQuery(''); setSearchTerm('') }
+  const studentSearch = view === 'student' ? searchTerm : ''
+  const homeroomSearch = view === 'homeroom' ? searchTerm : ''
 
   const [irregulars, setIrregulars] = useState<StudentAttendanceEntry[]>([])
   const [loadingIrregular, setLoadingIrregular] = useState(true)
   const [streakMap, setStreakMap] = useState<Map<string, number>>(new Map())
 
   const [present, setPresent] = useState<StudentAttendanceEntry[]>([])
+  /** Rows the current present query (search included) matches. */
   const [presentTotal, setPresentTotal] = useState(0)
+  /** Everyone present that day, unsearched — what the summary counts. */
+  const [presentDayTotal, setPresentDayTotal] = useState(0)
   const [loadingPresent, setLoadingPresent] = useState(true)
+  const [searchingPresent, setSearchingPresent] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 
   const [homeroomRows, setHomeroomRows] = useState<HomeroomAttendanceCounts[]>([])
   const [homeroomTotal, setHomeroomTotal] = useState(0)
   const [loadingHomerooms, setLoadingHomerooms] = useState(true)
+  const [searchingHomerooms, setSearchingHomerooms] = useState(false)
   const [loadingMoreHomerooms, setLoadingMoreHomerooms] = useState(false)
 
   // Picking one homeroom narrows the scope; otherwise the report covers the
   // class teacher's homerooms (scoped) or the whole school (managers).
   const hrId = homeroom?.id ?? scopeIds ?? null
+  const scopeKey = `${date}|${Array.isArray(hrId) ? hrId.join(',') : hrId ?? ''}`
 
   // Options for the homeroom toggler beside the search box. A class teacher
   // picks among their own homerooms; managers get the whole school, loaded once
@@ -808,12 +981,16 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const showHomeroomPicker = !scoped || pickerHomerooms.length > 1
 
   const pickHomeroom = (id: string) => {
+    clearSearch()
     if (!id) { setHomeroom(null); return }
     const hr = pickerHomerooms.find(h => h.id === id)
     if (hr) { setHomeroom({ id: hr.id, name: hr.name }); return }
     // Re-picking the carried-over selection above: leave it as it is.
     if (homeroom?.id !== id) setHomeroom(null)
   }
+
+  const changeDate = (d: string) => { clearSearch(); setDate(d) }
+  const changeView = (v: ReportView) => { if (v !== view) clearSearch(); setView(v) }
 
   // A deep link (e.g. the home dashboard's Present / Absent / Irregular tiles)
   // is always a request for the student-wise list — open it on the tab it names
@@ -826,18 +1003,11 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     setPendingScroll(REPORT_ANCHOR)
   }, [])
 
-  // A new day or a new homeroom scope invalidates whatever was typed.
-  useEffect(() => { setQuery('') }, [date, hrId])
-
-  // Reload everything whenever the date or homeroom scope changes. Both views
-  // stay loaded so toggling between them is instant and the summary strip above
-  // them reads the same in either one.
+  // Absent and irregular arrive whole for the day and scope (searched in the
+  // browser); they reload only when the day or the scope changes.
   useEffect(() => {
     let cancelled = false
     setLoadingIrregular(true)
-    setLoadingPresent(true)
-    setPresent([])
-    setPresentTotal(0)
     setStreakMap(new Map())
     fetchStudentNonPresentByDate(date, hrId).then(async d => {
       if (cancelled) return
@@ -851,33 +1021,71 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
         if (!cancelled) setStreakMap(streaks)
       }
     })
-    fetchStudentPresentByDate(date, hrId, 0, PRESENT_PAGE_SIZE).then(({ rows, total }) => {
-      if (!cancelled) { setPresent(rows); setPresentTotal(total); setLoadingPresent(false) }
-    })
     return () => { cancelled = true }
   }, [date, hrId])
 
+  // Present students, paged and searched in the database. A new day or scope
+  // redraws the list from a skeleton; a new search keeps the rows on screen
+  // and shows the box's spinner until the answer lands.
+  const presentScope = useRef('')
   useEffect(() => {
     let cancelled = false
-    setLoadingHomerooms(true)
-    setHomeroomRows([])
-    setHomeroomTotal(0)
-    fetchHomeroomAttendanceCountsByDate(date, hrId, 0, HOMEROOM_PAGE_SIZE).then(({ rows, total }) => {
-      if (!cancelled) { setHomeroomRows(rows); setHomeroomTotal(total); setLoadingHomerooms(false) }
+    const scopeChanged = presentScope.current !== scopeKey
+    presentScope.current = scopeKey
+    if (scopeChanged) {
+      setLoadingPresent(true)
+      setPresent([])
+      setPresentTotal(0)
+    } else {
+      setSearchingPresent(true)
+    }
+    fetchStudentPresentByDate(date, hrId, 0, PRESENT_PAGE_SIZE, studentSearch).then(({ rows, total }) => {
+      if (cancelled) return
+      setPresent(rows)
+      setPresentTotal(total)
+      if (!studentSearch) setPresentDayTotal(total)
+      setLoadingPresent(false)
+      setSearchingPresent(false)
     })
     return () => { cancelled = true }
-  }, [date, hrId])
+  // scopeKey is derived from date + hrId, both listed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, hrId, studentSearch])
+
+  // Homeroom tallies — paged and searched in the database, same rules as above.
+  const homeroomScope = useRef('')
+  useEffect(() => {
+    let cancelled = false
+    const scopeChanged = homeroomScope.current !== scopeKey
+    homeroomScope.current = scopeKey
+    if (scopeChanged) {
+      setLoadingHomerooms(true)
+      setHomeroomRows([])
+      setHomeroomTotal(0)
+    } else {
+      setSearchingHomerooms(true)
+    }
+    fetchHomeroomAttendanceCountsByDate(date, hrId, 0, HOMEROOM_PAGE_SIZE, homeroomSearch).then(({ rows, total }) => {
+      if (cancelled) return
+      setHomeroomRows(rows)
+      setHomeroomTotal(total)
+      setLoadingHomerooms(false)
+      setSearchingHomerooms(false)
+    })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, hrId, homeroomSearch])
 
   const loadMorePresent = async () => {
     setLoadingMore(true)
-    const { rows } = await fetchStudentPresentByDate(date, hrId, present.length, PRESENT_PAGE_SIZE)
+    const { rows } = await fetchStudentPresentByDate(date, hrId, present.length, PRESENT_PAGE_SIZE, studentSearch)
     setPresent(p => [...p, ...rows])
     setLoadingMore(false)
   }
 
   const loadMoreHomerooms = async () => {
     setLoadingMoreHomerooms(true)
-    const { rows } = await fetchHomeroomAttendanceCountsByDate(date, hrId, homeroomRows.length, HOMEROOM_PAGE_SIZE)
+    const { rows } = await fetchHomeroomAttendanceCountsByDate(date, hrId, homeroomRows.length, HOMEROOM_PAGE_SIZE, homeroomSearch)
     setHomeroomRows(p => [...p, ...rows])
     setLoadingMoreHomerooms(false)
   }
@@ -885,12 +1093,19 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   // Drill down from the homeroom table into the student list for that homeroom,
   // optionally landing on the section whose count was clicked.
   const openStudentView = (row: HomeroomAttendanceCounts, section: ReportSection | null) => {
+    clearSearch()
     setHomeroom({ id: row.homeroom_id, name: row.homeroom_name })
     setView('student')
     if (section) setActiveTab(section)
     // Bring the report header into view so the drill-down never leaves the
     // user mid-page.
     setPendingScroll(REPORT_ANCHOR)
+  }
+
+  /** The summary's figures double as a way into the matching list. */
+  const openSection = (section: ReportSection) => {
+    changeView('student')
+    setActiveTab(section)
   }
 
   // Whole-school lists can name a student once per homeroom — dedupe to one
@@ -919,14 +1134,12 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const irregularCount = (grouped['half_day']?.length ?? 0) + (grouped['excused']?.length ?? 0)
   // Present total including the late/on-duty rows folded in above (those are
   // fetched in full, unlike the paged 'present' rows).
-  const presentFullTotal = presentTotal + lateGroup.length + onDutyGroup.length
+  const presentFullTotal = presentDayTotal + lateGroup.length + onDutyGroup.length
   const loading = loadingIrregular || loadingPresent
-  const isEmpty = !loading && irregularList.length === 0 && presentTotal === 0
+  const isEmpty = !loading && irregularList.length === 0 && presentDayTotal === 0
 
-  // ── Search ────────────────────────────────────────────────────────────────
-  // Filters the rows that are actually loaded. Absent and Irregular arrive in
-  // full, so those tabs search the whole day; Present is paged, so it searches
-  // what has been fetched so far — "Show more" widens it.
+  // Typed text filters the whole-day lists at once; the paged present rows
+  // are already the database's answer for `searchTerm`.
   const q = query.trim().toLowerCase()
   const matchesStudent = useCallback((e: StudentAttendanceEntry) => {
     if (!q) return true
@@ -938,7 +1151,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   // Late, then on duty, at the top of the present list, ahead of the paged
   // 'present' rows.
   const presentRows = useMemo(
-    () => [...lateGroup, ...onDutyGroup].filter(matchesStudent).concat(present.filter(matchesStudent)),
+    () => [...lateGroup, ...onDutyGroup].filter(matchesStudent).concat(present),
     [lateGroup, onDutyGroup, present, matchesStudent]
   )
   const irregularGroups = useMemo(
@@ -948,19 +1161,18 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     [grouped, matchesStudent]
   )
 
-  const visibleHomeroomRows = useMemo(() => {
-    if (!q) return homeroomRows
-    return homeroomRows.filter(r =>
-      r.homeroom_name.toLowerCase().includes(q)
-      || (r.class_teacher?.full_name ?? '').toLowerCase().includes(q)
-    )
-  }, [homeroomRows, q])
+  // Waiting on the database for the text in the box.
+  const searchPending = query.trim() !== searchTerm
+    || (view === 'student' ? searchingPresent : searchingHomerooms)
 
-  // Everyone with a record for the day — the denominator behind the rate bar.
+  // Everyone with a record for the day — the denominator behind the rate.
   const markedTotal = presentFullTotal + absentCount + irregularCount
   const pct = markedTotal > 0 ? Math.round((presentFullTotal / markedTotal) * 100) : 0
 
-  const scopeLabel = homeroom?.name ?? (scoped ? 'my homerooms' : 'whole school')
+  const scopeLabel = homeroom?.name ?? (scoped ? 'My homerooms' : 'Whole school')
+  const dateLabel = date === todayStr
+    ? 'Today'
+    : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
   useEffect(() => {
     if (!pendingScroll || view !== 'student' || loading) return
@@ -983,250 +1195,224 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     irregular: irregularCount,
   }
 
+  const summaryStats: { key: ReportSection; label: string; color: string }[] = [
+    { key: 'present',   label: 'Present',   color: PRESENT_C },
+    { key: 'absent',    label: 'Absent',    color: ABSENT_C },
+    { key: 'irregular', label: 'Irregular', color: LATE_C },
+  ]
+
   return (
     // On phones the report is full-bleed with square corners so the lists get
-    // the whole screen; from sm up it settles back into a rounded card — the
-    // same shape the staff report takes.
+    // the whole screen; from sm up it is a rounded glass sheet like the
+    // student view above it.
     <section
       id={REPORT_ANCHOR}
-      className="-mx-4 sm:mx-0 border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden"
+      className="lg-sheet -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-4"
     >
-      {/* ── Title strip — inherits --page-gradient-from/to from the page theme ── */}
-      <div
-        className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
-        style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-      >
-        <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
-          <ClipboardList size={15} className="flex-shrink-0 text-white/70" />
-          <span className="truncate">{scoped ? 'My Class Report' : 'Student Report'}</span>
-        </h2>
+      <Ambient colors={['var(--page-gradient-from, #7c3aed)', ABSENT_C]} />
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Homeroom-wise / student-wise. Labels collapse to icons on phones so
-              this shares one row with the date toggler at every width. */}
-          <div className="inline-flex items-stretch rounded-lg overflow-hidden border border-white/25">
-            {([
-              { key: 'homeroom' as const, label: 'Homerooms', icon: Home },
-              { key: 'student'  as const, label: 'Students',  icon: Users },
-            ]).map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setView(key)}
-                aria-pressed={view === key}
-                title={label}
-                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
-                  view === key ? 'bg-white text-[#18181B]' : 'text-white/75 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Icon size={12} className="flex-shrink-0" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
+      <div className="relative">
+        {/* ── Header: what this is, which way it is cut, and which day ── */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 pt-3 pb-2.5">
+          {/* min-w lets the controls drop to their own row on a phone rather
+              than squeezing the title to an ellipsis. */}
+          <div className="flex items-center gap-2.5 min-w-[12rem] flex-1">
+            <span
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }}
+            >
+              <ClipboardList size={17} className="text-white" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">
+                {scoped ? 'My class report' : 'Student report'}
+              </h2>
+              <p className="text-[11px] text-slate-500 truncate mt-0.5">{scopeLabel} · {dateLabel}</p>
+            </div>
           </div>
 
-          <DateToggler
-            value={date}
-            onChange={setDate}
-            max={todayStr}
-            todayStr={todayStr}
-            className="inline-flex flex-shrink-0"
-            size="sm"
-          />
-        </div>
-      </div>
-
-      {/* ── Summary strip ── */}
-      <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold text-[#18181B] leading-none">
-            {loading ? '—' : presentFullTotal}
-          </span>
-          <span className="text-sm font-medium text-[#A1A1AA]">/ {loading ? '…' : markedTotal}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${pct}%`, background: 'var(--page-gradient-from, #7c3aed)' }}
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <Segmented
+              ariaLabel="Report view"
+              value={view}
+              onChange={changeView}
+              options={[
+                { key: 'homeroom', label: <span className="hidden sm:inline">Homerooms</span>, icon: Home, title: 'Homeroom-wise' },
+                { key: 'student',  label: <span className="hidden sm:inline">Students</span>,  icon: Users, title: 'Student-wise' },
+              ]}
+            />
+            <DateToggler
+              value={date}
+              onChange={changeDate}
+              max={todayStr}
+              todayStr={todayStr}
+              className="inline-flex flex-shrink-0 !rounded-full !border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+              size="sm"
             />
           </div>
-          <p className="text-[11px] text-[#71717A] mt-1 truncate">{pct}% present · {scopeLabel}</p>
         </div>
-      </div>
 
-      {/* ── Body ── */}
-      <div className="p-3 sm:p-4 space-y-4">
-        {/* Inline tabs — one list at a time, instead of stacking all three */}
-        {view === 'student' && (
-          <div className="grid grid-cols-3 border-b border-[#E4E4E7]">
-            {REPORT_TABS.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                aria-pressed={activeTab === t.key}
-                className={`flex items-center justify-center gap-1.5 pb-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
-                  activeTab === t.key ? t.color : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
-                }`}
-              >
-                {t.label}
-                <span className={activeTab === t.key ? 'opacity-70' : 'text-[#D4D4D8]'}>
-                  {loading ? '—' : tabCounts[t.key]}
-                </span>
-              </button>
-            ))}
+        {/* ── Content card ── */}
+        <div className="lg-content mx-2 mb-2 sm:mx-2.5 sm:mb-2.5 overflow-hidden">
+          {/* Summary: the day in one line — the fraction, its bar, and the
+              three figures, each a way into its list. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
+            <div className="flex items-baseline gap-1.5 flex-shrink-0">
+              <span className="text-2xl font-bold text-slate-900 leading-none tabular-nums">
+                {loading ? '—' : presentFullTotal}
+              </span>
+              <span className="text-sm font-medium text-slate-400 tabular-nums">/ {loading ? '…' : markedTotal}</span>
+            </div>
+            <div className="flex-1 min-w-[8rem]">
+              <div className="flex h-1.5 rounded-full bg-slate-100 overflow-hidden" aria-hidden>
+                {markedTotal > 0 && !loading && (
+                  <>
+                    <span className="h-full transition-[width] duration-500" style={{ width: `${(presentFullTotal / markedTotal) * 100}%`, background: PRESENT_C }} />
+                    <span className="h-full transition-[width] duration-500" style={{ width: `${(absentCount / markedTotal) * 100}%`, background: ABSENT_C }} />
+                    <span className="h-full transition-[width] duration-500" style={{ width: `${(irregularCount / markedTotal) * 100}%`, background: LATE_C }} />
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 truncate">
+                {loading ? 'Counting…' : markedTotal > 0 ? `${pct}% present` : 'Not marked yet'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {summaryStats.map(st => (
+                <button
+                  key={st.key}
+                  onClick={() => openSection(st.key)}
+                  title={`Show ${st.label.toLowerCase()} students`}
+                  className="flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: st.color }} />
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">{st.label}</span>
+                  <span className="text-[13px] font-bold text-slate-900 tabular-nums">{loading ? '–' : tabCounts[st.key]}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {/* Search + homeroom toggler */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder={view === 'student' ? 'Search students…' : 'Search homerooms…'}
-              className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]"
-              >
-                <X size={13} />
-              </button>
+          {/* ── Body ── */}
+          <div className="p-2.5 sm:p-3 space-y-2.5">
+            {/* One list at a time, instead of stacking all three */}
+            {view === 'student' && (
+              <Segmented
+                fill
+                ariaLabel="Student list"
+                value={activeTab}
+                onChange={setActiveTab}
+                options={(['absent', 'present', 'irregular'] as const).map(key => ({
+                  key,
+                  label: key === 'absent' ? 'Absent' : key === 'present' ? 'Present' : 'Irregular',
+                  count: loading ? '—' : tabCounts[key],
+                  tone: SECTION_TONE[key],
+                }))}
+              />
             )}
-          </div>
-          {showHomeroomPicker && (
-            <SmartSelect
-              options={homeroomOptions}
-              value={homeroom?.id ?? ''}
-              onChange={pickHomeroom}
-              allowClear
-              align="right"
-              placeholder={scoped ? 'All my homerooms' : 'All homerooms'}
-              searchPlaceholder="Search homerooms…"
-              emptyText="No homerooms"
-              className="w-36 sm:w-48 flex-shrink-0"
-              leadingIcon={<Home size={14} className="text-[#71717A] flex-shrink-0" />}
-            />
-          )}
-        </div>
 
-        {/* ── Homeroom-wise ── */}
-        {view === 'homeroom' ? (
-          loadingHomerooms ? (
-            <HomeroomReportSkeleton />
-          ) : (
-            <div className="animate-fade-in">
-              {visibleHomeroomRows.length === 0 ? (
-                <EmptyNote>
-                  {query ? `No homerooms match "${query}".` : 'No homerooms to report on.'}
-                </EmptyNote>
-              ) : (
-                <div className="border border-[#E4E4E7] rounded-lg overflow-hidden">
-                  {/* Column headings */}
-                  <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 h-8 bg-[#FAFAF9] border-b border-[#E4E4E7]">
-                    <span className="flex-1 min-w-0 text-[10px] font-bold text-[#A1A1AA] uppercase tracking-widest">Homeroom</span>
-                    {(['Present', 'Absent', 'Irregular'] as const).map(label => (
-                      <span key={label} className="w-11 sm:w-16 text-center text-[10px] font-bold text-[#A1A1AA] uppercase tracking-wide flex-shrink-0">
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="divide-y divide-[#F0F0EF]">
-                    {visibleHomeroomRows.map(row => (
-                      <HomeroomCountsRow key={row.homeroom_id} row={row} onOpen={openStudentView} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Kept visible while searching — the filter only sees loaded rows,
-                  so paging in more is how you widen it. */}
-              {homeroomRows.length < homeroomTotal && (
-                <LoadMoreButton
-                  loading={loadingMoreHomerooms}
-                  shown={homeroomRows.length}
-                  total={homeroomTotal}
-                  onClick={loadMoreHomerooms}
+            {/* Search + homeroom toggler */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder={view === 'student' ? 'Search students' : 'Search homerooms'}
+                  title={view === 'homeroom' ? 'Matches a homeroom, its section or its class teacher' : undefined}
+                  aria-label={view === 'student' ? 'Search students' : 'Search homerooms'}
+                  className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-100 border border-transparent rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-violet-500/15 transition-colors [&::-webkit-search-cancel-button]:hidden"
+                />
+                {query && (searchPending ? (
+                  <span aria-label="Searching" className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
+                ) : (
+                  <button
+                    onClick={clearSearch}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-300/70 text-white hover:bg-slate-400 transition-colors"
+                  >
+                    <X size={11} strokeWidth={3} />
+                  </button>
+                ))}
+              </div>
+              {showHomeroomPicker && (
+                <SmartSelect
+                  options={homeroomOptions}
+                  value={homeroom?.id ?? ''}
+                  onChange={pickHomeroom}
+                  allowClear
+                  align="right"
+                  placeholder={scoped ? 'All my homerooms' : 'All homerooms'}
+                  searchPlaceholder="Search homerooms…"
+                  emptyText="No homerooms match"
+                  className="w-36 sm:w-52 flex-shrink-0"
+                  buttonClassName="!rounded-xl !border-slate-200"
+                  leadingIcon={<Home size={14} className="text-slate-400 flex-shrink-0" />}
                 />
               )}
             </div>
-          )
-        ) : loading ? (
-          <ReportBodySkeleton />
-        ) : isEmpty ? (
-          <EmptyNote>No attendance recorded for this date.</EmptyNote>
-        ) : (
-          <div className="animate-fade-in">
-            {/* ── Absent ── */}
-            {activeTab === 'absent' && (
-              <div id={SECTION_ANCHOR.absent}>
-                {absentRows.length === 0 ? (
-                  <EmptyNote>
-                    {query ? `No absentees match "${query}".` : 'No one is marked absent for this day.'}
-                  </EmptyNote>
-                ) : (
-                  <RowList>
-                    {absentRows.map((r, i) => (
-                      <StudentEntryRow
-                        key={`${r.student.id}-${r.homeroom_id}-${i}`}
-                        entry={r}
-                        streak={streakMap.get(r.student.id)}
-                        viewerUserId={user?.id}
-                        viewerRole={profile?.role}
-                        onAppOpen={openLeaveApp}
-                      />
-                    ))}
-                  </RowList>
-                )}
-              </div>
-            )}
 
-            {/* ── Present ── */}
-            {activeTab === 'present' && (
-              <div id={SECTION_ANCHOR.present}>
-                {presentRows.length === 0 ? (
-                  <EmptyNote>
-                    {query ? `No present students match "${query}".` : 'No one is marked present for this day.'}
-                  </EmptyNote>
-                ) : (
-                  <RowList>
-                    {presentRows.map((r, i) => (
-                      <StudentEntryRow
-                        key={`${r.student.id}-${r.homeroom_id}-${i}`}
-                        entry={r}
-                        viewerUserId={user?.id}
-                        viewerRole={profile?.role}
-                        onAppOpen={openLeaveApp}
-                      />
-                    ))}
-                  </RowList>
-                )}
-                {present.length < presentTotal && (
-                  <LoadMoreButton
-                    loading={loadingMore}
-                    shown={present.length}
-                    total={presentTotal}
-                    onClick={loadMorePresent}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* ── Irregular — every non-present status other than absent ── */}
-            {activeTab === 'irregular' && (
-              <div id={SECTION_ANCHOR.irregular} className="space-y-4">
-                {irregularGroups.length === 0 ? (
-                  <EmptyNote>
-                    {query ? `No irregular attendance matches "${query}".` : 'No irregular attendance for this day.'}
-                  </EmptyNote>
-                ) : (
-                  irregularGroups.map(({ status, rows }) => (
-                    <div key={status}>
-                      <GroupLabel status={status} count={rows.length} />
-                      <RowList>
-                        {rows.map((r, i) => (
+            {/* ── Homeroom-wise ── */}
+            {view === 'homeroom' ? (
+              loadingHomerooms ? (
+                <HomeroomReportSkeleton />
+              ) : (
+                <div className="animate-fade-in">
+                  {homeroomRows.length === 0 ? (
+                    <EmptyNote>
+                      {searchPending
+                        ? 'Searching…'
+                        : homeroomSearch ? `No homerooms or class teachers match “${homeroomSearch}”.` : 'No homerooms to report on.'}
+                    </EmptyNote>
+                  ) : (
+                    <div className="rounded-xl overflow-hidden ring-1 ring-slate-900/[0.06]">
+                      {/* Column headings */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-8 bg-slate-50 border-b border-slate-100">
+                        <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-400">
+                          Homeroom{homeroomSearch ? ` · ${homeroomTotal} found` : ''}
+                        </span>
+                        <span className="hidden md:block w-24 text-[11px] font-semibold text-slate-400 flex-shrink-0">Rate</span>
+                        {([['Present', 'Pres.'], ['Absent', 'Abs.'], ['Irregular', 'Irreg.']] as const).map(([label, short]) => (
+                          <span key={label} className="w-11 sm:w-16 text-center text-[11px] font-semibold text-slate-400 flex-shrink-0">
+                            <span className="hidden sm:inline">{label}</span>
+                            <span className="sm:hidden" title={label}>{short}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <div className={`divide-y divide-slate-100 transition-opacity ${searchingHomerooms ? 'opacity-60' : ''}`}>
+                        {homeroomRows.map(row => (
+                          <HomeroomCountsRow key={row.homeroom_id} row={row} onOpen={openStudentView} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {homeroomRows.length < homeroomTotal && (
+                    <LoadMoreButton
+                      loading={loadingMoreHomerooms}
+                      shown={homeroomRows.length}
+                      total={homeroomTotal}
+                      onClick={loadMoreHomerooms}
+                    />
+                  )}
+                </div>
+              )
+            ) : loading ? (
+              <ReportBodySkeleton />
+            ) : isEmpty ? (
+              <EmptyNote>No attendance recorded for this date.</EmptyNote>
+            ) : (
+              <div className="animate-fade-in">
+                {/* ── Absent ── */}
+                {activeTab === 'absent' && (
+                  <div id={SECTION_ANCHOR.absent} className="scroll-mt-4">
+                    {absentRows.length === 0 ? (
+                      <EmptyNote>
+                        {query ? `No absentees match “${query.trim()}”.` : 'No one is marked absent for this day.'}
+                      </EmptyNote>
+                    ) : (
+                      <RowList count={absentRows.length}>
+                        {absentRows.map((r, i) => (
                           <StudentEntryRow
                             key={`${r.student.id}-${r.homeroom_id}-${i}`}
                             entry={r}
@@ -1237,13 +1423,78 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                           />
                         ))}
                       </RowList>
-                    </div>
-                  ))
+                    )}
+                  </div>
+                )}
+
+                {/* ── Present ── */}
+                {activeTab === 'present' && (
+                  <div id={SECTION_ANCHOR.present} className="scroll-mt-4">
+                    {presentRows.length === 0 ? (
+                      <EmptyNote>
+                        {searchPending
+                          ? 'Searching…'
+                          : query ? `No present students match “${query.trim()}”.` : 'No one is marked present for this day.'}
+                      </EmptyNote>
+                    ) : (
+                      <div className={`transition-opacity ${searchingPresent ? 'opacity-60' : ''}`}>
+                        <RowList count={presentRows.length}>
+                          {presentRows.map((r, i) => (
+                            <StudentEntryRow
+                              key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                              entry={r}
+                              streak={streakMap.get(r.student.id)}
+                              viewerUserId={user?.id}
+                              viewerRole={profile?.role}
+                              onAppOpen={openLeaveApp}
+                            />
+                          ))}
+                        </RowList>
+                      </div>
+                    )}
+                    {present.length < presentTotal && (
+                      <LoadMoreButton
+                        loading={loadingMore}
+                        shown={present.length}
+                        total={presentTotal}
+                        onClick={loadMorePresent}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* ── Irregular — every non-present status other than absent ── */}
+                {activeTab === 'irregular' && (
+                  <div id={SECTION_ANCHOR.irregular} className="scroll-mt-4 space-y-3">
+                    {irregularGroups.length === 0 ? (
+                      <EmptyNote>
+                        {query ? `No irregular attendance matches “${query.trim()}”.` : 'No irregular attendance for this day.'}
+                      </EmptyNote>
+                    ) : (
+                      irregularGroups.map(({ status, rows }) => (
+                        <div key={status}>
+                          <GroupLabel status={status} count={rows.length} />
+                          <RowList count={rows.length}>
+                            {rows.map((r, i) => (
+                              <StudentEntryRow
+                                key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                                entry={r}
+                                streak={streakMap.get(r.student.id)}
+                                viewerUserId={user?.id}
+                                viewerRole={profile?.role}
+                                onAppOpen={openLeaveApp}
+                              />
+                            ))}
+                          </RowList>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </section>
   )
@@ -1288,15 +1539,16 @@ function AttendanceContent({ user, isStaff, isManager, bannerEditing, refreshKey
 
   return (
     <div
-      className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6 transition-all duration-300 ${
+      className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 lg:space-y-5 transition-all duration-300 ${
         bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
       }`}
+      aria-hidden={bannerEditing}
     >
       {studentParam ? (
         <>
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+            className="inline-flex items-center gap-1 pl-1.5 pr-3 py-1 rounded-full text-xs font-semibold text-slate-600 bg-white/70 ring-1 ring-slate-900/[0.06] hover:bg-white hover:text-slate-900 transition-colors"
           >
             <ChevronLeft size={14} /> Back
           </button>
@@ -1362,7 +1614,9 @@ export default function AttendancePage() {
           backgroundIcon={<ClipboardList size={180} className="text-white" />}
           title="Attendance"
           subtitle={isStaff ? 'Mark homeroom attendance sheets' : 'View your monthly attendance calendar'}
-          maxWidth="max-w-6xl"
+          compactMobileTitle
+          elevated
+          maxWidth={MAX_W}
           isAdmin={isAdmin}
           onEditingChange={setBannerEditing}
           actions={
@@ -1394,7 +1648,7 @@ export default function AttendancePage() {
           suspense boundary". The fallback renders the skeleton that already exists
           for this page, so there's no layout shift.
         */}
-        <Suspense fallback={<StudentAttendanceSkeleton />}>
+        <Suspense fallback={<div className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6`}><StudentAttendanceSkeleton /></div>}>
           <LeaveHostContext.Provider value={leaveHost}>
             <AttendanceContent
               user={user}

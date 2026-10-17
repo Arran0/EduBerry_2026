@@ -90,30 +90,37 @@ export default function LeaveApplicationDetailModal({
       {applicationId && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className={`fixed inset-0 ${zClass} flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm`}
+          // A plain dim: this opens over the leave popup, and a blurred
+          // backdrop fading over another one is what flashed black in Chrome.
+          className={`lg-scrim fixed inset-0 ${zClass} flex items-end sm:items-center justify-center p-3 sm:p-4`}
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.96, opacity: 0, y: 16 }}
+            initial={{ scale: 0.97, opacity: 0, y: 16 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.96, opacity: 0, y: 16 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
+            exit={{ scale: 0.97, opacity: 0, y: 12, transition: { duration: 0.14, ease: 'easeIn' } }}
+            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Leave application"
+            className="lg-popup rounded-[26px] w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-              <div className="p-2 bg-slate-100 rounded-xl">
-                <CalendarDays size={16} className="text-slate-500" />
+            <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0">
+                <CalendarDays size={15} />
               </div>
-              <h3 className="flex-1 font-bold text-slate-800">Leave Application</h3>
+              <h3 className="flex-1 text-[15px] font-bold text-slate-900">Leave application</h3>
               <button
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="Close"
+                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all"
               >
-                <X size={16} />
+                <X size={15} strokeWidth={2.5} />
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 px-4 py-4">
+            <div className="overflow-y-auto overscroll-contain flex-1 px-4 py-3.5">
               {loading && !application ? (
                 <div className="text-center py-12">
                   <div className="spinner mx-auto mb-3" />

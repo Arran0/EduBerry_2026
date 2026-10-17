@@ -185,19 +185,29 @@ export default function PageBanner({
         }}
       />
 
-      {/* Admin edit pencil – top-right of banner */}
+      {/* Admin edit pencil – top-right of banner. The same chip as the home
+          page's welcome banner: a 44 px dark frosted disc with a white pencil,
+          so changing a banner looks and feels the same everywhere. */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className={`absolute top-2 right-2 p-1 backdrop-blur-sm rounded-md border transition-colors z-10 ${onDark ? 'bg-black/30 hover:bg-black/50 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-black/10 text-slate-800'}`}
+          aria-label="Customise banner"
           title="Customise banner"
+          className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
         >
-          <Pencil size={10} />
+          <Pencil size={14} className="text-white" aria-hidden="true" />
         </button>
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'}`}>
+      {/* With the admin pencil pinned top-right, the actions keep clear of it:
+          beside it from sm up, and on a phone — where the title and the
+          actions already fill the row — by starting the row below it. */}
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${
+        isAdmin && actions && !editingBanner
+          ? `sm:pr-16 lg:pr-16 ${elevated ? 'pt-14 pb-8 sm:pt-7 sm:pb-9' : 'pt-14 pb-10 sm:pt-7'}`
+          : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
+      }`}>
         {onBack && (
           <button
             onClick={onBack}

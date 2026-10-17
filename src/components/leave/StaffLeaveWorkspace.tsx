@@ -374,7 +374,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
             exit={{ opacity: 0, height: 0 }}
             className="mb-5 overflow-hidden"
           >
-            <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="rounded-2xl bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)] p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                 <button

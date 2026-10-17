@@ -384,7 +384,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
             exit={{ opacity: 0, height: 0 }}
             className="mb-5 overflow-hidden"
           >
-            <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="rounded-2xl bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)] p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                 <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
@@ -573,7 +573,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
           onChange={e => setSearchInput(e.target.value)}
           placeholder="Search by sender or receiver name…"
           autoComplete="off"
-          className="w-full pl-9 pr-9 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none page-input-focus text-slate-700 placeholder:text-slate-400"
+          className="w-full pl-9 pr-9 py-2 text-sm bg-slate-100 border border-transparent rounded-xl focus:outline-none focus:bg-white focus:border-slate-300 page-input-focus text-slate-700 placeholder:text-slate-400 transition-colors"
         />
         {searching ? (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
