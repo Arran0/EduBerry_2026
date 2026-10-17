@@ -185,19 +185,26 @@ export default function PageBanner({
         }}
       />
 
-      {/* Admin edit pencil – top-right of banner */}
+      {/* Admin edit pencil – top-right of banner. The same chip as the home
+          page's welcome banner: a 44 px dark glass circle with a white pencil. */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
-          className={`absolute top-2 right-2 p-1 backdrop-blur-sm rounded-md border transition-colors z-10 ${onDark ? 'bg-black/30 hover:bg-black/50 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-black/10 text-slate-800'}`}
+          aria-label="Customise banner"
+          className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
           title="Customise banner"
         >
-          <Pencil size={10} />
+          <Pencil size={14} className="text-white" aria-hidden="true" />
         </button>
       )}
 
       {/* Main header content */}
-      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'}`}>
+      {/* Phones have no side margin to hold the actions clear of the admin
+          pencil, so the row drops below it instead; wider screens keep the
+          height and step the actions in (see the actions wrapper below). */}
+      <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${
+        isAdmin && actions && !editingBanner ? `pt-14 sm:pt-7 ${elevated ? 'pb-8 sm:pb-9' : 'pb-10'}` : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
+      }`}>
         {onBack && (
           <button
             onClick={onBack}
@@ -253,7 +260,9 @@ export default function PageBanner({
             </div>
           </div>
 
-          {actions && <div className="flex-shrink-0 ml-auto">{actions}</div>}
+          {/* With the admin pencil in the corner, hold the actions clear of it
+              until the page is wide enough that the container's margin does. */}
+          {actions && <div className={`flex-shrink-0 ml-auto ${isAdmin && !editingBanner ? 'sm:mr-10 2xl:mr-0' : ''}`}>{actions}</div>}
         </motion.div>
       </div>
 

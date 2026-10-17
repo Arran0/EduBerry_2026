@@ -1802,6 +1802,98 @@ async function saveScopeRules(
 }
 
 /**
+ * Every rule in effect on each date of [startDate, endDate], keyed by date —
+ * the same answer fetchScopeRulesForDate gives one date at a time, for a whole
+ * range in three queries instead of two per date. Team-scoped rules keep their
+ * staff_ids, so a report can excuse exactly the staff a rule covers.
+ */
+async function fetchScopeRulesForRange(
+  t: ScopeRuleTables, startDate: string, endDate: string,
+): Promise<Map<string, ScopeRuleGroup[]>> {
+  const [dateRes, weekdayRes] = await Promise.all([
+    supabase.from(t.table).select(t.columns).eq('scope_type', 'date')
+      .gte('scope_date', startDate).lte('scope_date', endDate),
+    supabase.from(t.table).select(t.columns).eq('scope_type', 'weekday'),
+  ])
+  if (dateRes.error) console.error(`fetchScopeRulesForRange(${t.table}) date error:`, dateRes.error)
+  if (weekdayRes.error) console.error(`fetchScopeRulesForRange(${t.table}) weekday error:`, weekdayRes.error)
+
+  const rows = [
+    ...((dateRes.data ?? []) as unknown as ScopeRuleRow[]),
+    ...((weekdayRes.data ?? []) as unknown as ScopeRuleRow[]),
+  ]
+  const withMembers = await attachScopeMembers(rows, t)
+  const dateRules = withMembers.filter(r => r.scope_type === 'date')
+  const weekdayRules = withMembers.filter(r => r.scope_type === 'weekday')
+
+  const out = new Map<string, ScopeRuleGroup[]>()
+  for (const date of enumerateDates(startDate, endDate)) {
+    const weekday = new Date(date + 'T12:00:00').getDay()
+    // Exact-date rules first, then the weekday's — fetchScopeRulesForDate's order.
+    out.set(date, [
+      ...dateRules.filter(r => r.scope_date === date),
+      ...weekdayRules.filter(r => r.scope_weekday === weekday),
+    ])
+  }
+  return out
+}
+
+/** Every calendar date from startDate to endDate inclusive, as 'YYYY-MM-DD'. */
+export function enumerateDates(startDate: string, endDate: string): string[] {
+  const out: string[] = []
+  const d = new Date(startDate + 'T12:00:00')
+  const end = new Date(endDate + 'T12:00:00')
+  while (d <= end) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    d.setDate(d.getDate() + 1)
+  }
+  return out
+}
+
+/** Holiday and non-working rules for every date in a range (see fetchScopeRulesForRange). */
+export async function fetchDayRulesForRange(startDate: string, endDate: string): Promise<{
+  holidays: Map<string, HolidayGroup[]>
+  nonWorking: Map<string, NonWorkingDayGroup[]>
+}> {
+  const [holidays, nonWorking] = await Promise.all([
+    fetchScopeRulesForRange(HOLIDAY_TABLES, startDate, endDate),
+    fetchScopeRulesForRange(NON_WORKING_DAY_TABLES, startDate, endDate),
+  ])
+  return { holidays, nonWorking }
+}
+
+/**
+ * Every staff attendance row between two dates, whole school. Paged for the
+ * same reason fetchMonthlyAttendanceRecords is: a month of a full staff room
+ * clears PostgREST's 1000-row cap, and a short reply would read as absences.
+ */
+export async function fetchStaffAttendanceForRange(
+  startDate: string,
+  endDate: string,
+): Promise<StaffAttendanceRecord[] | null> {
+  const PAGE = 1000
+  const out: StaffAttendanceRecord[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('staff_attendance_records')
+      .select(STAFF_ATTENDANCE_COLUMNS)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true })
+      .order('staff_id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) {
+      // A partial list would turn the missing rows into absences, so fail whole.
+      console.error('fetchStaffAttendanceForRange error:', error)
+      return null
+    }
+    out.push(...((data ?? []) as unknown as StaffAttendanceRecord[]))
+    if (!data || data.length < PAGE) break
+  }
+  return out
+}
+
+/**
  * Resolves every is_default rule (date-scoped and weekly-recurring) into
  * concrete per-date entries for one calendar month — what the mini calendar
  * and payroll actually consume. A date rule wins over a weekday rule that

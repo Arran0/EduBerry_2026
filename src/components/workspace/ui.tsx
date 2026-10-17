@@ -426,6 +426,7 @@ export function DateToggler({
   todayStr = new Date().toISOString().split('T')[0],
   className,
   size = 'md',
+  glass = false,
 }: {
   value: string
   onChange: (date: string) => void
@@ -436,6 +437,8 @@ export function DateToggler({
   className?: string
   /** 'sm' is a slimmer variant for tight toolbars — smaller padding/type/icons, narrower min-width. */
   size?: 'md' | 'sm'
+  /** A Liquid Glass capsule (the home deck's .lg-pill) instead of the square bordered box. */
+  glass?: boolean
 }) {
   const dateRef = useRef<HTMLInputElement>(null)
   const canGoNext = !max || value < max
@@ -453,11 +456,15 @@ export function DateToggler({
   }
 
   return (
-    <div className={`${className ?? 'inline-flex'} items-stretch border border-[#D4D4D8] bg-white rounded-lg overflow-hidden`}>
+    <div className={`${className ?? 'inline-flex'} items-stretch overflow-hidden ${
+      glass ? 'lg-pill p-0.5 gap-0.5' : 'border border-[#D4D4D8] bg-white rounded-lg'
+    }`}>
       <button
         type="button"
         onClick={() => onChange(shiftISODate(value, -1))}
-        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-r border-[#E4E4E7]`}
+        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:text-[#18181B] transition-colors ${
+          glass ? 'rounded-full hover:bg-white' : 'hover:bg-[#F5F5F5] border-r border-[#E4E4E7]'
+        }`}
         aria-label="Previous day"
       >
         <ChevronLeft size={sm ? 13 : 16} />
@@ -466,7 +473,7 @@ export function DateToggler({
       <button
         type="button"
         onClick={openPicker}
-        className={`relative inline-flex flex-1 items-center hover:bg-[#F5F5F5] transition-colors justify-center ${
+        className={`relative inline-flex flex-1 items-center transition-colors justify-center ${glass ? 'rounded-full hover:bg-white' : 'hover:bg-[#F5F5F5]'} ${
           sm ? 'gap-1 px-2 py-1 text-xs font-medium text-[#18181B] min-w-[6rem]' : 'gap-2 px-3 py-2 text-sm font-medium text-[#18181B] min-w-[8.5rem]'
         }`}
       >
@@ -488,7 +495,9 @@ export function DateToggler({
         type="button"
         onClick={() => canGoNext && onChange(shiftISODate(value, 1))}
         disabled={!canGoNext}
-        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors border-l border-[#E4E4E7] disabled:opacity-30 disabled:pointer-events-none`}
+        className={`${sm ? 'px-1.5' : 'px-2'} flex items-center justify-center text-[#71717A] hover:text-[#18181B] transition-colors disabled:opacity-30 disabled:pointer-events-none ${
+          glass ? 'rounded-full hover:bg-white' : 'hover:bg-[#F5F5F5] border-l border-[#E4E4E7]'
+        }`}
         aria-label="Next day"
       >
         <ChevronRight size={sm ? 13 : 16} />

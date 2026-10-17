@@ -613,14 +613,14 @@ export default function LeaveApplicationCard({
           {showDeleteConfirm && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1c1a1e]/45"
               onClick={() => setShowDeleteConfirm(false)}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+                className="lg-sheet relative rounded-[28px] w-full max-w-sm p-6"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3 mb-3">
