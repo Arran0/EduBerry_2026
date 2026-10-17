@@ -200,6 +200,10 @@ export default function LeaveApplicationCard({
         userId: namedApproval?.approver_id ?? undefined,
         detail: namedApproval?.approver?.role ?? namedApproval?.approver_role ?? '',
         prefix: 'To ',
+        // What the list already knows, so the profile card opens fully drawn.
+        seed: namedApproval?.approver && namedApproval.approver_id
+          ? { ...namedApproval.approver, id: namedApproval.approver_id }
+          : null,
       }
     : {
         name: application.applicant?.full_name ?? '—',
@@ -211,6 +215,7 @@ export default function LeaveApplicationCard({
           application.applicant?.section,
         ].filter(Boolean).join(' · '),
         prefix: '',
+        seed: application.applicant ? { ...application.applicant, id: application.applicant_id } : null,
       }
 
   const myPendingApprovals = application.approvals.filter(a => {
@@ -423,6 +428,7 @@ export default function LeaveApplicationCard({
           name={counterparty.name}
           size={34}
           userId={counterparty.userId}
+          profileSeed={counterparty.seed}
         />
 
         <button
@@ -526,6 +532,7 @@ export default function LeaveApplicationCard({
             name={application.applicant?.full_name ?? ''}
             size={26}
             userId={application.applicant_id}
+            profileSeed={application.applicant ? { ...application.applicant, id: application.applicant_id } : null}
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate leading-tight">

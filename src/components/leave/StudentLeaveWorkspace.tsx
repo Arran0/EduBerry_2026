@@ -370,7 +370,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
     <>
       {/* Student stats summary */}
       {isStudent && (
-        <div className="mb-5">
+        <div className={embedded ? 'mb-2' : 'mb-5'}>
           <LeaveStatsCard stats={stats} />
         </div>
       )}
@@ -564,6 +564,9 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
         )}
       </AnimatePresence>
 
+      {/* Search and folders stay pinned to the top of the popup while the
+          list scrolls under them (the popup is a fixed height). */}
+      <div className={embedded ? 'sticky -top-1 z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-3 bg-white' : ''}>
       {/* ── Search: matches either side of an application, sender or receiver ── */}
       <div className="relative mb-2.5">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -613,6 +616,8 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
             }`} />
           </button>
         ))}
+      </div>
+
       </div>
 
       {/* ── Tab Content ── */}

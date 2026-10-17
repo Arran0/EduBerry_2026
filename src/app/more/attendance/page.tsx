@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef, useId } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useDragControls, useReducedMotion, type PanInfo } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -53,21 +53,10 @@ const LATE_C = '#f59e0b'
 const HALF_C = '#f97316'
 
 // ─── Liquid Glass pieces ──────────────────────────────────────────────────────
-// The home page's material: a glass sheet with colour under it, and solid
-// content cards riding on top (.lg-pane / .lg-content in globals.css). The
-// sheet here carries no backdrop-filter — popups open over this page, and a
-// blurred layer under a fading popup is what made Chrome flash black.
-
-/** Blurred colour under a sheet, in the page's accent and a status hue. */
-function Ambient({ colors = ['var(--page-gradient-from, #7c3aed)', PRESENT_C] }: { colors?: string[] }) {
-  return (
-    <div aria-hidden className="absolute inset-0 overflow-hidden rounded-[inherit] pointer-events-none">
-      <div className="lg-ambient">
-        {colors.map((c, i) => <span key={i} style={{ background: c }} />)}
-      </div>
-    </div>
-  )
-}
+// The home page's material: a glass sheet with solid content cards riding on
+// top (.lg-pane / .lg-content in globals.css). No colour pooled under it — the
+// tinted patches read as stains — and no backdrop-filter: popups open over
+// this page, and a blurred layer under a fading popup made Chrome flash black.
 
 interface SegmentOption<T extends string> {
   key: T
@@ -322,7 +311,6 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
   if (homerooms.length === 0) {
     return (
       <div className="lg-pane py-14 text-center px-6">
-        <Ambient />
         <div className="relative">
           <div className="w-14 h-14 rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/[0.06] flex items-center justify-center mx-auto mb-3">
             <ClipboardList size={24} className="text-slate-300" />
@@ -341,7 +329,6 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
     // takes the wide column and the homeroom and the year's tally stack in a
     // narrow one beside it; on a phone they stack above it.
     <div className="lg-pane p-2 sm:p-2.5 animate-fade-in">
-      <Ambient />
       <div className="relative grid gap-2 sm:gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
         <div className="space-y-2 sm:space-y-2.5 lg:order-2">
 
@@ -523,6 +510,17 @@ type ReportView = 'homeroom' | 'student'
 type ReportSection = 'present' | 'absent' | 'irregular'
 
 const REPORT_ANCHOR = 'student-report'
+
+/** The report's two panes slide by direction: +1 heads to the student view
+ *  (it lives on the right), -1 back to homerooms. */
+const PANE_VARIANTS = {
+  enter: (dir: number) => ({ x: dir > 0 ? '100%' : '-100%' }),
+  center: { x: 0 },
+  exit: (dir: number) => ({ x: dir > 0 ? '-100%' : '100%' }),
+}
+
+/** How far (px, with a little velocity folded in) a sideways swipe has to go. */
+const SWIPE_THRESHOLD = 70
 
 const SECTION_ANCHOR: Record<ReportSection, string> = {
   present:   'student-present',
@@ -992,7 +990,27 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   }
 
   const changeDate = (d: string) => { clearSearch(); setDate(d) }
-  const changeView = (v: ReportView) => { if (v !== view) clearSearch(); setView(v) }
+  // Which way the panes slide for the latest switch — see PANE_VARIANTS.
+  const [viewDir, setViewDir] = useState(1)
+  const changeView = (v: ReportView) => {
+    if (v === view) return
+    clearSearch()
+    setViewDir(v === 'student' ? 1 : -1)
+    setView(v)
+  }
+
+  // Swipe between the views on a touch screen (see the pane in the render).
+  const paneDrag = useDragControls()
+  const reduceMotion = useReducedMotion()
+  const onPaneDragEnd = (_: unknown, info: PanInfo) => {
+    const swipe = info.offset.x + info.velocity.x * 0.2
+    if (swipe < -SWIPE_THRESHOLD) changeView('student')
+    else if (swipe > SWIPE_THRESHOLD) changeView('homeroom')
+  }
+
+  // The records scroll inside the report; a new list starts at its top.
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [activeTab, date, hrId])
 
   // A deep link (e.g. the home dashboard's Present / Absent / Irregular tiles)
   // is always a request for the student-wise list — open it on the tab it names
@@ -1097,6 +1115,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const openStudentView = (row: HomeroomAttendanceCounts, section: ReportSection | null) => {
     clearSearch()
     setHomeroom({ id: row.homeroom_id, name: row.homeroom_name })
+    setViewDir(1)
     setView('student')
     if (section) setActiveTab(section)
     // Bring the report header into view so the drill-down never leaves the
@@ -1207,13 +1226,13 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     // On phones the report is full-bleed with square corners so the lists get
     // the whole screen; from sm up it is a rounded glass sheet like the
     // student view above it.
+    // A fixed height — the screen, less the top bar (and the tab bar on a
+    // phone) — so the controls stay put and only the records scroll.
     <section
       id={REPORT_ANCHOR}
-      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-4"
+      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc(100dvh-9.5rem)] sm:h-[calc(100dvh-5.5rem)] min-h-[30rem]"
     >
-      <Ambient colors={['var(--page-gradient-from, #7c3aed)', ABSENT_C]} />
-
-      <div className="relative">
+      <div className="relative flex flex-col flex-1 min-h-0">
         {/* ── Header: what this is, which way it is cut, and which day ── */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 pt-3 pb-2.5">
           {/* min-w lets the controls drop to their own row on a phone rather
@@ -1255,10 +1274,10 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
         </div>
 
         {/* ── Content card ── */}
-        <div className="lg-content mx-2 mb-2 sm:mx-2.5 sm:mb-2.5 overflow-hidden">
+        <div className="lg-content mx-2 mb-2 sm:mx-2.5 sm:mb-2.5 overflow-hidden flex flex-col flex-1 min-h-0">
           {/* Summary: the day in one line — the fraction, its bar, and the
               three figures, each a way into its list. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
+          <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
             <div className="flex items-baseline gap-1.5 flex-shrink-0">
               <span className="text-2xl font-bold text-slate-900 leading-none tabular-nums">
                 {loading ? '—' : presentFullTotal}
@@ -1295,206 +1314,247 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
             </div>
           </div>
 
-          {/* ── Body ── */}
-          <div className="p-2.5 sm:p-3 space-y-2.5">
-            {/* One list at a time, instead of stacking all three */}
-            {view === 'student' && (
-              <Segmented
-                fill
-                ariaLabel="Student list"
-                value={activeTab}
-                onChange={setActiveTab}
-                options={(['absent', 'present', 'irregular'] as const).map(key => ({
-                  key,
-                  label: key === 'absent' ? 'Absent' : key === 'present' ? 'Present' : 'Irregular',
-                  count: loading ? '—' : tabCounts[key],
-                  tone: SECTION_TONE[key],
-                }))}
-              />
-            )}
-
-            {/* Search + homeroom toggler */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-0">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder={view === 'student' ? 'Search students' : 'Search homerooms'}
-                  title={view === 'homeroom' ? 'Matches a homeroom, its section or its class teacher' : undefined}
-                  aria-label={view === 'student' ? 'Search students' : 'Search homerooms'}
-                  className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-100 border border-transparent rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-violet-500/15 transition-colors [&::-webkit-search-cancel-button]:hidden"
-                />
-                {query && (searchPending ? (
-                  <span aria-label="Searching" className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
-                ) : (
-                  <button
-                    onClick={clearSearch}
-                    aria-label="Clear search"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-300/70 text-white hover:bg-slate-400 transition-colors"
-                  >
-                    <X size={11} strokeWidth={3} />
-                  </button>
-                ))}
-              </div>
-              {showHomeroomPicker && (
-                <SmartSelect
-                  options={homeroomOptions}
-                  value={homeroom?.id ?? ''}
-                  onChange={pickHomeroom}
-                  allowClear
-                  align="right"
-                  placeholder={scoped ? 'All my homerooms' : 'All homerooms'}
-                  searchPlaceholder="Search homerooms…"
-                  emptyText="No homerooms match"
-                  className="w-36 sm:w-52 flex-shrink-0"
-                  buttonClassName="!rounded-xl !border-slate-200"
-                  leadingIcon={<Home size={14} className="text-slate-400 flex-shrink-0" />}
-                />
-              )}
-            </div>
-
-            {/* ── Homeroom-wise ── */}
-            {view === 'homeroom' ? (
-              loadingHomerooms ? (
-                <HomeroomReportSkeleton />
-              ) : (
-                <div className="animate-fade-in">
-                  {homeroomRows.length === 0 ? (
-                    <EmptyNote>
-                      {searchPending
-                        ? 'Searching…'
-                        : homeroomSearch ? `No homerooms or class teachers match “${homeroomSearch}”.` : 'No homerooms to report on.'}
-                    </EmptyNote>
-                  ) : (
-                    <div className="rounded-xl overflow-hidden ring-1 ring-slate-900/[0.06]">
-                      {/* Column headings */}
-                      <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-8 bg-slate-50 border-b border-slate-100">
-                        <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-400">
-                          Homeroom{homeroomSearch ? ` · ${homeroomTotal} found` : ''}
-                        </span>
-                        <span className="hidden md:block w-24 text-[11px] font-semibold text-slate-400 flex-shrink-0">Rate</span>
-                        {([['Present', 'Pres.'], ['Absent', 'Abs.'], ['Irregular', 'Irreg.']] as const).map(([label, short]) => (
-                          <span key={label} className="w-11 sm:w-16 text-center text-[11px] font-semibold text-slate-400 flex-shrink-0">
-                            <span className="hidden sm:inline">{label}</span>
-                            <span className="sm:hidden" title={label}>{short}</span>
-                          </span>
-                        ))}
-                      </div>
-                      <div className={`divide-y divide-slate-100 transition-opacity ${searchingHomerooms ? 'opacity-60' : ''}`}>
-                        {homeroomRows.map(row => (
-                          <HomeroomCountsRow key={row.homeroom_id} row={row} onOpen={openStudentView} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {homeroomRows.length < homeroomTotal && (
-                    <LoadMoreButton
-                      loading={loadingMoreHomerooms}
-                      shown={homeroomRows.length}
-                      total={homeroomTotal}
-                      onClick={loadMoreHomerooms}
+          {/* ── Body ──
+              One pane per view. Switching slides the new one in from the side
+              it lives on (homerooms left, students right), and on a touch
+              screen a horizontal swipe does the switch. The panes fill the
+              report's fixed height; only the records scroll. */}
+          <div className="relative flex-1 min-h-0 overflow-hidden">
+            <AnimatePresence initial={false} custom={viewDir}>
+              <motion.div
+                key={view}
+                custom={viewDir}
+                variants={PANE_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 38 }}
+                drag="x"
+                dragListener={false}
+                dragControls={paneDrag}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.22}
+                onDragEnd={onPaneDragEnd}
+                // Touch only: a mouse drag over buttons would fight clicks, and
+                // the segmented control is right there. pan-y keeps vertical
+                // scrolling native — the browser takes it and the drag stands
+                // down; only a sideways move reaches the swipe.
+                onPointerDown={e => { if (e.pointerType === 'touch') paneDrag.start(e) }}
+                style={{ touchAction: 'pan-y' }}
+                className="absolute inset-0 flex flex-col"
+              >
+                <div className="flex-shrink-0 px-2.5 sm:px-3 pt-2.5 sm:pt-3 pb-2 space-y-2.5">
+                  {/* One list at a time, instead of stacking all three */}
+                  {view === 'student' && (
+                    <Segmented
+                      fill
+                      ariaLabel="Student list"
+                      value={activeTab}
+                      onChange={setActiveTab}
+                      options={(['absent', 'present', 'irregular'] as const).map(key => ({
+                        key,
+                        label: key === 'absent' ? 'Absent' : key === 'present' ? 'Present' : 'Irregular',
+                        count: loading ? '—' : tabCounts[key],
+                        tone: SECTION_TONE[key],
+                      }))}
                     />
                   )}
-                </div>
-              )
-            ) : loading ? (
-              <ReportBodySkeleton />
-            ) : isEmpty ? (
-              <EmptyNote>No attendance recorded for this date.</EmptyNote>
-            ) : (
-              <div className="animate-fade-in">
-                {/* ── Absent ── */}
-                {activeTab === 'absent' && (
-                  <div id={SECTION_ANCHOR.absent} className="scroll-mt-4">
-                    {absentRows.length === 0 ? (
-                      <EmptyNote>
-                        {query ? `No absentees match “${query.trim()}”.` : 'No one is marked absent for this day.'}
-                      </EmptyNote>
-                    ) : (
-                      <RowList count={absentRows.length}>
-                        {absentRows.map((r, i) => (
-                          <StudentEntryRow
-                            key={`${r.student.id}-${r.homeroom_id}-${i}`}
-                            entry={r}
-                            streak={streakMap.get(r.student.id)}
-                            viewerUserId={user?.id}
-                            viewerRole={profile?.role}
-                            onAppOpen={openLeaveApp}
-                          />
-                        ))}
-                      </RowList>
-                    )}
-                  </div>
-                )}
 
-                {/* ── Present ── */}
-                {activeTab === 'present' && (
-                  <div id={SECTION_ANCHOR.present} className="scroll-mt-4">
-                    {presentRows.length === 0 ? (
-                      <EmptyNote>
-                        {searchPending
-                          ? 'Searching…'
-                          : query ? `No present students match “${query.trim()}”.` : 'No one is marked present for this day.'}
-                      </EmptyNote>
-                    ) : (
-                      <div className={`transition-opacity ${searchingPresent ? 'opacity-60' : ''}`}>
-                        <RowList count={presentRows.length}>
-                          {presentRows.map((r, i) => (
-                            <StudentEntryRow
-                              key={`${r.student.id}-${r.homeroom_id}-${i}`}
-                              entry={r}
-                              streak={streakMap.get(r.student.id)}
-                              viewerUserId={user?.id}
-                              viewerRole={profile?.role}
-                              onAppOpen={openLeaveApp}
-                            />
-                          ))}
-                        </RowList>
-                      </div>
-                    )}
-                    {present.length < presentTotal && (
-                      <LoadMoreButton
-                        loading={loadingMore}
-                        shown={present.length}
-                        total={presentTotal}
-                        onClick={loadMorePresent}
+                  {/* Search + homeroom toggler */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="search"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder={view === 'student' ? 'Search students' : 'Search homerooms'}
+                        title={view === 'homeroom' ? 'Matches a homeroom, its section or its class teacher' : undefined}
+                        aria-label={view === 'student' ? 'Search students' : 'Search homerooms'}
+                        className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-100 border border-transparent rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-violet-500/15 transition-colors [&::-webkit-search-cancel-button]:hidden"
+                      />
+                      {query && (searchPending ? (
+                        <span aria-label="Searching" className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
+                      ) : (
+                        <button
+                          onClick={clearSearch}
+                          aria-label="Clear search"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-300/70 text-white hover:bg-slate-400 transition-colors"
+                        >
+                          <X size={11} strokeWidth={3} />
+                        </button>
+                      ))}
+                    </div>
+                    {showHomeroomPicker && (
+                      <SmartSelect
+                        options={homeroomOptions}
+                        value={homeroom?.id ?? ''}
+                        onChange={pickHomeroom}
+                        allowClear
+                        align="right"
+                        placeholder={scoped ? 'All my homerooms' : 'All homerooms'}
+                        searchPlaceholder="Search homerooms…"
+                        emptyText="No homerooms match"
+                        className="w-36 sm:w-52 flex-shrink-0"
+                        buttonClassName="!rounded-xl !border-slate-200"
+                        leadingIcon={<Home size={14} className="text-slate-400 flex-shrink-0" />}
                       />
                     )}
                   </div>
-                )}
 
-                {/* ── Irregular — every non-present status other than absent ── */}
-                {activeTab === 'irregular' && (
-                  <div id={SECTION_ANCHOR.irregular} className="scroll-mt-4 space-y-3">
-                    {irregularGroups.length === 0 ? (
-                      <EmptyNote>
-                        {query ? `No irregular attendance matches “${query.trim()}”.` : 'No irregular attendance for this day.'}
-                      </EmptyNote>
+                </div>
+
+                <div
+                  ref={el => { if (el) scrollRef.current = el }}
+                  // pan-y again here: touch-action is only inherited down to the
+                  // nearest scroll container, so without it the browser claims
+                  // a sideways swipe that starts on a record.
+                  style={{ touchAction: 'pan-y' }}
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 sm:px-3 pb-2.5 sm:pb-3"
+                >
+                  {/* ── Homeroom-wise ── */}
+                  {view === 'homeroom' ? (
+                    loadingHomerooms ? (
+                      <HomeroomReportSkeleton />
                     ) : (
-                      irregularGroups.map(({ status, rows }) => (
-                        <div key={status}>
-                          <GroupLabel status={status} count={rows.length} />
-                          <RowList count={rows.length}>
-                            {rows.map((r, i) => (
-                              <StudentEntryRow
-                                key={`${r.student.id}-${r.homeroom_id}-${i}`}
-                                entry={r}
-                                streak={streakMap.get(r.student.id)}
-                                viewerUserId={user?.id}
-                                viewerRole={profile?.role}
-                                onAppOpen={openLeaveApp}
-                              />
-                            ))}
-                          </RowList>
+                      <div className="animate-fade-in">
+                        {homeroomRows.length === 0 ? (
+                          <EmptyNote>
+                            {searchPending
+                              ? 'Searching…'
+                              : homeroomSearch ? `No homerooms or class teachers match “${homeroomSearch}”.` : 'No homerooms to report on.'}
+                          </EmptyNote>
+                        ) : (
+                          <div className="rounded-xl overflow-clip ring-1 ring-slate-900/[0.06]">
+                            {/* Column headings — pinned while the rows scroll */}
+                            <div className="sticky top-0 z-[1] flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-8 bg-slate-50 border-b border-slate-100">
+                              <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-400">
+                                Homeroom{homeroomSearch ? ` · ${homeroomTotal} found` : ''}
+                              </span>
+                              <span className="hidden md:block w-24 text-[11px] font-semibold text-slate-400 flex-shrink-0">Rate</span>
+                              {([['Present', 'Pres.'], ['Absent', 'Abs.'], ['Irregular', 'Irreg.']] as const).map(([label, short]) => (
+                                <span key={label} className="w-11 sm:w-16 text-center text-[11px] font-semibold text-slate-400 flex-shrink-0">
+                                  <span className="hidden sm:inline">{label}</span>
+                                  <span className="sm:hidden" title={label}>{short}</span>
+                                </span>
+                              ))}
+                            </div>
+                            <div className={`divide-y divide-slate-100 transition-opacity ${searchingHomerooms ? 'opacity-60' : ''}`}>
+                              {homeroomRows.map(row => (
+                                <HomeroomCountsRow key={row.homeroom_id} row={row} onOpen={openStudentView} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {homeroomRows.length < homeroomTotal && (
+                          <LoadMoreButton
+                            loading={loadingMoreHomerooms}
+                            shown={homeroomRows.length}
+                            total={homeroomTotal}
+                            onClick={loadMoreHomerooms}
+                          />
+                        )}
+                      </div>
+                    )
+                  ) : loading ? (
+                    <ReportBodySkeleton />
+                  ) : isEmpty ? (
+                    <EmptyNote>No attendance recorded for this date.</EmptyNote>
+                  ) : (
+                    <div className="animate-fade-in">
+                      {/* ── Absent ── */}
+                      {activeTab === 'absent' && (
+                        <div id={SECTION_ANCHOR.absent} className="scroll-mt-4">
+                          {absentRows.length === 0 ? (
+                            <EmptyNote>
+                              {query ? `No absentees match “${query.trim()}”.` : 'No one is marked absent for this day.'}
+                            </EmptyNote>
+                          ) : (
+                            <RowList count={absentRows.length}>
+                              {absentRows.map((r, i) => (
+                                <StudentEntryRow
+                                  key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                                  entry={r}
+                                  streak={streakMap.get(r.student.id)}
+                                  viewerUserId={user?.id}
+                                  viewerRole={profile?.role}
+                                  onAppOpen={openLeaveApp}
+                                />
+                              ))}
+                            </RowList>
+                          )}
                         </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                      )}
+
+                      {/* ── Present ── */}
+                      {activeTab === 'present' && (
+                        <div id={SECTION_ANCHOR.present} className="scroll-mt-4">
+                          {presentRows.length === 0 ? (
+                            <EmptyNote>
+                              {searchPending
+                                ? 'Searching…'
+                                : query ? `No present students match “${query.trim()}”.` : 'No one is marked present for this day.'}
+                            </EmptyNote>
+                          ) : (
+                            <div className={`transition-opacity ${searchingPresent ? 'opacity-60' : ''}`}>
+                              <RowList count={presentRows.length}>
+                                {presentRows.map((r, i) => (
+                                  <StudentEntryRow
+                                    key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                                    entry={r}
+                                    streak={streakMap.get(r.student.id)}
+                                    viewerUserId={user?.id}
+                                    viewerRole={profile?.role}
+                                    onAppOpen={openLeaveApp}
+                                  />
+                                ))}
+                              </RowList>
+                            </div>
+                          )}
+                          {present.length < presentTotal && (
+                            <LoadMoreButton
+                              loading={loadingMore}
+                              shown={present.length}
+                              total={presentTotal}
+                              onClick={loadMorePresent}
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Irregular — every non-present status other than absent ── */}
+                      {activeTab === 'irregular' && (
+                        <div id={SECTION_ANCHOR.irregular} className="scroll-mt-4 space-y-3">
+                          {irregularGroups.length === 0 ? (
+                            <EmptyNote>
+                              {query ? `No irregular attendance matches “${query.trim()}”.` : 'No irregular attendance for this day.'}
+                            </EmptyNote>
+                          ) : (
+                            irregularGroups.map(({ status, rows }) => (
+                              <div key={status}>
+                                <GroupLabel status={status} count={rows.length} />
+                                <RowList count={rows.length}>
+                                  {rows.map((r, i) => (
+                                    <StudentEntryRow
+                                      key={`${r.student.id}-${r.homeroom_id}-${i}`}
+                                      entry={r}
+                                      streak={streakMap.get(r.student.id)}
+                                      viewerUserId={user?.id}
+                                      viewerRole={profile?.role}
+                                      onAppOpen={openLeaveApp}
+                                    />
+                                  ))}
+                                </RowList>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>

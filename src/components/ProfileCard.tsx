@@ -226,13 +226,15 @@ function ContactRow({ icon, label, value, href, loading, empty }: {
 }
 
 /**
- * A seed is only good enough to render from if it carries the fields the card
- * shows above the fold. Anything less falls back to the loading state rather
- * than drawing a half-empty card.
+ * A seed is good enough to render from once it names the person and their
+ * role — the face, the name and the badge. Lists like the leave app know that
+ * much but not the email; the email row holds its place with a shimmer until
+ * the fetch fills it, rather than the whole card opening as a grey skeleton
+ * and then swapping to the real one (a visible blink a beat after opening).
  */
 function seedToProfile(seed?: ProfileCardSeed | null): UserProfile | null {
-  if (!seed?.full_name || !seed.email || !seed.role) return null
-  return { created_at: '', updated_at: '', ...seed } as UserProfile
+  if (!seed?.full_name || !seed.role) return null
+  return { created_at: '', updated_at: '', email: '', ...seed } as UserProfile
 }
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
@@ -251,6 +253,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   // drawn and the fetch below only fills in what the list didn't have.
   const [targetProfile, setTargetProfile] = useState<UserProfile | null>(() => seedToProfile(seed))
   const [loadingProfile, setLoadingProfile] = useState(() => !seedToProfile(seed))
+  // Whether the full profile row has landed — a seeded card may be missing
+  // fields (the email) until it has.
+  const [profileFetched, setProfileFetched] = useState(false)
   const [phone, setPhone] = useState<string | null>(null)
   // Student-only facts
   const [admissionNo, setAdmissionNo] = useState<string | null>(null)
@@ -292,6 +297,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
       .single()
     if (!error && data) setTargetProfile(data as UserProfile)
     setLoadingProfile(false)
+    setProfileFetched(true)
   }, [userId])
 
   useEffect(() => { loadProfile() }, [loadProfile])
@@ -487,7 +493,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                     label="Email"
                     value={targetProfile.email}
                     href={targetProfile.email ? `mailto:${targetProfile.email}` : undefined}
-                    loading={false}
+                    loading={!targetProfile.email && !profileFetched}
                     empty="Nil"
                   />
                   <ContactRow
