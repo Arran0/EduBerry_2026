@@ -31,7 +31,6 @@ interface Form {
   end_time: string
   vehicle_id: string
   driver_id: string
-  attendant_id: string
   auto_start: boolean
   active: boolean
 }
@@ -45,7 +44,6 @@ function formFrom(route: TransportRoute, s: TransportSchedule | null): Form {
     // Prefilled from the route's defaults so the common case is one click.
     vehicle_id: s?.vehicle_id ?? route.default_vehicle_id ?? '',
     driver_id: s?.driver_id ?? route.default_driver_id ?? '',
-    attendant_id: s?.attendant_id ?? route.default_attendant_id ?? '',
     auto_start: s?.auto_start ?? true,
     active: s?.active ?? true,
   }
@@ -91,7 +89,6 @@ export default function ScheduleEditor({
   }
 
   const drivers = crew.filter(c => c.kind === 'driver' && c.active)
-  const attendants = crew.filter(c => c.kind === 'attendant' && c.active)
 
   const missing: string[] = []
   if (form.days_of_week.length === 0) missing.push('the days it runs')
@@ -115,7 +112,7 @@ export default function ScheduleEditor({
       end_time: form.end_time,
       vehicle_id: form.vehicle_id,
       driver_id: form.driver_id,
-      attendant_id: form.attendant_id || null,
+      attendant_id: null,
       auto_start: form.auto_start,
       active: form.active,
     }
@@ -214,7 +211,7 @@ export default function ScheduleEditor({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className={label}>Bus *</span>
             <select className={`${GINPUT} mt-1 ${!form.vehicle_id ? '!border-amber-300' : ''}`} value={form.vehicle_id} onChange={e => set('vehicle_id', e.target.value)}>
@@ -227,13 +224,6 @@ export default function ScheduleEditor({
             <select className={`${GINPUT} mt-1 ${!form.driver_id ? '!border-amber-300' : ''}`} value={form.driver_id} onChange={e => set('driver_id', e.target.value)}>
               <option value="">Choose a driver</option>
               {drivers.map(d => <option key={d.id} value={d.profile_id}>{d.profile?.full_name ?? 'Unknown'}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className={label}>Attendant</span>
-            <select className={`${GINPUT} mt-1`} value={form.attendant_id} onChange={e => set('attendant_id', e.target.value)}>
-              <option value="">No attendant</option>
-              {attendants.map(a => <option key={a.id} value={a.profile_id}>{a.profile?.full_name ?? 'Unknown'}</option>)}
             </select>
           </label>
         </div>

@@ -18,7 +18,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, Bus, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Phone, Plus,
+  AlertTriangle, Bus, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Plus, Search,
   Map as MapIcon, Radio, Route as RouteIcon, School, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
@@ -30,14 +30,14 @@ import { currentPeriod, previewBills, type BillableRider } from '@/lib/transport
 import { mapStatus, schoolStatus } from '../TransportSettings'
 import { fetchMapSettings, fetchSchoolLocation, type MapSettings, type SchoolLocation } from '@/lib/transport/settings'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
-import { STAFF_KIND_LABELS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
+import { VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
 import RouteWorkspace, { type RouteTab } from '../RouteWorkspace'
 import RouteNavigator from '../RouteNavigator'
 import RouteFormModal from '../RouteFormModal'
 import VehicleFormModal from '../VehicleFormModal'
 import CrewFormModal from '../CrewFormModal'
 import {
-  CardHead, Content, EmptyNote, GBTN, GlassPanel, GlassTileButton,
+  CardHead, Content, EmptyNote, GBTN, GINPUT, GlassPanel, GlassTileButton,
 } from '../glass'
 
 export type ConnectionKey = 'whatsapp' | 'gps' | 'scan' | 'school' | 'map'
@@ -133,11 +133,8 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
     return m
   }, [live])
   const routesByPerson = useMemo(() => {
-    const m: Record<string, { route: TransportRoute; as: 'driver' | 'attendant' }[]> = {}
-    for (const r of live) {
-      if (r.default_driver_id) (m[r.default_driver_id] ??= []).push({ route: r, as: 'driver' })
-      if (r.default_attendant_id) (m[r.default_attendant_id] ??= []).push({ route: r, as: 'attendant' })
-    }
+    const m: Record<string, TransportRoute[]> = {}
+    for (const r of live) if (r.default_driver_id) (m[r.default_driver_id] ??= []).push(r)
     return m
   }, [live])
 
@@ -145,16 +142,22 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
   return (
     <div className="space-y-5">
       {/* ── Network at a glance ───────────────────────────────────── */}
-      <GlassPanel eyebrow="Configuration" title="Transport network" icon={SlidersHorizontal}>
+      <GlassPanel eyebrow="Configuration" title="Transport network" icon={SlidersHorizontal} className="z-30">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 px-0.5">
           <Tile icon={RouteIcon} value={loading ? '—' : `${live.length}`} label="Routes" sub={`${live.filter(r => r.direction === 'inbound').length} to school · ${live.filter(r => r.direction === 'outbound').length} from school`} />
           <Tile icon={MapPin} value={loading ? '—' : `${totals.stops}`} label="Stops" sub="across all routes" />
           <Tile icon={Users} value={loading ? '—' : `${totals.riders}`} label="Riders assigned" sub="one per route ridden" />
           <Tile icon={Bus} value={loading ? '—' : `${vehicles.filter(v => v.status === 'active').length}`} label="Buses in service"
-            sub={totals.warnings > 0 ? `${totals.warnings} with papers due` : 'papers current'} tone={totals.warnings > 0 ? 'warn' : undefined} />
-          <Tile icon={IdCard} value={loading ? '—' : `${crew.filter(c => c.active).length}`} label="Crew" sub={`${crew.filter(c => c.kind === 'driver').length} drivers · ${crew.filter(c => c.kind === 'attendant').length} attendants`} />
-          <Tile icon={IndianRupee} value={billing ? fmtINR(totals.monthly) : '—'} label="Billed per month"
-            sub={totals.unpriced > 0 ? `${totals.unpriced} riders without a price` : 'every rider priced'} tone={totals.unpriced > 0 ? 'warn' : undefined} />
+            sub={totals.warnings > 0 ? `${totals.warnings} with papers due` : 'papers current'} tone={totals.warnings > 0 ? 'warn' : undefined}
+            detail={totals.warnings > 0
+              ? `${totals.warnings} bus${totals.warnings === 1 ? ' has' : 'es have'} insurance, fitness, permit or PUC expired or due within 30 days. The bus list below marks which.`
+              : undefined} />
+          <Tile icon={IdCard} value={loading ? '—' : `${crew.filter(c => c.active).length}`} label="Drivers" sub={`${crew.length - crew.filter(c => c.active).length} inactive`} />
+          <Tile icon={IndianRupee} value={billing ? fmtINR(totals.monthly) : '—'} label="Billed per month" align="right"
+            sub={totals.unpriced > 0 ? `${totals.unpriced} riders without a price` : 'every rider priced'} tone={totals.unpriced > 0 ? 'warn' : undefined}
+            detail={totals.unpriced > 0
+              ? `${totals.unpriced} rider${totals.unpriced === 1 ? ' has' : 's have'} no monthly price yet, so they would be left out of a Bus fee issue. Either their route’s pricing (by stop or by student) is not chosen, or their stop or their own amount is empty. Open each route’s Fees tab to fix it.`
+              : 'Every rider on a running route has a monthly price.'} />
         </div>
       </GlassPanel>
 
@@ -206,117 +209,108 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
       </div>
 
       {/* ── Fleet & crew ──────────────────────────────────────────── */}
-      <GlassPanel eyebrow="Fleet & crew" title="Buses and the people who run them" icon={Bus} delay={0.08}>
+      <GlassPanel eyebrow="Fleet & crew" title="Buses and drivers" icon={Bus} delay={0.08}>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          <Content className="p-4">
+          <Content className="p-3 sm:p-4 flex flex-col">
             <CardHead icon={Bus} label={`Buses · ${vehicles.length}`}
-              right={<button className={GBTN.secondary} onClick={() => setEditVehicle(null)}><Plus size={13} /> Add bus</button>} />
-            <div className="mt-3">
-              {loading ? <RowSkeletons /> : vehicles.length === 0 ? (
-                <EmptyNote icon={Bus} title="No buses yet" detail="Add the buses this school runs. Routes and schedules attach to them." />
-              ) : (
-                <ul className="divide-y divide-slate-200/60">
-                  {vehicles.map(v => {
-                    const w = complianceWarnings(v)
-                    const on = routesByVehicle[v.id] ?? []
-                    return (
-                      <li key={v.id} className="group flex items-start gap-3 py-2.5">
-                        <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${v.status === 'active' ? 'bg-emerald-500' : v.status === 'maintenance' ? 'bg-amber-500' : 'bg-slate-300'}`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-900 truncate">
-                            {vehicleLabel(v)}
-                            {v.status !== 'active' && <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{VEHICLE_STATUS_LABELS[v.status]}</span>}
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            {v.registration_no}{v.make_model ? ` · ${v.make_model}` : ''} · {v.capacity || '—'} seats
-                          </p>
-                          <RouteChips items={on.map(r => ({ route: r }))} empty="Not the default bus on any route" onPick={pickRoute} />
-                          {w.length > 0 && (
-                            <p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${w[0].expired ? 'text-rose-600' : 'text-amber-600'}`}>
-                              <AlertTriangle size={11} />
-                              {w[0].label} {w[0].expired ? `expired ${Math.abs(w[0].daysLeft)}d ago` : `due in ${w[0].daysLeft}d`}
-                              {w.length > 1 && ` +${w.length - 1}`}
-                            </p>
-                          )}
-                        </div>
-                        <RowActions
-                          onEdit={() => setEditVehicle(v)}
-                          onDelete={async () => {
-                            if (!confirm(`Delete ${vehicleLabel(v)}? Routes pointing at it will lose the link.`)) return
-                            await deleteVehicle(v.id)
-                            loadFleet(); loadRoutes()
-                          }}
-                        />
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
+              right={<button className={`${GBTN.secondary} !h-8`} onClick={() => setEditVehicle(null)}><Plus size={13} /> Add bus</button>} />
+            <SearchList
+              loading={loading}
+              items={vehicles}
+              placeholder="Search buses by name, number, model or route…"
+              haystack={v => [vehicleLabel(v), v.registration_no, v.make_model, VEHICLE_STATUS_LABELS[v.status],
+                ...(routesByVehicle[v.id] ?? []).flatMap(r => [r.name, r.code])].filter(Boolean).join(' ')}
+              empty={<EmptyNote icon={Bus} title="No buses yet" detail="Add the buses this school runs. Routes and schedules attach to them." />}
+              row={v => {
+                const w = complianceWarnings(v)
+                const on = routesByVehicle[v.id] ?? []
+                return (
+                  <li key={v.id} className="group flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50">
+                    <span title={VEHICLE_STATUS_LABELS[v.status]}
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${v.status === 'active' ? 'bg-emerald-500' : v.status === 'maintenance' ? 'bg-amber-500' : 'bg-slate-300'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-slate-900 truncate leading-tight">
+                        {vehicleLabel(v)}
+                        <span className="ml-1.5 text-[11px] font-normal text-slate-500">
+                          {v.registration_no !== vehicleLabel(v) ? `${v.registration_no} · ` : ''}{v.capacity || '—'} seats
+                        </span>
+                      </p>
+                    </div>
+                    {w.length > 0 && (
+                      <span title={w.map(x => `${x.label} ${x.expired ? `expired ${Math.abs(x.daysLeft)} days ago` : `due in ${x.daysLeft} days`}`).join('\n')}
+                        className={`inline-flex items-center gap-1 text-[10.5px] font-semibold flex-shrink-0 ${w[0].expired ? 'text-rose-600' : 'text-amber-600'}`}>
+                        <AlertTriangle size={11} /> {w[0].label}{w.length > 1 ? ` +${w.length - 1}` : ''}
+                      </span>
+                    )}
+                    <RouteChips items={on.map(r => ({ route: r }))} onPick={pickRoute} />
+                    <RowActions
+                      onEdit={() => setEditVehicle(v)}
+                      onDelete={async () => {
+                        if (!confirm(`Delete ${vehicleLabel(v)}? Routes pointing at it will lose the link.`)) return
+                        await deleteVehicle(v.id)
+                        loadFleet(); loadRoutes()
+                      }}
+                    />
+                  </li>
+                )
+              }}
+            />
           </Content>
 
-          <Content className="p-4">
-            <CardHead icon={IdCard} label={`Drivers & attendants · ${crew.length}`}
+          <Content className="p-3 sm:p-4 flex flex-col">
+            <CardHead icon={IdCard} label={`Drivers · ${crew.length}`}
               right={
-                <button className={GBTN.secondary} onClick={() => setEditCrew(null)} disabled={candidates.length === 0}
+                <button className={`${GBTN.secondary} !h-8`} onClick={() => setEditCrew(null)} disabled={candidates.length === 0}
                   title={candidates.length === 0 ? 'Create a driver account in User Management first' : undefined}>
-                  <Plus size={13} /> Add crew
+                  <Plus size={13} /> Add driver
                 </button>
               } />
             {candidates.length === 0 && !loading && (
-              <p className="mt-2 text-[11px] text-slate-500">
-                No driver accounts yet. Create one in User Management — attendants use a driver account too.
-              </p>
+              <p className="mt-2 text-[11px] text-slate-500">No driver accounts yet. Create one in User Management first.</p>
             )}
-            <div className="mt-3">
-              {loading ? <RowSkeletons /> : crew.length === 0 ? (
-                <EmptyNote icon={IdCard} title="No crew yet" detail="Add the drivers and attendants who work the routes. Parents see their name and phone." />
-              ) : (
-                <ul className="divide-y divide-slate-200/60">
-                  {crew.map(c => {
-                    const on = routesByPerson[c.profile_id] ?? []
-                    const licDays = c.licence_expiry
-                      ? Math.round((new Date(c.licence_expiry + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000)
-                      : null
-                    return (
-                      <li key={c.id} className="flex items-start gap-3 py-2.5">
-                        <Avatar avatarUrl={c.profile?.avatar_url} name={c.profile?.full_name ?? '?'} size={32} userId={c.profile_id} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-slate-900 truncate flex items-center gap-1.5">
-                            {c.profile?.full_name ?? 'Unknown'}
-                            {c.verified_at && <ShieldCheck size={13} className="text-emerald-500 flex-shrink-0" />}
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{STAFF_KIND_LABELS[c.kind]}</span>
-                            {!c.active && <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">· Inactive</span>}
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-                            {c.licence_no ? `DL ${c.licence_no}` : c.kind === 'driver' ? 'No licence on file' : (c.employee_code || 'No employee code')}
-                            {c.phone && <><span className="text-slate-300">·</span><Phone size={10} /> {c.phone}</>}
-                          </p>
-                          <RouteChips
-                            items={on.map(x => ({ route: x.route, note: x.as === 'attendant' ? 'attending' : undefined }))}
-                            empty="Not on any route by default"
-                            onPick={pickRoute}
-                          />
-                          {licDays != null && licDays <= 30 && (
-                            <p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${licDays < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
-                              <AlertTriangle size={11} /> Licence {licDays < 0 ? `expired ${Math.abs(licDays)}d ago` : `expires in ${licDays}d`}
-                            </p>
-                          )}
-                        </div>
-                        <RowActions
-                          onEdit={() => setEditCrew(c)}
-                          onDelete={async () => {
-                            if (!confirm(`Remove the ${STAFF_KIND_LABELS[c.kind].toLowerCase()} record for ${c.profile?.full_name}?`)) return
-                            await deleteTransportStaff(c.id)
-                            loadFleet()
-                          }}
-                        />
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
+            <SearchList
+              loading={loading}
+              items={crew}
+              placeholder="Search drivers by name, phone, licence or route…"
+              haystack={c => [c.profile?.full_name, c.phone, c.licence_no, c.employee_code, c.badge_no,
+                ...(routesByPerson[c.profile_id] ?? []).flatMap(r => [r.name, r.code])].filter(Boolean).join(' ')}
+              empty={<EmptyNote icon={IdCard} title="No drivers yet" detail="Add the drivers who work the routes. Parents see their name and phone." />}
+              row={c => {
+                const on = routesByPerson[c.profile_id] ?? []
+                const licDays = c.licence_expiry
+                  ? Math.round((new Date(c.licence_expiry + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000)
+                  : null
+                return (
+                  <li key={c.id} className={`group flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 ${c.active ? '' : 'opacity-60'}`}>
+                    <Avatar avatarUrl={c.profile?.avatar_url} name={c.profile?.full_name ?? '?'} size={26} userId={c.profile_id} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-slate-900 truncate leading-tight flex items-center gap-1">
+                        <span className="truncate">{c.profile?.full_name ?? 'Unknown'}</span>
+                        {c.verified_at && <ShieldCheck size={12} className="text-emerald-500 flex-shrink-0" aria-label="Verified" />}
+                        <span className="ml-1 text-[11px] font-normal text-slate-500 truncate">
+                          {c.phone || (c.licence_no ? `DL ${c.licence_no}` : 'No phone')}{!c.active ? ' · inactive' : ''}
+                        </span>
+                      </p>
+                    </div>
+                    {licDays != null && licDays <= 30 && (
+                      <span title={`Licence ${licDays < 0 ? `expired ${Math.abs(licDays)} days ago` : `expires in ${licDays} days`}`}
+                        className={`inline-flex items-center gap-1 text-[10.5px] font-semibold flex-shrink-0 ${licDays < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                        <AlertTriangle size={11} /> Licence
+                      </span>
+                    )}
+                    <RouteChips items={on.map(r => ({ route: r }))} onPick={pickRoute} />
+                    <RowActions
+                      onEdit={() => setEditCrew(c)}
+                      onDelete={async () => {
+                        if (!confirm(`Remove the driver record for ${c.profile?.full_name}?`)) return
+                        await deleteTransportStaff(c.id)
+                        loadFleet()
+                      }}
+                    />
+                  </li>
+                )
+              }}
+            />
           </Content>
         </div>
       </GlassPanel>
@@ -369,53 +363,109 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
 
 /* ── Pieces ────────────────────────────────────────────────────── */
 
-function Tile({ icon: Icon, value, label, sub, tone }: {
-  icon: React.ElementType; value: string; label: string; sub?: string; tone?: 'warn'
+/**
+ * A headline number. When there is more to say than fits under it, the whole
+ * explanation opens in a box on hover or keyboard focus.
+ */
+function Tile({ icon: Icon, value, label, sub, tone, detail, align = 'left' }: {
+  icon: React.ElementType; value: string; label: string; sub?: string; tone?: 'warn'; detail?: string
+  /** Which edge the hover box lines up with — 'right' for tiles at the end of a row. */
+  align?: 'left' | 'right'
 }) {
   return (
-    <div className="lg-content flex items-center gap-3 p-3 min-w-0">
-      <span className="fee-mini-icon !w-9 !h-9 !rounded-xl"><Icon size={16} /></span>
-      <span className="min-w-0">
-        <span className="block font-display text-[1.25rem] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
-        <span className="block text-[11px] font-semibold text-slate-600 truncate">{label}</span>
-        {sub && <span className={`block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
-      </span>
+    <div className="group relative min-w-0" tabIndex={detail ? 0 : undefined}>
+      <div className={`lg-content flex items-center gap-3 p-3 min-w-0 ${detail ? 'cursor-help' : ''}`}>
+        <span className="fee-mini-icon !w-9 !h-9 !rounded-xl"><Icon size={16} /></span>
+        <span className="min-w-0">
+          <span className="block font-display text-[1.25rem] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
+          <span className="block text-[11px] font-semibold text-slate-600 truncate">{label}</span>
+          {sub && <span className={`block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
+        </span>
+      </div>
+      {detail && (
+        <div role="tooltip"
+          className={`lg-tooltip !bg-white/[.97] absolute left-0 right-0 ${align === 'right' ? 'sm:left-auto' : 'sm:right-auto'} sm:w-72 top-full mt-2 z-40 hidden group-hover:block group-focus-visible:block text-[12px] leading-snug text-slate-700`}>
+          {tone === 'warn' && <AlertTriangle size={12} className="inline -mt-0.5 mr-1 text-amber-600" />}
+          {detail}
+        </div>
+      )}
     </div>
   )
 }
 
-function RouteChips({ items, empty, onPick }: {
-  items: { route: TransportRoute; note?: string }[]
-  empty: string
+/**
+ * A fixed-height, scrolling list with a type-ahead search above it. Every
+ * word typed must appear somewhere in an item's searchable text.
+ */
+function SearchList<T extends { id: string }>({ items, haystack, row, placeholder, empty, loading }: {
+  items: T[]
+  haystack: (item: T) => string
+  row: (item: T) => React.ReactNode
+  placeholder: string
+  empty: React.ReactNode
+  loading: boolean
+}) {
+  const [q, setQ] = useState('')
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown = words.length
+    ? items.filter(it => { const h = haystack(it).toLowerCase(); return words.every(w => h.includes(w)) })
+    : items
+  return (
+    <div className="mt-2.5 flex flex-col">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input className={`${GINPUT} pl-8 pr-16 !h-8 text-[12.5px]`} value={q} onChange={e => setQ(e.target.value)}
+          placeholder={placeholder} aria-label={placeholder} />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10.5px] text-slate-400 tabular-nums">
+          {q ? `${shown.length}/${items.length}` : items.length}
+        </span>
+      </div>
+      <div className="mt-2 h-[19rem] overflow-y-auto overscroll-contain -mx-1 px-1">
+        {loading ? <RowSkeletons /> : items.length === 0 ? empty : shown.length === 0 ? (
+          <p className="py-8 text-center text-xs text-slate-500">Nothing matches “{q}”.</p>
+        ) : (
+          <ul className="space-y-0.5">{shown.map(row)}</ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The routes a bus or driver serves, compact: the first two, then a count. */
+function RouteChips({ items, onPick }: {
+  items: { route: TransportRoute }[]
   onPick: (routeId: string) => void
 }) {
-  if (items.length === 0) return <p className="mt-1 text-[11px] text-slate-400">{empty}</p>
+  if (items.length === 0) return <span className="hidden sm:inline text-[10.5px] text-slate-400 flex-shrink-0">no route</span>
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      {items.map(({ route, note }) => (
+    <span className="hidden sm:flex items-center gap-1 flex-shrink-0 max-w-[45%]">
+      {items.slice(0, 2).map(({ route }) => (
         <button
-          key={`${route.id}-${note ?? ''}`}
+          key={route.id}
           onClick={() => onPick(route.id)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-2 py-0.5 text-[10.5px] font-semibold text-slate-700 hover:bg-white hover:border-[#B8983C]/60 transition"
-          title="Open this route above"
+          className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-1.5 py-px text-[10.5px] font-semibold text-slate-700 hover:bg-white hover:border-[#B8983C]/60 transition truncate max-w-[9rem]"
+          title={`Open ${route.name} above`}
         >
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: route.color }} />
-          {route.name}{note ? <span className="font-medium text-slate-400">· {note}</span> : null}
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: route.color }} />
+          <span className="truncate">{route.code || route.name}</span>
         </button>
       ))}
-    </div>
+      {items.length > 2 && (
+        <span className="text-[10.5px] font-semibold text-slate-400" title={items.slice(2).map(x => x.route.name).join(', ')}>+{items.length - 2}</span>
+      )}
+    </span>
   )
 }
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-0.5 flex-shrink-0">
-      <button onClick={onEdit} className={GBTN.icon} aria-label="Edit"><Pencil size={14} /></button>
-      <button onClick={onDelete} className={`${GBTN.icon} hover:!text-rose-600 hover:!bg-rose-50`} aria-label="Delete"><Trash2 size={14} /></button>
+    <div className="flex items-center flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <button onClick={onEdit} className={`${GBTN.icon} !w-7 !h-7`} aria-label="Edit"><Pencil size={13} /></button>
+      <button onClick={onDelete} className={`${GBTN.icon} !w-7 !h-7 hover:!text-rose-600 hover:!bg-rose-50`} aria-label="Delete"><Trash2 size={13} /></button>
     </div>
   )
 }
 
 function RowSkeletons() {
-  return <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-12 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
+  return <div className="space-y-1">{[0, 1, 2, 3, 4].map(i => <div key={i} className="h-9 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
 }

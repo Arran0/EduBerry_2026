@@ -5,7 +5,6 @@ import { IdCard } from 'lucide-react'
 import BusModal from './BusModal'
 import { upsertTransportStaff, updateTransportStaff } from '@/lib/transport/staff'
 import type { StaffInput, TransportStaff } from '@/lib/transport/types'
-import { STAFF_KIND_LABELS } from '@/lib/transport/types'
 import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
 
 interface Candidate { id: string; full_name: string; avatar_url?: string | null }
@@ -20,7 +19,8 @@ export default function CrewFormModal({
 }) {
   const [form, setForm] = useState<StaffInput>({
     profile_id: staff?.profile_id ?? candidates[0]?.id ?? '',
-    kind: staff?.kind ?? 'driver',
+    // Crew are drivers. Attendants are not part of the bus app.
+    kind: 'driver',
     employee_code: staff?.employee_code ?? '',
     phone: staff?.phone ?? '',
     licence_no: staff?.licence_no ?? '',
@@ -69,7 +69,7 @@ export default function CrewFormModal({
       onClose={onClose}
       size="md"
       title={staff ? 'Edit crew record' : 'New crew record'}
-      subtitle="Drivers and attendants who work the routes"
+      subtitle="A driver who works the routes"
       icon={<IdCard size={18} />}
       iconClassName="bg-sky-100 text-sky-700"
       footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
@@ -80,7 +80,7 @@ export default function CrewFormModal({
         <FormGrid>
           <Field
             label="Person *"
-            hint="Attendants use a driver account too — the role below is what distinguishes them."
+            hint="Any account with the driver role. Create one in User Management first."
           >
             <Select
               value={form.profile_id}
@@ -89,13 +89,6 @@ export default function CrewFormModal({
             >
               {candidates.length === 0 && <option value="">No driver accounts yet</option>}
               {candidates.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Role *">
-            <Select value={form.kind} onChange={e => set('kind', e.target.value as StaffInput['kind'])} disabled={!!staff}>
-              {(Object.keys(STAFF_KIND_LABELS) as (keyof typeof STAFF_KIND_LABELS)[]).map(k => (
-                <option key={k} value={k}>{STAFF_KIND_LABELS[k]}</option>
-              ))}
             </Select>
           </Field>
           <Field label="Phone" hint="Shown to parents on the crew card.">

@@ -95,8 +95,8 @@ export default function RouteWorkspace({
           <Fact icon={Bus} label="Bus" value={route.default_vehicle ? vehicleLabel(route.default_vehicle) : 'Not set'}
             sub={capacity ? `${capacity} seats` : undefined} />
           <Fact icon={UserRound} label="Driver" value={route.default_driver?.full_name ?? 'Not set'}
-            sub={route.default_attendant?.full_name ? `with ${route.default_attendant.full_name}` : 'no attendant'} />
-          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2 backdrop-blur-sm">
+            sub={route.default_driver ? 'default for every trip' : 'set one in Edit route'} />
+          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Users size={11} /> Riders</p>
             <p className={`mt-0.5 text-sm font-semibold tabular-nums ${over ? 'text-rose-300' : ''}`}>
               {riders ?? '—'}{capacity ? <span className="text-white/60"> / {capacity}</span> : ''}
@@ -156,7 +156,7 @@ function HeaderBtn({ label, onClick, children }: { label: string; onClick: () =>
 
 function Fact({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2 backdrop-blur-sm min-w-0">
+    <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2 min-w-0">
       <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Icon size={11} /> {label}</p>
       <p className="mt-0.5 text-sm font-semibold truncate">{value}</p>
       {sub && <p className="text-[11px] text-white/60 truncate">{sub}</p>}

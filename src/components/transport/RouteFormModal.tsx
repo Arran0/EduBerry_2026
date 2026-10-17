@@ -27,14 +27,12 @@ export default function RouteFormModal({
     direction: route?.direction ?? 'inbound',
     default_vehicle_id: route?.default_vehicle_id ?? '',
     default_driver_id: route?.default_driver_id ?? '',
-    default_attendant_id: route?.default_attendant_id ?? '',
     active: route?.active ?? true,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const drivers = crew.filter(c => c.kind === 'driver' && c.active)
-  const attendants = crew.filter(c => c.kind === 'attendant' && c.active)
 
   const set = <K extends keyof RouteInput>(k: K, v: RouteInput[K]) => setForm(f => ({ ...f, [k]: v }))
 
@@ -49,7 +47,8 @@ export default function RouteFormModal({
       // An empty <select> value is "", which is not a valid UUID.
       default_vehicle_id: form.default_vehicle_id || null,
       default_driver_id: form.default_driver_id || null,
-      default_attendant_id: form.default_attendant_id || null,
+      // Routes have no attendants; the column stays for history only.
+      default_attendant_id: null,
     }
     if (route) {
       const res = await updateRoute(route.id, payload)
@@ -146,7 +145,7 @@ export default function RouteFormModal({
           </div>
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Default bus">
             <Select
               value={form.default_vehicle_id ?? ''}
@@ -164,17 +163,6 @@ export default function RouteFormModal({
               <option value="">Not set</option>
               {drivers.map(d => (
                 <option key={d.id} value={d.profile_id}>{d.profile?.full_name ?? 'Unknown'}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Default attendant">
-            <Select
-              value={form.default_attendant_id ?? ''}
-              onChange={e => set('default_attendant_id', e.target.value)}
-            >
-              <option value="">Not set</option>
-              {attendants.map(a => (
-                <option key={a.id} value={a.profile_id}>{a.profile?.full_name ?? 'Unknown'}</option>
               ))}
             </Select>
           </Field>

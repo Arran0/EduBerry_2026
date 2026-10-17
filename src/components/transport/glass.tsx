@@ -63,8 +63,10 @@ export function GlassPanel({
       <motion.div
         className="lg-deck lg-panel"
         onPointerMove={onPointerMove}
-        initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.99 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
+        // Slides, never fades: fading an element that carries backdrop-filter
+        // is what makes Chrome flash black frames.
+        initial={reduceMotion ? false : { y: 14 }}
+        animate={{ y: 0 }}
         transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: EASE, delay }}
       >
         {(title || actions) && (

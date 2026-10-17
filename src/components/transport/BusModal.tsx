@@ -78,8 +78,11 @@ export default function BusModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          // Above Leaflet (map panes 400, controls 1000).
-          className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center sm:p-5 bg-[#1c1a1e]/40 backdrop-blur-md"
+          // Above Leaflet (map panes 400, controls 1000). No backdrop-filter on
+          // the backdrop or the sheet: blurred layers animating in over the
+          // page's own glass make Chrome flash black frames. The sheet keeps
+          // its glass look from the fill, rim and highlight instead.
+          className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center sm:p-5 bg-[#1c1a1e]/45"
           onClick={onClose}
           data-page-theme="bus"
         >
@@ -93,7 +96,7 @@ export default function BusModal({
             aria-modal="true"
             className={`relative w-full ${SIZE[size]} ${fullHeight ? 'h-[94dvh] sm:h-[88vh]' : 'max-h-[94dvh] sm:max-h-[88vh]'}
               flex flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px]
-              bg-[linear-gradient(160deg,rgba(250,248,244,0.92),rgba(243,240,235,0.86))] backdrop-blur-2xl
+              bg-[linear-gradient(160deg,rgba(250,248,244,0.98),rgba(241,238,232,0.97))]
               border border-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,.9),0_30px_80px_-30px_rgba(15,23,42,.55),0_2px_8px_rgba(15,23,42,.08)]`}
           >
             {/* Header, on the glass */}

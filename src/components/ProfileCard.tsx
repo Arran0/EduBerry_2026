@@ -346,7 +346,11 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
         exit={{ opacity: 0 }}
         transition={{ duration: 0.16, ease: 'easeOut' }}
         onClick={onClose}
-        className="fixed inset-0 z-[9998] bg-slate-900/55 backdrop-blur-[2px]"
+        // No backdrop-filter here. A blurred backdrop fading in over a page
+        // that itself uses backdrop-filter (the transport admin's glass
+        // panels) makes Chrome drop to black frames — the card, or the whole
+        // app, flashed black as it opened. A plain dim does the job.
+        className="fixed inset-0 z-[9998] bg-slate-900/55"
       />
 
       {/* Card */}
