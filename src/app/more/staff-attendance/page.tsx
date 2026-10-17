@@ -27,7 +27,7 @@ const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'
 
 const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'), {
   loading: () => (
-    <section className="lg-deck lg-panel flex flex-col min-h-[300px] lg:h-full">
+    <section className="lg-deck lg-panel flex flex-col h-full">
       <div className="relative z-[3] flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
         <div className="w-10 h-10 rounded-[0.85rem] bg-white/60 animate-pulse" />
         <div className="h-5 w-24 bg-white/60 rounded-full animate-pulse" />
@@ -239,12 +239,16 @@ export default function StaffAttendancePage() {
             <button
               onClick={() => setLeavePopup({})}
               title="Open Staff OD / Leave"
-              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3.5 sm:pr-4 py-1.5 rounded-full bg-white/80 hover:bg-white/95 backdrop-blur-xl border border-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-8px_rgba(0,0,0,0.45)] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90"
+              // The same button as the Student Attendance app's Leave / OD.
+              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3 sm:pr-4 py-1.5 rounded-full bg-white/95 hover:bg-white border border-white/70 shadow-[0_6px_20px_-6px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_26px_-6px_rgba(0,0,0,0.5)] active:scale-95 transition-all"
             >
-              <span className="icon-chip w-8 h-8 sm:w-9 sm:h-9 !rounded-full flex-shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600">
-                <CalendarDays size={16} className="relative z-10 text-white" />
+              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-purple-700 shadow-inner">
+                <CalendarDays size={16} className="text-white" />
               </span>
-              <span className="text-[13px] sm:text-sm font-semibold text-slate-900 whitespace-nowrap">Leave / OD</span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Open</span>
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 whitespace-nowrap mt-0.5">Leave / OD</span>
+              </span>
               {leaveCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white shadow-sm">
                   {leaveCount > 9 ? '9+' : leaveCount}
@@ -278,14 +282,16 @@ export default function StaffAttendancePage() {
               />
             </motion.div>
 
-            {/* -mx-2 claws back most of the phone gutter for the report's
-                width while keeping the glass sheet's rounded edge in view;
-                from sm up it sits back inside the layout. */}
+            {/* A fixed, screen-tall box: scrolled to, the report fills the
+                screen under the navbar (and above the phone's bottom bar), and
+                switching day, list or roster only changes what scrolls inside
+                it — never its height. -mx-2 claws back most of the phone gutter
+                while keeping the glass sheet's rounded edge in view. */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-              className="-mx-2 sm:mx-0 lg:h-[680px] lg:min-h-0"
+              className="-mx-2 sm:mx-0 h-[calc(100dvh-8.5rem)] md:h-[calc(100dvh-5.5rem)] min-h-[30rem]"
             >
               <AllStaffAttendanceReport
                 viewerId={user.id}

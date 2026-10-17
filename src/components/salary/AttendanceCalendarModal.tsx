@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { CalendarDays } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { UserProfile } from '@/lib/supabase'
+import StaffAttendanceCalendarSkeleton from '@/components/attendance/StaffAttendanceCalendarSkeleton'
 
 // Loaded on demand — the calendar pulls in attendance, holiday and leave data
 // that a payroll sheet has no use for until someone actually opens it.
@@ -12,12 +13,8 @@ const StaffAttendanceCalendar = dynamic(
   () => import('@/components/attendance/StaffAttendanceCalendar'),
   {
     ssr: false,
-    loading: () => (
-      <div className="py-16 text-center">
-        <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-[#71717A]">Loading calendar…</p>
-      </div>
-    ),
+    // The calendar's own shape in grey, so the popup opens at its final size.
+    loading: () => <StaffAttendanceCalendarSkeleton />,
   },
 )
 

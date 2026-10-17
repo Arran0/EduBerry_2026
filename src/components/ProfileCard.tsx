@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useProfileCard, type ProfileCardSeed } from '@/contexts/ProfileCardContext'
+import { useProfileCard, type ProfileCardSeed, type SupportCardPerson } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
 import { fetchRawSetting } from '@/lib/pageConfig'
 import { fetchStudentDetails } from '@/lib/studentDetails'
@@ -17,14 +17,12 @@ import { gradeLabel } from '@/lib/grades'
 import Avatar from '@/components/Avatar'
 import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 import { useRouter } from 'next/navigation'
+import type { StaffAttendanceRecord } from '@/lib/attendance'
+import StaffCalendarModal from '@/components/attendance/StaffCalendarModal'
 
 // Loaded on demand — the read-only "self" view of the same calendar the
 // attendance pages open when you click a name, reused here so a profile
 // card gives a quick attendance glance without leaving the current page.
-const StaffAttendanceCalendar = dynamic(() => import('@/components/attendance/StaffAttendanceCalendar'), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
-})
 const AttendanceCalendar = dynamic(() => import('@/components/attendance/AttendanceCalendar'), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
@@ -186,13 +184,99 @@ function ContactRow({ icon, label, value, href, loading, empty }: {
 let bannerCache: string | null | undefined
 
 /**
- * A seed is only good enough to render from if it carries the fields the card
- * shows above the fold. Anything less falls back to the loading state rather
- * than drawing a half-empty card.
+ * A name is enough to draw the card from. Every avatar now hands over what it
+ * knows (name, face, often email); the role badge, email and action row draw
+ * as placeholders at their own size until the profile lands, so the card opens
+ * as itself rather than as a grey skeleton that then swaps for the real card —
+ * the swap was the blink on every open.
  */
 function seedToProfile(seed?: ProfileCardSeed | null): UserProfile | null {
-  if (!seed?.full_name || !seed.email || !seed.role) return null
-  return { created_at: '', updated_at: '', ...seed } as UserProfile
+  if (!seed?.full_name) return null
+  return { created_at: '', updated_at: '', email: '', role: '', ...seed } as unknown as UserProfile
+}
+
+/** Reads the site-wide profile banner once and warms the image cache with it. */
+function prefetchProfileBanner(): Promise<string | null> {
+  if (bannerCache !== undefined) return Promise.resolve(bannerCache)
+  return fetchRawSetting<string>('profile_banner').then(url => {
+    bannerCache = typeof url === 'string' && url ? url : null
+    if (bannerCache && typeof window !== 'undefined') {
+      const img = new window.Image()
+      img.src = bannerCache
+    }
+    return bannerCache
+  })
+}
+
+/** The dimmed backdrop and the card's own surface — shared by every kind of card. */
+function CardFrame({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
+        onClick={onClose}
+        // No backdrop-filter here. A blurred backdrop fading in over a page
+        // that itself uses backdrop-filter (the transport admin's glass
+        // panels) makes Chrome drop to black frames — the card, or the whole
+        // app, flashed black as it opened. A plain dim does the job.
+        className="fixed inset-0 z-[9998] bg-slate-900/55"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        // A spring has no duration to wait on, which made closing drift; the
+        // exit is an explicit short tween so the card leaves as decisively as
+        // it arrives and AnimatePresence knows exactly when it is gone.
+        exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14, ease: 'easeIn' } }}
+        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
+      >
+        <div
+          className="pointer-events-auto max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-[28px] bg-white shadow-[0_28px_70px_-24px_rgba(15,23,42,0.55)] ring-1 ring-slate-900/[0.06]"
+          onClick={e => e.stopPropagation()}
+        >
+          {children}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
+/** The banner across the card's top, with its close button. */
+function CardBanner({ bannerUrl, onClose }: { bannerUrl: string | null; onClose: () => void }) {
+  return (
+    <div
+      className="relative h-32 flex-shrink-0"
+      style={bannerUrl
+        ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+        : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
+      }
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_65%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
+      <button
+        onClick={onClose}
+        aria-label="Close profile"
+        className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
+
+/** The action row's placeholder while the viewer's or the target's role is still unknown. */
+function ActionRowSkeleton() {
+  return (
+    <div className="mt-3 grid w-full grid-cols-4 gap-1.5">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-[52px] rounded-xl border border-slate-200/70 bg-slate-100/80 animate-pulse" />
+      ))}
+    </div>
+  )
 }
 
 // ─── Inner modal (needs auth + router) ────────────────────────────────────────
@@ -211,6 +295,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   // drawn and the fetch below only fills in what the list didn't have.
   const [targetProfile, setTargetProfile] = useState<UserProfile | null>(() => seedToProfile(seed))
   const [loadingProfile, setLoadingProfile] = useState(() => !seedToProfile(seed))
+  // Whether the profiles row itself has landed — a seeded card is drawn before
+  // it, with the fields the seed lacked (role, email) as placeholders.
+  const [profileResolved, setProfileResolved] = useState(false)
   const [phone, setPhone] = useState<string | null>(null)
   // Student-only facts
   const [admissionNo, setAdmissionNo] = useState<string | null>(null)
@@ -244,10 +331,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
 
   useEffect(() => {
     if (bannerCache !== undefined) return
-    fetchRawSetting<string>('profile_banner').then(url => {
-      bannerCache = typeof url === 'string' && url ? url : null
-      setProfileBannerUrl(bannerCache)
-    })
+    prefetchProfileBanner().then(setProfileBannerUrl)
   }, [])
 
   const loadProfile = useCallback(async () => {
@@ -258,6 +342,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
       .single()
     if (!error && data) setTargetProfile(data as UserProfile)
     setLoadingProfile(false)
+    setProfileResolved(true)
   }, [userId])
 
   useEffect(() => { loadProfile() }, [loadProfile])
@@ -339,44 +424,10 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
           so its own full-screen modal owns the screen and state is kept for the return trip. */}
       {!showDownloadCentre && (
         <>
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
-        onClick={onClose}
-        // No backdrop-filter here. A blurred backdrop fading in over a page
-        // that itself uses backdrop-filter (the transport admin's glass
-        // panels) makes Chrome drop to black frames — the card, or the whole
-        // app, flashed black as it opened. A plain dim does the job.
-        className="fixed inset-0 z-[9998] bg-slate-900/55"
-      />
-
-      {/* Card */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        // A spring has no duration to wait on, which made closing drift; the
-        // exit is an explicit short tween so the card leaves as decisively as
-        // it arrives and AnimatePresence knows exactly when it is gone.
-        exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14, ease: 'easeIn' } }}
-        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
-      >
-        {/* A plain div again: every slot inside is drawn whether or not it has
-            a value, so the card is the same height from the frame it opens to
-            the frame it closes. Nothing left to animate — and the layout
-            animation that used to cover the resizing was itself what made
-            closing lurch, since it re-measures against a card that is at the
-            same time being scaled away. */}
-        <div
-          className="pointer-events-auto max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-[28px] bg-white shadow-[0_28px_70px_-24px_rgba(15,23,42,0.55)] ring-1 ring-slate-900/[0.06]"
-          onClick={e => e.stopPropagation()}
-        >
+      <CardFrame onClose={onClose}>
           {loadingProfile ? (
             <ProfileCardSkeleton bannerUrl={profileBannerUrl} />
-          ) : !targetProfile ? (
+          ) : !targetProfile || (profileResolved && !targetProfile.role) ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ minHeight: CARD_MIN_HEIGHT }}>
               <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-300">
                 <X size={22} />
@@ -388,28 +439,10 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
             </div>
           ) : (
             <>
-              {/* Banner — the admin's profiles_banner image. Its height is
-                  deliberately left alone; what changed is that it now carries a
-                  scrim at the bottom, so the avatar's white ring and the close
-                  button read against any photograph rather than only against
-                  the dark default gradient. */}
-              <div
-                className="relative h-32 flex-shrink-0"
-                style={profileBannerUrl
-                  ? { backgroundImage: `url(${profileBannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                  : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
-                }
-              >
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_65%)]" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
-                <button
-                  onClick={onClose}
-                  aria-label="Close profile"
-                  className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                >
-                  <X size={14} />
-                </button>
-              </div>
+              {/* Banner — the admin's profiles_banner image, with a scrim at
+                  the bottom so the avatar's white ring and the close button
+                  read against any photograph. */}
+              <CardBanner bannerUrl={profileBannerUrl} onClose={onClose} />
 
               {/* Body */}
               <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
@@ -430,9 +463,13 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   {targetProfile.full_name || 'No Name'}
                 </h2>
                 <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
-                  <span className={`rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
-                    {getDisplayRole(targetProfile)}
-                  </span>
+                  {targetProfile.role ? (
+                    <span className={`rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide ${getRoleBadgeColor(targetProfile.role, targetProfile.is_non_teaching)}`}>
+                      {getDisplayRole(targetProfile)}
+                    </span>
+                  ) : (
+                    <span className="h-5 w-20 rounded-full bg-slate-200/80 animate-pulse" />
+                  )}
                   {/* gradeLabel, not `Grade ${grade}`: pre-primary years are
                       stored as negative numbers, so the old string rendered
                       LKG as "Grade -2". */}
@@ -457,9 +494,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   <ContactRow
                     icon={<Mail size={13} />}
                     label="Email"
-                    value={targetProfile.email}
+                    value={targetProfile.email || null}
                     href={targetProfile.email ? `mailto:${targetProfile.email}` : undefined}
-                    loading={false}
+                    loading={!targetProfile.email && !profileResolved}
                     empty="Nil"
                   />
                   <ContactRow
@@ -494,7 +531,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                      groups. The row also keeps its place before the viewer's own
                      profile resolves, so the card is never briefly a tile
                      shorter. ─────────────────────────────────────────────────── */}
-                {!viewerProfile ? <div className="mt-3 h-[52px] w-full" /> : (() => {
+                {!viewerProfile || !targetProfile.role ? <ActionRowSkeleton /> : (() => {
                   // Staff can see student contact buttons; so can the student themselves
                   const canSeeStudentActions = isStudentProfile && (viewerProfile.id === targetProfile.id || isStaff(viewerProfile.role))
                   // Everyone can see staff contact buttons
@@ -609,15 +646,26 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
               </div>
             </>
           )}
-        </div>
-      </motion.div>
+      </CardFrame>
         </>
       )}
 
       {/* Attendance calendar drill-down — the same "self" view opened from the
           attendance pages when tapping a name, stacked above the card. */}
       <AnimatePresence>
-        {showAttendance && targetProfile && (
+        {showAttendance && targetProfile && !isStudentProfile && (
+          <StaffCalendarModal
+            person={targetProfile}
+            subtitle="Attendance calendar"
+            viewerId={viewerProfile?.id}
+            viewerRole={viewerProfile?.role}
+            onClose={() => setShowAttendance(false)}
+            zClass="z-[10000]"
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showAttendance && targetProfile && isStudentProfile && (
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -661,8 +709,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                   </div>
                 )}
                 <div className="overflow-y-auto flex-1 px-4 py-4">
-                  {isStudentProfile ? (
-                    loadingHomerooms ? (
+                  {loadingHomerooms ? (
                       <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>
                     ) : homeroomId ? (
                       <AttendanceCalendar
@@ -676,16 +723,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                       />
                     ) : (
                       <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
-                    )
-                  ) : (
-                    <StaffAttendanceCalendar
-                      staffId={targetProfile.id}
-                      staffName={targetProfile.full_name}
-                      mode="self"
-                      viewerUserId={viewerProfile?.id}
-                      viewerRole={viewerProfile?.role}
-                    />
-                  )}
+                    )}
                 </div>
               </div>
             </motion.div>
@@ -708,12 +746,149 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   )
 }
 
+// ─── Support staff card ───────────────────────────────────────────────────────
+/**
+ * The same card for a ground support staff member. They have no account, so
+ * the card is drawn entirely from their roster row — no fetch, nothing to wait
+ * for — and offers what applies to them: a call or WhatsApp to their phone and
+ * their attendance month.
+ */
+function SupportStaffCardModal({ person, onClose }: { person: SupportCardPerson; onClose: () => void }) {
+  useBodyScrollLock()
+  const { profile: viewerProfile } = useAuth()
+  const [bannerUrl, setBannerUrl] = useState<string | null>(bannerCache ?? null)
+  const [showAttendance, setShowAttendance] = useState(false)
+
+  useEffect(() => {
+    if (bannerCache !== undefined) return
+    prefetchProfileBanner().then(setBannerUrl)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || showAttendance) return
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showAttendance, onClose])
+
+  // Their month lives in support_staff_attendance, adapted into the shape the
+  // staff calendar reads — the same adapter payroll and the report use.
+  const fetchGroundRecords = useCallback(async (staffId: string, year: number, month: number): Promise<StaffAttendanceRecord[]> => {
+    const { fetchSupportAttendanceRange, supportRecordToStaffShape } = await import('@/lib/supportStaff')
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const recs = await fetchSupportAttendanceRange(`${year}-${pad(month)}-01`, `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`)
+    return recs.filter(r => r.support_staff_id === staffId).map(supportRecordToStaffShape)
+  }, [])
+
+  const dialable = person.phone ? person.phone.replace(/\D/g, '') : ''
+  const canSeeAttendance = !!viewerProfile && isStaff(viewerProfile.role)
+  const btnCls = 'h-[52px] flex flex-col items-center justify-center gap-1 rounded-xl border px-1 font-medium transition-colors active:scale-[0.97]'
+  const off = `${btnCls} cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300`
+
+  return (
+    <>
+      <CardFrame onClose={onClose}>
+        <CardBanner bannerUrl={bannerUrl} onClose={onClose} />
+        <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
+          <div className="h-[84px] w-[84px] flex-shrink-0 overflow-hidden rounded-full ring-[5px] ring-white shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] grid place-items-center">
+            <Avatar name={person.full_name} size={84} />
+          </div>
+          <h2 className="mt-3 font-display text-[17px] font-bold leading-[22px] text-slate-900 text-center">{person.full_name}</h2>
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
+            <span className="rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide bg-lime-100 text-lime-800">
+              Support staff
+            </span>
+            {person.department && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-[3px] text-[10px] font-bold uppercase leading-[14px] tracking-wide text-slate-500">
+                {person.department}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 w-full divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200/80">
+            <ContactRow
+              icon={<PhoneIcon size={13} />}
+              label="Phone"
+              value={person.phone ?? null}
+              href={dialable ? `tel:${dialable}` : undefined}
+              loading={false}
+              empty="Nil"
+            />
+            <ContactRow
+              icon={<PhoneIcon size={13} />}
+              label="Alt."
+              value={person.alternate_phone ?? null}
+              href={person.alternate_phone ? `tel:${person.alternate_phone.replace(/\D/g, '')}` : undefined}
+              loading={false}
+              empty="Nil"
+            />
+          </div>
+
+          <div className="mt-2 grid w-full grid-cols-2 gap-2">
+            <InfoChip icon={<IdCard size={13} />} label="Employee ID" value={person.employee_id ?? null} loading={false} />
+            <InfoChip icon={<Briefcase size={13} />} label="Designation" value={person.designation ?? null} loading={false} />
+          </div>
+
+          <div className={`mt-3 grid w-full ${canSeeAttendance ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5`}>
+            {dialable ? (
+              <a href={`https://wa.me/${dialable}`} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                className={`${btnCls} bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100`}>
+                <WhatsAppIcon size={17} /><ActionLabel>WhatsApp</ActionLabel>
+              </a>
+            ) : (
+              <div className={off} title="No phone on file" aria-disabled><WhatsAppIcon size={17} /><ActionLabel>WhatsApp</ActionLabel></div>
+            )}
+            {dialable ? (
+              <a href={`tel:${dialable}`} title="Call" className={`${btnCls} bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100`}>
+                <PhoneIcon size={16} /><ActionLabel>Call</ActionLabel>
+              </a>
+            ) : (
+              <div className={off} title="No phone on file" aria-disabled><PhoneIcon size={16} /><ActionLabel>Call</ActionLabel></div>
+            )}
+            {canSeeAttendance && (
+              <button onClick={() => setShowAttendance(true)} className={`${btnCls} bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100`}>
+                <CalendarCheck size={16} /><ActionLabel>Attendance</ActionLabel>
+              </button>
+            )}
+          </div>
+        </div>
+      </CardFrame>
+
+      <AnimatePresence>
+        {showAttendance && (
+          <StaffCalendarModal
+            person={person}
+            subtitle={person.designation ?? 'Support staff'}
+            viewerId={viewerProfile?.id}
+            viewerRole={viewerProfile?.role}
+            onClose={() => setShowAttendance(false)}
+            fetchRecords={fetchGroundRecords}
+            zClass="z-[10000]"
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
 // ─── Portal wrapper (rendered in ProfileCardProvider) ─────────────────────────
 export default function ProfileCard() {
-  const { activeUserId, activeSeed, closeProfileCard } = useProfileCard()
+  const { activeUserId, activeSeed, activeSupport, closeProfileCard } = useProfileCard()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
+
+  // Warm the banner (setting and image) once the app is idle, so even the
+  // first card of a session opens with its banner already painted instead of
+  // the fallback gradient swapping to the photo a moment later.
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }
+    const run = () => { void prefetchProfileBanner() }
+    if (w.requestIdleCallback) w.requestIdleCallback(run)
+    else setTimeout(run, 1500)
+  }, [])
 
   if (!mounted) return null
 
@@ -723,7 +898,13 @@ export default function ProfileCard() {
     // stacking two backdrops into a visible double-darkening. The exits below
     // are short tweens, so waiting for one costs a frame or two.
     <AnimatePresence mode="wait">
-      {activeUserId && (
+      {activeSupport ? (
+        <SupportStaffCardModal
+          key={activeUserId}
+          person={activeSupport}
+          onClose={closeProfileCard}
+        />
+      ) : activeUserId && (
         <ProfileCardModal
           key={activeUserId}
           userId={activeUserId}

@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, Loader2, CalendarPlus, AlertTriangle, ShieldAlert,
+  ChevronLeft, ChevronRight, X, CalendarPlus, AlertTriangle, ShieldAlert,
 } from 'lucide-react'
+import { CALENDAR_CELLS, CALENDAR_DAY_HEADERS, CalendarGridSkeleton, CalendarStatsSkeleton } from './StaffAttendanceCalendarSkeleton'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
@@ -29,7 +30,7 @@ import {
 } from '@/lib/leave'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 
-const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_HEADERS = CALENDAR_DAY_HEADERS
 
 type EffectiveStatus = StaffAttendanceStatus | 'holiday' | 'non_working'
 
@@ -289,7 +290,9 @@ export default function StaffAttendanceCalendar({
   const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
   const cells: (number | null)[] = Array(firstDow).fill(null)
   for (let d = 1; d <= totalDays; d++) cells.push(d)
-  while (cells.length % 7 !== 0) cells.push(null)
+  // Always six weeks, so paging between a five- and a six-row month (or from
+  // the loading skeleton to the month) never changes the calendar's height.
+  while (cells.length < CALENDAR_CELLS) cells.push(null)
 
   const prevMonth = () => month === 1 ? (setYear(y => y - 1), setMonth(12)) : setMonth(m => m - 1)
   const nextMonth = () => month === 12 ? (setYear(y => y + 1), setMonth(1)) : setMonth(m => m + 1)
@@ -339,9 +342,7 @@ export default function StaffAttendanceCalendar({
 
       {/* Calendar grid */}
       {loading ? (
-        <div className={`${fill ? 'flex-1 ' : 'py-14 '}flex items-center justify-center gap-2 text-[#A1A1AA] text-sm`}>
-          <Loader2 size={16} className="animate-spin" />
-        </div>
+        <CalendarGridSkeleton fill={fill} />
       ) : (
         <div
           ref={gridRef}
@@ -501,6 +502,7 @@ export default function StaffAttendanceCalendar({
       </AnimatePresence>
 
       {/* Monthly stats */}
+      {loading ? <CalendarStatsSkeleton /> : (
       <div className="border-t border-[#E4E4E7] px-4 py-3 space-y-2 bg-[#FAFAF9]">
         {statItems.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -536,6 +538,7 @@ export default function StaffAttendanceCalendar({
           </p>
         )}
       </div>
+      )}
 
       {detailDay && detailRecord && (
         <DayAttendanceDetailModal

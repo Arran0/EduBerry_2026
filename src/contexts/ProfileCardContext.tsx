@@ -12,22 +12,46 @@ import type { UserProfile } from '@/lib/supabase'
  */
 export type ProfileCardSeed = Partial<UserProfile> & { id: string }
 
+/**
+ * A ground support staff member — someone with no account (see
+ * src/lib/supportStaff.ts), so their card is drawn from their roster row
+ * rather than fetched from profiles.
+ */
+export interface SupportCardPerson {
+  id: string
+  full_name: string
+  employee_id?: string | null
+  designation?: string | null
+  department?: string | null
+  phone?: string | null
+  alternate_phone?: string | null
+}
+
 interface ProfileCardContextType {
   openProfileCard: (userId: string, seed?: ProfileCardSeed | null) => void
+  /** Opens the same card for a support staff member, from their roster row. */
+  openSupportStaffCard: (person: SupportCardPerson) => void
   closeProfileCard: () => void
   activeUserId: string | null
   activeSeed: ProfileCardSeed | null
+  activeSupport: SupportCardPerson | null
 }
 
 const ProfileCardContext = createContext<ProfileCardContextType | undefined>(undefined)
 
 export function ProfileCardProvider({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = useState<{ id: string; seed: ProfileCardSeed | null } | null>(null)
+  const [active, setActive] = useState<
+    { id: string; seed: ProfileCardSeed | null; support?: SupportCardPerson } | null
+  >(null)
 
   const openProfileCard = useCallback((userId: string, seed: ProfileCardSeed | null = null) => {
     // A seed for somebody else would render the wrong person for a frame, so
     // one that doesn't match the requested id is dropped rather than trusted.
     setActive({ id: userId, seed: seed && seed.id === userId ? seed : null })
+  }, [])
+
+  const openSupportStaffCard = useCallback((person: SupportCardPerson) => {
+    setActive({ id: `support:${person.id}`, seed: null, support: person })
   }, [])
 
   const closeProfileCard = useCallback(() => {
@@ -41,11 +65,13 @@ export function ProfileCardProvider({ children }: { children: React.ReactNode })
   const value = useMemo(
     () => ({
       openProfileCard,
+      openSupportStaffCard,
       closeProfileCard,
       activeUserId: active?.id ?? null,
       activeSeed: active?.seed ?? null,
+      activeSupport: active?.support ?? null,
     }),
-    [openProfileCard, closeProfileCard, active],
+    [openProfileCard, openSupportStaffCard, closeProfileCard, active],
   )
 
   return (
