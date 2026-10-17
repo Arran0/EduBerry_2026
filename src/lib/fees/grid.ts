@@ -66,7 +66,13 @@ export interface IssueRow {
   title: string; status: 'issued' | 'undone'; student_count: number
   invoice_count: number; total: number; issued_at: string
   undone_at: string | null; undo_reason: string | null
-  filters: { head_ids?: string[] | null; rows?: { grade: number | null; group_id: string | null }[] | null }
+  filters: {
+    head_ids?: string[] | null
+    rows?: { grade: number | null; group_id: string | null }[] | null
+    /** A Bus fee issue (fee_issue_transport), and the routes it was limited to. */
+    transport?: boolean
+    routes?: string[] | null
+  }
 }
 
 export interface IssueCellRow {
@@ -432,6 +438,19 @@ export async function issueTransport(
     total: Number(s.total),
     by_route: (s.by_route ?? []).map(r => ({ ...r, total: Number(r.total) })),
   }
+}
+
+/** Running transport routes, for the Bus fee's route filter. Empty when the
+ *  viewer cannot see transport (the filter then simply does not show). */
+export async function fetchFeeRoutes(): Promise<{ id: string; name: string; code: string | null; color: string; direction: 'inbound' | 'outbound' }[]> {
+  const { data, error } = await supabase
+    .from('transport_routes')
+    .select('id, name, code, color, direction')
+    .is('archived_at', null)
+    .order('direction')
+    .order('name')
+  if (error) { if (!isMissingRelation(error)) console.error('fetchFeeRoutes failed:', error); return [] }
+  return (data ?? []) as { id: string; name: string; code: string | null; color: string; direction: 'inbound' | 'outbound' }[]
 }
 
 export interface Blocker {

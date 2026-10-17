@@ -29,17 +29,35 @@ export interface IssueScope {
   headIds: Set<string>
   /** Empty = every row. */
   rowIds: Set<string>
+  /** Bus fee only: the routes to bill. Empty = every route. */
+  routeIds: Set<string>
+}
+
+/** A transport route, as the issue panel offers it for the Bus fee. */
+export interface FeeRoute {
+  id: string
+  name: string
+  code: string | null
+  color: string
+  direction: 'inbound' | 'outbound'
+}
+
+/** The Bus fee is in the selection: a monthly issue that includes its head. */
+export function busInScope(scope: IssueScope, heads: HeadRow[]): HeadRow | null {
+  const bus = heads.find(h => h.active && h.is_transport && h.frequency === 'monthly') ?? null
+  if (!bus || scope.mode !== 'month' || !scope.month) return null
+  return scope.headIds.size === 0 || scope.headIds.has(bus.id) ? bus : null
 }
 
 export function emptyScope(terms: TermRow[], months: string[]): IssueScope {
   return {
     mode: 'term', termId: terms[0]?.id ?? null, month: months[0] ?? null,
-    headIds: new Set(), rowIds: new Set(),
+    headIds: new Set(), rowIds: new Set(), routeIds: new Set(),
   }
 }
 
 export function IssueBar({
-  scope, setScope, terms, heads, groups, months, monthDue, canIssue, onReview,
+  scope, setScope, terms, heads, groups, months, monthDue, canIssue, onReview, routes = [],
 }: {
   scope: IssueScope
   setScope: (s: IssueScope) => void
@@ -51,13 +69,16 @@ export function IssueBar({
   monthDue: Map<string, string>
   canIssue: boolean
   onReview: () => void
+  /** Transport routes, for billing the Bus fee route by route. */
+  routes?: FeeRoute[]
 }) {
+  const bus = busInScope(scope, heads)
   const modeHeads = heads.filter(h => h.active && h.frequency === (scope.mode === 'term' ? 'term' : 'monthly'))
   const rows = gridRows(groups)
   const term = terms.find(t => t.id === scope.termId)
 
   const set = (patch: Partial<IssueScope>) => setScope({ ...scope, ...patch })
-  const toggle = (key: 'headIds' | 'rowIds', id: string) => {
+  const toggle = (key: 'headIds' | 'rowIds' | 'routeIds', id: string) => {
     const n = new Set(scope[key]); if (n.has(id)) n.delete(id); else n.add(id)
     set({ [key]: n } as Partial<IssueScope>)
   }
@@ -81,6 +102,7 @@ export function IssueBar({
     period,
     scope.headIds.size === 0 ? `all ${scope.mode === 'term' ? 'term-wise' : 'monthly'} heads` : `${scope.headIds.size} head${scope.headIds.size === 1 ? '' : 's'}`,
     scope.rowIds.size === 0 ? 'every grade' : `${scope.rowIds.size} row${scope.rowIds.size === 1 ? '' : 's'}`,
+    ...(bus && routes.length ? [scope.routeIds.size === 0 ? 'every route' : `${scope.routeIds.size} route${scope.routeIds.size === 1 ? '' : 's'}`] : []),
     `due ${due}`,
   ].join(' · ')
 
@@ -137,6 +159,23 @@ export function IssueBar({
           )}
         </div>
 
+        {bus && routes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
+            <span className={label} title="Which routes the Bus fee is billed for">Routes</span>
+            <Pick on={scope.routeIds.size === 0} onClick={() => set({ routeIds: new Set() })}>All</Pick>
+            {routes.map(r => (
+              <Pick key={r.id} on={scope.routeIds.has(r.id)} onClick={() => toggle('routeIds', r.id)}>
+                <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: r.color }} />
+                {r.code ? `${r.code} · ` : ''}{r.name}
+                <span className="ml-1 opacity-60">{r.direction === 'inbound' ? '→ school' : '← school'}</span>
+              </Pick>
+            ))}
+            <span className="w-full text-[10.5px] text-[#8C8878] pl-[68px] max-sm:pl-0">
+              The Bus fee is billed by route; grades do not apply to it.
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
           <span className={label}>Grades</span>
           <Pick on={scope.rowIds.size === 0} onClick={() => set({ rowIds: new Set() })}>All</Pick>
@@ -190,17 +229,16 @@ export function IssueSheet({
   // The Bus fee is billed by route, not by grade: it joins a monthly issue
   // when its head is in the selection and every grade is (a grade filter has
   // no meaning for a route).
-  const transportHead = heads.find(h => h.active && h.is_transport && h.frequency === 'monthly') ?? null
-  const busInScope = scope.mode === 'month' && !!scope.month && !!transportHead
-    && (scope.headIds.size === 0 || scope.headIds.has(transportHead.id))
-  const withBus = busInScope && scope.rowIds.size === 0
+  const busHead = busInScope(scope, heads)
+  const withBus = !!busHead && scope.rowIds.size === 0
+  const routeIds = Array.from(scope.routeIds)
 
   useEffect(() => {
     if (!open) return
     setPreview(null); setBus(null); setError(null); setLoading(true)
     Promise.all([
       issueGrid(yearId, scopeRequest(scope, groups), false),
-      withBus ? issueTransport(yearId, scope.month as string, false) : Promise.resolve(null),
+      withBus ? issueTransport(yearId, scope.month as string, false, { route_ids: routeIds }) : Promise.resolve(null),
     ])
       .then(([g, b]) => { setPreview(g); setBus(b) })
       .catch(e => setError(e instanceof Error ? e.message : 'Could not preview.'))
@@ -217,7 +255,7 @@ export function IssueSheet({
     setBusy(true); setError(null)
     try {
       if (gridBills > 0) await issueGrid(yearId, scopeRequest(scope, groups), true)
-      if (withBus && busLines > 0) await issueTransport(yearId, scope.month as string, true)
+      if (withBus && busLines > 0) await issueTransport(yearId, scope.month as string, true, { route_ids: routeIds })
       onIssued(); onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not issue.')
@@ -262,7 +300,7 @@ export function IssueSheet({
             ]} />
           </div>
 
-          {busInScope && !withBus && (
+          {busHead && !withBus && (
             <Aside>
               The Bus fee is billed by route, so it is left out when only some grades are picked. Issue it with every
               grade selected, or from Transport.
@@ -439,9 +477,10 @@ export function UndoSheet({
 const LOG_COLS = 'sm:grid-cols-[minmax(0,200px)_minmax(0,1fr)_96px_72px_112px_88px]'
 
 export function IssuesLog({
-  issues, heads, groups, canUndo, onUndo, onOpenCharge,
+  issues, heads, groups, canUndo, onUndo, onOpenCharge, routes = [],
 }: {
   issues: IssueRow[]; heads: HeadRow[]; groups: GroupRow[]; canUndo: boolean
+  routes?: FeeRoute[]
   onUndo: (i: IssueRow) => void; onOpenCharge: (chargeId: string) => void
 }) {
   const [showUndone, setShowUndone] = useState(false)
@@ -475,9 +514,14 @@ export function IssuesLog({
         {list.map(i => {
           const h = i.filters?.head_ids?.length ? i.filters.head_ids.map(id => headName.get(id) ?? 'Head').join(', ') : null
           const r = i.filters?.rows?.length ? i.filters.rows.map(x => rowLabel(x, groups)).join(', ') : null
+          const routeNames = i.filters?.routes?.length
+            ? i.filters.routes.map(id => routes.find(x => x.id === id)?.name ?? 'Route').join(', ')
+            : 'every route'
           const scope = i.kind === 'charge'
             ? 'Other fee or fine'
-            : [i.bill_month ? 'Monthly' : 'Term-wise', h ?? 'all heads', r ?? 'every grade'].join(' · ')
+            : i.filters?.transport
+              ? ['Monthly', h ?? 'Bus fee', routeNames].join(' · ')
+              : [i.bill_month ? 'Monthly' : 'Term-wise', h ?? 'all heads', r ?? 'every grade'].join(' · ')
           const isUndone = i.status === 'undone'
           return (
             <Row key={i.id} cols={LOG_COLS} trailing={1} className={isUndone ? 'opacity-60' : ''}>

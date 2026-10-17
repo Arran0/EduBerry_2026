@@ -11,7 +11,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { IndianRupee, MapPin, Receipt, UserRound, Users, Wand2 } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowUpRight, IndianRupee, MapPin, Receipt, UserRound, Users, Wand2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINRExact } from '@/lib/formatMoney'
 import { fetchAssignments, updateAssignment } from '@/lib/transport/assignments'
@@ -20,7 +21,6 @@ import { updateRoute } from '@/lib/transport/routes'
 import { fetchStopFees, resolveRiderFee, riderStopId, saveStopFee, type StopFee } from '@/lib/transport/fees'
 import type { RouteFeeMode, TransportAssignment, TransportRoute, TransportStop } from '@/lib/transport/types'
 import { BUS, EmptyNote, GBTN, GlassSegments } from './glass'
-import BillingRun from './BillingRun'
 
 const MONEY =
   'w-full h-8 rounded-lg bg-white border border-slate-200 pl-6 pr-2 text-sm text-right tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
@@ -74,7 +74,6 @@ export default function RouteFeesEditor({ route, onChanged }: { route: Transport
   const [grid, setGrid] = useState<Record<string, StopFee>>({})
   const [riders, setRiders] = useState<TransportAssignment[]>([])
   const [loading, setLoading] = useState(true)
-  const [issuing, setIssuing] = useState(false)
   const [fillAmount, setFillAmount] = useState('')
 
   useEffect(() => { setMode(route.fee_mode ?? null) }, [route.fee_mode])
@@ -166,12 +165,13 @@ export default function RouteFeesEditor({ route, onChanged }: { route: Transport
             { key: 'student', label: 'Priced by student', icon: UserRound },
           ]}
         />
-        <button className={GBTN.primary} onClick={() => setIssuing(v => !v)} disabled={riders.length === 0}>
-          <Receipt size={14} /> {issuing ? 'Close' : 'Issue a month'}
-        </button>
+        {/* Billing happens in the fee app, under its Bus fee head. This opens
+            its issue panel with the month view, the Bus fee and this route
+            already picked. */}
+        <Link href={`/more/fees?tab=config&issue=bus&route=${route.id}`} className={GBTN.primary}>
+          <Receipt size={14} /> Issue in fee app <ArrowUpRight size={13} />
+        </Link>
       </div>
-
-      {issuing && <BillingRun routeIds={[route.id]} compact onIssued={load} />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         <Mini icon={IndianRupee} label="Billed per month" value={fmtINRExact(monthly)} />

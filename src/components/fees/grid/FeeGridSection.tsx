@@ -11,7 +11,8 @@
 //   5. A quiet link to copy last session's grid forward.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertOctagon, Copy, Lock, Plus, Receipt, Timer } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -19,7 +20,7 @@ import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN } from '@/components/fees/ui'
 import { Loading, Notice, SectionBar, TitledPanel } from '@/components/fees/shell'
 import {
-  cloneGrid, defaultMonthDue, fetchGrid, fetchStudents, issueProgress, monthLabel, rateKey,
+  cloneGrid, defaultMonthDue, fetchFeeRoutes, fetchGrid, fetchStudents, issueProgress, monthLabel, rateKey,
   saveMonthDues, sessionMonths, setRates, type Progress,
   type ChargeRow, type GridBundle, type HeadRow, type IssueRow,
   type RateEdit, type StudentLite, type TermRow,
@@ -28,7 +29,7 @@ import FeeGrid from './FeeGrid'
 import ChargeSheet from './ChargeSheet'
 import { HeadSheet, SplitSheet, TermSheet } from './SetupSheets'
 import OptInSheet from './OptInSheet'
-import { IssueBar, IssueSheet, IssuesLog, UndoSheet, emptyScope, type IssueScope } from './IssuePanel'
+import { IssueBar, IssueSheet, IssuesLog, UndoSheet, emptyScope, type FeeRoute, type IssueScope } from './IssuePanel'
 import { shortDate } from './kit'
 
 const EMPTY: GridBundle = {
@@ -87,6 +88,25 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
 
   const months = useMemo(() => (year ? sessionMonths(year.starts_on, year.ends_on) : []), [year])
   const [scope, setScope] = useState<IssueScope>(() => emptyScope([], []))
+  const [routes, setRoutes] = useState<FeeRoute[]>([])
+  useEffect(() => { fetchFeeRoutes().then(setRoutes) }, [])
+
+  // Transport's "Issue in fee app" lands here with ?issue=bus&route=<id>: open
+  // the issue panel on this month's Bus fee for that route.
+  const params = useSearchParams()
+  const issueParam = params.get('issue')
+  const routeParam = params.get('route')
+  const issueRef = useRef<HTMLDivElement>(null)
+  const deepLinked = useRef(false)
+  useEffect(() => {
+    if (deepLinked.current || issueParam !== 'bus') return
+    const bus = data.heads.find(h => h.active && h.is_transport && h.frequency === 'monthly')
+    if (!bus) return
+    deepLinked.current = true
+    const ids = (routeParam ?? '').split(',').filter(Boolean)
+    setScope(s => ({ ...s, mode: 'month', headIds: new Set([bus.id]), rowIds: new Set(), routeIds: new Set(ids) }))
+    setTimeout(() => issueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
+  }, [issueParam, routeParam, data.heads])
 
   const load = useCallback(async (quiet = false) => {
     if (!year) return
@@ -274,11 +294,11 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       </div>
 
       {/* ── Issue ──────────────────────────────────────────────────────── */}
-      <div className="mt-3">
+      <div className="mt-3 scroll-mt-4" ref={issueRef}>
         <IssueBar
           scope={scope} setScope={setScope}
           terms={data.terms} heads={data.heads} groups={data.groups} months={months} monthDue={data.months}
-          canIssue={canIssue} onReview={() => setIssueOpen(true)}
+          canIssue={canIssue} onReview={() => setIssueOpen(true)} routes={routes}
         />
       </div>
 
@@ -322,7 +342,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       </div>
 
       <IssuesLog
-        issues={data.issues} heads={data.heads} groups={data.groups} canUndo={canUndo}
+        issues={data.issues} heads={data.heads} groups={data.groups} canUndo={canUndo} routes={routes}
         onUndo={setUndo}
         onOpenCharge={id => {
           const c = data.charges.find(x => x.id === id)

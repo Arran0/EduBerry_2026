@@ -70,11 +70,13 @@ function tallyOf(c: RunRiderCounts | undefined): Tally {
 /** Expected riders not yet picked up (approved leave excluded). */
 const neither = (t: Tally) => Math.max(0, t.expected - t.picked - t.excused)
 
-export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool }: {
+export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool, settingsVersion = 0 }: {
   onOpenPanel: (key: 'replay' | 'incidents') => void
   onOpenFees: () => void
-  /** Takes the admin to where the school's location is set (Configuration). */
+  /** Opens the school-location popup. */
   onSetSchool: () => void
+  /** Bumped when a settings popup closes, so the map picks up a new location. */
+  settingsVersion?: number
 }) {
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [riders, setRiders] = useState<Record<string, RunRiderCounts>>({})
@@ -93,7 +95,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
   // The map opens on the school: the location set in Configuration, else the
   // attendance geofence. undefined while loading, null when there is none.
   const [school, setSchool] = useState<SchoolLocation | null | undefined>(undefined)
-  useEffect(() => { fetchSchoolLocation().then(setSchool) }, [])
+  useEffect(() => { fetchSchoolLocation().then(setSchool) }, [settingsVersion])
 
   const runIds = useRef<Set<string>>(new Set())
   useEffect(() => { runIds.current = new Set(runs.map(r => r.id)) }, [runs])

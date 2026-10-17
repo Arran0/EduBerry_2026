@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import {
   Bus, CreditCard, Receipt, CheckCircle2, Clock, Route, Wallet, Radio,
-  SlidersHorizontal, MessageCircle, ScanLine, History, ShieldAlert,
+  SlidersHorizontal, MessageCircle, ScanLine, History, ShieldAlert, School, Map as MapIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -26,6 +26,8 @@ const WhatsAppPanel = dynamic(() =>
 const DevicesPanel = dynamic(() =>
   import('@/components/transport/sections/IntegrationsSection').then(m => m.DevicesPanel))
 const ScanPanel = dynamic(() => import('@/components/transport/panels').then(m => m.ScanPanel))
+const SchoolLocationForm = dynamic(() => import('@/components/transport/TransportSettings').then(m => m.SchoolLocationForm))
+const MapProviderForm = dynamic(() => import('@/components/transport/TransportSettings').then(m => m.MapProviderForm))
 const ReplayPanel = dynamic(() => import('@/components/transport/panels').then(m => m.ReplayPanel))
 import { useAuth } from '@/contexts/AuthContext'
 import { isAdminRole } from '@/lib/supabase'
@@ -105,14 +107,17 @@ const SECTIONS = [
 
 const SECTION_KEYS = SECTIONS.map(s => s.key)
 
-type PanelKey = 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents'
+type PanelKey = 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents' | 'school' | 'map'
 
-const PANELS: Record<PanelKey, { title: string; subtitle: string; icon: LucideIcon }> = {
+/** Settings popups are small forms; the rest are full working panels. */
+const PANELS: Record<PanelKey, { title: string; subtitle: string; icon: LucideIcon; compact?: boolean }> = {
   whatsapp: { title: 'WhatsApp', subtitle: 'Message templates and the sending account', icon: MessageCircle },
   gps: { title: 'GPS', subtitle: 'Hardware already fitted to the buses', icon: Radio },
   scan: { title: 'Scan', subtitle: 'Cards, fobs and QR — only if you want them', icon: ScanLine },
   replay: { title: 'Replay', subtitle: 'Scrub a finished trip, and export the open data feed', icon: History },
   incidents: { title: 'Incidents', subtitle: 'SOS events and their frozen snapshots', icon: ShieldAlert },
+  school: { title: 'School location', subtitle: 'Where the Operations map opens', icon: School, compact: true },
+  map: { title: 'Map provider', subtitle: 'Your own Mapbox key, or the fallback', icon: MapIcon, compact: true },
 }
 
 const PANEL_KEYS = Object.keys(PANELS) as PanelKey[]
@@ -188,8 +193,12 @@ function AdminBusHub() {
     syncUrl(section, key, routeId)
   }
 
+  // Bumped whenever a popup closes, so anything showing a setting re-reads it.
+  const [settingsVersion, setSettingsVersion] = useState(0)
+
   const closePanel = () => {
     setPanel(null)
+    setSettingsVersion(v => v + 1)
     syncUrl(section, null, routeId)
   }
 
@@ -236,15 +245,12 @@ function AdminBusHub() {
             <OperationsSection
               onOpenPanel={openPanel}
               onOpenFees={() => router.push('/more/fees?section=collection')}
-              onSetSchool={() => {
-                selectSection('config')
-                // Wait for Configuration to render, then bring its settings into view.
-                setTimeout(() => document.getElementById('school-location')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 600)
-              }}
+              onSetSchool={() => openPanel('school')}
+              settingsVersion={settingsVersion}
             />
           )}
           {section === 'config' && (
-            <ConfigurationSection onOpenPanel={openPanel} routeId={routeId} onRouteChange={selectRoute} />
+            <ConfigurationSection onOpenPanel={openPanel} routeId={routeId} onRouteChange={selectRoute} settingsVersion={settingsVersion} />
           )}
         </div>
       </div>
@@ -257,14 +263,16 @@ function AdminBusHub() {
         title={panelMeta?.title ?? ''}
         subtitle={panelMeta?.subtitle}
         icon={panelMeta?.icon}
-        size="xl"
-        fullHeight
+        size={panelMeta?.compact ? 'sm' : 'xl'}
+        fullHeight={!panelMeta?.compact}
       >
         {panel === 'whatsapp' && <WhatsAppPanel />}
         {panel === 'gps' && <DevicesPanel />}
         {panel === 'scan' && <ScanPanel />}
         {panel === 'replay' && <ReplayPanel />}
         {panel === 'incidents' && <SafetySection />}
+        {panel === 'school' && <SchoolLocationForm onSaved={closePanel} />}
+        {panel === 'map' && <MapProviderForm />}
       </Modal>
     </div>
   )

@@ -19,7 +19,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, Bus, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Phone, Plus,
-  Radio, Receipt, Route as RouteIcon, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
+  Map as MapIcon, Radio, Route as RouteIcon, School, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINR } from '@/lib/formatMoney'
@@ -27,7 +27,8 @@ import { fetchRouteCounts, fetchRoutes, fetchRouteSearchIndex, type RouteSearchI
 import { complianceWarnings, deleteVehicle, fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { deleteTransportStaff, fetchCrewCandidates, fetchTransportStaff } from '@/lib/transport/staff'
 import { currentPeriod, previewBills, type BillableRider } from '@/lib/transport/fees'
-import { MapProviderCard, SchoolLocationCard } from '../TransportSettings'
+import { mapStatus, schoolStatus } from '../TransportSettings'
+import { fetchMapSettings, fetchSchoolLocation, type MapSettings, type SchoolLocation } from '@/lib/transport/settings'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
 import { STAFF_KIND_LABELS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
 import RouteWorkspace, { type RouteTab } from '../RouteWorkspace'
@@ -35,15 +36,16 @@ import RouteNavigator from '../RouteNavigator'
 import RouteFormModal from '../RouteFormModal'
 import VehicleFormModal from '../VehicleFormModal'
 import CrewFormModal from '../CrewFormModal'
-import BillingRun from '../BillingRun'
 import {
   CardHead, Content, EmptyNote, GBTN, GlassPanel, GlassTileButton,
 } from '../glass'
 
-export type ConnectionKey = 'whatsapp' | 'gps' | 'scan'
+export type ConnectionKey = 'whatsapp' | 'gps' | 'scan' | 'school' | 'map'
 
-export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChange }: {
+export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChange, settingsVersion = 0 }: {
   onOpenPanel: (key: ConnectionKey) => void
+  /** Bumped by the page when a settings popup closes, so the tiles re-read their status. */
+  settingsVersion?: number
   /** The open route, held by the page so it survives in the URL (`?route=`). */
   routeId: string | null
   onRouteChange: (routeId: string | null) => void
@@ -91,6 +93,13 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
     const [v, c, cand] = await Promise.all([fetchVehicles(), fetchTransportStaff(), fetchCrewCandidates()])
     setVehicles(v); setCrew(c); setCandidates(cand)
   }, [])
+
+  const [school, setSchool] = useState<SchoolLocation | null | undefined>(undefined)
+  const [mapSettings, setMapSettings] = useState<MapSettings | null | undefined>(undefined)
+  useEffect(() => {
+    fetchSchoolLocation(true).then(setSchool)
+    fetchMapSettings(true).then(setMapSettings)
+  }, [settingsVersion])
 
   const loadBilling = useCallback(async () => {
     setBilling(await previewBills(currentPeriod()))
@@ -312,32 +321,15 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
         </div>
       </GlassPanel>
 
-      {/* ── Monthly bills ─────────────────────────────────────────── */}
-      <GlassPanel eyebrow="Billing" title="Issue a month of bus fees" icon={Receipt} delay={0.1}>
-        <Content className="p-3 sm:p-4">
-          <p className="mb-3 text-[12px] leading-snug text-slate-600 max-w-3xl">
-            One bill per rider per route, priced from each route&apos;s fee grid or the rider&apos;s custom amount
-            (choose by-stop or by-student pricing on each route&apos;s <span className="font-semibold">Fees</span> tab above).
-            A child on a to-school route and a from-school route gets a bill for each. Running a month twice only bills whoever
-            was missed the first time.
-          </p>
-          <BillingRun onIssued={loadBilling} />
-        </Content>
-      </GlassPanel>
-
       {/* ── Connections & settings ─────────────────────────────────── */}
       <div id="transport-settings" className="scroll-mt-4">
-        <GlassPanel eyebrow="Connections & settings" title="Maps, messaging and devices" icon={Radio} delay={0.12}>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <GlassTileButton icon={MessageCircle} label="WhatsApp" detail="Message templates and the sending account" onClick={() => onOpenPanel('whatsapp')} />
-              <GlassTileButton icon={Radio} label="GPS" detail="Hardware already fitted to the buses" onClick={() => onOpenPanel('gps')} />
-              <GlassTileButton icon={ScanLine} label="Scan" detail="Cards, fobs and QR — only if you want them" onClick={() => onOpenPanel('scan')} />
-            </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-              <SchoolLocationCard />
-              <MapProviderCard />
-            </div>
+        <GlassPanel eyebrow="Connections & settings" title="Messaging, devices and maps" icon={Radio} delay={0.12}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
+            <GlassTileButton icon={MessageCircle} label="WhatsApp" detail="Message templates and the sending account" onClick={() => onOpenPanel('whatsapp')} />
+            <GlassTileButton icon={Radio} label="GPS" detail="Hardware already fitted to the buses" onClick={() => onOpenPanel('gps')} />
+            <GlassTileButton icon={ScanLine} label="Scan" detail="Cards, fobs and QR — only if you want them" onClick={() => onOpenPanel('scan')} />
+            <GlassTileButton icon={School} label="School location" detail="Where the Operations map opens" status={schoolStatus(school)} onClick={() => onOpenPanel('school')} />
+            <GlassTileButton icon={MapIcon} label="Map provider" detail="Your own Mapbox key, or the fallback" status={mapStatus(mapSettings)} onClick={() => onOpenPanel('map')} />
           </div>
         </GlassPanel>
       </div>

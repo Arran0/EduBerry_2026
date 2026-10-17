@@ -163,21 +163,6 @@ export async function previewBills(period: string, routeIds?: string[]): Promise
     .sort((x, y) => x.route_name.localeCompare(y.route_name) || x.student_name.localeCompare(y.student_name))
 }
 
-/** The academic session a month (`YYYY-MM`) falls in, as its id and code. */
-export async function sessionForMonth(period: string): Promise<{ id: string; code: string } | null> {
-  const day = `${period}-01`
-  const { data, error } = await supabase
-    .from('academic_years')
-    .select('id, code')
-    .lte('starts_on', day)
-    .gte('ends_on', day)
-    .order('starts_on', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) { console.error('sessionForMonth failed:', error); return null }
-  return (data as { id: string; code: string } | null) ?? null
-}
-
 // ── Month-wise position ─────────────────────────────────────────────────────
 
 export interface MonthFeePosition {
