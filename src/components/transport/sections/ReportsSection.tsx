@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, ChevronRight, Clock, Download, Gauge, Radio, TrendingUp, Users,
 } from 'lucide-react'
-import { ADMIN, SHEET, Sheet, SheetRowSkeleton, EmptyRow } from '@/components/bus/adminUI'
+import { ADMIN, SHEET, Sheet, SheetRowSkeleton, EmptyRow } from '../glassAdmin'
 import DonutChart from '@/components/charts/DonutChart'
 import MetricBars from '@/components/charts/MetricBars'
 import {

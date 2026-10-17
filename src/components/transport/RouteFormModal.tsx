@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { Route as RouteIcon } from 'lucide-react'
-import ModalShell from '@/components/ui/ModalShell'
+import BusModal from './BusModal'
 import { createRoute, updateRoute } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import type { RouteInput, TransportDirection, TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
@@ -65,9 +65,9 @@ export default function RouteFormModal({
   }
 
   return (
-    <ModalShell
+    <BusModal
       onClose={onClose}
-      size="lg"
+      size="md"
       title={route ? 'Edit route' : 'New route'}
       subtitle="One direction, one schedule — stops, riders and fees attach to it"
       icon={<RouteIcon size={18} />}
@@ -107,12 +107,14 @@ export default function RouteFormModal({
                 type="button"
                 onClick={() => set('direction', key)}
                 aria-pressed={form.direction === key}
-                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-                  form.direction === key ? 'border-[#27272A] bg-[#27272A] text-white' : 'border-[#E4E4E7] bg-white text-[#52525B] hover:border-[#D4D4D8]'
+                className={`rounded-2xl border px-3 py-2.5 text-left transition ${
+                  form.direction === key
+                    ? 'border-transparent bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_18px_-10px_rgba(15,23,42,.6)]'
+                    : 'border-slate-200/80 bg-white/90 text-slate-600 hover:bg-white'
                 }`}
               >
                 <span className="block text-sm font-semibold">{title}</span>
-                <span className={`block text-[11px] ${form.direction === key ? 'text-white/70' : 'text-[#A1A1AA]'}`}>{sub}</span>
+                <span className={`block text-[11px] ${form.direction === key ? 'text-white/70' : 'text-slate-400'}`}>{sub}</span>
               </button>
             ))}
           </div>
@@ -136,7 +138,7 @@ export default function RouteFormModal({
                 onClick={() => set('color', c)}
                 aria-label={`Colour ${c}`}
                 className={`w-7 h-7 rounded-full transition-transform ${
-                  form.color === c ? 'ring-2 ring-offset-2 ring-[#27272A] scale-110' : 'hover:scale-105'
+                  form.color === c ? 'ring-2 ring-offset-2 ring-[#3D3B40] scale-110' : 'hover:scale-105'
                 }`}
                 style={{ background: c }}
               />
@@ -184,11 +186,7 @@ export default function RouteFormModal({
           </p>
         )}
 
-        <label className="flex items-center gap-2 text-sm text-[#52525B]">
-          <input type="checkbox" checked={form.active ?? true} onChange={e => set('active', e.target.checked)} />
-          Route is running
-        </label>
       </div>
-    </ModalShell>
+    </BusModal>
   )
 }

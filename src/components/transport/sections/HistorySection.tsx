@@ -10,7 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, History, Loader2, Wifi, WifiOff } from 'lucide-react'
-import { ADMIN, EmptyRow } from '@/components/bus/adminUI'
+import { ADMIN, EmptyRow } from '../glassAdmin'
 import { fetchRoutes } from '@/lib/transport/routes'
 import { fetchReplay, fetchRunHistory, type RunReplay } from '@/lib/transport/replay'
 import { formatClock } from '@/lib/transport/runs'

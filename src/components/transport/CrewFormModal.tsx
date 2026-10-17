@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { IdCard } from 'lucide-react'
-import ModalShell from '@/components/ui/ModalShell'
+import BusModal from './BusModal'
 import { upsertTransportStaff, updateTransportStaff } from '@/lib/transport/staff'
 import type { StaffInput, TransportStaff } from '@/lib/transport/types'
 import { STAFF_KIND_LABELS } from '@/lib/transport/types'
@@ -65,9 +65,9 @@ export default function CrewFormModal({
   }
 
   return (
-    <ModalShell
+    <BusModal
       onClose={onClose}
-      size="lg"
+      size="md"
       title={staff ? 'Edit crew record' : 'New crew record'}
       subtitle="Drivers and attendants who work the routes"
       icon={<IdCard size={18} />}
@@ -140,6 +140,6 @@ export default function CrewFormModal({
           <TextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
         </Field>
       </div>
-    </ModalShell>
+    </BusModal>
   )
 }

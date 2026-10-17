@@ -5,7 +5,7 @@ import {
   MessageCircle, Radio, Plus, Trash2, KeyRound, Copy, Check, Loader2, ExternalLink,
   CreditCard, Download, Globe, RefreshCw, Search, Ban,
 } from 'lucide-react'
-import { ADMIN, SegTabs, SHEET, Sheet, EmptyRow } from '@/components/bus/adminUI'
+import { ADMIN, SegTabs, SHEET, Sheet, EmptyRow } from '../glassAdmin'
 import { supabase } from '@/lib/supabase'
 import {
   createSource, deleteSource, fetchSources, rotateSourceSecret, sourceHealth,

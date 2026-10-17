@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { Bus } from 'lucide-react'
-import ModalShell from '@/components/ui/ModalShell'
+import BusModal from './BusModal'
 import { createVehicle, updateVehicle } from '@/lib/transport/vehicles'
 import type { TransportVehicle, VehicleInput } from '@/lib/transport/types'
 import { VEHICLE_COMPLIANCE_FIELDS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
@@ -57,9 +57,9 @@ export default function VehicleFormModal({
   }
 
   return (
-    <ModalShell
+    <BusModal
       onClose={onClose}
-      size="lg"
+      size="md"
       title={vehicle ? 'Edit vehicle' : 'New vehicle'}
       subtitle="Buses that routes and schedules attach to"
       icon={<Bus size={18} />}
@@ -132,6 +132,6 @@ export default function VehicleFormModal({
           <TextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
         </FormSection>
       </div>
-    </ModalShell>
+    </BusModal>
   )
 }

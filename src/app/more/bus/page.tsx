@@ -15,13 +15,12 @@ import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN } from '@/components/bus/adminUI'
-import Modal from '@/components/workspace/Modal'
+import Modal from '@/components/transport/BusModal'
 import { GlassSegments } from '@/components/transport/glass'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const OperationsSection = dynamic(() => import('@/components/transport/sections/OperationsSection'))
 const ConfigurationSection = dynamic(() => import('@/components/transport/sections/ConfigurationSection'))
 const SafetySection     = dynamic(() => import('@/components/transport/sections/SafetySection'))
-const BusFeesSection    = dynamic(() => import('@/components/bus/sections/BusFeesSection'))
 const WhatsAppPanel = dynamic(() =>
   import('@/components/transport/sections/IntegrationsSection').then(m => m.WhatsAppPanel))
 const DevicesPanel = dynamic(() =>
@@ -91,8 +90,8 @@ function BusPageContent() {
 // popups that only make sense together, so they are one page now; Replay and
 // Incidents sit above the map they belong to; WhatsApp, GPS and Scan still
 // open in their own popups from the foot of Configuration, because they are
-// opened once a term. The fee ledger (collection, issued fees, fee heads) is
-// a popup from the fee chart on Operations.
+// opened once a term. Bus fees are fee-app bills under the "Bus fee" head, so
+// they are collected in Fees; the chart on Operations links there.
 //
 // Driver payroll lives at /more/bus/payroll.
 // ──────────────────────────────────────────────────────────────
@@ -106,7 +105,7 @@ const SECTIONS = [
 
 const SECTION_KEYS = SECTIONS.map(s => s.key)
 
-type PanelKey = 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents' | 'ledger'
+type PanelKey = 'whatsapp' | 'gps' | 'scan' | 'replay' | 'incidents'
 
 const PANELS: Record<PanelKey, { title: string; subtitle: string; icon: LucideIcon }> = {
   whatsapp: { title: 'WhatsApp', subtitle: 'Message templates and the sending account', icon: MessageCircle },
@@ -114,7 +113,6 @@ const PANELS: Record<PanelKey, { title: string; subtitle: string; icon: LucideIc
   scan: { title: 'Scan', subtitle: 'Cards, fobs and QR — only if you want them', icon: ScanLine },
   replay: { title: 'Replay', subtitle: 'Scrub a finished trip, and export the open data feed', icon: History },
   incidents: { title: 'Incidents', subtitle: 'SOS events and their frozen snapshots', icon: ShieldAlert },
-  ledger: { title: 'Bus fee ledger', subtitle: 'Collection, issued fees and fee heads', icon: Wallet },
 }
 
 const PANEL_KEYS = Object.keys(PANELS) as PanelKey[]
@@ -130,7 +128,6 @@ const PANEL_KEYS = Object.keys(PANELS) as PanelKey[]
 const LEGACY_TAB: Record<string, { tab: SectionKey; panel?: PanelKey }> = {
   insights: { tab: 'live' },
   reports:  { tab: 'live' },
-  fees:     { tab: 'live', panel: 'ledger' },
   routes:   { tab: 'config' },
   fleet:    { tab: 'config' },
   crew:     { tab: 'config' },
@@ -147,13 +144,13 @@ function AdminBusHub() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const panelParam = searchParams.get('panel')
-  const feesSectionParam = searchParams.get('section')
-  const feesFilterParam  = searchParams.get('filter')
   const routeParam = searchParams.get('route')
 
-  // ?tab=payroll used to open a tab that no longer exists here.
+  // Tabs that moved elsewhere. Payroll has its own pages, and bus fees are
+  // fee-app bills now (under the "Bus fee" head), collected in Fees.
   useEffect(() => {
     if (tabParam === 'payroll') router.replace('/more/bus/payroll')
+    if (tabParam === 'fees') router.replace('/more/fees?section=collection')
   }, [tabParam, router])
 
   const legacy = tabParam ? LEGACY_TAB[tabParam] : undefined
@@ -238,7 +235,12 @@ function AdminBusHub() {
           {section === 'live' && (
             <OperationsSection
               onOpenPanel={openPanel}
-              onOpenLedger={() => openPanel('ledger')}
+              onOpenFees={() => router.push('/more/fees?section=collection')}
+              onSetSchool={() => {
+                selectSection('config')
+                // Wait for Configuration to render, then bring its settings into view.
+                setTimeout(() => document.getElementById('school-location')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 600)
+              }}
             />
           )}
           {section === 'config' && (
@@ -263,7 +265,6 @@ function AdminBusHub() {
         {panel === 'scan' && <ScanPanel />}
         {panel === 'replay' && <ReplayPanel />}
         {panel === 'incidents' && <SafetySection />}
-        {panel === 'ledger' && <BusFeesSection initialSection={feesSectionParam} initialFilter={feesFilterParam} />}
       </Modal>
     </div>
   )

@@ -18,7 +18,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, Bus, IdCard, IndianRupee, Map as MapIcon, MapPin, MessageCircle, Pencil, Phone, Plus,
+  AlertTriangle, Bus, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Phone, Plus,
   Radio, Receipt, Route as RouteIcon, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
@@ -27,7 +27,7 @@ import { fetchRouteCounts, fetchRoutes, fetchRouteSearchIndex, type RouteSearchI
 import { complianceWarnings, deleteVehicle, fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { deleteTransportStaff, fetchCrewCandidates, fetchTransportStaff } from '@/lib/transport/staff'
 import { currentPeriod, previewBills, type BillableRider } from '@/lib/transport/fees'
-import { mapProviderStatus } from '@/lib/transport/mapTiles'
+import { MapProviderCard, SchoolLocationCard } from '../TransportSettings'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
 import { STAFF_KIND_LABELS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
 import RouteWorkspace, { type RouteTab } from '../RouteWorkspace'
@@ -37,7 +37,7 @@ import VehicleFormModal from '../VehicleFormModal'
 import CrewFormModal from '../CrewFormModal'
 import BillingRun from '../BillingRun'
 import {
-  BUS, CardHead, Content, EmptyNote, GBTN, GlassPanel, GlassTileButton,
+  CardHead, Content, EmptyNote, GBTN, GlassPanel, GlassTileButton,
 } from '../glass'
 
 export type ConnectionKey = 'whatsapp' | 'gps' | 'scan'
@@ -132,14 +132,13 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
     return m
   }, [live])
 
-  const map = mapProviderStatus()
 
   return (
     <div className="space-y-5">
       {/* ── Network at a glance ───────────────────────────────────── */}
       <GlassPanel eyebrow="Configuration" title="Transport network" icon={SlidersHorizontal}>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 px-0.5">
-          <Tile icon={RouteIcon} value={loading ? '—' : `${live.filter(r => r.active).length}`} label="Routes running" sub={`${live.length - live.filter(r => r.active).length} paused`} />
+          <Tile icon={RouteIcon} value={loading ? '—' : `${live.length}`} label="Routes" sub={`${live.filter(r => r.direction === 'inbound').length} to school · ${live.filter(r => r.direction === 'outbound').length} from school`} />
           <Tile icon={MapPin} value={loading ? '—' : `${totals.stops}`} label="Stops" sub="across all routes" />
           <Tile icon={Users} value={loading ? '—' : `${totals.riders}`} label="Riders assigned" sub="one per route ridden" />
           <Tile icon={Bus} value={loading ? '—' : `${vehicles.filter(v => v.status === 'active').length}`} label="Buses in service"
@@ -151,7 +150,7 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
       </GlassPanel>
 
       {/* ── Routes ────────────────────────────────────────────────── */}
-      <div ref={routesRef} className="scroll-mt-4">
+      <div ref={routesRef} className="relative z-20 scroll-mt-4">
       <GlassPanel eyebrow="Routes & trips" title="Routes" icon={RouteIcon} delay={0.04}>
         <div className="px-0.5 pb-3">
           {loading ? (
@@ -314,8 +313,7 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
       </GlassPanel>
 
       {/* ── Monthly bills ─────────────────────────────────────────── */}
-      <GlassPanel eyebrow="Billing" title="Issue a month of bus fees" icon={Receipt} delay={0.1}
-        ambient={['#10b981', BUS.gold, BUS.taupe]}>
+      <GlassPanel eyebrow="Billing" title="Issue a month of bus fees" icon={Receipt} delay={0.1}>
         <Content className="p-3 sm:p-4">
           <p className="mb-3 text-[12px] leading-snug text-slate-600 max-w-3xl">
             One bill per rider per route, priced from each route&apos;s fee grid or the rider&apos;s custom amount
@@ -327,27 +325,22 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
         </Content>
       </GlassPanel>
 
-      {/* ── Connections ───────────────────────────────────────────── */}
-      <GlassPanel eyebrow="Connections" title="WhatsApp, GPS & scanning" icon={Radio} delay={0.12}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
-          <GlassTileButton icon={MessageCircle} label="WhatsApp" detail="Message templates and the sending account" onClick={() => onOpenPanel('whatsapp')} />
-          <GlassTileButton icon={Radio} label="GPS" detail="Hardware already fitted to the buses" onClick={() => onOpenPanel('gps')} />
-          <GlassTileButton icon={ScanLine} label="Scan" detail="Cards, fobs and QR — only if you want them" onClick={() => onOpenPanel('scan')} />
-          <div className="lg-content flex items-center gap-3 p-3.5">
-            <span className="icon-chip w-10 h-10 flex-shrink-0" style={{ background: map.connected ? 'linear-gradient(135deg,#34d399,#059669)' : `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
-              <MapIcon size={17} className="relative z-10 text-white" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-slate-900">Map · {map.label}</span>
-              <span className="mt-0.5 inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600">
-                <span className={`w-1.5 h-1.5 rounded-full ${map.connected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                {map.connected ? 'Mapbox connected' : 'Mapbox not connected'}
-              </span>
-              <span className="block text-[11px] leading-snug text-slate-500">{map.detail}</span>
-            </span>
+      {/* ── Connections & settings ─────────────────────────────────── */}
+      <div id="transport-settings" className="scroll-mt-4">
+        <GlassPanel eyebrow="Connections & settings" title="Maps, messaging and devices" icon={Radio} delay={0.12}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <GlassTileButton icon={MessageCircle} label="WhatsApp" detail="Message templates and the sending account" onClick={() => onOpenPanel('whatsapp')} />
+              <GlassTileButton icon={Radio} label="GPS" detail="Hardware already fitted to the buses" onClick={() => onOpenPanel('gps')} />
+              <GlassTileButton icon={ScanLine} label="Scan" detail="Cards, fobs and QR — only if you want them" onClick={() => onOpenPanel('scan')} />
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              <SchoolLocationCard />
+              <MapProviderCard />
+            </div>
           </div>
-        </div>
-      </GlassPanel>
+        </GlassPanel>
+      </div>
 
       {newRoute && (
         <RouteFormModal

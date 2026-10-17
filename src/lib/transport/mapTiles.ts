@@ -1,8 +1,9 @@
 /**
  * Which tiles the transport map draws.
  *
- * Mapbox when a public token is configured, OpenStreetMap's own tiles
- * otherwise. The map component also falls back to OpenStreetMap on its own if
+ * The deployment's own Mapbox token when one is configured, OpenStreetMap's
+ * tiles otherwise. A school's own token, set in Configuration, comes first —
+ * see ./settings.ts for the full order. The map component also falls back to OpenStreetMap on its own if
  * Mapbox starts refusing tiles (a revoked or URL-restricted token), so a bad
  * key degrades to a plainer map rather than a grey box.
  *
@@ -58,15 +59,4 @@ export function mapboxTiles(token: string, style = 'mapbox/streets-v12'): TileSo
 
 export function defaultTiles(): TileSource {
   return MAPBOX_TOKEN ? mapboxTiles(MAPBOX_TOKEN) : OSM_TILES
-}
-
-/** For the settings read-out: is the map on Mapbox, and if not, why not. */
-export function mapProviderStatus(): { connected: boolean; label: string; detail: string } {
-  return MAPBOX_TOKEN
-    ? { connected: true, label: 'Mapbox', detail: 'Streets style, using the configured public token.' }
-    : {
-        connected: false,
-        label: 'OpenStreetMap',
-        detail: 'No Mapbox token in this build. Add NEXT_PUBLIC_MAPBOX_TOKEN to the deployment’s environment variables and redeploy.',
-      }
 }

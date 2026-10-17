@@ -163,41 +163,19 @@ export async function previewBills(period: string, routeIds?: string[]): Promise
     .sort((x, y) => x.route_name.localeCompare(y.route_name) || x.student_name.localeCompare(y.student_name))
 }
 
-/**
- * Raise one bill per rider per trip for `period`. Riders already billed for the
- * month and riders without a price are skipped, never guessed at.
- */
-export async function issueBills(
-  riders: BillableRider[],
-  opts: { period: string; dueDate: string | null; feeHeadId: string | null },
-): Promise<{ success: boolean; issued: number; error?: string }> {
-  const ready = riders.filter(r => !r.alreadyBilled && r.fee.amount != null && r.fee.amount > 0)
-  if (ready.length === 0) return { success: true, issued: 0 }
-  const { data: { user } } = await supabase.auth.getUser()
-  const label = periodLabel(opts.period)
-  const rows = ready.map(r => ({
-    passenger_id: r.student_id,
-    route_id: r.route_id,
-    fee_head_id: opts.feeHeadId,
-    amount: r.fee.amount as number,
-    description: `Bus fee · ${r.route_name} · ${label}`,
-    due_date: opts.dueDate,
-    billing_period: opts.period,
-    created_by: user?.id,
-  }))
-  const { error } = await supabase.from('bus_fees').insert(rows)
-  if (error) {
-    console.error('issueBills failed:', error)
-    const dup = error.code === '23505'
-    return {
-      success: false,
-      issued: 0,
-      error: dup
-        ? 'Some of these riders were billed for this month a moment ago. Refresh and try again.'
-        : error.message,
-    }
-  }
-  return { success: true, issued: rows.length }
+/** The academic session a month (`YYYY-MM`) falls in, as its id and code. */
+export async function sessionForMonth(period: string): Promise<{ id: string; code: string } | null> {
+  const day = `${period}-01`
+  const { data, error } = await supabase
+    .from('academic_years')
+    .select('id, code')
+    .lte('starts_on', day)
+    .gte('ends_on', day)
+    .order('starts_on', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) { console.error('sessionForMonth failed:', error); return null }
+  return (data as { id: string; code: string } | null) ?? null
 }
 
 // ── Month-wise position ─────────────────────────────────────────────────────
@@ -224,37 +202,55 @@ export function academicMonths(yearCode: string): string[] {
 /**
  * Billed / collected / outstanding per month across one academic year.
  *
- * A bill belongs to the month it was raised for (`billing_period`), falling back
- * to its due date and then its creation date for bills issued by hand.
+ * Bus fees are fee-app bills now (transport_r6_c): each monthly transport
+ * issue's bills carry the month on the issue. Older bills from the bus app's
+ * own ledger (bus_fees) are added in by their billing month, due date or
+ * creation date, so history is not lost.
  */
 export async function fetchMonthlyBusFees(yearCode: string): Promise<MonthFeePosition[]> {
   const months = academicMonths(yearCode)
+  const out = new Map(months.map(p => [p, { period: p, billed: 0, collected: 0, outstanding: 0, bills: 0 }]))
   const start = Number(yearCode.slice(0, 4))
-  // A bill is raised around the month it is for. Reading from six months before
-  // the year opens covers fees issued early by hand; the bucketing below is
-  // exact, so over-fetching at the edges costs nothing but a few rows.
   const since = `${start - 1}-10-01`
 
-  const [{ data: fees, error }, { data: pays }] = await Promise.all([
-    supabase
-      .from('bus_fees')
-      .select('id, amount, status, billing_period, due_date, created_at')
-      .neq('status', 'cancelled')
-      .gte('created_at', since),
+  const { data: year } = await supabase.from('academic_years').select('id').eq('code', yearCode).maybeSingle()
+
+  const [{ data: issues }, { data: legacy }, { data: pays }] = await Promise.all([
+    year
+      ? supabase.from('fee_issues').select('id, bill_month')
+          .eq('academic_year_id', (year as { id: string }).id).eq('status', 'issued').eq('filters->>transport', 'true')
+      : Promise.resolve({ data: [] as { id: string; bill_month: string }[] }),
+    supabase.from('bus_fees').select('id, amount, status, billing_period, due_date, created_at')
+      .neq('status', 'cancelled').gte('created_at', since),
     supabase.from('bus_payments').select('fee_id, amount').eq('status', 'verified').gte('created_at', since),
   ])
-  if (error) { console.error('fetchMonthlyBusFees failed:', error); return months.map(p => ({ period: p, billed: 0, collected: 0, outstanding: 0, bills: 0 })) }
 
+  // Fee-app bills.
+  const monthOf = new Map(((issues ?? []) as { id: string; bill_month: string }[]).map(i => [i.id, i.bill_month.slice(0, 7)]))
+  if (monthOf.size) {
+    const { data: invoices, error } = await supabase
+      .from('fee_invoices')
+      .select('issue_id, net, paid, balance')
+      .in('issue_id', [...monthOf.keys()])
+      .neq('status', 'cancelled')
+    if (error) console.error('fetchMonthlyBusFees(invoices) failed:', error)
+    for (const i of (invoices ?? []) as { issue_id: string; net: unknown; paid: unknown; balance: unknown }[]) {
+      const bucket = out.get(monthOf.get(i.issue_id) ?? '')
+      if (!bucket) continue
+      bucket.billed += Number(i.net) || 0
+      bucket.collected += Number(i.paid) || 0
+      bucket.outstanding += Math.max(0, Number(i.balance) || 0)
+      bucket.bills += 1
+    }
+  }
+
+  // The bus app's older ledger.
   const paid = new Map<string, number>()
   for (const p of (pays ?? []) as { fee_id: string; amount: unknown }[]) {
     paid.set(p.fee_id, (paid.get(p.fee_id) ?? 0) + (Number(p.amount) || 0))
   }
-
-  const out = new Map(months.map(p => [p, { period: p, billed: 0, collected: 0, outstanding: 0, bills: 0 }]))
-  for (const f of (fees ?? []) as { id: string; amount: unknown; status: string; billing_period: string | null; due_date: string | null; created_at: string }[]) {
-    if (f.status === 'cancelled') continue
-    const key = f.billing_period ?? (f.due_date ?? f.created_at).slice(0, 7)
-    const bucket = out.get(key)
+  for (const f of (legacy ?? []) as { id: string; amount: unknown; status: string; billing_period: string | null; due_date: string | null; created_at: string }[]) {
+    const bucket = out.get(f.billing_period ?? (f.due_date ?? f.created_at).slice(0, 7))
     if (!bucket) continue
     const amt = Number(f.amount) || 0
     const got = f.status === 'paid' ? amt : Math.min(amt, paid.get(f.id) ?? 0)

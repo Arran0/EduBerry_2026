@@ -112,10 +112,6 @@ async function syncDirection(
   return { success: true }
 }
 
-export async function setRouteActive(routeId: string, active: boolean) {
-  return updateRoute(routeId, { active })
-}
-
 /**
  * Archive rather than delete.
  *

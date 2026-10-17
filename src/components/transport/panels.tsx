@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react'
 import { ScanLine, ChevronDown, ChevronRight, Globe } from 'lucide-react'
-import { ADMIN } from '@/components/bus/adminUI'
+import { ADMIN } from './glassAdmin'
 import { CardsPanel, GtfsPanel } from './sections/IntegrationsSection'
 import HistorySection from './sections/HistorySection'
 

@@ -24,7 +24,7 @@ import {
   AlertTriangle, BarChart3, Bus, Check, CheckCheck, ChevronLeft, ChevronRight, History,
   Loader2, Phone, Radio, RefreshCw, ShieldAlert, Users, WifiOff, Wallet, X, Clock, Gauge,
 } from 'lucide-react'
-import Modal from '@/components/workspace/Modal'
+import Modal from '../BusModal'
 import { supabase } from '@/lib/supabase'
 import { fmtINR, fmtINRExact } from '@/lib/formatMoney'
 import {
@@ -37,6 +37,7 @@ import { fetchAttendanceMismatch, type MismatchRow } from '@/lib/transport/repor
 import { academicMonths, fetchMonthlyBusFees, type MonthFeePosition } from '@/lib/transport/fees'
 import { currentAcademicYear, listBusAcademicYears } from '@/lib/bus'
 import { vehicleLabel } from '@/lib/transport/vehicles'
+import { fetchSchoolLocation, type SchoolLocation } from '@/lib/transport/settings'
 import type { TransportAlert, TransportRun } from '@/lib/transport/types'
 import { ALERT_TYPE_LABELS, DIRECTION_LABELS, RUN_STATUS_LABELS } from '@/lib/transport/types'
 import {
@@ -69,9 +70,11 @@ function tallyOf(c: RunRiderCounts | undefined): Tally {
 /** Expected riders not yet picked up (approved leave excluded). */
 const neither = (t: Tally) => Math.max(0, t.expected - t.picked - t.excused)
 
-export default function OperationsSection({ onOpenPanel, onOpenLedger }: {
+export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool }: {
   onOpenPanel: (key: 'replay' | 'incidents') => void
-  onOpenLedger: () => void
+  onOpenFees: () => void
+  /** Takes the admin to where the school's location is set (Configuration). */
+  onSetSchool: () => void
 }) {
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [riders, setRiders] = useState<Record<string, RunRiderCounts>>({})
@@ -87,6 +90,10 @@ export default function OperationsSection({ onOpenPanel, onOpenLedger }: {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [hoverRunId, setHoverRunId] = useState<string | null>(null)
   const [reportsOpen, setReportsOpen] = useState(false)
+  // The map opens on the school: the location set in Configuration, else the
+  // attendance geofence. undefined while loading, null when there is none.
+  const [school, setSchool] = useState<SchoolLocation | null | undefined>(undefined)
+  useEffect(() => { fetchSchoolLocation().then(setSchool) }, [])
 
   const runIds = useRef<Set<string>>(new Set())
   useEffect(() => { runIds.current = new Set(runs.map(r => r.id)) }, [runs])
@@ -354,15 +361,24 @@ export default function OperationsSection({ onOpenPanel, onOpenLedger }: {
       </div>
 
       {/* ── The fleet map ─────────────────────────────────────────── */}
-      <GlassPanel ambient={[BUS.gold, '#0ea5e9', BUS.taupe]}>
+      <GlassPanel>
         <div className="relative rounded-[18px] overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.06),0_16px_32px_-22px_rgba(15,23,42,.45)]">
           <TransportMap
+            school={school ?? null}
             buses={mapBuses}
             selectedBusId={selectedRunId}
             onBusClick={id => setSelectedRunId(id === selectedRunId ? null : id)}
             showFences={false}
             heightClass="h-[320px] md:h-[420px] lg:h-[min(54vh,36rem)]"
           />
+          {school === null && (
+            <div className="absolute left-3 right-3 top-3 z-[1000] flex justify-center sm:justify-end pointer-events-none">
+              <div className="lg-tooltip pointer-events-auto flex items-center gap-2.5 !py-2">
+                <span className="text-[12px] font-medium text-slate-700">Set the school’s location so the map opens on it.</span>
+                <button onClick={onSetSchool} className={`${GBTN.primary} !h-8 !px-3`}>Set location</button>
+              </div>
+            </div>
+          )}
           {!loading && mapBuses.length === 0 && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 z-[1000] flex justify-center px-4">
               <span className="lg-tooltip text-[12px] font-medium text-slate-700 text-center">
@@ -497,7 +513,7 @@ export default function OperationsSection({ onOpenPanel, onOpenLedger }: {
       </GlassPanel>
 
       {/* ── Bus fees, month by month ──────────────────────────────── */}
-      <FeeMonths onOpenLedger={onOpenLedger} />
+      <FeeMonths onOpenFees={onOpenFees} />
 
       <Modal
         open={reportsOpen}
@@ -790,7 +806,7 @@ const OUTSTANDING = '#f59e0b'
  * fee position as a shape rather than a total, so a month that never got
  * chased stands out.
  */
-function FeeMonths({ onOpenLedger }: { onOpenLedger: () => void }) {
+function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
   const reduceMotion = useReducedMotion()
   const [year, setYear] = useState(currentAcademicYear())
   const [years, setYears] = useState<string[]>([currentAcademicYear()])
@@ -825,7 +841,6 @@ function FeeMonths({ onOpenLedger }: { onOpenLedger: () => void }) {
       title="Collected vs outstanding"
       icon={Wallet}
       delay={0.1}
-      ambient={[COLLECTED, BUS.gold, OUTSTANDING]}
       actions={
         <>
           <div className="lg-pill flex items-center h-8 px-1" role="group" aria-label="Academic year">
@@ -837,8 +852,8 @@ function FeeMonths({ onOpenLedger }: { onOpenLedger: () => void }) {
               <ChevronRight size={14} />
             </button>
           </div>
-          <button onClick={onOpenLedger} className={GBTN.primary}>
-            <Wallet size={14} /> Fee ledger
+          <button onClick={onOpenFees} className={GBTN.primary}>
+            <Wallet size={14} /> Collect in Fees
           </button>
         </>
       }

@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic'
 import {
   Clock, Loader2, MapPin, Pause, Play, RotateCcw, SkipBack, SkipForward, Users,
 } from 'lucide-react'
-import { ADMIN } from '@/components/bus/adminUI'
+import { ADMIN } from './glassAdmin'
 import { formatDelay } from '@/lib/transport/reports'
 import { positionAt, replayWindow, type RunReplay } from '@/lib/transport/replay'
 

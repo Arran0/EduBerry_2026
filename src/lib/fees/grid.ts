@@ -24,6 +24,12 @@ export interface HeadRow {
   frequency: Frequency; gender_split: boolean; sort: number; active: boolean
   /** Opt-in only: billed to the students on its opt-in list. */
   optional: boolean
+  /**
+   * The Bus fee head. Priced per route in Transport, not per grade here: its
+   * grid column is read-only, and issuing a month bills each rider their
+   * route's amount (see issueTransport).
+   */
+  is_transport: boolean
   description: string | null
 }
 
@@ -159,7 +165,7 @@ export async function fetchGrid(yearId: string): Promise<GridBundle> {
   const [terms, heads, groups, rates, charges, chargeStudents, issues, cells, fines, optins, months] = await Promise.all([
     supabase.from('fee_terms').select('id, academic_year_id, name, seq, due_date')
       .eq('academic_year_id', yearId).order('seq'),
-    supabase.from('fee_heads').select('id, academic_year_id, name, code, frequency, gender_split, optional, sort, active, description')
+    supabase.from('fee_heads').select('id, academic_year_id, name, code, frequency, gender_split, optional, is_transport, sort, active, description')
       .eq('academic_year_id', yearId).order('sort').order('name'),
     supabase.from('fee_grade_groups').select('id, academic_year_id, grade, name, sections, sort')
       .eq('academic_year_id', yearId).order('grade').order('sort'),
@@ -375,6 +381,57 @@ export async function issueGrid(yearId: string, req: IssueRequest, commit: boole
   if (error) fail(error)
   const s = data as IssueSummary
   return { ...s, total: Number(s.total) }
+}
+
+// ── Bus fees ────────────────────────────────────────────────────────────
+/**
+ * One month of bus fees, as fee-app bills under the session's Bus fee head.
+ *
+ * Shared by the fee grid's monthly issue and Transport's billing run, so both
+ * apps bill the same way: a bill per child, a line per route they ride, priced
+ * by the route (by stop or by student). Riders already billed for the month,
+ * riders without a price and routes whose pricing is not chosen are skipped
+ * and counted, never guessed at. See transport_r6_c_bus_fee_in_fee_app.sql.
+ */
+export interface TransportIssueSummary {
+  committed: boolean
+  issue_id: string | null
+  head_id: string
+  title: string
+  month: string
+  due_date: string
+  /** Route lines to bill — one per child per route. */
+  lines: number
+  /** Bills — one per child. */
+  invoices: number
+  total: number
+  already: number
+  unpriced: number
+  /** Riders on routes whose pricing (by stop / by student) is not chosen. */
+  unset: number
+  by_route: { route_id: string; route_name: string; ready: number; total: number; already: number; unpriced: number; unset: boolean }[]
+}
+
+export async function issueTransport(
+  yearId: string,
+  month: string,
+  commit: boolean,
+  opts: { due_date?: string | null; route_ids?: string[] | null } = {},
+): Promise<TransportIssueSummary> {
+  const { data, error } = await supabase.rpc('fee_issue_transport', {
+    p_year: yearId,
+    p_month: month,
+    p_due: opts.due_date || null,
+    p_routes: opts.route_ids && opts.route_ids.length ? opts.route_ids : null,
+    p_commit: commit,
+  })
+  if (error) fail(error)
+  const s = data as TransportIssueSummary
+  return {
+    ...s,
+    total: Number(s.total),
+    by_route: (s.by_route ?? []).map(r => ({ ...r, total: Number(r.total) })),
+  }
 }
 
 export interface Blocker {

@@ -251,9 +251,12 @@ export default function ScheduleEditor({
               <span className="block text-[11px] text-slate-500">Otherwise the driver taps Start.</span>
             </span>
           </label>
-          <label className="flex items-center gap-2 text-[12.5px] text-slate-700">
-            <input type="checkbox" className="accent-[#3D3B40]" checked={form.active} onChange={e => set('active', e.target.checked)} />
-            Schedule is running
+          <label className="flex items-start gap-2 text-[12.5px] text-slate-700">
+            <input type="checkbox" className="mt-0.5 accent-[#3D3B40]" checked={form.active} onChange={e => set('active', e.target.checked)} />
+            <span>
+              Running
+              <span className="block text-[11px] text-slate-500">Untick to stop this route making trips for a while — a bus in for repairs, a holiday week.</span>
+            </span>
           </label>
         </div>
 

@@ -12,8 +12,9 @@ import { ADMIN, INVOICE_CHIP } from '@/components/fees/ui'
 import { CELL, Col, List, ListHead, Row, Segmented, StatStrip } from '@/components/fees/shell'
 import { GRADE_OPTIONS, gradeShortLabel } from '@/lib/grades'
 import {
-  NO_GRADE_LABEL, defaultMonthDue, gridRows, issueBlockers, issueGrid, monthLabel, rowId, rowLabel, undoIssue,
+  NO_GRADE_LABEL, defaultMonthDue, gridRows, issueBlockers, issueGrid, issueTransport, monthLabel, rowId, rowLabel, undoIssue,
   type Blocker, type GridRowKey, type GroupRow, type HeadRow, type IssueRow, type IssueSummary, type TermRow,
+  type TransportIssueSummary,
 } from '@/lib/fees/grid'
 import { Aside, ErrorNote, FeeSheet, Field, Pick, rupees, shortDate } from './kit'
 
@@ -181,24 +182,42 @@ export function IssueSheet({
   groups: GroupRow[]; heads: HeadRow[]; onIssued: () => void
 }) {
   const [preview, setPreview] = useState<IssueSummary | null>(null)
+  const [bus, setBus] = useState<TransportIssueSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // The Bus fee is billed by route, not by grade: it joins a monthly issue
+  // when its head is in the selection and every grade is (a grade filter has
+  // no meaning for a route).
+  const transportHead = heads.find(h => h.active && h.is_transport && h.frequency === 'monthly') ?? null
+  const busInScope = scope.mode === 'month' && !!scope.month && !!transportHead
+    && (scope.headIds.size === 0 || scope.headIds.has(transportHead.id))
+  const withBus = busInScope && scope.rowIds.size === 0
+
   useEffect(() => {
     if (!open) return
-    setPreview(null); setError(null); setLoading(true)
-    issueGrid(yearId, scopeRequest(scope, groups), false)
-      .then(setPreview)
+    setPreview(null); setBus(null); setError(null); setLoading(true)
+    Promise.all([
+      issueGrid(yearId, scopeRequest(scope, groups), false),
+      withBus ? issueTransport(yearId, scope.month as string, false) : Promise.resolve(null),
+    ])
+      .then(([g, b]) => { setPreview(g); setBus(b) })
       .catch(e => setError(e instanceof Error ? e.message : 'Could not preview.'))
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  const gridBills = preview?.invoices ?? 0
+  const busLines = bus?.lines ?? 0
+  const totalBills = gridBills + (bus?.invoices ?? 0)
+  const grandTotal = (preview?.total ?? 0) + (bus?.total ?? 0)
+
   const commit = async () => {
     setBusy(true); setError(null)
     try {
-      await issueGrid(yearId, scopeRequest(scope, groups), true)
+      if (gridBills > 0) await issueGrid(yearId, scopeRequest(scope, groups), true)
+      if (withBus && busLines > 0) await issueTransport(yearId, scope.month as string, true)
       onIssued(); onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not issue.')
@@ -222,10 +241,10 @@ export function IssueSheet({
             Issued cells lock. You can undo while nobody has paid against them.
           </p>
           <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
-          <button onClick={() => void commit()} disabled={busy || loading || !preview || preview.invoices === 0}
+          <button onClick={() => void commit()} disabled={busy || loading || !preview || (gridBills === 0 && busLines === 0)}
                   className={ADMIN.goldBtn}>
             {busy && <Loader2 size={13} className="animate-spin" />}
-            {preview && preview.invoices > 0 ? `Issue ${rupees(preview.total)}` : 'Issue'}
+            {gridBills + busLines > 0 ? `Issue ${rupees(grandTotal)}` : 'Issue'}
           </button>
         </div>
       }
@@ -238,12 +257,19 @@ export function IssueSheet({
           <div className="-mx-4 sm:mx-0 [&>div]:mb-0">
             <StatStrip stats={[
               { label: 'Students', value: String(preview.students) },
-              { label: 'Bills', value: String(preview.invoices) },
-              { label: 'Total', value: rupees(preview.total), strong: true },
+              { label: 'Bills', value: String(totalBills) },
+              { label: 'Total', value: rupees(grandTotal), strong: true },
             ]} />
           </div>
 
-          {preview.invoices === 0 && (
+          {busInScope && !withBus && (
+            <Aside>
+              The Bus fee is billed by route, so it is left out when only some grades are picked. Issue it with every
+              grade selected, or from Transport.
+            </Aside>
+          )}
+
+          {preview.invoices === 0 && busLines === 0 && (
             <Aside tone="warn">
               Nothing to bill in this selection — the cells are empty, already issued, or no students sit in those rows.
             </Aside>
@@ -270,6 +296,35 @@ export function IssueSheet({
             <Aside tone="warn">
               <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
               {preview.no_gender} boys/girls line{preview.no_gender === 1 ? '' : 's'} will be left off because the student has no gender recorded. Add it in their student details, then issue again.
+            </Aside>
+          )}
+
+          {bus && bus.by_route.length > 0 && (
+            <List className="!mx-0 !border">
+              <ListHead cols={BY_ROW_COLS}>
+                <Col>Bus fee · route</Col><Col right>Riders</Col><Col right>Amount</Col>
+              </ListHead>
+              {bus.by_route.map(r => (
+                <Row key={r.route_id} cols={BY_ROW_COLS}>
+                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
+                    {r.route_name}
+                    {r.unset && <span className="ml-1.5 text-[11px] text-[#A93232]">· pricing not chosen</span>}
+                    {r.unpriced > 0 && <span className="ml-1.5 text-[11px] text-[#A93232]">· {r.unpriced} without a price</span>}
+                    {r.already > 0 && <span className="ml-1.5 text-[11px] text-[#8C8878]">· {r.already} already billed</span>}
+                  </span>
+                  <span className={`${CELL.A2} sm:text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
+                    {r.ready}<span className="sm:hidden"> riders</span>
+                  </span>
+                  <span className={`${CELL.B1} text-right text-[11.5px] font-semibold tabular-nums`}>{rupees(r.total)}</span>
+                </Row>
+              ))}
+            </List>
+          )}
+          {bus && (bus.unset > 0 || bus.unpriced > 0) && (
+            <Aside tone="warn">
+              <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
+              {bus.unset + bus.unpriced} rider{bus.unset + bus.unpriced === 1 ? '' : 's'} will not get a Bus fee line — their
+              route has no pricing chosen or no amount for them. Set it on the route’s Fees tab in Transport.
             </Aside>
           )}
 

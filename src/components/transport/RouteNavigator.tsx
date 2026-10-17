@@ -1,20 +1,20 @@
 'use client'
 
 /**
- * Getting to a route: a smart search, a toggler, and "New route".
+ * Getting to a route: a smart search, a route dropdown, and "New route".
  *
  * The search is type-ahead over everything a route is known by — its name and
  * code, its bus and driver, its stops, and the children who ride it — so
  * "Ananya", "Temple Rd" and "KL-07" all land on the right route. Picking a
  * stop opens the route on Stops, picking a child opens it on Students.
  *
- * Under it, every route as a chip, to-school routes first, and a stepper to
- * walk through them in order.
+ * Beside it, a dropdown of every route — to-school routes first — for when
+ * you know the route and just want to pick it.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeftFromLine, ArrowRightToLine, ChevronLeft, ChevronRight, CornerDownLeft, MapPin, Plus,
+  ArrowLeftFromLine, ArrowRightToLine, Check, ChevronDown, CornerDownLeft, MapPin, Plus,
   Route as RouteIcon, Search, User, X,
 } from 'lucide-react'
 import { vehicleLabel } from '@/lib/transport/vehicles'
@@ -166,16 +166,6 @@ export default function RouteNavigator({
     else if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
   }
 
-  const idx = ordered.findIndex(r => r.id === selectedId)
-  const step = (d: -1 | 1) => {
-    if (ordered.length === 0) return
-    const next = ordered[(idx + d + ordered.length) % ordered.length]
-    onSelect(next.id)
-  }
-
-  const inbound = ordered.filter(r => r.direction === 'inbound')
-  const outbound = ordered.filter(r => r.direction === 'outbound')
-
   return (
     <div className="space-y-2.5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -243,51 +233,121 @@ export default function RouteNavigator({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Stepper */}
-          <div className="lg-pill inline-flex items-center h-10 px-1" role="group" aria-label="Step through routes">
-            <button onClick={() => step(-1)} disabled={ordered.length < 2} className={GBTN.icon} aria-label="Previous route"><ChevronLeft size={16} /></button>
-            <span className="px-1.5 text-[12px] font-semibold text-slate-600 tabular-nums whitespace-nowrap">
-              {idx >= 0 ? idx + 1 : '–'} / {ordered.length}
-            </span>
-            <button onClick={() => step(1)} disabled={ordered.length < 2} className={GBTN.icon} aria-label="Next route"><ChevronRight size={16} /></button>
-          </div>
-          <button onClick={onNew} className={`${GBTN.primary} !h-10 flex-1 sm:flex-none`}>
-            <Plus size={15} /> New route
+          <RoutePicker routes={ordered} selectedId={selectedId} riders={riders} onSelect={id => onSelect(id)} />
+          <button onClick={onNew} className={`${GBTN.primary} !h-10 flex-shrink-0`}>
+            <Plus size={15} /> <span className="hidden sm:inline">New route</span><span className="sm:hidden">New</span>
           </button>
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* Toggler — every route, grouped by direction */}
-      {ordered.length > 0 && (
-        <div className="flex items-stretch gap-2 overflow-x-auto scrollbar-none pb-0.5 -mx-0.5 px-0.5">
-          {[{ label: 'To school', icon: ArrowRightToLine, list: inbound }, { label: 'From school', icon: ArrowLeftFromLine, list: outbound }]
-            .filter(g => g.list.length > 0)
-            .map(g => (
-              <div key={g.label} className="lg-pill flex-shrink-0 inline-flex items-center gap-0.5 p-1">
-                <span className="inline-flex items-center gap-1 pl-2 pr-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
-                  <g.icon size={11} /> {g.label}
-                </span>
-                {g.list.map(r => {
-                  const on = r.id === selectedId
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => onSelect(r.id)}
-                      aria-pressed={on}
-                      title={`${r.name} · ${riders[r.id] ?? 0} riders`}
-                      className={`inline-flex flex-shrink-0 items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold whitespace-nowrap transition ${
-                        on ? 'text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_4px_10px_-4px_rgba(15,23,42,.45)]' : 'text-slate-600 hover:bg-white hover:text-slate-900'
-                      } ${r.archived_at || !r.active ? 'opacity-60' : ''}`}
-                      style={on ? { background: 'linear-gradient(150deg, #3D3B40, #27272A)' } : undefined}
-                    >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }} />
-                      {r.code || r.name}
-                      <span className={`tabular-nums text-[10.5px] ${on ? 'text-white/60' : 'text-slate-400'}`}>{riders[r.id] ?? 0}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
+/**
+ * Choose a route from a list — the routes grouped by direction, each with its
+ * bus and how many ride it. Keyboard: arrows move, Enter picks, Esc closes.
+ */
+function RoutePicker({ routes, selectedId, riders, onSelect }: {
+  routes: TransportRoute[]
+  selectedId: string | null
+  riders: Record<string, number>
+  onSelect: (routeId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(0)
+  const ref = useRef<HTMLDivElement>(null)
+  const current = routes.find(r => r.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (!open) return
+    setHi(Math.max(0, routes.findIndex(r => r.id === selectedId)))
+    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, routes, selectedId])
+
+  useEffect(() => {
+    if (!open) return
+    document.getElementById(`rp-${hi}`)?.scrollIntoView({ block: 'nearest' })
+  }, [hi, open])
+
+  const choose = (id: string) => { onSelect(id); setOpen(false) }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(true); return }
+    if (!open) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(routes.length - 1, h + 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(0, h - 1)) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (routes[hi]) choose(routes[hi].id) }
+    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false) }
+  }
+
+  return (
+    <div ref={ref} className="relative flex-1 sm:flex-none min-w-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={onKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="lg-pill w-full sm:w-[19rem] h-10 inline-flex items-center gap-2 pl-3.5 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+      >
+        {current ? (
+          <>
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: current.color }} />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-900">
+              {current.code ? <span className="text-slate-400 mr-1">{current.code}</span> : null}{current.name}
+            </span>
+            <span className="flex-shrink-0 text-[10.5px] font-semibold text-slate-400">
+              {current.direction === 'inbound' ? 'To school' : 'From school'}
+            </span>
+          </>
+        ) : (
+          <span className="flex-1 text-[13px] text-slate-500">{routes.length ? 'Choose a route' : 'No routes yet'}</span>
+        )}
+        <ChevronDown size={15} className={`flex-shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && routes.length > 0 && (
+        <div role="listbox" className="absolute z-40 right-0 mt-2 w-[min(92vw,26rem)] lg-tooltip !bg-white/[.97] !p-1.5 max-h-[26rem] overflow-y-auto">
+          {routes.map((r, i) => {
+            const first = i === 0 || routes[i - 1].direction !== r.direction
+            const on = r.id === selectedId
+            const n = riders[r.id] ?? 0
+            const cap = r.default_vehicle?.capacity ?? 0
+            return (
+              <React.Fragment key={r.id}>
+                {first && (
+                  <p className="flex items-center gap-1 px-2.5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {r.direction === 'inbound' ? <ArrowRightToLine size={11} /> : <ArrowLeftFromLine size={11} />}
+                    {r.direction === 'inbound' ? 'To school' : 'From school'}
+                  </p>
+                )}
+                <button
+                  id={`rp-${i}`}
+                  role="option"
+                  aria-selected={on}
+                  onMouseEnter={() => setHi(i)}
+                  onClick={() => choose(r.id)}
+                  className={`w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${i === hi ? 'bg-slate-100/80' : ''} ${r.archived_at ? 'opacity-55' : ''}`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-slate-900 truncate">
+                      {r.code ? <span className="text-slate-400 mr-1">{r.code}</span> : null}{r.name}
+                      {r.archived_at && <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Archived</span>}
+                    </span>
+                    <span className="block text-[11px] text-slate-500 truncate">
+                      {r.default_vehicle ? vehicleLabel(r.default_vehicle) : 'No bus'} · {r.default_driver?.full_name ?? 'no driver'}
+                    </span>
+                  </span>
+                  <span className={`flex-shrink-0 text-[11px] font-semibold tabular-nums ${cap && n > cap ? 'text-rose-600' : 'text-slate-500'}`}>
+                    {n}{cap ? `/${cap}` : ''}
+                  </span>
+                  {on && <Check size={14} className="flex-shrink-0 text-[#8B6F47]" />}
+                </button>
+              </React.Fragment>
+            )
+          })}
         </div>
       )}
     </div>

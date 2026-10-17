@@ -16,7 +16,7 @@
 
 import React, { useMemo } from 'react'
 import { AlertTriangle, Phone, MessageCircle, CalendarDays } from 'lucide-react'
-import { ADMIN, SHEET } from '@/components/bus/adminUI'
+import { ADMIN, SHEET } from './glassAdmin'
 import type { MismatchRow } from '@/lib/transport/reports'
 
 /** Digits only, with a default country code when the number has none. */

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertOctagon, ShieldCheck, MapPin, Users, Clock, ChevronDown, Loader2,
 } from 'lucide-react'
-import { ADMIN, EmptyRow } from '@/components/bus/adminUI'
+import { ADMIN, EmptyRow } from '../glassAdmin'
 import {
   fetchIncidents, formatClock, resolveIncident,
   INCIDENT_LABELS, type TransportIncident,

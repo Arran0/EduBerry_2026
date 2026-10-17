@@ -146,18 +146,31 @@ export function HeadSheet({
     onSaved(); onClose()
   })
 
+  // The Bus fee head belongs to Transport: it is monthly, everyone on a route
+  // pays, and the amounts live on the routes. Only its name is editable here.
+  const transport = !!head?.is_transport
+
   return (
     <FeeSheet
       open={open} onClose={onClose} icon={<Tag size={15} />}
       title={head ? head.name : 'New fee head'}
       subtitle="A line on the bill — tuition, bus, uniform, ID card, anything the school charges"
-      footer={<Footer onDelete={head && !locked ? remove : undefined} onCancel={onClose}
+      footer={<Footer onDelete={head && !locked && !transport ? remove : undefined} onCancel={onClose}
                       onSave={save} busy={busy} saveLabel={head ? 'Save head' : 'Add head'} />}
     >
       <Field label="Name">
         <input value={name} autoFocus onChange={e => setName(e.target.value)} className={ADMIN.inputPlain} placeholder="Tuition" />
       </Field>
 
+      {transport && (
+        <Aside tone="good">
+          This is the session’s <span className="font-semibold">Bus fee</span>. It is billed monthly to every rider, at the
+          amount their route sets — by stop or by student — in Transport → Configuration. Issue a month here or there;
+          each child gets one bill with a line per route they ride.
+        </Aside>
+      )}
+
+      {!transport && (<>
       <Field
         label="Collected"
         hint={frequency === 'term'
@@ -189,8 +202,9 @@ export function HeadSheet({
         <Segmented<Payers> fill value={payers} onChange={setPayers}
           options={[{ key: 'all', label: 'Everyone' }, { key: 'optin', label: 'Only those who opt in' }]} />
       </Field>
+      </>)}
 
-      {locked && (
+      {locked && !transport && (
         <Aside tone="good">
           <Lock size={11} className="inline mr-1 -mt-0.5" />
           Some fees under this head have already been issued. You can rename it and change who pays,

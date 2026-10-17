@@ -200,6 +200,12 @@ export default function FeeGrid({
                       </span>
                     )}
                   </button>
+                  {col.head.is_transport && (
+                    <span title="Priced per route in Transport → Configuration"
+                          className="ml-1.5 align-middle inline-flex items-center border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#B8983C]">
+                      Per route
+                    </span>
+                  )}
                   {col.head.optional && (
                     <button onClick={() => onOptIns(col.head)}
                             title="Optional — billed only to students on its opt-in list. Open the list."
@@ -305,6 +311,15 @@ export default function FeeGrid({
                   ))}
 
                   {columns.map((col, c) => {
+                    // The Bus fee is priced on the routes, not per grade.
+                    if (col.head.is_transport) {
+                      return (
+                        <td key={col.key} className={`border-r border-b ${HAIR} ${top} ${band(col.band)} px-2 text-right`}
+                            title="Each rider pays their route’s amount — set in Transport → Configuration">
+                          <span className="text-[10.5px] text-[#A8A395] italic">by route</span>
+                        </td>
+                      )
+                    }
                     const locked = lockIx.has(lockKey(row, col.head.id, col.termId))
                     const scoped = inScope(row, col)
                     const valueOf = (g: Gender) => rateIx.get(rateKey(row, col.head.id, col.termId, g)) ?? null

@@ -18,7 +18,8 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Polygon, useM
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '@/lib/transport/types'
-import { OSM_TILES, defaultTiles } from '@/lib/transport/mapTiles'
+import { MAPBOX_TOKEN, OSM_TILES, defaultTiles, mapboxTiles, type TileSource } from '@/lib/transport/mapTiles'
+import { fetchMapSettings } from '@/lib/transport/settings'
 
 function makeIcon(html: string, size: number) {
   return L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
@@ -118,6 +119,13 @@ export interface TransportMapProps {
   buses?: MapBus[]
   selectedBusId?: string | null
   onBusClick?: (busId: string) => void
+  /**
+   * The school. Drawn as a marker, and when given the map opens centred on
+   * it rather than fitting itself around the buses.
+   */
+  school?: { lat: number; lng: number; label?: string } | null
+  /** Starting zoom when centred on the school. */
+  schoolZoom?: number
   me?: { lat: number; lng: number; accuracy?: number } | null
   /** Draw each stop's geofence. Off in read-only contexts where it is clutter. */
   showFences?: boolean
@@ -142,6 +150,19 @@ function PanTo({ point }: { point: LatLng | null }) {
     if (key === last.current) return
     last.current = key
     map.setView([point.lat, point.lng], Math.max(map.getZoom(), 15), { animate: true })
+  }, [point, map])
+  return null
+}
+
+/** Moves to the school once it is known (it usually arrives after the map mounts). */
+function RecentreOn({ point }: { point: LatLng }) {
+  const map = useMap()
+  const done = useRef<string>('')
+  useEffect(() => {
+    const key = `${point.lat},${point.lng}`
+    if (done.current === key) return
+    done.current = key
+    map.setView([point.lat, point.lng], Math.max(map.getZoom(), 13), { animate: false })
   }, [point, map])
   return null
 }
@@ -202,18 +223,36 @@ function FitStops({ stops }: { stops: { lat: number; lng: number }[] }) {
 }
 
 /**
- * The base map, with a fallback.
+ * The base map, with fallbacks.
  *
- * Mapbox when a token is configured. If Mapbox refuses tiles — a revoked
- * token, a URL restriction that does not list this domain — a handful of
- * errors in a row swaps the layer to OpenStreetMap so the admin still has a map.
+ * The school's own Mapbox key first (set in Configuration), then the key this
+ * deployment provides, then OpenStreetMap. A provider that starts refusing
+ * tiles — a revoked key, a URL restriction that leaves this site out — is
+ * dropped after a handful of errors in a row, so a bad key degrades to the
+ * next map rather than a grey box.
  */
 function BaseTiles() {
-  const [tiles, setTiles] = useState(defaultTiles)
+  const [chain, setChain] = useState<TileSource[]>(() => [defaultTiles(), OSM_TILES])
+  const [at, setAt] = useState(0)
   const errors = useRef(0)
+
+  useEffect(() => {
+    let alive = true
+    fetchMapSettings().then(s => {
+      if (!alive) return
+      const list: TileSource[] = []
+      if (s.mapbox_token) list.push(mapboxTiles(s.mapbox_token, s.style))
+      if (MAPBOX_TOKEN) list.push(mapboxTiles(MAPBOX_TOKEN, s.style))
+      list.push(OSM_TILES)
+      setChain(list); setAt(0); errors.current = 0
+    })
+    return () => { alive = false }
+  }, [])
+
+  const tiles = chain[Math.min(at, chain.length - 1)]
   return (
     <TileLayer
-      key={tiles.provider}
+      key={tiles.url}
       attribution={tiles.attribution}
       url={tiles.url}
       tileSize={tiles.tileSize}
@@ -222,11 +261,12 @@ function BaseTiles() {
       {...(tiles.subdomains ? { subdomains: tiles.subdomains } : {})}
       eventHandlers={{
         tileerror: () => {
-          if (tiles.provider !== 'mapbox') return
+          if (at >= chain.length - 1) return
           errors.current += 1
           if (errors.current >= 4) {
-            console.warn('Mapbox tiles are being refused — falling back to OpenStreetMap tiles. Check NEXT_PUBLIC_MAPBOX_TOKEN.')
-            setTiles(OSM_TILES)
+            console.warn(`Map tiles from ${tiles.provider} are being refused — falling back to the next provider.`)
+            errors.current = 0
+            setAt(a => a + 1)
           }
         },
         tileload: () => { errors.current = 0 },
@@ -247,6 +287,8 @@ export default function TransportMap({
   buses,
   selectedBusId = null,
   onBusClick,
+  school = null,
+  schoolZoom = 13,
   me = null,
   showFences = true,
   height = 380,
@@ -269,7 +311,9 @@ export default function TransportMap({
 
   const center: [number, number] = bus
     ? [bus.lat, bus.lng]
-    : firstBus
+    : school
+      ? [school.lat, school.lng]
+      : firstBus
       ? [firstBus.lat, firstBus.lng]
       : selected
       ? [selected.lat, selected.lng]
@@ -286,7 +330,7 @@ export default function TransportMap({
     >
       <MapContainer
         center={center}
-        zoom={14}
+        zoom={school && !bus && stops.length === 0 ? schoolZoom : 14}
         scrollWheelZoom
         zoomControl
         style={{ height: '100%', width: '100%', cursor: onMapClick ? 'crosshair' : undefined }}
@@ -294,7 +338,8 @@ export default function TransportMap({
         <KeepSized />
         <BaseTiles />
 
-        <FitStops stops={stops.length > 0 ? stops : (buses ?? [])} />
+        <FitStops stops={stops.length > 0 ? stops : school ? [] : (buses ?? [])} />
+        {school && <RecentreOn point={school} />}
         {selected && <PanTo point={{ lat: selected.lat, lng: selected.lng }} />}
         {selectedBus && <PanTo point={{ lat: selectedBus.lat, lng: selectedBus.lng }} />}
         {onMapClick && <ClickCatcher onMapClick={onMapClick} />}
@@ -344,6 +389,12 @@ export default function TransportMap({
         {bus && (
           <Marker position={[bus.lat, bus.lng]} icon={BUS_ICON}>
             <Popup>{bus.label ?? 'Bus'}</Popup>
+          </Marker>
+        )}
+
+        {school && (
+          <Marker position={[school.lat, school.lng]} icon={stopIcon(0, { school: true })} zIndexOffset={500}>
+            <Popup><span className="font-semibold">{school.label ?? 'School'}</span></Popup>
           </Marker>
         )}
 

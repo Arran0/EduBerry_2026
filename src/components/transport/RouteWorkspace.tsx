@@ -10,9 +10,9 @@
 
 import React, { useState } from 'react'
 import {
-  Archive, ArrowLeftFromLine, ArrowRightToLine, Bus, Clock, IndianRupee, MapPin, Pencil, Power, RotateCcw, Users, UserRound,
+  Archive, ArrowLeftFromLine, ArrowRightToLine, Bus, Clock, IndianRupee, MapPin, Pencil, RotateCcw, Users, UserRound,
 } from 'lucide-react'
-import { archiveRoute, restoreRoute, setRouteActive } from '@/lib/transport/routes'
+import { archiveRoute, restoreRoute } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import type { TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
 import StopEditor from './StopEditor'
@@ -47,18 +47,16 @@ export default function RouteWorkspace({
   const fill = capacity > 0 && riders != null ? Math.min(1, riders / capacity) : null
   const over = capacity > 0 && riders != null && riders > capacity
 
-  const status = route.archived_at
-    ? { text: 'Archived', cls: 'bg-slate-100 text-slate-500' }
-    : route.active
-      ? { text: 'Running', cls: 'bg-emerald-50 text-emerald-700' }
-      : { text: 'Paused', cls: 'bg-amber-50 text-amber-700' }
+  // No pause here: a route stops making trips by pausing its schedule, and
+  // leaves for good by being archived.
+  const status = route.archived_at ? { text: 'Archived', cls: 'bg-slate-100 text-slate-500' } : null
 
   return (
     <div className="min-w-0">
       {/* Header — the route's identity on a tinted strip of its own colour. */}
       <div className="relative overflow-hidden rounded-[18px] p-4 sm:p-5 text-white"
-        style={{ background: `linear-gradient(135deg, ${BUS.ink} 0%, ${BUS.charcoal} 55%, color-mix(in srgb, ${route.color} 55%, ${BUS.charcoal}) 100%)` }}>
-        <div aria-hidden className="absolute -right-10 -top-12 w-48 h-48 rounded-full opacity-40 blur-2xl" style={{ background: route.color }} />
+        style={{ background: `linear-gradient(135deg, ${BUS.ink} 0%, ${BUS.charcoal} 60%, ${BUS.bronze} 140%)` }}>
+        <div aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: route.color }} />
         <div aria-hidden className="absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,.12),transparent_45%)]" />
 
         <div className="relative flex flex-wrap items-start justify-between gap-3">
@@ -67,7 +65,7 @@ export default function RouteWorkspace({
               {route.code && (
                 <span className="px-2 py-0.5 rounded-md bg-white/15 text-[11px] font-bold tracking-wide">{route.code}</span>
               )}
-              <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${status.cls}`}>{status.text}</span>
+              {status && <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${status.cls}`}>{status.text}</span>}
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-[10.5px] font-bold">
                 {route.direction === 'inbound' ? <ArrowRightToLine size={11} /> : <ArrowLeftFromLine size={11} />}
                 {route.direction === 'inbound' ? 'To school' : 'From school'}
@@ -79,14 +77,6 @@ export default function RouteWorkspace({
 
           <div className="flex items-center gap-1">
             <HeaderBtn label="Edit route" onClick={() => setEditing(true)}><Pencil size={15} /></HeaderBtn>
-            {!route.archived_at && (
-              <HeaderBtn
-                label={route.active ? 'Pause route' : 'Resume route'}
-                onClick={async () => { await setRouteActive(route.id, !route.active); onChanged() }}
-              >
-                <Power size={15} className={route.active ? 'text-emerald-300' : ''} />
-              </HeaderBtn>
-            )}
             <HeaderBtn
               label={route.archived_at ? 'Restore route' : 'Archive route'}
               onClick={async () => {

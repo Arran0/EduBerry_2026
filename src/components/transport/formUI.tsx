@@ -3,9 +3,8 @@
 /**
  * Form atoms shared by the transport modals.
  *
- * Thin wrappers over the existing ADMIN tokens in components/bus/adminUI so the
- * new screens sit in the same design language as the fee and payroll surfaces
- * rather than introducing a third one.
+ * Thin wrappers over the bus app's glass tokens (./glassAdmin), so a form in a
+ * popup reads as the same material as the panels it opened from.
  *
  * These are deliberately dense. An admin form here is not a sign-up page with
  * six fields and room to breathe — it is a vehicle with ten, a route with
@@ -21,15 +20,16 @@
  */
 
 import React from 'react'
-import { ADMIN } from '@/components/bus/adminUI'
+import { ADMIN } from './glassAdmin'
 
 /**
  * One step tighter than ADMIN.inputPlain, which is sized for a page rather
  * than for twelve of itself inside a modal.
  */
 const DENSE_INPUT =
-  'w-full bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 text-sm text-[#27272A] ' +
-  'placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+  'w-full bg-white/90 border border-slate-200/80 rounded-xl px-2.5 py-1.5 text-sm text-slate-900 ' +
+  'shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] placeholder:text-slate-400 focus:outline-none ' +
+  'focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
 
 export function Field({
   label, hint, children, className = '', span,
@@ -50,7 +50,7 @@ export function Field({
     <label className={`block ${spanClass} ${className}`}>
       <span className={ADMIN.label}>{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-0.5 text-[10px] leading-snug text-[#A1A1AA]">{hint}</p>}
+      {hint && <p className="mt-0.5 text-[10.5px] leading-snug text-slate-500">{hint}</p>}
     </label>
   )
 }
@@ -84,12 +84,12 @@ export function FormSection({ title, hint, children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-[#E4E4E7] overflow-hidden">
-      <div className="bg-[#27272A] px-3.5 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{title}</p>
+    <section className="rounded-2xl border border-slate-200/70 bg-slate-50/60 overflow-hidden">
+      <div className="px-3.5 pt-3">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
       </div>
-      <div className="p-3.5">
-        {hint && <p className="mb-2.5 text-[11px] leading-snug text-[#71717A]">{hint}</p>}
+      <div className="p-3.5 pt-2">
+        {hint && <p className="mb-2.5 text-[11.5px] leading-snug text-slate-500">{hint}</p>}
         {children}
       </div>
     </section>
@@ -111,7 +111,7 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 export function FormError({ message }: { message: string | null }) {
   if (!message) return null
   return (
-    <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+    <p className="text-xs text-rose-700 bg-rose-50/90 border border-rose-100 rounded-xl px-3 py-2">
       {message}
     </p>
   )

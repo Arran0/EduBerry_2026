@@ -31,9 +31,6 @@ export const BUS = {
   pending: '#D4D4D8',
 }
 
-/** Ambient light for a panel, in the bus palette unless told otherwise. */
-const DEFAULT_AMBIENT = [BUS.gold, BUS.taupe, '#0ea5e9']
-
 /**
  * A glass sheet with a header straight on the glass and content below.
  *
@@ -41,13 +38,12 @@ const DEFAULT_AMBIENT = [BUS.gold, BUS.taupe, '#0ea5e9']
  * the two pages feel like one material.
  */
 export function GlassPanel({
-  eyebrow, title, icon: Icon, actions, ambient = DEFAULT_AMBIENT, children, className = '', bodyClassName = '', delay = 0,
+  eyebrow, title, icon: Icon, actions, children, className = '', bodyClassName = '', delay = 0,
 }: {
   eyebrow?: string
   title?: React.ReactNode
   icon?: LucideIcon
   actions?: React.ReactNode
-  ambient?: string[]
   children: React.ReactNode
   className?: string
   bodyClassName?: string
@@ -64,9 +60,6 @@ export function GlassPanel({
 
   return (
     <div className={`relative ${className}`}>
-      <div aria-hidden className="lg-ambient lg-ambient-overview">
-        {ambient.slice(0, 3).map((c, i) => <span key={i} style={{ background: c }} />)}
-      </div>
       <motion.div
         className="lg-deck lg-panel"
         onPointerMove={onPointerMove}
