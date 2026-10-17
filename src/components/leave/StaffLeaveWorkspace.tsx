@@ -53,8 +53,10 @@ function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="bg-white border-y sm:border sm:rounded-2xl border-slate-200 p-10 text-center">
-      <Icon size={36} className="text-slate-200 mx-auto mb-3" />
+    <div className="bg-[#FAF9F6] border border-[#27272A]/[0.06] rounded-[22px] px-6 py-10 text-center">
+      <div className="mx-auto mb-3 w-12 h-12 rounded-2xl bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)] flex items-center justify-center">
+        <Icon size={22} className="text-slate-300" />
+      </div>
       <p className="text-slate-500 text-sm">{text}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -341,8 +343,8 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
   // The mail list runs to the surface's edge at every width — inside the popup
   // it is already sitting on a card, and boxing it in a second one would spend
   // width on nested borders. How far it has to pull back depends on the host:
-  // the popup body is px-5, the standalone page px-4.
-  const listBleed = embedded ? '-mx-5' : '-mx-4 sm:mx-0'
+  // the popup's glass body card is px-4 (px-5 from sm), the standalone page px-4.
+  const listBleed = embedded ? '-mx-4 sm:-mx-5' : '-mx-4 sm:mx-0'
 
   // The number beside a folder is its unread count — what is waiting on
   // someone — not how many applications it holds. A total tells the user
@@ -374,15 +376,16 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
             exit={{ opacity: 0, height: 0 }}
             className="mb-5 overflow-hidden"
           >
-            <form onSubmit={handleSubmit} className="rounded-2xl bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)] p-4 sm:p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="rounded-[22px] bg-[#FAF9F6] border border-[#27272A]/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
+                <h2 className="font-display text-[1.05rem] font-bold text-slate-900 headline">New OD / leave application</h2>
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); resetForm() }}
-                  className="p-1 text-slate-400 hover:text-slate-600"
+                  aria-label="Close form"
+                  className="lg-control w-8 h-8"
                 >
-                  <X size={18} />
+                  <X size={15} />
                 </button>
               </div>
 
@@ -485,10 +488,10 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
                         setLeaveType(t)
                         if ((t === 'half_day' || t === 'late') && startDate) setEndDate(startDate)
                       }}
-                      className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-medium border transition-colors ${
+                      className={`h-9 px-2 rounded-full text-xs sm:text-[13px] font-semibold border transition-all active:scale-[0.97] ${
                         leaveType === t
-                          ? 'page-type-btn-active'
-                          : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                          ? 'page-type-btn-active shadow-[0_4px_12px_-6px_rgba(124,58,237,0.6)]'
+                          : 'text-slate-600 bg-white border-slate-200/80 hover:border-slate-300'
                       }`}
                     >
                       {LEAVE_TYPE_LABELS[t]}
@@ -613,14 +616,14 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); resetForm() }}
-                  className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
+                  className="h-10 px-4 rounded-full text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-white transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting || !selectedRecipient || !startDate || !endDate || !reason.trim()}
-                  className="btn-primary text-sm px-5 py-2 disabled:opacity-50 flex items-center gap-2"
+                  className="h-10 px-5 rounded-full text-sm font-semibold text-white bg-gradient-to-b from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 shadow-[inset_0_1px_0_rgba(255,255,255,.2),0_8px_18px_-8px_rgba(124,58,237,0.7)] active:scale-[0.97] transition disabled:opacity-50 flex items-center gap-2"
                 >
                   {submitting && (
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -642,7 +645,7 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
           onChange={e => setSearchInput(e.target.value)}
           placeholder="Search by sender or receiver name…"
           autoComplete="off"
-          className="w-full pl-9 pr-9 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none page-input-focus text-slate-700 placeholder:text-slate-400"
+          className="w-full h-10 pl-9 pr-9 text-sm bg-[#F4F2EE] border border-transparent rounded-full focus:outline-none focus:bg-white page-input-focus text-slate-700 placeholder:text-slate-400 transition"
         />
         {searching ? (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
@@ -659,29 +662,41 @@ const StaffLeaveWorkspace = forwardRef<StaffLeaveWorkspaceHandle, StaffLeaveWork
       </div>
 
       {/* ── Folder tabs ── */}
-      <div className="flex items-stretch gap-0.5 border-b border-slate-200 mb-3 overflow-x-auto scrollbar-hide">
-        {tabs.map(({ id, label, Icon, unread }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`relative flex items-center gap-1.5 px-3 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors ${
-              activeTab === id ? 'page-tab-line-active' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <Icon size={13} />
-            <span>{label}</span>
-            {unread > 0 && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === id ? 'page-tab-line-badge' : 'bg-amber-100 text-amber-600'
-              }`}>
-                {unread}
+      {/* An iOS segmented control: a white thumb slides under the open folder. */}
+      <div className="flex items-stretch gap-0.5 p-1 rounded-full bg-[#F1EEE8] mb-3 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Folders">
+        {tabs.map(({ id, label, Icon, unread }) => {
+          const active = activeTab === id
+          return (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(id)}
+              className={`relative flex-1 flex items-center justify-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors ${
+                active ? 'page-accent-text' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {active && (
+                <motion.span
+                  layoutId={embedded ? 'staff-leave-folder-embedded' : 'staff-leave-folder'}
+                  className="absolute inset-0 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_4px_12px_-4px_rgba(15,23,42,0.25)]"
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                />
+              )}
+              <span className="relative z-10 inline-flex items-center gap-1.5">
+                <Icon size={13} />
+                <span>{label}</span>
+                {unread > 0 && (
+                  <span className={`min-w-[1.15rem] h-[1.15rem] px-1 rounded-full text-[10px] font-bold leading-[1.15rem] text-center tabular-nums ${
+                    active ? 'bg-violet-600 text-white' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {unread}
+                  </span>
+                )}
               </span>
-            )}
-            <span className={`absolute left-2 right-2 -bottom-px h-[2.5px] rounded-t-full transition-colors ${
-              activeTab === id ? 'page-tab-line-indicator' : 'bg-transparent'
-            }`} />
-          </button>
-        ))}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Tab Content ── */}

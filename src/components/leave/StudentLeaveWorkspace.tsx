@@ -342,7 +342,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   // it is already sitting on a card, and boxing it in a second one would spend
   // width on nested borders. How far it has to pull back depends on the host:
   // the popup body is px-5, the standalone page px-4.
-  const listBleed = embedded ? '-mx-5' : '-mx-4 sm:mx-0'
+  const listBleed = embedded ? '-mx-4 sm:-mx-5' : '-mx-4 sm:mx-0'
 
   // The number beside a folder is its unread count — what is waiting on
   // someone — not how many applications it holds.
@@ -384,7 +384,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
             exit={{ opacity: 0, height: 0 }}
             className="mb-5 overflow-hidden"
           >
-            <form onSubmit={handleSubmit} className="rounded-2xl bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)] p-4 sm:p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="rounded-[22px] bg-[#FAF9F6] border border-[#27272A]/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                 <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">

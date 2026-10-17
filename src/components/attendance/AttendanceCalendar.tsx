@@ -290,8 +290,8 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
       {/* ── Leave application popup ── */}
       {selectedApps && typeof document !== 'undefined' && createPortal(
-        // Plain dim, solid sheet: no backdrop-filter anywhere in a popup (see
-        // .lg-popup in globals.css for why).
+        // Plain dim and the glass sheet ModalShell uses: no backdrop-filter
+        // anywhere in a popup (a blurred layer fading in flashed black).
         <div
           className="lg-scrim fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-3 sm:p-4"
           onClick={() => setSelectedApps(null)}
@@ -300,22 +300,22 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
             role="dialog"
             aria-modal="true"
             aria-label="Leave applications on this day"
-            className="lg-popup rounded-[22px] w-full max-w-sm overflow-hidden"
+            className="lg-sheet relative rounded-[26px] w-full max-w-sm overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2.5 border-b border-slate-100">
+            <div className="relative z-[3] flex items-center justify-between gap-3 px-4 pt-3.5 pb-2.5">
               <p className="text-[15px] font-bold text-slate-900">
                 {selectedApps.length === 1 ? 'Leave application' : `${selectedApps.length} leave applications`}
               </p>
               <button
                 onClick={() => setSelectedApps(null)}
                 aria-label="Close"
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                className="lg-control w-8 h-8 flex-shrink-0"
               >
-                <X size={14} strokeWidth={2.5} />
+                <X size={15} strokeWidth={2.4} />
               </button>
             </div>
-            <div className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
+            <div className="lg-sheet-card relative z-[3] mx-2 mb-2 divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
               {selectedApps.map(app => (
                 <div key={app.id} className="px-4 py-3 space-y-2">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">

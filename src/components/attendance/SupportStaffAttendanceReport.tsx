@@ -240,17 +240,17 @@ function SupportRow({
           {showCalendar && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-[#1c1a1e]/45"
               onClick={() => setShowCalendar(false)}
             >
               <motion.div
                 initial={{ scale: 0.96, opacity: 0, y: 16 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.96, opacity: 0, y: 16 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                className="lg-sheet relative rounded-[28px] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+                <div className="relative z-[3] flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3 flex-shrink-0">
                   <Avatar
                     avatarUrl={person.avatar_url ?? null}
                     name={person.full_name}
@@ -263,12 +263,12 @@ function SupportRow({
                   </div>
                   <button
                     onClick={() => setShowCalendar(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="lg-control w-9 h-9 flex-shrink-0"
                   >
                     <X size={16} />
                   </button>
                 </div>
-                <div className="overflow-y-auto flex-1 px-4 py-4">
+                <div className="lg-sheet-card relative z-[3] mx-2 mb-2 overflow-y-auto overscroll-contain flex-1 px-4 py-4">
                   <StaffAttendanceCalendarDynamic
                     staffId={person.id}
                     staffName={person.full_name}

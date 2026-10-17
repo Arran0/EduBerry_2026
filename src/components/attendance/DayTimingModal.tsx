@@ -279,7 +279,7 @@ export default function DayTimingModal({
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-[#1c1a1e]/45"
         onClick={onClose}
       >
         <motion.div
@@ -287,17 +287,17 @@ export default function DayTimingModal({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: '100%', opacity: 0 }}
           transition={{ type: 'spring', damping: 40, stiffness: 320 }}
-          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-xl flex flex-col overflow-hidden"
+          className="lg-sheet relative rounded-t-[28px] sm:rounded-[28px] w-full sm:max-w-xl flex flex-col overflow-hidden"
           style={{ maxHeight: '92dvh' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Drag handle — mobile only */}
           <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
-            <div className="w-10 h-1 rounded-full bg-slate-300" />
+            <div className="w-10 h-1.5 rounded-full bg-slate-500/30" />
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2 relative z-[3] px-4 sm:px-5 py-3 sm:py-4 flex-shrink-0">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <div
                 className="icon-chip w-9 h-9 sm:w-11 sm:h-11 flex-shrink-0"
@@ -306,20 +306,20 @@ export default function DayTimingModal({
                 <Clock size={18} className="relative z-10 text-white drop-shadow-sm" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-sm sm:text-lg font-bold text-slate-800 leading-tight truncate">Attendance Cutoffs</h2>
+                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-slate-900 leading-tight headline truncate">Attendance Cutoffs</h2>
                 <p className="text-[11px] sm:text-xs text-slate-400 truncate">Late &amp; checkout overrides</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
+              className="lg-control w-9 h-9 flex-shrink-0"
             >
               <X size={18} />
             </button>
           </div>
 
           {/* Scrollable body */}
-          <div className="overflow-y-auto flex-1 px-4 sm:px-5 py-3 sm:py-4 space-y-5">
+          <div className="lg-sheet-card relative z-[3] mx-2 sm:mx-2.5 overflow-y-auto overscroll-contain flex-1 px-4 sm:px-5 py-3 sm:py-4 space-y-5">
             {/* When */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
@@ -589,7 +589,7 @@ export default function DayTimingModal({
 
           {/* Sticky footer */}
           <div
-            className="flex items-center gap-2 px-4 sm:px-5 py-3 border-t border-slate-100 flex-shrink-0"
+            className="relative z-[3] flex items-center gap-2 px-4 sm:px-5 py-3 flex-shrink-0"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
           >
             {hasExistingRule && (

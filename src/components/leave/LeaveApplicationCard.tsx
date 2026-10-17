@@ -615,16 +615,14 @@ export default function LeaveApplicationCard({
           {showDeleteConfirm && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="lg-scrim fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1c1a1e]/45"
               onClick={() => setShowDeleteConfirm(false)}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                role="alertdialog"
-                aria-modal="true"
-                className="lg-popup rounded-[24px] w-full max-w-sm p-5"
+                className="lg-sheet relative rounded-[28px] w-full max-w-sm p-6"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3 mb-3">

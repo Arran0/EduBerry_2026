@@ -54,7 +54,7 @@ const HALF_C = '#f97316'
 
 // ─── Liquid Glass pieces ──────────────────────────────────────────────────────
 // The home page's material: a glass sheet with colour under it, and solid
-// content cards riding on top (.lg-sheet / .lg-content in globals.css). The
+// content cards riding on top (.lg-pane / .lg-content in globals.css). The
 // sheet here carries no backdrop-filter — popups open over this page, and a
 // blurred layer under a fading popup is what made Chrome flash black.
 
@@ -186,7 +186,7 @@ function CalendarSkeleton() {
 /** Full first-paint placeholder mirroring the student attendance layout. */
 function StudentAttendanceSkeleton() {
   return (
-    <div className="lg-sheet p-2 sm:p-2.5">
+    <div className="lg-pane p-2 sm:p-2.5">
       <div className="relative grid gap-2 sm:gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
         <div className="space-y-2 sm:space-y-2.5 lg:order-2">
           <div className="lg-content flex items-center gap-2.5 px-3 py-2.5">
@@ -321,7 +321,7 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
 
   if (homerooms.length === 0) {
     return (
-      <div className="lg-sheet py-14 text-center px-6">
+      <div className="lg-pane py-14 text-center px-6">
         <Ambient />
         <div className="relative">
           <div className="w-14 h-14 rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/[0.06] flex items-center justify-center mx-auto mb-3">
@@ -340,7 +340,7 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
     // One glass sheet: the calendar is the reading surface, so on a desktop it
     // takes the wide column and the homeroom and the year's tally stack in a
     // narrow one beside it; on a phone they stack above it.
-    <div className="lg-sheet p-2 sm:p-2.5 animate-fade-in">
+    <div className="lg-pane p-2 sm:p-2.5 animate-fade-in">
       <Ambient />
       <div className="relative grid gap-2 sm:gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
         <div className="space-y-2 sm:space-y-2.5 lg:order-2">
@@ -436,9 +436,10 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
             role="dialog"
             aria-modal="true"
             aria-label="Apply for OD or leave"
-            className="lg-popup w-full max-w-xs rounded-[22px] p-4 space-y-3.5"
+            className="lg-sheet relative w-full max-w-xs rounded-[26px] p-4"
             onClick={e => e.stopPropagation()}
           >
+            <div className="relative z-[3] space-y-3.5">
             <div className="flex items-start gap-3">
               <span className="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0">
                 <CalendarDays size={16} />
@@ -455,7 +456,7 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
             <div className="flex gap-2">
               <button
                 onClick={() => setApplyLeaveDate(null)}
-                className="flex-1 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                className="flex-1 py-2 text-sm font-semibold text-slate-700 bg-white/80 ring-1 ring-slate-900/[0.06] rounded-xl hover:bg-white transition-colors"
               >
                 Cancel
               </button>
@@ -469,6 +470,7 @@ function StudentAttendanceView({ studentId, readOnly, refreshKey = 0 }: { studen
               >
                 Apply
               </button>
+            </div>
             </div>
           </div>
         </div>,
@@ -670,7 +672,7 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              // Plain dim, no backdrop-filter — see .lg-popup in globals.css.
+              // Plain dim, no backdrop-filter — a blurred layer fading in flashed black.
               className="lg-scrim fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4"
               onClick={() => setShowModal(false)}
             >
@@ -682,10 +684,10 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
                 role="dialog"
                 aria-modal="true"
                 aria-label={`${student.full_name}'s attendance`}
-                className="lg-popup rounded-[26px] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                className="lg-sheet relative rounded-[28px] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
+                <div className="relative z-[3] flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
                   <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-slate-900 text-[15px] truncate leading-tight">{student.full_name}</p>
@@ -697,13 +699,13 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
                   <button
                     onClick={() => setShowModal(false)}
                     aria-label="Close"
-                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all"
+                    className="lg-control w-9 h-9 flex-shrink-0"
                   >
-                    <X size={15} strokeWidth={2.5} />
+                    <X size={16} strokeWidth={2.4} />
                   </button>
                 </div>
                 {homerooms.length > 1 && homeroomId && (
-                  <div className="px-4 pt-3 flex-shrink-0 overflow-x-auto scrollbar-hide">
+                  <div className="relative z-[3] px-4 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
                     <Segmented
                       ariaLabel="Homeroom"
                       value={homeroomId}
@@ -712,7 +714,7 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
                     />
                   </div>
                 )}
-                <div className="overflow-y-auto overscroll-contain flex-1 p-3 sm:p-4">
+                <div className="relative z-[3] overflow-y-auto overscroll-contain flex-1 px-2 pb-2 sm:px-2.5 sm:pb-2.5">
                   {loadingHomerooms ? (
                     <CalendarSkeleton />
                   ) : homeroomId ? (
@@ -1207,7 +1209,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     // student view above it.
     <section
       id={REPORT_ANCHOR}
-      className="lg-sheet -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-4"
+      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-4"
     >
       <Ambient colors={['var(--page-gradient-from, #7c3aed)', ABSENT_C]} />
 

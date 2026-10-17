@@ -12,20 +12,14 @@ import { useStaffLeaveNotifications } from '@/hooks/useLeaveNotifications'
 
 const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'), {
   loading: () => (
-    <div
-      className="relative overflow-hidden rounded-[1.6rem] bg-white border-4"
-      style={{
-        borderColor: 'var(--page-gradient-from, #27272A)',
-        boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.18)',
-      }}
-    >
-      <div className="flex flex-col lg:flex-row lg:items-stretch">
-        <div className="lg:w-[300px] xl:w-[340px] flex-shrink-0 min-h-[168px] border-b lg:border-b-0 lg:border-r border-[#E4E4E7] animate-pulse bg-[#FAFAFA]" />
-        <div className="flex-1 p-5 sm:p-6 lg:px-7 flex flex-col justify-center gap-3">
-          <div className="h-5 w-40 bg-[#F5F5F5] rounded-lg animate-pulse" />
-          <div className="h-16 bg-[#F5F5F5] rounded-xl animate-pulse" />
-          <div className="h-11 w-full sm:w-64 bg-[#F5F5F5] rounded-xl animate-pulse" />
-        </div>
+    <div className="lg-deck lg-panel">
+      <div className="relative z-[3] px-4 pt-5 pb-4 sm:px-6 space-y-2.5">
+        <div className="h-3 w-28 bg-white/60 rounded-full animate-pulse" />
+        <div className="h-11 w-44 bg-white/60 rounded-xl animate-pulse" />
+      </div>
+      <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 p-4 sm:p-5 space-y-3">
+        <div className="h-4 w-40 bg-[#F4F2EE] rounded-full animate-pulse" />
+        <div className="h-14 bg-[#F4F2EE] rounded-2xl animate-pulse" />
       </div>
     </div>
   ),
@@ -33,20 +27,15 @@ const StaffCheckIn = dynamic(() => import('@/components/attendance/StaffCheckIn'
 
 const AllStaffAttendanceReport = dynamic(() => import('@/components/attendance/AllStaffAttendanceReport'), {
   loading: () => (
-    <section className="border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden flex flex-col min-h-[300px]">
-      <div
-        className="px-4 py-2.5 space-y-1.5"
-        style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #27272A), var(--page-gradient-to, #3D3B40))' }}
-      >
-        <div className="h-4 w-52 bg-white/20 rounded animate-pulse" />
-        <div className="h-3 w-36 bg-white/20 rounded animate-pulse" />
+    <section className="lg-deck lg-panel flex flex-col min-h-[300px] lg:h-full">
+      <div className="relative z-[3] flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
+        <div className="w-10 h-10 rounded-[0.85rem] bg-white/60 animate-pulse" />
+        <div className="h-5 w-24 bg-white/60 rounded-full animate-pulse" />
       </div>
-      <div className="bg-[#FAFAF9] px-4 py-2">
-        <div className="h-9 bg-[#E4E4E7] rounded-lg animate-pulse" />
-      </div>
-      <div className="border-t border-[#E4E4E7] p-4 space-y-2 flex-1">
+      <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 p-4 space-y-2 flex-1">
+        <div className="h-9 bg-[#F4F2EE] rounded-full animate-pulse" />
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-12 bg-[#F5F5F5] rounded-lg animate-pulse" />
+          <div key={i} className="h-12 bg-[#F4F2EE] rounded-2xl animate-pulse" />
         ))}
       </div>
     </section>
@@ -250,15 +239,12 @@ export default function StaffAttendancePage() {
             <button
               onClick={() => setLeavePopup({})}
               title="Open Staff OD / Leave"
-              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3 sm:pr-4 py-1.5 rounded-full bg-white/95 hover:bg-white border border-white/70 shadow-[0_6px_20px_-6px_rgba(0,0,0,0.45)] hover:shadow-[0_10px_26px_-6px_rgba(0,0,0,0.5)] active:scale-95 transition-all"
+              className="group relative flex items-center gap-2 sm:gap-2.5 pl-1.5 pr-3.5 sm:pr-4 py-1.5 rounded-full bg-white/80 hover:bg-white/95 backdrop-blur-xl border border-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-8px_rgba(0,0,0,0.45)] active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90"
             >
-              <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600 shadow-inner">
-                <CalendarDays size={16} className="text-white" />
+              <span className="icon-chip w-8 h-8 sm:w-9 sm:h-9 !rounded-full flex-shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600">
+                <CalendarDays size={16} className="relative z-10 text-white" />
               </span>
-              <span className="flex flex-col items-start leading-none">
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Open</span>
-                <span className="text-[13px] sm:text-sm font-bold text-slate-900 whitespace-nowrap mt-0.5">Leave / OD</span>
-              </span>
+              <span className="text-[13px] sm:text-sm font-semibold text-slate-900 whitespace-nowrap">Leave / OD</span>
               {leaveCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold ring-2 ring-white shadow-sm">
                   {leaveCount > 9 ? '9+' : leaveCount}
@@ -292,13 +278,14 @@ export default function StaffAttendancePage() {
               />
             </motion.div>
 
-            {/* -mx-4 cancels the page's phone gutter so the report spans the
-                screen edge to edge; from sm up it sits back inside the layout. */}
+            {/* -mx-2 claws back most of the phone gutter for the report's
+                width while keeping the glass sheet's rounded edge in view;
+                from sm up it sits back inside the layout. */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-              className="-mx-4 sm:mx-0 lg:h-[680px] lg:min-h-0"
+              className="-mx-2 sm:mx-0 lg:h-[680px] lg:min-h-0"
             >
               <AllStaffAttendanceReport
                 viewerId={user.id}

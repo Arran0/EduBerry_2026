@@ -71,8 +71,18 @@ interface ModalShellProps {
    * floating over one reads as a different product.
    */
   sharp?: boolean
+  /**
+   * The Liquid Glass sheet: a frosted panel with the header straight on the
+   * glass and the body on a solid card riding on it (the home deck's two
+   * layers). Defaults on for the pages listed in GLASS_THEMES, so every popup
+   * raised from them matches without each one opting in.
+   */
+  glass?: boolean
   children: React.ReactNode
 }
+
+/** Page themes whose popups default to the glass sheet. */
+const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave'])
 
 export default function ModalShell({
   onClose,
@@ -88,6 +98,7 @@ export default function ModalShell({
   bodyClassName = '',
   minHClass = '',
   sharp = false,
+  glass: glassProp,
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
@@ -158,6 +169,92 @@ export default function ModalShell({
   // back to its default and the sheet ignores the school's colours.
   const pageTheme = document.querySelector('[data-page-theme]')
     ?.getAttribute('data-page-theme') ?? undefined
+  const glass = glassProp ?? (!!pageTheme && GLASS_THEMES.has(pageTheme))
+
+  if (glass) {
+    return createPortal(
+      <div
+        data-page-theme={pageTheme}
+        className={`modal-portal fixed inset-0 ${zClass} flex items-end sm:items-center justify-center`}
+        style={isPresent ? undefined : { pointerEvents: 'none' }}
+      >
+        {/* No backdrop-filter here or on the sheet: a blurred layer animating
+            in over glass makes Chrome flash black frames (see BusModal). The
+            sheet reads as glass from its fill, rim and highlight instead. */}
+        <motion.div
+          className="absolute inset-0 bg-[#1c1a1e]/45"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onClick={onClose}
+        />
+
+        <motion.div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[94dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden rounded-t-[28px] sm:rounded-[28px]`}
+          initial={{ opacity: 0, y: 56, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 56, scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          drag="y"
+          dragControls={dragControls}
+          dragListener={false}
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0, bottom: 0.55 }}
+          onDragEnd={handleDragEnd}
+        >
+          <div
+            className={`sm:hidden flex-shrink-0 flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none ${bare ? 'absolute top-0 left-0 right-0 z-20' : ''}`}
+            onPointerDown={e => dragControls.start(e)}
+          >
+            <div className="w-10 h-1.5 !rounded-full bg-slate-500/30" />
+          </div>
+
+          {/* Header, straight on the glass */}
+          {title != null && !bare && (
+            <div className="relative z-[3] flex-shrink-0 flex items-center gap-3 px-4 sm:px-5 pt-1.5 sm:pt-4 pb-3">
+              {icon && (
+                <div className={`icon-chip w-10 h-10 flex-shrink-0 ${iconClassName}`}>
+                  <span className="relative z-10 flex">{icon}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-slate-900 leading-tight headline truncate">{title}</h2>
+                {subtitle != null && (
+                  <p className="text-[12px] text-slate-500 truncate mt-0.5">{subtitle}</p>
+                )}
+              </div>
+              {headerActions}
+              <button onClick={onClose} aria-label="Close" className="lg-control w-9 h-9 flex-shrink-0">
+                <X size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+          )}
+
+          {/* Body, on a solid card riding on the glass */}
+          {bare ? (
+            <div className="relative z-[3] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+              {children}
+            </div>
+          ) : (
+            <div className={`lg-sheet-card relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overscroll-contain`}>
+              <div className={`px-4 sm:px-5 py-4 ${bodyClassName}`}>{children}</div>
+            </div>
+          )}
+
+          {footer && !bare && (
+            <div className="relative z-[3] flex-shrink-0 px-4 sm:px-5 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3.5">
+              {footer}
+            </div>
+          )}
+        </motion.div>
+      </div>,
+      document.body
+    )
+  }
 
   return createPortal(
     // modal-portal marks this subtree as page chrome that was raised out of the

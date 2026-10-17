@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
@@ -10,6 +9,8 @@ import {
   Search, Users, X, Clock, Loader2, CircleSlash,
   Umbrella, Ban, Repeat, Settings, FileText, ShieldAlert, HardHat,
 } from 'lucide-react'
+import ModalShell from '@/components/ui/ModalShell'
+import { GlassSegments } from '@/components/transport/glass'
 import { UserProfile } from '@/lib/supabase'
 import {
   StaffAttendanceRecord,
@@ -35,7 +36,7 @@ import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import type { TeamRoster } from '@/lib/teams'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
-import { DateToggler, SmartSelect, SECTION_LABEL } from '@/components/workspace/ui'
+import { DateToggler, SmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { LocationWarningChip, LocationWarningModal } from '@/components/attendance/LocationWarning'
 
@@ -115,8 +116,9 @@ const NonWorkingDayModalDynamic = dynamic(
   { ssr: false }
 )
 
-const LateSummaryReportModalDynamic = dynamic(
-  () => import('@/components/attendance/reports/LateSummaryReportModal'),
+// The Documents popup: Late summary, Absence & irregular summary, Time tracking.
+const ReportsModalDynamic = dynamic(
+  () => import('@/components/attendance/reports/ReportsModal'),
   { ssr: false }
 )
 
@@ -198,18 +200,16 @@ const StaffRow = React.memo(function StaffRow({
   const showStreak = streak !== undefined && streak >= 1 &&
     (effectiveStatus === 'absent' || effectiveStatus === 'on_leave')
   const router = useRouter()
+  // Nothing is mounted for a row until it is opened — with a whole school
+  // listed, an idle popup per row re-rendered on every keystroke in the search.
   const [showModal, setShowModal] = useState(false)
-  // Stays true through the closing animation, then clears — so the rows nobody
-  // opened never put a portal in the document. With a whole school listed that
-  // was one idle portal per row, re-rendered on every keystroke in the search box.
-  const [portalMounted, setPortalMounted] = useState(false)
   // A punch this staff member was allowed through with the location off
   // campus, unmeasured, or unavailable. Flagged here because "present" on
   // this row would otherwise be indistinguishable from a check-in that was
   // actually verified against the campus.
   const [showWarning, setShowWarning] = useState(false)
   const warning = useMemo(() => describeLocationWarning(record), [record])
-  const openModal = useCallback(() => { setPortalMounted(true); setShowModal(true) }, [])
+  const openModal = useCallback(() => setShowModal(true), [])
 
   return (
     <>
@@ -219,16 +219,16 @@ const StaffRow = React.memo(function StaffRow({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
         transition={{ layout: { duration: 0.2, ease: 'easeInOut' }, opacity: { duration: 0.15 } }}
-        className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 bg-white hover:bg-[#FAFAF9] transition-colors"
+        className="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3.5 py-2.5 bg-white hover:bg-[#FAF9F6] transition-colors"
       >
-        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={30} userId={staff.id} />
+        <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={32} userId={staff.id} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={openModal}
               title={staff.full_name}
-              className="text-sm font-semibold text-[#18181B] truncate leading-tight hover:text-blue-600 hover:underline text-left"
+              className="text-[13.5px] font-semibold text-slate-900 truncate leading-tight hover:text-[#8A6F22] text-left transition-colors"
             >
               {shortName(staff.full_name)}
             </button>
@@ -236,13 +236,13 @@ const StaffRow = React.memo(function StaffRow({
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {record?.check_in_time && (
-              <span className="text-[10px] text-[#A1A1AA] flex items-center gap-0.5">
+              <span className="text-[10.5px] text-slate-400 tabular-nums flex items-center gap-0.5">
                 <Clock size={9} /> {formatTime(record.check_in_time)}
                 {record.check_out_time && <> → {formatTime(record.check_out_time)}</>}
               </span>
             )}
             {record?.check_in_time_2 && (
-              <span className="text-[10px] text-violet-400 flex items-center gap-0.5">
+              <span className="text-[10.5px] text-violet-400 tabular-nums flex items-center gap-0.5">
                 <Clock size={9} /> {formatTime(record.check_in_time_2)}
                 {record.check_out_time_2 && <> → {formatTime(record.check_out_time_2)}</>}
               </span>
@@ -252,7 +252,7 @@ const StaffRow = React.memo(function StaffRow({
         </div>
 
         {showStreak && (
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 border rounded-full tabular-nums flex-shrink-0 ${streak! >= 3 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
             {streak}d
           </span>
         )}
@@ -285,7 +285,7 @@ const StaffRow = React.memo(function StaffRow({
 
         {/* Quick-set buttons — only shown to admin/principal */}
         {canEdit && (
-          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+          <div className="flex items-center gap-0.5 p-0.5 rounded-[11px] bg-[#F1EEE8] flex-shrink-0" role="group" aria-label="Set status">
             {QUICK_SET.map(st => {
               const isWordLabel = st === 'late' || st === 'e'
               // On phones, On Leave / On Duty surface as a tiny corner dot on the
@@ -301,12 +301,12 @@ const StaffRow = React.memo(function StaffRow({
                   disabled={isSaving}
                   onClick={() => onSet(staff.id, st)}
                   title={STAFF_ATTENDANCE_STATUS_LABELS[st]}
-                  className={`relative h-6 sm:h-7 font-bold border rounded-md transition-colors disabled:opacity-40 active:scale-95 flex items-center justify-center ${
+                  className={`relative h-6 sm:h-7 font-bold border rounded-[9px] transition-all disabled:opacity-40 active:scale-95 flex items-center justify-center ${
                     isWordLabel ? 'px-1.5 text-[7px] sm:text-[7.5px] uppercase tracking-tight' : 'w-6 sm:w-7 text-[10px] sm:text-xs'
                   } ${
                     buttonStatus === st
-                      ? QUICK_ACTIVE[st]
-                      : 'border-[#D4D4D8] text-[#A1A1AA] bg-white hover:bg-[#F5F5F5] hover:text-[#18181B]'
+                      ? `${QUICK_ACTIVE[st]} shadow-[0_2px_6px_-2px_rgba(15,23,42,0.35)]`
+                      : 'border-transparent text-slate-400 hover:bg-white hover:text-slate-900'
                   }`}
                 >
                   {st === 'e'
@@ -331,60 +331,37 @@ const StaffRow = React.memo(function StaffRow({
         />
       )}
 
-      {portalMounted && typeof document !== 'undefined' && createPortal(
-        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
-          {showModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
-              onClick={() => setShowModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.96, opacity: 0, y: 16 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.96, opacity: 0, y: 16 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-                  <Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={32} userId={staff.id} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-sm truncate">{staff.full_name}</p>
-                    <p className="text-[11px] text-slate-500 capitalize">{staff.role}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="overflow-y-auto flex-1 px-4 py-4">
-                  <StaffAttendanceCalendarDynamic
-                    staffId={staff.id}
-                    mode="self"
-                    viewerUserId={viewerId}
-                    viewerRole={viewerRole}
-                    onViewLeave={app => {
-                      setShowModal(false)
-                      if (onViewLeave) onViewLeave(app)
-                      else router.push(`/more/staff-leave?app=${app.id}`)
-                    }}
-                  />
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+      <AnimatePresence>
+        {showModal && (
+          <ModalShell
+            onClose={() => setShowModal(false)}
+            size="xl"
+            title={staff.full_name}
+            subtitle={<span className="capitalize">{staff.role}</span>}
+            icon={<Avatar avatarUrl={staff.avatar_url ?? null} name={staff.full_name} email={staff.email} size={40} userId={staff.id} />}
+            iconClassName="!shadow-none overflow-hidden !rounded-full"
+          >
+            <StaffAttendanceCalendarDynamic
+              staffId={staff.id}
+              mode="self"
+              viewerUserId={viewerId}
+              viewerRole={viewerRole}
+              onViewLeave={app => {
+                setShowModal(false)
+                if (onViewLeave) onViewLeave(app)
+                else router.push(`/more/staff-leave?app=${app.id}`)
+              }}
+            />
+          </ModalShell>
+        )}
+      </AnimatePresence>
     </>
   )
 })
 
 function RowList({ children }: { children: React.ReactNode }) {
   return (
-    <div className="border border-[#E4E4E7] divide-y divide-[#F0F0EF] rounded-lg overflow-hidden">
+    <div className="sa-list rounded-2xl border border-[#27272A]/[0.07] overflow-hidden bg-white">
       <AnimatePresence initial={false}>{children}</AnimatePresence>
     </div>
   )
@@ -435,7 +412,7 @@ export default function AllStaffAttendanceReport({
   // Holiday/Cutoff setup buttons live behind a settings toggle — collapsed by default
   // so the toolbar stays out of the way for admins who aren't actively configuring them.
   const [showAdminControls, setShowAdminControls] = useState(false)
-  const [showLateSummaryModal, setShowLateSummaryModal] = useState(false)
+  const [showReportsModal, setShowReportsModal] = useState(false)
 
   // Auto-absent derivation
   const [allTrackedStaff, setAllTrackedStaff] = useState<UserProfile[]>([])
@@ -862,224 +839,213 @@ export default function AllStaffAttendanceReport({
     return fixedTeams?.find(t => t.id === selectedTeamId)?.name ?? null
   }, [hasFixedRoster, myTeamOptions.length, selectedTeamId, fixedTeams])
 
-  // On phones the section is full-bleed — square corners, no side borders, so it
-  // runs edge to edge. From sm up it goes back to the rounded card.
+  // The pointer moves the glass's highlight, as on the home deck.
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType !== 'mouse') return
+    const el = e.currentTarget
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--lg-x', `${e.clientX - r.left}px`)
+    el.style.setProperty('--lg-y', `${e.clientY - r.top}px`)
+  }, [])
+
+  // Liquid Glass, as on the home page: the section is a glass sheet with its
+  // header straight on the glass, and the roster sits on a solid card riding
+  // on it — glass is the chrome, never the surface a name is read off.
   return (
     <section
       ref={sectionRef}
-      className="border-y sm:border-x border-[#D4D4D8] bg-white rounded-none sm:rounded-xl overflow-hidden flex flex-col lg:h-full"
+      onPointerMove={onPointerMove}
+      className="lg-deck lg-panel flex flex-col lg:h-full"
       style={matchHeight ? { height: matchHeight } : undefined}
     >
-      {/* Toolbar */}
-      <div className="border-b border-[#E4E4E7]">
-        {/* Gradient title strip — inherits --page-gradient-from/to from the staff-attendance theme */}
-        <div
-          className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2"
-          style={{ background: 'linear-gradient(135deg, var(--page-gradient-from), var(--page-gradient-to))' }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-white min-w-0">
-              {showSupport
-                ? <HardHat size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />
-                : <Users size={15} className="flex-shrink-0" style={{ color: 'var(--page-accent)' }} />}
-              <span className="truncate">Report</span>
-            </h2>
-
-            {/* Staff ⇄ Support toggle. Support staff never appear in the staff
-                list or its counts, and vice versa — this switches the whole
-                body, not a filter over one roster. */}
-            {canSeeSupport && (
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 border border-white/15 flex-shrink-0" role="tablist" aria-label="Attendance roster">
-                {([
-                  { key: 'staff' as const, label: 'School Staff', icon: <Users size={11} />, title: 'Teaching, office and admin staff' },
-                  { key: 'support' as const, label: 'Support Staff', icon: <HardHat size={11} />, title: 'Support staff and drivers — cleaning, maintenance, grounds and transport' },
-                ]).map(t => (
-                  <button
-                    key={t.key}
-                    role="tab"
-                    aria-selected={section === t.key}
-                    onClick={() => setSection(t.key)}
-                    title={t.title}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                      section === t.key ? 'bg-white text-[#18181B]' : 'text-white/70 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {t.icon}
-                    <span className="hidden sm:inline">{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {viewerRole === 'admin' && !showSupport && (
-              <button
-                onClick={() => setShowLateSummaryModal(true)}
-                title="Late Summary Report — preview or download"
-                className="p-1.5 rounded-lg transition-colors text-white/70 hover:bg-white/10 hover:text-white"
-              >
-                <FileText size={14} />
-              </button>
-            )}
-            {viewerRole === 'admin' && !showSupport && (
-              <button
-                onClick={() => setShowAdminControls(v => !v)}
-                title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
-                aria-pressed={showAdminControls}
-                className={`p-1.5 rounded-lg transition-colors ${showAdminControls ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
-              >
-                <Settings size={14} />
-              </button>
-            )}
-            <DateToggler
-              value={date}
-              onChange={pickDate}
-              max={todayStr}
-              todayStr={todayStr}
-              className="inline-flex flex-shrink-0"
-              size="sm"
-            />
+      {/* Header, on the glass */}
+      <div className="relative z-[3] flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 px-3.5 sm:px-5 pt-3.5 sm:pt-4 pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="icon-chip w-10 h-10 flex-shrink-0 bg-[linear-gradient(135deg,#3D3B40,#27272A)]">
+            {showSupport
+              ? <HardHat size={17} className="relative z-10 text-[#E9DDBB]" />
+              : <Users size={17} className="relative z-10 text-[#E9DDBB]" />}
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-display text-[1.15rem] sm:text-[1.3rem] font-bold leading-none headline text-slate-900">Report</h2>
+            <p className="text-[12px] text-slate-500 mt-1 truncate">{formatDayLabel(date)}{date === todayStr ? ' · today' : ''}</p>
           </div>
         </div>
-        {/* Controls strip — holiday + cutoff, admin only, hidden behind the settings toggle */}
-        {viewerRole === 'admin' && showAdminControls && !showSupport && (
-        <div className="bg-[#FAFAF9] px-3 sm:px-4 py-1.5">
-          <div className="flex items-center gap-1.5">
-            {holidayRules !== undefined && (
-              holidayRules.length > 0 ? (
-                <button
-                  onClick={() => setShowHolidayModal(true)}
-                  title={holidayRules.length === 1 ? undefined : holidayRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n')}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-violet-200 bg-white hover:bg-violet-50 rounded-lg transition-colors min-w-0"
-                >
-                  <Umbrella size={12} className="text-violet-500 flex-shrink-0" />
-                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-[9rem]">
-                    {holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holidays`}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowHolidayModal(true)}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
-                >
-                  <Umbrella size={12} className="text-violet-500 flex-shrink-0" />
-                  <span className="text-[#18181B]">Holiday</span>
-                </button>
-              )
-            )}
 
-            {nonWorkingRules !== undefined && (
-              nonWorkingRules.length > 0 ? (
-                <button
-                  onClick={() => setShowNonWorkingModal(true)}
-                  title={nonWorkingRules.length === 1 ? undefined : nonWorkingRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n')}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-slate-300 bg-white hover:bg-slate-50 rounded-lg transition-colors min-w-0"
-                >
-                  <Ban size={12} className="text-slate-500 flex-shrink-0" />
-                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-[9rem]">
-                    {nonWorkingRules.length === 1 ? nonWorkingRules[0].name : `${nonWorkingRules.length} non-working`}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowNonWorkingModal(true)}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
-                >
-                  <Ban size={12} className="text-slate-500 flex-shrink-0" />
-                  <span className="text-[#18181B]">Non-working Day</span>
-                </button>
-              )
-            )}
-
-            {dayTimings !== undefined && (
-              dayTimings.length > 0 ? (
-                <button
-                  onClick={() => setShowTimingModal(true)}
-                  title={dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-amber-200 bg-white hover:bg-amber-50 rounded-lg transition-colors min-w-0"
-                >
-                  {dayTimings[0].scope_type === 'weekday'
-                    ? <Repeat size={12} className="text-amber-500 flex-shrink-0" />
-                    : <Clock size={12} className="text-amber-500 flex-shrink-0" />}
-                  <span className="text-[#18181B] truncate max-w-[6rem] sm:max-w-none">
-                    {dayTimings.length === 1
-                      ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
-                      : `${dayTimings.length} cutoffs`}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowTimingModal(true)}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-[#D4D4D8] bg-white hover:bg-[#F5F5F5] rounded-lg transition-colors flex-shrink-0"
-                >
-                  <Clock size={12} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-[#18181B]">Cutoff</span>
-                </button>
-              )
-            )}
-          </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+          {viewerRole === 'admin' && !showSupport && (
+            <button
+              onClick={() => setShowReportsModal(true)}
+              title="Documents — late, absence and time tracking reports"
+              aria-label="Documents"
+              className="lg-control w-9 h-9"
+            >
+              <FileText size={16} />
+            </button>
+          )}
+          {viewerRole === 'admin' && !showSupport && (
+            <button
+              onClick={() => setShowAdminControls(v => !v)}
+              title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
+              aria-label="Day setup"
+              aria-pressed={showAdminControls}
+              className={`lg-control w-9 h-9 ${showAdminControls ? '!bg-[#27272A] !text-white' : ''}`}
+            >
+              <Settings size={16} />
+            </button>
+          )}
+          <DateToggler
+            value={date}
+            onChange={pickDate}
+            max={todayStr}
+            todayStr={todayStr}
+            className="inline-flex flex-shrink-0 h-9"
+            size="sm"
+            glass
+          />
         </div>
+
+        {/* Staff ⇄ Support. Support staff never appear in the staff list or its
+            counts, and vice versa — this switches the whole body, not a filter
+            over one roster. */}
+        {canSeeSupport && (
+          <GlassSegments
+            items={[
+              { key: 'staff' as const, label: 'School staff', icon: Users },
+              { key: 'support' as const, label: 'Support staff', icon: HardHat },
+            ]}
+            value={section}
+            onChange={setSection}
+            size="sm"
+            layoutId="sa-roster"
+            stretch
+            className="sm:order-none"
+          />
         )}
       </div>
 
+      {/* Day setup — holiday, non-working day and cutoff, admin only */}
+      <AnimatePresence initial={false}>
+        {viewerRole === 'admin' && showAdminControls && !showSupport && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="relative z-[3] overflow-hidden"
+          >
+            <div className="flex flex-wrap items-center gap-1.5 px-3.5 sm:px-5 pb-3">
+              {holidayRules !== undefined && (
+                <button
+                  onClick={() => setShowHolidayModal(true)}
+                  title={holidayRules.length > 1 ? holidayRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n') : undefined}
+                  className={`lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold min-w-0 transition hover:bg-white ${holidayRules.length > 0 ? 'text-violet-700' : 'text-slate-700'}`}
+                >
+                  <Umbrella size={13} className="text-violet-500 flex-shrink-0" />
+                  <span className="truncate max-w-[7rem] sm:max-w-[10rem]">
+                    {holidayRules.length === 0 ? 'Holiday' : holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holidays`}
+                  </span>
+                </button>
+              )}
+
+              {nonWorkingRules !== undefined && (
+                <button
+                  onClick={() => setShowNonWorkingModal(true)}
+                  title={nonWorkingRules.length > 1 ? nonWorkingRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n') : undefined}
+                  className="lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-slate-700 min-w-0 transition hover:bg-white"
+                >
+                  <Ban size={13} className="text-slate-500 flex-shrink-0" />
+                  <span className="truncate max-w-[7rem] sm:max-w-[10rem]">
+                    {nonWorkingRules.length === 0 ? 'Non-working day' : nonWorkingRules.length === 1 ? nonWorkingRules[0].name : `${nonWorkingRules.length} non-working`}
+                  </span>
+                </button>
+              )}
+
+              {dayTimings !== undefined && (
+                <button
+                  onClick={() => setShowTimingModal(true)}
+                  title={dayTimings.length === 0 ? undefined : dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
+                  className={`lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold min-w-0 transition hover:bg-white ${dayTimings.length > 0 ? 'text-amber-800' : 'text-slate-700'}`}
+                >
+                  {dayTimings[0]?.scope_type === 'weekday'
+                    ? <Repeat size={13} className="text-amber-500 flex-shrink-0" />
+                    : <Clock size={13} className="text-amber-500 flex-shrink-0" />}
+                  <span className="truncate max-w-[8rem] sm:max-w-none">
+                    {dayTimings.length === 0
+                      ? 'Cutoff'
+                      : dayTimings.length === 1
+                        ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
+                        : `${dayTimings.length} cutoffs`}
+                  </span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {showSupport ? (
-        <SupportStaffAttendanceReportDynamic
-          date={date}
-          todayStr={todayStr}
-          viewerId={viewerId}
-          canEdit={canEdit}
-          // The whole-school rules already loaded for the staff side apply to
-          // support staff too — nobody is expected in on a school holiday.
-          dayOff={
-            hasDefaultNonWorking
-              ? { kind: 'non_working', name: nonWorkingRules?.find(r => r.is_default)?.name ?? 'Non-working day' }
-              : hasDefaultHoliday
-                ? { kind: 'holiday', name: holidayRules?.find(r => r.is_default)?.name ?? 'Holiday' }
-                : null
-          }
-          refreshKey={refreshKey}
-          onChanged={onChanged}
-        />
+        <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 flex-1 min-h-0 flex flex-col overflow-hidden">
+          <SupportStaffAttendanceReportDynamic
+            date={date}
+            todayStr={todayStr}
+            viewerId={viewerId}
+            canEdit={canEdit}
+            // The whole-school rules already loaded for the staff side apply to
+            // support staff too — nobody is expected in on a school holiday.
+            dayOff={
+              hasDefaultNonWorking
+                ? { kind: 'non_working', name: nonWorkingRules?.find(r => r.is_default)?.name ?? 'Non-working day' }
+                : hasDefaultHoliday
+                  ? { kind: 'holiday', name: holidayRules?.find(r => r.is_default)?.name ?? 'Holiday' }
+                  : null
+            }
+            refreshKey={refreshKey}
+            onChanged={onChanged}
+          />
+        </div>
       ) : (
-      <>
-      {/* Summary strip */}
-      <div className="flex items-center gap-4 px-4 py-3 border-b border-[#E4E4E7]">
+      <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 flex-1 min-h-0 flex flex-col overflow-hidden">
+      {/* Summary */}
+      <div className="flex items-center gap-4 px-4 py-3.5 border-b border-[#27272A]/[0.06]">
         {hasDefaultHoliday ? (
-          <div className="flex items-center gap-2 w-full">
-            <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-              <Umbrella size={16} className="text-violet-600" />
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <Umbrella size={17} className="text-violet-600" />
             </div>
             <div>
               <p className="text-sm font-bold text-violet-800">{holidayRules?.find(r => r.is_default)?.name}</p>
-              <p className="text-[11px] text-violet-500">Holiday · Staff who came in are shown below</p>
+              <p className="text-[12px] text-violet-500">Holiday · staff who came in are listed below</p>
             </div>
           </div>
         ) : hasDefaultNonWorking ? (
-          <div className="flex items-center gap-2 w-full">
-            <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-              <Ban size={16} className="text-slate-600" />
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <Ban size={17} className="text-slate-600" />
             </div>
             <div>
               <p className="text-sm font-bold text-slate-800">{nonWorkingRules?.find(r => r.is_default)?.name}</p>
-              <p className="text-[11px] text-slate-500">Non-working day · Staff who came in are shown below</p>
+              <p className="text-[12px] text-slate-500">Non-working day · staff who came in are listed below</p>
             </div>
           </div>
         ) : (
           <>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold text-[#18181B] leading-none">
+            <div className="flex items-baseline gap-1">
+              <span className="font-display text-[2rem] font-bold text-slate-900 leading-none tabular-nums headline">
                 {loading || teamLoading ? '—' : presentCount}
               </span>
-              <span className="text-sm font-medium text-[#A1A1AA]">
+              <span className="text-sm font-semibold text-slate-400 tabular-nums">
                 / {(!hasFixedRoster && !selectedTeamId && trackedTotal === null && allTrackedStaff.length === 0) || teamLoading ? '…' : presentTotal}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="h-1.5 bg-[#F0F0EF] rounded-full overflow-hidden">
-                <div className="h-full bg-[#B8983C] rounded-full transition-all" style={{ width: `${pct}%` }} />
+              <div className="h-2 bg-[#EEEBE5] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #CBAB55, #B8983C)' }}
+                />
               </div>
-              <p className="text-[11px] text-[#71717A] mt-1 flex items-center gap-1.5 flex-wrap">
+              <p className="text-[12px] text-slate-500 mt-1.5 flex items-center gap-1.5 flex-wrap">
                 <span>
                   {pct}% present{scopeLabel ? ` · ${scopeLabel}` : ''}{roster && notMarked.length > 0 ? ` · ${notMarked.length} not marked` : ''}
                 </span>
@@ -1087,9 +1053,9 @@ export default function AllStaffAttendanceReport({
                   <button
                     onClick={() => setActiveTab('present')}
                     title="Punches accepted with the location off campus, unmeasured, or unavailable. Tap to see who."
-                    className="inline-flex items-center gap-1 font-bold text-red-700 hover:text-red-800 hover:underline"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 font-semibold text-red-700 hover:bg-red-100 transition-colors"
                   >
-                    <ShieldAlert size={10} className="flex-shrink-0" />
+                    <ShieldAlert size={11} className="flex-shrink-0" />
                     {warningCount} unverified
                   </button>
                 )}
@@ -1099,46 +1065,61 @@ export default function AllStaffAttendanceReport({
         )}
       </div>
 
-      {/* Scrollable staff list — flex-1 fills the section's remaining height; overflow scrolls */}
-      <div className="p-3 sm:p-4 flex-1 min-h-0 overflow-y-auto">
+      {/* Scrollable staff list — fills the card's remaining height */}
+      <div className="p-3 sm:p-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
         {loading || teamLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#A1A1AA]">
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400">
             <Loader2 size={16} className="animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Inline tabs — pick one list at a time instead of stacking everything */}
-            <div className="grid grid-cols-3 border-b border-[#E4E4E7]">
+          <div className="space-y-3.5">
+            {/* One list at a time — an iOS segmented control */}
+            <div className="relative grid grid-cols-3 p-1 rounded-full bg-[#F1EEE8]" role="tablist" aria-label="Attendance lists">
               {([
-                { key: 'absent' as const, label: 'Absent', count: absentTabTotal, color: 'border-red-600 text-red-600' },
-                { key: 'present' as const, label: 'Present', count: presentTabTotal, color: 'border-emerald-600 text-emerald-600' },
-                { key: 'exception' as const, label: 'Irregular', count: exceptionTotal, color: 'border-amber-500 text-amber-600' },
-              ]).map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  className={`flex items-center justify-center gap-1.5 pb-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
-                    activeTab === t.key ? t.color : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
-                  }`}
-                >
-                  {t.label}
-                  <span className={activeTab === t.key ? 'opacity-70' : 'text-[#D4D4D8]'}>{t.count}</span>
-                </button>
-              ))}
+                { key: 'absent' as const, label: 'Absent', count: absentTabTotal, tone: 'bg-red-500' },
+                { key: 'present' as const, label: 'Present', count: presentTabTotal, tone: 'bg-emerald-500' },
+                { key: 'exception' as const, label: 'Irregular', count: exceptionTotal, tone: 'bg-amber-500' },
+              ]).map(t => {
+                const active = activeTab === t.key
+                return (
+                  <button
+                    key={t.key}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActiveTab(t.key)}
+                    className={`relative h-8 rounded-full text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+                      active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="sa-report-tab"
+                        className="absolute inset-0 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_4px_12px_-4px_rgba(15,23,42,0.25)]"
+                        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                      />
+                    )}
+                    <span className="relative z-10 inline-flex items-center justify-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${t.tone} ${active ? '' : 'opacity-50'}`} />
+                      {t.label}
+                      <span className={`tabular-nums text-[11px] ${active ? 'text-slate-500' : 'text-slate-400'}`}>{t.count}</span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
 
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   value={query}
                   onChange={e => { setQuery(e.target.value); setPageSize(PAGE_SIZE) }}
-                  placeholder="Search staff…"
-                  className="w-full pl-8 pr-7 py-1.5 text-sm border border-[#D4D4D8] bg-white focus:outline-none focus:border-[#27272A] rounded-md"
+                  placeholder="Search staff"
+                  className="w-full h-9 pl-9 pr-8 text-sm rounded-full bg-[#F4F2EE] border border-transparent placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-[#B8983C]/60 focus:ring-2 focus:ring-[#B8983C]/15 transition"
                 />
                 {query && (
-                  <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#18181B]">
-                    <X size={13} />
+                  <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-800">
+                    <X size={14} />
                   </button>
                 )}
               </div>
@@ -1172,7 +1153,7 @@ export default function AllStaffAttendanceReport({
             {/* ── Absent — on_leave (auto-counts as absent) + real/derived absent ── */}
             {activeTab === 'absent' && (
               absentTabTotal === 0 ? (
-                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                <p className="text-[13px] text-slate-500 bg-[#FAF9F6] border border-[#27272A]/[0.05] px-4 py-6 rounded-2xl text-center">
                   {query ? `No absentees match "${query}".` : 'No one is marked absent for this day.'}
                 </p>
               ) : (
@@ -1207,7 +1188,7 @@ export default function AllStaffAttendanceReport({
             {activeTab === 'present' && (
               <>
                 {presentTabTotal === 0 ? (
-                  <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                  <p className="text-[13px] text-slate-500 bg-[#FAF9F6] border border-[#27272A]/[0.05] px-4 py-6 rounded-2xl text-center">
                     {query ? `No present staff match "${query}".` : hasDefaultHoliday ? 'No staff checked in on this holiday.' : hasDefaultNonWorking ? 'No staff checked in on this non-working day.' : 'No one has checked in yet.'}
                   </p>
                 ) : (
@@ -1218,15 +1199,13 @@ export default function AllStaffAttendanceReport({
                         see — not something to find by scrolling past everyone
                         whose location actually checked out. */}
                     {filteredUnverified.length > 0 && (
-                      <div id="staff-unverified" className="border border-red-200 bg-red-50/50 rounded-lg overflow-hidden">
-                        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-red-200 bg-red-50">
-                          <ShieldAlert size={13} className="text-red-600 flex-shrink-0" />
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-red-800">
-                            Location Not Verified
-                          </p>
-                          <span className="text-xs text-red-500">({filteredUnverified.length})</span>
+                      <div id="staff-unverified" className="border border-red-200/80 bg-red-50/40 rounded-2xl overflow-hidden">
+                        <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-red-200/70 bg-red-50/80">
+                          <ShieldAlert size={14} className="text-red-600 flex-shrink-0" />
+                          <p className="text-[12.5px] font-semibold text-red-800">Location not verified</p>
+                          <span className="text-[12px] text-red-500 tabular-nums">{filteredUnverified.length}</span>
                         </div>
-                        <div className="divide-y divide-red-100">
+                        <div className="sa-list">
                           <AnimatePresence initial={false}>
                             {filteredUnverified.map(r => (
                               <StaffRow key={r.id} staff={r.staff as UserProfile} record={r} savingId={savingId} canEdit={canEdit} onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole} onViewLeave={onViewLeave} />
@@ -1259,7 +1238,7 @@ export default function AllStaffAttendanceReport({
                         {presentList.length > pageSize && (
                           <button
                             onClick={() => setPageSize(s => s + PAGE_SIZE)}
-                            className="mt-2 w-full py-2 text-sm font-medium text-[#18181B] bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors rounded-md"
+                            className="mt-2 w-full h-9 text-[13px] font-semibold text-slate-700 bg-[#F4F2EE] hover:bg-[#ECE8E1] transition-colors rounded-full"
                           >
                             Show more ({presentList.length - pageSize} remaining)
                           </button>
@@ -1274,7 +1253,7 @@ export default function AllStaffAttendanceReport({
             {/* ── Irregular — half_day, e; segregated but untitled (late lives under Present) ── */}
             {activeTab === 'exception' && (
               exceptionGroups.length === 0 ? (
-                <p className="text-sm text-[#71717A] border border-[#E4E4E7] bg-[#FAFAF9] px-3 py-3 rounded-lg">
+                <p className="text-[13px] text-slate-500 bg-[#FAF9F6] border border-[#27272A]/[0.05] px-4 py-6 rounded-2xl text-center">
                   {query ? `No irregular attendance matches "${query}".` : 'No irregular attendance for this day.'}
                 </p>
               ) : (
@@ -1295,11 +1274,11 @@ export default function AllStaffAttendanceReport({
 
             {/* ── Not marked (only when a roster is known) ─────── */}
             {roster && notMarkedList.length > 0 && (
-              <div className="border-t border-[#E4E4E7] pt-4">
-                <div className="flex items-center gap-1.5 mb-2.5">
-                  <CircleSlash size={13} className="text-[#A1A1AA]" />
-                  <p className={SECTION_LABEL}>Not Marked</p>
-                  <span className="text-xs text-[#A1A1AA]">({notMarkedList.length})</span>
+              <div className="border-t border-[#27272A]/[0.06] pt-4">
+                <div className="flex items-center gap-1.5 mb-2.5 px-1">
+                  <CircleSlash size={14} className="text-slate-400" />
+                  <p className="text-[12.5px] font-semibold text-slate-600">Not marked</p>
+                  <span className="text-[12px] text-slate-400 tabular-nums">{notMarkedList.length}</span>
                 </div>
                 <RowList>
                   {notMarkedList.map(s => (
@@ -1312,7 +1291,7 @@ export default function AllStaffAttendanceReport({
         )}
       </div>
 
-      </>
+      </div>
       )}
 
       {showTimingModal && (
@@ -1348,9 +1327,15 @@ export default function AllStaffAttendanceReport({
         />
       )}
 
-      {showLateSummaryModal && (
-        <LateSummaryReportModalDynamic onClose={() => setShowLateSummaryModal(false)} />
-      )}
+      <AnimatePresence>
+        {showReportsModal && (
+          <ReportsModalDynamic
+            onClose={() => setShowReportsModal(false)}
+            todayStr={todayStr}
+            teams={teams}
+          />
+        )}
+      </AnimatePresence>
     </section>
   )
 }

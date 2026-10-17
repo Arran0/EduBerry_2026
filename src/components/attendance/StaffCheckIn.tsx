@@ -895,14 +895,14 @@ export default function StaffCheckIn({
   const statusReadout = (
     <div className="flex flex-col items-end gap-1.5 text-right min-w-0 flex-shrink-0">
       {rec ? (
-        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#F5F5F5] border border-[#E4E4E7]">
+        <span className="lg-pill inline-flex items-center gap-2 px-3 py-1.5">
           <span className={`w-2 h-2 rounded-full ${STATUS_DOT[rec.status]}`} />
           <span className="text-xs font-bold text-[#18181B]">
             {STAFF_ATTENDANCE_STATUS_LABELS[rec.status]}
           </span>
         </span>
       ) : (
-        <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#FAFAFA] border border-[#E4E4E7]">
+        <span className="lg-pill inline-flex items-center gap-2 px-3 py-1.5">
           <span className="w-2 h-2 rounded-full border border-[#A1A1AA]" />
           <span className="text-xs font-medium text-[#71717A]">
             {checkInState === 'loading' ? 'Loading…' : 'Awaiting check-in'}
@@ -956,30 +956,30 @@ export default function StaffCheckIn({
 
   // ── Render — one stable hero shell across loading / in / out states ────────────
 
+  // The pointer moves the glass's highlight (.lg-deck::after), as on home.
+  const onGlassPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType !== 'mouse') return
+    const r = e.currentTarget.getBoundingClientRect()
+    e.currentTarget.style.setProperty('--lg-x', `${e.clientX - r.left}px`)
+    e.currentTarget.style.setProperty('--lg-y', `${e.clientY - r.top}px`)
+  }
+
+  // Liquid Glass, as on the home deck: the clock sits straight on the glass —
+  // it is the one big thing on the page — and the punches ride on a solid card.
   return (
-    <section
-      className="relative overflow-hidden rounded-[1.5rem] bg-white border-4"
-      style={{
-        borderColor: 'var(--page-gradient-from, #27272A)',
-        boxShadow: '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)',
-      }}
-    >
-      {/* ── Clock + status readout ── */}
-      <div className="relative overflow-hidden border-b border-[#E4E4E7]">
-        <div
-          className="absolute -top-24 -right-16 w-64 h-64 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(184,152,60,0.16), transparent 68%)' }}
-        />
-        <div className="absolute -bottom-10 left-6 opacity-[0.04] pointer-events-none select-none">
-          <Fingerprint size={130} className="text-[#18181B]" />
+    <section className="lg-deck lg-panel" onPointerMove={onGlassPointerMove}>
+      {/* ── Clock + status readout, on the glass ── */}
+      <div className="relative z-[3] overflow-hidden rounded-t-[30px]">
+        <div className="absolute -bottom-12 right-4 opacity-[0.05] pointer-events-none select-none">
+          <Fingerprint size={150} className="text-[#18181B]" />
         </div>
 
-        <div className="relative px-4 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between gap-3">
+        <div className="relative px-4 pt-4 pb-3.5 sm:px-6 sm:pt-5 sm:pb-4 flex items-center justify-between gap-3">
           {/* Clock */}
           <div className="min-w-0">
             <p className="eyebrow" style={{ color: GOLD }}>Today · {weekday || '—'}</p>
             <div className="flex items-baseline gap-1.5 mt-2">
-              <span className="font-display text-[2.15rem] sm:text-[2.9rem] font-bold leading-none text-[#18181B] tabular-nums headline">
+              <span className="font-display text-[2.6rem] sm:text-[3.4rem] font-bold leading-none text-[#18181B] tabular-nums headline">
                 {clockHM}
               </span>
               <span className="flex flex-col items-start leading-none gap-0.5 pb-0.5">
@@ -995,8 +995,8 @@ export default function StaffCheckIn({
         </div>
       </div>
 
-      {/* ── Punch timeline + actions ── */}
-      <div className="p-4 sm:p-6">
+      {/* ── Punch timeline + actions, on a solid card ── */}
+      <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 p-4 sm:p-5">
         {checkInState === 'loading' ? (
           <div className="flex flex-col gap-3" aria-label="Loading today's status">
             <div className="h-4 w-44 bg-[#F5F5F5] rounded-lg animate-pulse" />
@@ -1007,7 +1007,7 @@ export default function StaffCheckIn({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <p className="eyebrow text-[#A1A1AA]">Today&apos;s Check-in &amp; Check-out</p>
+            <p className="text-[12.5px] font-semibold text-slate-500">Today&apos;s check-in and check-out</p>
 
             {/* Timeline (left) + action (right) fill the full width on desktop. */}
             <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
@@ -1042,7 +1042,7 @@ export default function StaffCheckIn({
                             <span className="absolute inset-0 rounded-full border-2 border-[#B8983C]/40 animate-ping pointer-events-none" />
                           )}
                         </div>
-                        <p className={`text-[10px] font-bold uppercase tracking-wider text-center ${done || isNext ? 'text-[#71717A]' : 'text-[#A1A1AA]'}`}>
+                        <p className={`text-[11px] font-semibold text-center ${done || isNext ? 'text-[#52525B]' : 'text-[#A1A1AA]'}`}>
                           {p.label}
                         </p>
                         <p className={`text-sm font-bold tabular-nums leading-none ${done ? 'text-[#18181B]' : 'text-[#D4D4D8]'}`}>

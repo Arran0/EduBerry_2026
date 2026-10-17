@@ -148,7 +148,7 @@ body:has([data-page-theme="bus"]) { background: #EDE9E3; }
   --page-gradient-from: #27272A;
   --page-gradient-to: #3D3B40;
 }
-body:has([data-page-theme="staff-attendance"]) { background: #EDE9E3; }
+/* Page background: see "Staff Attendance — glass page" below. */
 
 [data-page-theme="student-attendance"] {
   --page-primary: #7c3aed;
@@ -603,22 +603,95 @@ body {
   box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.35), 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
+/* ============================================================ */
+/* Liquid Glass — popup sheet (ModalShell `glass`)               */
+/* ============================================================ */
+
+/* The sheet is chrome, like the deck: a warm frosted fill, a specular rim and
+   a soft highlight from the top-left. No backdrop-filter (see ModalShell) —
+   the material comes from the fill. What people read sits on .lg-sheet-card. */
+.lg-sheet {
+  isolation: isolate;
+  background:
+    radial-gradient(420px circle at 12% -8%, rgba(255, 255, 255, 0.85), transparent 60%),
+    linear-gradient(160deg, rgba(250, 248, 244, 0.98) 0%, rgba(239, 235, 228, 0.97) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 8px rgba(15, 23, 42, 0.08),
+    0 30px 80px -30px rgba(15, 23, 42, 0.55);
+}
+.lg-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0.35) 40%,
+    rgba(255, 255, 255, 0.10) 65%,
+    rgba(255, 255, 255, 0.8) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Concentric with the sheet: 28 − 8 = 20. */
+.lg-sheet-card {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 30px -22px rgba(15, 23, 42, 0.45);
+}
+
+/* ============================================================ */
+/* Staff Attendance — glass page                                 */
+/* ============================================================ */
+
+/* Warm stone with light pooled under where the glass sits, so the panels have
+   colour to bend: honey gold top-left, grasshopper top-right, a breath of
+   rose low down. Fixed, so it stays put as the page scrolls under the glass. */
+body:has([data-page-theme="staff-attendance"]) {
+  background:
+    radial-gradient(56rem 34rem at 6% 2%, rgba(203, 171, 85, 0.30), transparent 62%),
+    radial-gradient(48rem 32rem at 100% 14%, rgba(141, 152, 87, 0.24), transparent 64%),
+    radial-gradient(52rem 30rem at 40% 104%, rgba(239, 51, 64, 0.10), transparent 62%),
+    #EDE9E3;
+  background-attachment: fixed;
+}
+
+/* A small solid "well" inside a content card — the timeline track, a stat. */
+.sa-well {
+  border-radius: 14px;
+  background: linear-gradient(180deg, #FAF9F6 0%, #F4F2EE 100%);
+  border: 1px solid rgba(39, 39, 42, 0.06);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* Rows in the report list: a hairline rhythm instead of boxed groups. */
+.sa-list > * + * { border-top: 1px solid rgba(39, 39, 42, 0.06); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .lg-sheet { background: #F7F5F1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fee-stripes,
   .fee-glint::after { animation: none; }
 }
 
 /* ============================================================ */
-/* Liquid Glass sheet — the deck's material without the lens     */
+/* Liquid Glass pane — the deck's material without the lens      */
 /* ============================================================ */
 
 /* The same sheet as .lg-deck (specular rim, inner highlight, ambient colour
-   under it) minus backdrop-filter. Used on pages that open popups — the
-   attendance app and its leave popup. A backdrop-filtered layer sitting under
+   under it) minus backdrop-filter, for page sections (popups use .lg-sheet). Used on
+   pages that open popups — the student attendance app. A backdrop-filtered layer sitting under
    a popup that fades in is what makes Chrome draw black frames, and over a
    flat page background the blur had nothing to bend anyway: the ambient
    blobs are already blurred, so the sheet reads as glass without it. */
-.lg-sheet {
+.lg-pane {
   position: relative;
   isolation: isolate;
   border-radius: 28px;
@@ -630,7 +703,7 @@ body {
     0 2px 6px rgba(15, 23, 42, 0.05),
     0 28px 56px -32px rgba(15, 23, 42, 0.38);
 }
-.lg-sheet::before {
+.lg-pane::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -682,22 +755,13 @@ body {
   z-index: -1;
 }
 
-/* Popup surface for the attendance and leave apps: solid, a crisp inner top
-   highlight, layered depth. Solid on purpose — never backdrop-filtered (see
-   .lg-sheet). Paired with .lg-scrim, a plain dim with no blur. */
-.lg-popup {
-  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    0 0 0 1px rgba(15, 23, 42, 0.06),
-    0 32px 80px -24px rgba(15, 23, 42, 0.45),
-    0 4px 12px -4px rgba(15, 23, 42, 0.10);
-}
-.lg-scrim { background: rgba(15, 23, 42, 0.46); }
+/* The plain dim behind a popup — no blur, the same as ModalShell's glass
+   sheet uses (a blurred backdrop fading in is what flashed black). */
+.lg-scrim { background: rgba(28, 26, 30, 0.45); }
 
 @media (prefers-reduced-transparency: reduce) {
-  .lg-sheet { background: #fff; }
-  .lg-sheet .lg-ambient { display: none; }
+  .lg-pane { background: #fff; }
+  .lg-pane .lg-ambient { display: none; }
 }
 
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work

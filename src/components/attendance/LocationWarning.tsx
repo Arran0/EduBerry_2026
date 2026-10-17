@@ -244,37 +244,37 @@ export function LocationWarningModal({
   // AnimatePresence, rather than one that quietly never fires.
   return createPortal(
     <div
-      className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-[#1c1a1e]/45"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.96, opacity: 0, y: 16 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="lg-sheet relative rounded-[28px] w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={warning.title}
       >
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100">
-          <span className={`w-8 h-8 rounded-full border flex items-center justify-center flex-shrink-0 ${tone.badge}`}>
+        <div className="relative z-[3] flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
+          <span className={`w-10 h-10 rounded-[0.85rem] border flex items-center justify-center flex-shrink-0 ${tone.badge}`}>
             <WarningIcon warning={warning} size={15} />
           </span>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-800 text-sm truncate">{title ?? 'Location notice'}</p>
+            <p className="font-display text-[1.05rem] font-bold text-slate-900 leading-tight headline truncate">{title ?? 'Location notice'}</p>
             {subtitle && <p className="text-[11px] text-slate-500 mt-0.5 truncate">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
+            className="lg-control w-9 h-9 flex-shrink-0"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="lg-sheet-card relative z-[3] mx-2 mb-2 p-4">
           <LocationWarningBanner
             warning={warning}
             footnote={warning.strict
