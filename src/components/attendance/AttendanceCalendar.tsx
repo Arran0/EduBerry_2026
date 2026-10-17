@@ -140,68 +140,68 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
     acc[r.status] = (acc[r.status] ?? 0) + 1; return acc
   }, {} as Partial<Record<AttendanceStatus, number>>)
 
+  const monthLabel = new Date(year, month - 1).toLocaleString('en-US', { month: 'long' })
+  const navBtn = 'w-8 h-8 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400'
+
   return (
     <>
-      <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+      {/* A solid content card (see .lg-content in globals.css): the month is
+          read off it, so it never sits on glass. Cell rhythm is unchanged —
+          52px tiles on a 4px gutter take the same 56px a bordered cell did. */}
+      <div className="rounded-[20px] overflow-hidden bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_14px_30px_-22px_rgba(15,23,42,0.4)]">
 
-        {/* ── Gradient header ── */}
-        <div className="bg-gradient-to-r from-violet-700 to-purple-600 px-4 sm:px-5 py-4">
-          <div className="flex items-center justify-between">
-            <button onClick={prevMonth}
-              className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
+        {/* ── Header: month, its tally, and the steppers ── */}
+        <div className="flex items-center gap-3 px-3.5 sm:px-4 pt-3 pb-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-display text-[17px] font-bold text-slate-900 leading-tight truncate" aria-live="polite">
+              {monthLabel} <span className="font-semibold text-slate-400">{year}</span>
+            </h3>
+            <div className="flex items-center gap-1 mt-1 flex-wrap">
+              {(['present', 'absent', 'late', 'half_day'] as AttendanceStatus[]).map(st => (
+                <span
+                  key={st}
+                  className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-1.5 py-[1px] rounded-full bg-slate-50 ring-1 ring-slate-900/[0.05] text-slate-600 tabular-nums"
+                  title={ATTENDANCE_STATUS_LABELS[st]}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_CELL[st].dot }} />
+                  {st === 'half_day' ? 'HD' : ATTENDANCE_STATUS_LABELS[st].charAt(0)} {loading ? '–' : counts[st] ?? 0}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button onClick={prevMonth} aria-label={`Previous month (${monthName(month === 1 ? year - 1 : year, month === 1 ? 12 : month - 1)})`} className={navBtn}>
               <ChevronLeft size={16} />
             </button>
-
-            <div className="text-center">
-              <p className="text-white font-bold text-base leading-tight">{monthName(year, month)}</p>
-              <div className="flex items-center justify-center gap-1.5 mt-1.5 flex-wrap">
-                {[
-                  { s: 'present'  as AttendanceStatus, label: 'P',  c: '#6ee7b7' },
-                  { s: 'absent'   as AttendanceStatus, label: 'A',  c: '#fca5a5' },
-                  { s: 'late'     as AttendanceStatus, label: 'L',  c: '#fcd34d' },
-                  { s: 'half_day' as AttendanceStatus, label: 'HD', c: '#fdba74' },
-                ].map(({ s, label, c }) => (
-                  <span key={s} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                    style={{ background: 'rgba(255,255,255,0.15)', color: c }}>
-                    {label} {counts[s] ?? 0}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <button onClick={nextMonth}
-              className="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
+            <button onClick={nextMonth} aria-label={`Next month (${monthName(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1)})`} className={navBtn}>
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
 
         {/* ── Day headers ── */}
-        <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+        <div className="grid grid-cols-7 gap-1 px-1.5">
           {DAY_HEADERS.map(h => (
-            <div key={h} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wider ${
-              h === 'Sun' ? 'text-slate-300' : 'text-slate-500'
+            <div key={h} className={`py-1 text-center text-[10px] font-semibold ${
+              h === 'Sun' ? 'text-slate-300' : 'text-slate-400'
             }`}>{h}</div>
           ))}
         </div>
 
         {/* ── Calendar grid ── */}
         {loading ? (
-          <div className="grid grid-cols-7 bg-white">
+          <div className="grid grid-cols-7 gap-1 px-1.5 pb-1.5">
             {cells.map((_, i) => (
-              <div
-                key={`sk-${i}`}
-                className="h-14 border-b border-r border-slate-100 last:border-r-0 flex items-center justify-center"
-              >
-                <div className="skeleton w-7 h-7 rounded-lg" />
+              <div key={`sk-${i}`} className="h-[52px] rounded-xl bg-slate-50 flex items-center justify-center">
+                <div className="skeleton w-6 h-6 rounded-lg" />
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-7 bg-white animate-fade-in">
+          <div className="grid grid-cols-7 gap-1 px-1.5 pb-1.5 animate-fade-in">
             {cells.map((day, i) => {
               if (day === null) {
-                return <div key={`e-${i}`} className="h-14 border-b border-r border-slate-100 last:border-r-0 bg-slate-50/30" />
+                return <div key={`e-${i}`} className="h-[52px]" />
               }
               const dow = (firstDow + day - 1) % 7
               const weekend = isWeekend(dow)
@@ -218,26 +218,31 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                 dayApps.length > 0 ||
                 (!rec && !!onEmptyDayClick && !future)
               )
+              const label = `${monthLabel} ${day}${s ? `, ${ATTENDANCE_STATUS_LABELS[s]}` : ''}${dayApps.length ? `, ${dayApps.length} leave application${dayApps.length > 1 ? 's' : ''}` : ''}`
 
               return (
                 <div
                   key={day}
+                  role={clickable ? 'button' : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  aria-label={clickable ? label : undefined}
                   onClick={() => !weekend && handleDayClick(day)}
-                  className={`h-14 border-b border-r border-slate-100 last:border-r-0 flex flex-col items-center justify-center gap-0.5 relative select-none transition-colors ${
-                    clickable ? 'cursor-pointer hover:opacity-80' : weekend ? 'cursor-default' : 'cursor-default'
+                  onKeyDown={clickable ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleDayClick(day) } } : undefined}
+                  className={`h-[52px] rounded-xl flex flex-col items-center justify-center gap-0.5 relative select-none transition-[transform,filter] ${
+                    clickable ? 'cursor-pointer hover:brightness-[0.97] active:scale-[0.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400' : 'cursor-default'
                   }`}
                   style={style
-                    ? { background: style.bg, borderBottomColor: style.border }
-                    : (hasPendingApp || hasApprovedApp) && !s
-                      ? { background: '#fffbeb' }
-                      : weekend ? { background: '#f8fafc' } : {}}
+                    ? { background: style.bg, boxShadow: `inset 0 0 0 1px ${style.border}66` }
+                    : (hasPendingApp || hasApprovedApp)
+                      ? { background: '#fffbeb', boxShadow: 'inset 0 0 0 1px #fcd34d66' }
+                      : weekend ? { background: '#f8fafc' } : { background: '#fcfcfd', boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.04)' }}
                 >
-                  {today && (
-                    <div className="absolute inset-[3px] rounded-lg ring-2 ring-violet-400 pointer-events-none" />
-                  )}
-
-                  <span className="text-[12px] font-bold leading-none z-10"
-                    style={{ color: style ? style.text : weekend ? '#cbd5e1' : future ? '#cbd5e1' : '#94a3b8' }}>
+                  <span
+                    className={`text-[12px] font-bold leading-none tabular-nums ${today ? 'w-[22px] h-[22px] rounded-full flex items-center justify-center text-white' : ''}`}
+                    style={today
+                      ? { background: 'var(--page-gradient-from, #7c3aed)' }
+                      : { color: style ? style.text : weekend || future ? '#cbd5e1' : '#94a3b8' }}
+                  >
                     {day}
                   </span>
 
@@ -253,7 +258,7 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
                     </div>
                   )}
 
-                  {isPast && <HelpCircle size={9} className="text-slate-300" />}
+                  {isPast && !today && <HelpCircle size={9} className="text-slate-300" />}
                 </div>
               )
             })}
@@ -261,20 +266,20 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
         )}
 
         {/* ── Legend ── */}
-        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-x-3 gap-y-1.5">
+        <div className="px-4 py-2 border-t border-slate-100 flex flex-wrap gap-x-3 gap-y-1">
           {(['present', 'absent', 'late', 'half_day'] as AttendanceStatus[]).map(s => (
             <div key={s} className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
+              <div className="w-2 h-2 rounded-full" style={{ background: STATUS_CELL[s].dot }} />
               <span className="text-[10px] text-slate-500 font-medium">{ATTENDANCE_STATUS_LABELS[s]}</span>
             </div>
           ))}
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] text-slate-500 font-medium">Approved App.</span>
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-slate-500 font-medium">Leave approved</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-            <span className="text-[10px] text-slate-500 font-medium">Pending App.</span>
+            <div className="w-2 h-2 rounded-full bg-amber-400" />
+            <span className="text-[10px] text-slate-500 font-medium">Leave pending</span>
           </div>
           <div className="flex items-center gap-1.5">
             <HelpCircle size={10} className="text-slate-300" />
@@ -285,39 +290,49 @@ export default function AttendanceCalendar({ studentId, homeroomId, year, month,
 
       {/* ── Leave application popup ── */}
       {selectedApps && typeof document !== 'undefined' && createPortal(
+        // Plain dim and the glass sheet ModalShell uses: no backdrop-filter
+        // anywhere in a popup (a blurred layer fading in flashed black).
         <div
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          className="lg-scrim fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-3 sm:p-4"
           onClick={() => setSelectedApps(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Leave applications on this day"
+            className="lg-sheet relative rounded-[26px] w-full max-w-sm overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-              <p className="text-sm font-bold text-slate-700">
-                {selectedApps.length === 1 ? 'Application' : `${selectedApps.length} Applications`}
+            <div className="relative z-[3] flex items-center justify-between gap-3 px-4 pt-3.5 pb-2.5">
+              <p className="text-[15px] font-bold text-slate-900">
+                {selectedApps.length === 1 ? 'Leave application' : `${selectedApps.length} leave applications`}
               </p>
-              <button onClick={() => setSelectedApps(null)} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                <X size={15} />
+              <button
+                onClick={() => setSelectedApps(null)}
+                aria-label="Close"
+                className="lg-control w-8 h-8 flex-shrink-0"
+              >
+                <X size={15} strokeWidth={2.4} />
               </button>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="lg-sheet-card relative z-[3] mx-2 mb-2 divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
               {selectedApps.map(app => (
                 <div key={app.id} className="px-4 py-3 space-y-2">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                    <span className={`w-1.5 h-1.5 rounded-full ${app.status === 'approved' ? 'bg-emerald-500' : app.status === 'pending' ? 'bg-amber-400' : 'bg-rose-500'}`} />
                     {LEAVE_TYPE_LABELS[app.leave_type]}
-                    {' · '}
+                    <span className="text-slate-300">·</span>
                     {new Date(app.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     {app.start_date !== app.end_date && ` – ${new Date(app.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-                  </p>
+                  </div>
                   <p className="text-sm text-slate-700 leading-relaxed">{app.reason}</p>
                   {onAppOpen && canViewApp(app, viewerUserId, viewerRole) && (
                     <button
                       onClick={() => { setSelectedApps(null); onAppOpen(app) }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors"
                     >
                       <ExternalLink size={12} />
-                      View in OD / Leave Manager
+                      Open in OD / Leave
                     </button>
                   )}
                 </div>

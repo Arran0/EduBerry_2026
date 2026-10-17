@@ -650,13 +650,13 @@ body {
 /* ============================================================ */
 
 /* Warm stone with light pooled under where the glass sits, so the panels have
-   colour to bend: honey gold top-left, grasshopper top-right, a breath of
-   rose low down. Fixed, so it stays put as the page scrolls under the glass. */
+   colour to bend: honey gold top-left, grasshopper top-right. (No red — a rose
+   pool low down read as a stain under the glass.) Fixed, so it stays put as
+   the page scrolls under the glass. */
 body:has([data-page-theme="staff-attendance"]) {
   background:
     radial-gradient(56rem 34rem at 6% 2%, rgba(203, 171, 85, 0.30), transparent 62%),
     radial-gradient(48rem 32rem at 100% 14%, rgba(141, 152, 87, 0.24), transparent 64%),
-    radial-gradient(52rem 30rem at 40% 104%, rgba(239, 51, 64, 0.10), transparent 62%),
     #EDE9E3;
   background-attachment: fixed;
 }
@@ -679,6 +679,101 @@ body:has([data-page-theme="staff-attendance"]) {
 @media (prefers-reduced-motion: reduce) {
   .fee-stripes,
   .fee-glint::after { animation: none; }
+}
+
+/* ============================================================ */
+/* Liquid Glass pane — the deck's material without the lens      */
+/* ============================================================ */
+
+/* The same sheet as .lg-deck (specular rim, inner highlight, ambient colour
+   under it) minus backdrop-filter, for page sections (popups use .lg-sheet). Used on
+   pages that open popups — the student attendance app. A backdrop-filtered layer sitting under
+   a popup that fades in is what makes Chrome draw black frames, and over a
+   flat page background the blur had nothing to bend anyway: the ambient
+   blobs are already blurred, so the sheet reads as glass without it. */
+.lg-pane {
+  position: relative;
+  isolation: isolate;
+  border-radius: 28px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.58) 55%, rgba(255, 255, 255, 0.74) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(15, 23, 42, 0.05),
+    0 28px 56px -32px rgba(15, 23, 42, 0.38);
+}
+.lg-pane::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(15, 23, 42, 0.06) 40%,
+    rgba(15, 23, 42, 0.04) 65%,
+    rgba(255, 255, 255, 0.8) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* iOS-style segmented control: a recessed track, and a raised white thumb
+   that slides between options (a framer-motion layoutId does the slide). */
+.lg-seg {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 9999px;
+  background: rgba(118, 118, 128, 0.12);
+}
+.lg-seg-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  color: rgb(100 116 139);
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+.lg-seg-btn:hover { color: rgb(15 23 42); }
+.lg-seg-btn[aria-pressed='true'] { color: rgb(15 23 42); }
+.lg-seg-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--page-gradient-from, #7c3aed) 55%, transparent); }
+.lg-seg-thumb {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10), 0 3px 8px -2px rgba(15, 23, 42, 0.14), inset 0 0 0 0.5px rgba(15, 23, 42, 0.04);
+  z-index: -1;
+}
+
+/* Glass controls inside a popup lose their blur. A backdrop-filtered button
+   sitting under a popup that fades in on top (a profile card opened from the
+   leave app) is the same pattern that makes Chrome drop a frame or flash
+   black; over the popup's own near-opaque sheet the blur showed nothing. */
+.modal-portal .lg-control,
+.modal-portal .lg-pill {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.82);
+}
+.modal-portal .lg-control:hover { background: #fff; }
+
+/* The plain dim behind a popup — no blur, the same as ModalShell's glass
+   sheet uses (a blurred backdrop fading in is what flashed black). */
+.lg-scrim { background: rgba(28, 26, 30, 0.45); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .lg-pane { background: #fff; }
+  .lg-pane .lg-ambient { display: none; }
 }
 
 /* Professional chrome — the .pro-card idea applied to a whole page. Staff work

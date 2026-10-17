@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import { PageIconMap, SiteBranding, LoginPageConfig, PageThemeMap, THEME_PALETTES, savePageIconConfig, saveBranding, saveLoginConfig, savePageThemes, saveSetting, uploadSiteAsset, AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS, BANNER_DEFAULT, TASK_BANNER_DEFAULT, ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT, ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT, LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT, FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT, BUS_BANNER_DEFAULT, TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
+import { setProfileBanner } from '@/lib/profileBanner'
 import { Check, RotateCcw, Save, Settings, Palette, Image as ImageIcon, Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2, MapPin, Clock, CalendarOff, Ban, ShieldCheck, Search, Bus, CreditCard, Banknote, Monitor, Building2, Repeat, EyeOff } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
 import {
@@ -1265,11 +1266,13 @@ export default function AdminSettingsPage() {
                 const url = await uploadSiteAsset(f, 'profile_banner')
                 if (url) {
                   await saveSetting('profile_banner', url)
+                  setProfileBanner(url)
                 }
                 setUploading('profile-banner', false)
               }}
               onClear={async () => {
                 await saveSetting('profile_banner', '')
+                setProfileBanner(null)
               }} />
           </div>
         </div>

@@ -44,9 +44,10 @@ export default function StudentLeaveModal({
     <ModalShell
       onClose={onClose}
       size="2xl"
-      // Tabs, a search box and a list — the box should not shrink to fit an
-      // empty folder and grow again when a full one is picked.
-      minHClass="min-h-[70dvh] sm:min-h-[min(38rem,80dvh)]"
+      // A fixed height: tabs, a search box and a list should not shrink to fit
+      // an empty folder and grow again when a full one is picked — the list
+      // scrolls inside the popup instead.
+      minHClass="h-[88dvh] sm:h-[min(44rem,86dvh)]"
       title={isStudent ? 'My OD / Leave' : 'Student OD / Leave'}
       subtitle={isStudent
         ? 'Apply for OD, casual, or medical leave and track applications'

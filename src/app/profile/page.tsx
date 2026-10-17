@@ -10,6 +10,7 @@ import Image from 'next/image'
 import { fetchMarksForStudent, StudentMarkWithContext } from '@/lib/classrooms'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
 import { fetchRawSetting } from '@/lib/pageConfig'
+import { setProfileBanner } from '@/lib/profileBanner'
 import {
   Mail,
   Shield,
@@ -111,6 +112,9 @@ export default function ProfilePage() {
       if (!json.success) throw new Error(json.error ?? 'Banner upload failed')
 
       setBannerUrl(json.url)
+      // Every profile card on this device switches to the new image now; other
+      // devices pick it up the next time they check the setting.
+      setProfileBanner(json.url)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       alert('Banner upload failed: ' + msg)

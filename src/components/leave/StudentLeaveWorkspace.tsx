@@ -342,7 +342,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
   // it is already sitting on a card, and boxing it in a second one would spend
   // width on nested borders. How far it has to pull back depends on the host:
   // the popup body is px-5, the standalone page px-4.
-  const listBleed = embedded ? '-mx-5' : '-mx-4 sm:mx-0'
+  const listBleed = embedded ? '-mx-4 sm:-mx-5' : '-mx-4 sm:mx-0'
 
   // The number beside a folder is its unread count — what is waiting on
   // someone — not how many applications it holds.
@@ -370,7 +370,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
     <>
       {/* Student stats summary */}
       {isStudent && (
-        <div className="mb-5">
+        <div className={embedded ? 'mb-2' : 'mb-5'}>
           <LeaveStatsCard stats={stats} />
         </div>
       )}
@@ -384,7 +384,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
             exit={{ opacity: 0, height: 0 }}
             className="mb-5 overflow-hidden"
           >
-            <form onSubmit={handleSubmit} className="glass-strong rounded-2xl p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="rounded-[22px] bg-[#FAF9F6] border border-[#27272A]/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-800">New OD / Leave Application</h2>
                 <button type="button" onClick={() => { setShowForm(false); resetForm() }} className="p-1 text-slate-400 hover:text-slate-600">
@@ -564,6 +564,9 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
         )}
       </AnimatePresence>
 
+      {/* Search and folders stay pinned to the top of the popup while the
+          list scrolls under them (the popup is a fixed height). */}
+      <div className={embedded ? 'sticky -top-1 z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-3 bg-white' : ''}>
       {/* ── Search: matches either side of an application, sender or receiver ── */}
       <div className="relative mb-2.5">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -573,7 +576,7 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
           onChange={e => setSearchInput(e.target.value)}
           placeholder="Search by sender or receiver name…"
           autoComplete="off"
-          className="w-full pl-9 pr-9 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none page-input-focus text-slate-700 placeholder:text-slate-400"
+          className="w-full pl-9 pr-9 py-2 text-sm bg-slate-100 border border-transparent rounded-xl focus:outline-none focus:bg-white focus:border-slate-300 page-input-focus text-slate-700 placeholder:text-slate-400 transition-colors"
         />
         {searching ? (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
@@ -613,6 +616,8 @@ const StudentLeaveWorkspace = forwardRef<StudentLeaveWorkspaceHandle, StudentLea
             }`} />
           </button>
         ))}
+      </div>
+
       </div>
 
       {/* ── Tab Content ── */}

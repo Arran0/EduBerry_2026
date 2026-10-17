@@ -39,9 +39,10 @@ export default function StaffLeaveModal({
     <ModalShell
       onClose={onClose}
       size="2xl"
-      // Tabs, a search box and a list — the box should not shrink to fit an
-      // empty folder and grow again when a full one is picked.
-      minHClass="min-h-[70dvh] sm:min-h-[min(38rem,80dvh)]"
+      // A fixed height: tabs, a search box and a list should not shrink to fit
+      // an empty folder and grow again when a full one is picked — the list
+      // scrolls inside the popup instead.
+      minHClass="h-[88dvh] sm:h-[min(44rem,86dvh)]"
       title="Staff OD / Leave"
       subtitle="Apply for on duty or leave and manage applications"
       icon={<CalendarDays size={16} />}

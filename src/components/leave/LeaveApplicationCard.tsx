@@ -200,6 +200,10 @@ export default function LeaveApplicationCard({
         userId: namedApproval?.approver_id ?? undefined,
         detail: namedApproval?.approver?.role ?? namedApproval?.approver_role ?? '',
         prefix: 'To ',
+        // What the list already knows, so the profile card opens fully drawn.
+        seed: namedApproval?.approver && namedApproval.approver_id
+          ? { ...namedApproval.approver, id: namedApproval.approver_id }
+          : null,
       }
     : {
         name: application.applicant?.full_name ?? '—',
@@ -211,6 +215,7 @@ export default function LeaveApplicationCard({
           application.applicant?.section,
         ].filter(Boolean).join(' · '),
         prefix: '',
+        seed: application.applicant ? { ...application.applicant, id: application.applicant_id } : null,
       }
 
   const myPendingApprovals = application.approvals.filter(a => {
@@ -423,6 +428,7 @@ export default function LeaveApplicationCard({
           name={counterparty.name}
           size={34}
           userId={counterparty.userId}
+          profileSeed={counterparty.seed}
         />
 
         <button
@@ -512,7 +518,9 @@ export default function LeaveApplicationCard({
   )
 
   const cardSurface = (
-    <div className="glass-strong rounded-2xl overflow-hidden">
+    // Solid, not frosted: this card is mostly shown inside popups, and a
+    // backdrop-filtered layer under a popup is what made Chrome flash black.
+    <div className="rounded-2xl overflow-hidden bg-white ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_10px_24px_-18px_rgba(15,23,42,0.35)]">
       {/* Type accent bar */}
       <div className={`h-[3px] bg-gradient-to-r ${ts.accentFrom} to-transparent`} />
 
@@ -524,6 +532,7 @@ export default function LeaveApplicationCard({
             name={application.applicant?.full_name ?? ''}
             size={26}
             userId={application.applicant_id}
+            profileSeed={application.applicant ? { ...application.applicant, id: application.applicant_id } : null}
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate leading-tight">

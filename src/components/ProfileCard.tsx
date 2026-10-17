@@ -8,7 +8,13 @@ import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, Cal
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard, type ProfileCardSeed, type SupportCardPerson } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
-import { fetchRawSetting } from '@/lib/pageConfig'
+import {
+  getCachedProfileBanner,
+  isProfileBannerDecoded,
+  decodeProfileBanner,
+  subscribeProfileBanner,
+  warmProfileBanner,
+} from '@/lib/profileBanner'
 import { fetchStudentDetails } from '@/lib/studentDetails'
 import { fetchStaffDirectory } from '@/lib/staffDetails'
 import { Homeroom, fetchHomeromsForStudent } from '@/lib/homerooms'
@@ -85,19 +91,60 @@ function hasCalendarAccess(viewer: UserProfile, target: UserProfile): boolean {
  */
 const CARD_MIN_HEIGHT = 475
 
+/**
+ * The card's header image. The photo is drawn as an <img> over a placeholder
+ * rather than as a CSS background: a background that is still downloading
+ * paints nothing, so the header showed the dark fallback gradient — a black
+ * blink — until the bytes arrived. The image is decoded off-screen first (see
+ * lib/profileBanner) and, once it is, paints in the same frame as the card.
+ *
+ * `url` undefined means this device has never asked (a first visit): the
+ * placeholder is a quiet light grey then, never the dark "no banner" gradient,
+ * which is reserved for a school that genuinely has none.
+ */
+function CardBanner({ url, children }: { url: string | null | undefined; children?: React.ReactNode }) {
+  const [ready, setReady] = useState(() => !!url && isProfileBannerDecoded(url))
+  useEffect(() => {
+    if (!url) return
+    if (isProfileBannerDecoded(url)) { setReady(true); return }
+    setReady(false)
+    let live = true
+    decodeProfileBanner(url).then(() => { if (live) setReady(true) })
+    return () => { live = false }
+  }, [url])
+
+  return (
+    <div
+      className="relative h-32 flex-shrink-0 overflow-hidden"
+      style={{
+        background: url === null
+          ? 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)'
+          : 'linear-gradient(140deg, #e2e8f0 0%, #cbd5e1 100%)',
+      }}
+    >
+      {url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-200"
+          style={{ opacity: ready ? 1 : 0 }}
+        />
+      )}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_65%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
+      {children}
+    </div>
+  )
+}
+
 /** The card's own layout in grey, for the opens that have nothing to draw yet. */
-function ProfileCardSkeleton({ bannerUrl }: { bannerUrl: string | null }) {
+function ProfileCardSkeleton({ bannerUrl }: { bannerUrl: string | null | undefined }) {
   const bar = 'rounded-lg bg-slate-200/80 animate-pulse'
   return (
     <div style={{ minHeight: CARD_MIN_HEIGHT }}>
-      <div
-        className="relative h-32 flex-shrink-0"
-        style={bannerUrl
-          ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-          : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }}
-      >
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
-      </div>
+      <CardBanner url={bannerUrl} />
       <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
         <div className="h-[84px] w-[84px] animate-pulse rounded-full bg-slate-200 ring-[5px] ring-white" />
         <div className={`mt-3 h-[22px] w-44 ${bar}`} />
@@ -177,35 +224,15 @@ function ContactRow({ icon, label, value, href, loading, empty }: {
 }
 
 /**
- * The banner is one site-wide setting, identical for every card. Fetching it
- * per open meant the header painted as the fallback gradient and then swapped
- * to the image a moment later — a flash on every single open. Read once.
- */
-let bannerCache: string | null | undefined
-
-/**
  * A name is enough to draw the card from. Every avatar now hands over what it
- * knows (name, face, often email); the role badge, email and action row draw
- * as placeholders at their own size until the profile lands, so the card opens
- * as itself rather than as a grey skeleton that then swaps for the real card —
- * the swap was the blink on every open.
+ * knows (name, face, often email); the role badge, email and action row hold
+ * their places as placeholders until the profile lands, so the card opens as
+ * itself rather than as a grey skeleton that then swaps for the real card — a
+ * visible blink a beat after opening.
  */
 function seedToProfile(seed?: ProfileCardSeed | null): UserProfile | null {
   if (!seed?.full_name) return null
   return { created_at: '', updated_at: '', email: '', role: '', ...seed } as unknown as UserProfile
-}
-
-/** Reads the site-wide profile banner once and warms the image cache with it. */
-function prefetchProfileBanner(): Promise<string | null> {
-  if (bannerCache !== undefined) return Promise.resolve(bannerCache)
-  return fetchRawSetting<string>('profile_banner').then(url => {
-    bannerCache = typeof url === 'string' && url ? url : null
-    if (bannerCache && typeof window !== 'undefined') {
-      const img = new window.Image()
-      img.src = bannerCache
-    }
-    return bannerCache
-  })
 }
 
 /** The dimmed backdrop and the card's own surface — shared by every kind of card. */
@@ -234,6 +261,9 @@ function CardFrame({ onClose, children }: { onClose: () => void; children: React
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
         className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
       >
+        {/* A plain div: every slot inside is drawn whether or not it has a
+            value, so the card is the same height from the frame it opens to
+            the frame it closes. */}
         <div
           className="pointer-events-auto max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-[28px] bg-white shadow-[0_28px_70px_-24px_rgba(15,23,42,0.55)] ring-1 ring-slate-900/[0.06]"
           onClick={e => e.stopPropagation()}
@@ -245,26 +275,18 @@ function CardFrame({ onClose, children }: { onClose: () => void; children: React
   )
 }
 
-/** The banner across the card's top, with its close button. */
-function CardBanner({ bannerUrl, onClose }: { bannerUrl: string | null; onClose: () => void }) {
+/** The close button on the banner. */
+function CardClose({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      className="relative h-32 flex-shrink-0"
-      style={bannerUrl
-        ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { background: 'linear-gradient(140deg, #3f3f46 0%, #1c1c1e 100%)' }
-      }
+    <button
+      onClick={onClose}
+      aria-label="Close profile"
+      // No backdrop-filter: a blurred chip inside a card that is fading in is
+      // one of the layers that made Chrome flash black.
+      className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.18),transparent_65%)]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/35" />
-      <button
-        onClick={onClose}
-        aria-label="Close profile"
-        className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-      >
-        <X size={14} />
-      </button>
-    </div>
+      <X size={14} />
+    </button>
   )
 }
 
@@ -295,9 +317,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   // drawn and the fetch below only fills in what the list didn't have.
   const [targetProfile, setTargetProfile] = useState<UserProfile | null>(() => seedToProfile(seed))
   const [loadingProfile, setLoadingProfile] = useState(() => !seedToProfile(seed))
-  // Whether the profiles row itself has landed — a seeded card is drawn before
-  // it, with the fields the seed lacked (role, email) as placeholders.
-  const [profileResolved, setProfileResolved] = useState(false)
+  // Whether the full profile row has landed — a seeded card may be missing
+  // fields (the email) until it has.
+  const [profileFetched, setProfileFetched] = useState(false)
   const [phone, setPhone] = useState<string | null>(null)
   // Student-only facts
   const [admissionNo, setAdmissionNo] = useState<string | null>(null)
@@ -307,7 +329,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   const [designation, setDesignation] = useState<string | null>(null)
   const [loadingDetails, setLoadingDetails] = useState(true)
 
-  const [profileBannerUrl, setProfileBannerUrl] = useState<string | null>(bannerCache ?? null)
+  // The site-wide banner as this device has it cached — see lib/profileBanner.
+  const [profileBannerUrl, setProfileBannerUrl] = useState<string | null | undefined>(getCachedProfileBanner)
+  useEffect(() => subscribeProfileBanner(setProfileBannerUrl), [])
 
   // Attendance calendar drill-down (stacked on top of the card)
   const [showAttendance, setShowAttendance] = useState(false)
@@ -329,11 +353,6 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
     && (viewerProfile.id === targetProfile.id || viewerProfile.role === 'admin')
     && (isStudentProfile || isDriverProfile || isSalaryStaffProfile)
 
-  useEffect(() => {
-    if (bannerCache !== undefined) return
-    prefetchProfileBanner().then(setProfileBannerUrl)
-  }, [])
-
   const loadProfile = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
@@ -342,7 +361,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
       .single()
     if (!error && data) setTargetProfile(data as UserProfile)
     setLoadingProfile(false)
-    setProfileResolved(true)
+    setProfileFetched(true)
   }, [userId])
 
   useEffect(() => { loadProfile() }, [loadProfile])
@@ -427,7 +446,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
       <CardFrame onClose={onClose}>
           {loadingProfile ? (
             <ProfileCardSkeleton bannerUrl={profileBannerUrl} />
-          ) : !targetProfile || (profileResolved && !targetProfile.role) ? (
+          ) : !targetProfile || (profileFetched && !targetProfile.role) ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ minHeight: CARD_MIN_HEIGHT }}>
               <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-300">
                 <X size={22} />
@@ -439,17 +458,29 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
             </div>
           ) : (
             <>
-              {/* Banner — the admin's profiles_banner image, with a scrim at
+              {/* Banner — the admin's profile_banner image, with a scrim at
                   the bottom so the avatar's white ring and the close button
                   read against any photograph. */}
-              <CardBanner bannerUrl={profileBannerUrl} onClose={onClose} />
+              <CardBanner url={profileBannerUrl}>
+                <button
+                  onClick={onClose}
+                  aria-label="Close profile"
+                  // No backdrop-filter: a blurred chip inside a card that is
+                  // fading in is one of the layers that made Chrome flash black.
+                  className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <X size={14} />
+                </button>
+              </CardBanner>
 
               {/* Body */}
               <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
                 {/* Avatar */}
                 <div
                   className="h-[84px] w-[84px] flex-shrink-0 overflow-hidden rounded-full ring-[5px] ring-white shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] grid place-items-center"
-                  style={{ background: profileBannerUrl ? '#27272A' : 'linear-gradient(135deg, #3f3f46, #1c1c1e)' }}
+                  // Light, not near-black: this disc shows for a beat before the face
+                  // loads, and a dark one read as another blink.
+                  style={{ background: '#e2e8f0' }}
                 >
                   <Avatar
                     avatarUrl={targetProfile.avatar_url}
@@ -496,7 +527,7 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
                     label="Email"
                     value={targetProfile.email || null}
                     href={targetProfile.email ? `mailto:${targetProfile.email}` : undefined}
-                    loading={!targetProfile.email && !profileResolved}
+                    loading={!targetProfile.email && !profileFetched}
                     empty="Nil"
                   />
                   <ContactRow
@@ -756,13 +787,9 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
 function SupportStaffCardModal({ person, onClose }: { person: SupportCardPerson; onClose: () => void }) {
   useBodyScrollLock()
   const { profile: viewerProfile } = useAuth()
-  const [bannerUrl, setBannerUrl] = useState<string | null>(bannerCache ?? null)
+  const [bannerUrl, setBannerUrl] = useState<string | null | undefined>(getCachedProfileBanner)
+  useEffect(() => subscribeProfileBanner(setBannerUrl), [])
   const [showAttendance, setShowAttendance] = useState(false)
-
-  useEffect(() => {
-    if (bannerCache !== undefined) return
-    prefetchProfileBanner().then(setBannerUrl)
-  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -790,9 +817,14 @@ function SupportStaffCardModal({ person, onClose }: { person: SupportCardPerson;
   return (
     <>
       <CardFrame onClose={onClose}>
-        <CardBanner bannerUrl={bannerUrl} onClose={onClose} />
+        <CardBanner url={bannerUrl}>
+          <CardClose onClose={onClose} />
+        </CardBanner>
         <div className="relative flex flex-col items-center -mt-10 px-5 pb-5">
-          <div className="h-[84px] w-[84px] flex-shrink-0 overflow-hidden rounded-full ring-[5px] ring-white shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] grid place-items-center">
+          <div
+            className="h-[84px] w-[84px] flex-shrink-0 overflow-hidden rounded-full ring-[5px] ring-white shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] grid place-items-center"
+            style={{ background: '#e2e8f0' }}
+          >
             <Avatar name={person.full_name} size={84} />
           </div>
           <h2 className="mt-3 font-display text-[17px] font-bold leading-[22px] text-slate-900 text-center">{person.full_name}</h2>
@@ -878,16 +910,11 @@ export default function ProfileCard() {
   const { activeUserId, activeSeed, activeSupport, closeProfileCard } = useProfileCard()
   const [mounted, setMounted] = useState(false)
 
-  useEffect(() => { setMounted(true) }, [])
-
-  // Warm the banner (setting and image) once the app is idle, so even the
-  // first card of a session opens with its banner already painted instead of
-  // the fallback gradient swapping to the photo a moment later.
   useEffect(() => {
-    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }
-    const run = () => { void prefetchProfileBanner() }
-    if (w.requestIdleCallback) w.requestIdleCallback(run)
-    else setTimeout(run, 1500)
+    setMounted(true)
+    // Decode the banner now, while nobody is looking, so the first card of the
+    // visit opens with its photo already drawn.
+    warmProfileBanner()
   }, [])
 
   if (!mounted) return null

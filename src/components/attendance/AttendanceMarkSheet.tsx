@@ -168,7 +168,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-[95dvh] sm:max-h-[80vh] rounded-t-2xl overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-700 to-purple-600 flex-shrink-0">
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
@@ -253,7 +253,7 @@ function StudentCalendarModal({ student, initialYear, initialMonth, homeroomId, 
       </div>
 
       {selectedApp && (
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setSelectedApp(null)}>
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedApp(null)}>
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[selectedApp.leave_type]}</h3>
@@ -360,7 +360,7 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
     <>
       {/* ── Full-viewport overlay ── */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-6"
         onClick={e => { if (e.target === e.currentTarget) onClose() }}
       >
         {/*

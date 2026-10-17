@@ -82,7 +82,7 @@ interface ModalShellProps {
 }
 
 /** Page themes whose popups default to the glass sheet. */
-const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave'])
+const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave'])
 
 export default function ModalShell({
   onClose,
@@ -268,9 +268,11 @@ export default function ModalShell({
       // and stays clickable even if the exit never finishes.
       style={isPresent ? undefined : { pointerEvents: 'none' }}
     >
-      {/* Backdrop */}
+      {/* Backdrop — a plain dim, no backdrop-filter. A full-screen blur that
+          fades in and out, with more popups (a profile card, a confirmation)
+          fading over it in turn, is what made Chrome flash black frames. */}
       <motion.div
-        className="absolute inset-0 bg-slate-950/45 backdrop-blur-md"
+        className="absolute inset-0 bg-slate-950/50"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -286,7 +288,7 @@ export default function ModalShell({
         className={`relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[92dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 ${
           bare
             ? `overflow-hidden ${radius}`
-            : `overflow-hidden ${radius} bg-white ring-1 ring-slate-900/[0.06] shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.4)]`
+            : `overflow-hidden ${radius} bg-white ring-1 ring-slate-900/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,1),0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[inset_0_1px_0_rgba(255,255,255,1),0_32px_80px_-20px_rgba(15,23,42,0.4)]`
         }`}
         initial={{ opacity: 0, y: 56, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -304,12 +306,12 @@ export default function ModalShell({
           className={`sm:hidden flex-shrink-0 flex justify-center pt-2.5 pb-1 cursor-grab active:cursor-grabbing touch-none ${bare ? 'absolute top-0 left-0 right-0 z-20' : ''}`}
           onPointerDown={e => dragControls.start(e)}
         >
-          <div className={`w-10 h-1.5 !rounded-full ${bare ? 'bg-slate-900/15 backdrop-blur-sm' : 'bg-slate-300/80'}`} />
+          <div className={`w-10 h-1.5 !rounded-full ${bare ? 'bg-slate-900/20' : 'bg-slate-300/80'}`} />
         </div>
 
         {/* Header */}
         {title != null && !bare && (
-          <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
+          <div className="flex-shrink-0 flex items-center gap-3 px-5 pt-2 pb-3.5 sm:pt-5 border-b border-slate-100 bg-white">
             {icon && (
               <div className={`w-9 h-9 ${sharp ? '' : '!rounded-xl'} flex items-center justify-center flex-shrink-0 ${iconClassName}`}>
                 {icon}
@@ -347,7 +349,7 @@ export default function ModalShell({
 
         {/* Footer */}
         {footer && !bare && (
-          <div className="flex-shrink-0 px-5 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] border-t border-slate-100 bg-white/90 backdrop-blur-xl">
+          <div className="flex-shrink-0 px-5 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] border-t border-slate-100 bg-white">
             {footer}
           </div>
         )}

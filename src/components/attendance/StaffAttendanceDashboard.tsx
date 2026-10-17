@@ -146,7 +146,7 @@ function StudentCalendarDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-[95dvh] sm:max-h-[90vh] rounded-t-2xl overflow-hidden">
@@ -226,7 +226,7 @@ function StudentCalendarDialog({
       {/* Application detail + decision modal */}
       {selectedApp && (
         <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-4"
           onClick={() => setSelectedApp(null)}
         >
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
@@ -566,26 +566,41 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
     setSearchResults([])
   }
 
-  return (
-    <div className="space-y-5">
+  const gradeLabel = (hr: SlimHomeroom) =>
+    hr.grade != null && hr.section ? `Grade ${hr.grade} · ${hr.section}`
+      : hr.grade != null ? `Grade ${hr.grade}` : hr.section ?? ''
 
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Clock size={12} className="text-violet-400 flex-shrink-0" />
-          <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-widest truncate">Recent Homerooms</span>
+  return (
+    // One glass pane, like the student view and the report below it: the
+    // header and the finder on the glass, each recent homeroom a solid card.
+    <div className="lg-pane p-2 sm:p-2.5">
+      <div className="relative space-y-2">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-2 px-1.5 pt-1">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
+            style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }}
+          >
+            <Clock size={16} className="text-white" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">Recent homerooms</h2>
+            <p className="text-[11px] text-slate-500 truncate mt-0.5">Open a sheet to mark attendance</p>
+          </div>
         </div>
         <button
           onClick={() => { setShowSearch(v => !v); setQuery(''); setSearchResults([]) }}
           aria-pressed={showSearch}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors flex-shrink-0 ${
+          className={`inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 text-xs font-semibold rounded-full transition-colors flex-shrink-0 ${
             showSearch
-              ? 'bg-[#27272A] text-white border-[#27272A]'
-              : 'bg-white text-[#18181B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
+              ? 'bg-slate-900 text-white hover:bg-slate-800'
+              : 'bg-white text-slate-800 ring-1 ring-slate-900/[0.08] shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:bg-slate-50'
           }`}
         >
           {showSearch ? <X size={13} /> : <Search size={13} />}
-          {showSearch ? 'Close' : 'Find Homeroom'}
+          {showSearch ? 'Close' : 'Find homeroom'}
         </button>
       </div>
 
@@ -597,40 +612,42 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="relative"
+            className="relative z-20"
           >
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none z-10" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
             <input
               autoFocus
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search by name, grade, or section…"
-              className="w-full pl-9 pr-3 py-2 bg-white border border-[#D4D4D8] rounded-lg text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+              placeholder="Search by name, grade or section"
+              className="w-full pl-9 pr-3 py-2 bg-white rounded-xl text-sm text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-900/[0.08] focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition-shadow"
             />
             {(searching || searchResults.length > 0) && (
-              <div className="absolute z-20 top-full mt-1 w-full bg-white border border-[#D4D4D8] rounded-lg shadow-md overflow-hidden">
+              <div className="absolute z-20 top-full mt-1.5 w-full bg-white rounded-2xl ring-1 ring-slate-900/[0.08] shadow-[0_18px_40px_-18px_rgba(15,23,42,0.35)] overflow-hidden">
                 {searching ? (
-                  <div className="flex items-center justify-center gap-2 py-3 text-sm text-[#A1A1AA]">
+                  <div className="flex items-center justify-center gap-2 py-3 text-sm text-slate-400">
                     <Loader2 size={14} className="animate-spin" /> Searching…
                   </div>
                 ) : (
-                  <div className="max-h-64 overflow-y-auto py-1">
+                  <div className="max-h-64 overflow-y-auto p-1">
                     {searchResults.map(hr => (
                       <button
                         key={hr.id}
                         onClick={() => openHomeroom({ id: hr.id, name: hr.name, grade: hr.grade, section: hr.section, class_teacher: hr.class_teacher ?? null })}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[#F5F5F5] text-left transition-colors"
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-50 text-left transition-colors"
                       >
-                        <Home size={14} className="text-violet-500 flex-shrink-0" />
+                        <span className="w-7 h-7 rounded-[9px] bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
+                          <Home size={13} />
+                        </span>
                         <span className="flex-1 min-w-0">
-                          <span className="block text-sm text-[#18181B] truncate">{hr.name}</span>
+                          <span className="block text-[13px] font-semibold text-slate-900 truncate">{hr.name}</span>
                           {hr.class_teacher && (
-                            <span className="block text-xs text-[#A1A1AA] truncate">{hr.class_teacher.full_name}</span>
+                            <span className="block text-[11px] text-slate-400 truncate">{hr.class_teacher.full_name}</span>
                           )}
                         </span>
                         {(hr.grade || hr.section) && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] flex-shrink-0">
+                          <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
                             {hr.grade && hr.section
                               ? `Gr ${hr.grade} · ${hr.section}`
                               : hr.grade ? `Grade ${hr.grade}` : hr.section}
@@ -648,72 +665,65 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
 
       {/* ── Empty state ── */}
       {recents.length === 0 && !showSearch && (
-        <div className="py-12 text-center px-6 bg-[#FAFAF9] rounded-xl border border-dashed border-[#D4D4D8]">
-          <Home size={26} className="text-[#D4D4D8] mx-auto mb-3" />
-          <p className="text-sm font-semibold text-[#18181B] mb-1">No recent homerooms</p>
-          <p className="text-xs text-[#71717A] mb-4">Search for a homeroom to open its attendance sheet.</p>
+        <div className="lg-content py-8 text-center px-6">
+          <div className="w-11 h-11 rounded-2xl bg-slate-50 ring-1 ring-slate-900/[0.05] flex items-center justify-center mx-auto mb-2.5">
+            <Home size={20} className="text-slate-300" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800 mb-0.5">No recent homerooms</p>
+          <p className="text-xs text-slate-500 mb-3.5">Find a homeroom to open its attendance sheet.</p>
           <button
             onClick={() => setShowSearch(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-medium rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-full transition-colors"
           >
             <Search size={13} />
-            Find a Homeroom
+            Find homeroom
           </button>
         </div>
       )}
 
-      {/* ── Homeroom cards ── */}
-      <div className="space-y-3">
-        {recents.map((hr, idx) => {
+      {/* ── Homeroom cards ──
+          Each one a solid card on the glass: the room's tile, its name, who
+          teaches it, and a capsule that says what a tap does. The open one
+          lifts a little and its capsule turns dark; the sheet unfolds inside. */}
+      <div className="space-y-2">
+        {recents.map(hr => {
           const isExpanded = expandedId === hr.id
+          const sub = gradeLabel(hr)
           return (
-            // Bordered the same way the staff check-in hero is: a thick frame in
-            // the page's own gradient colour, so the sheet you open reads as the
-            // one solid module on the screen.
             <div
               key={hr.id}
-              className="relative overflow-hidden rounded-[1.5rem] bg-white border-4 transition-shadow duration-200"
-              style={{
-                borderColor: 'var(--page-gradient-from, #7c3aed)',
-                boxShadow: isExpanded
-                  ? '0 1px 1px rgba(24,24,27,0.04), 0 18px 44px -18px rgba(24,24,27,0.22)'
-                  : '0 1px 1px rgba(24,24,27,0.04), 0 16px 40px -20px rgba(24,24,27,0.18)',
-              }}
+              className={`lg-content overflow-hidden transition-shadow duration-200 ${
+                isExpanded ? 'shadow-[0_1px_2px_rgba(15,23,42,0.06),0_22px_44px_-24px_rgba(15,23,42,0.5)]' : ''
+              }`}
             >
-              {/* Card button */}
               <div
                 role="button"
                 tabIndex={0}
+                aria-expanded={isExpanded}
                 onClick={() => openHomeroom(hr)}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHomeroom(hr) } }}
-                className={`w-full flex items-center gap-2.5 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all text-left cursor-pointer ${
-                  isExpanded
-                    ? 'bg-gradient-to-r from-violet-600 to-purple-500'
-                    : 'bg-white hover:bg-slate-50/80'
+                className={`group w-full flex items-center gap-3 px-3 sm:px-3.5 py-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400 ${
+                  isExpanded ? 'bg-slate-50/80 border-b border-slate-100' : 'hover:bg-slate-50/70'
                 }`}
               >
-                {/* Number chip */}
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${
-                  isExpanded ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {idx + 1}
-                </div>
+                <span
+                  className="w-10 h-10 rounded-[12px] flex items-center justify-center flex-shrink-0 shadow-[0_4px_10px_-4px_rgba(15,23,42,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]"
+                  style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }}
+                >
+                  <Home size={18} className="text-white" />
+                </span>
 
-                {/* Icon */}
-                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                  isExpanded ? 'bg-white/20' : 'bg-gradient-to-br from-violet-100 to-purple-100'
-                }`}>
-                  <Home size={18} className={isExpanded ? 'text-white' : 'text-violet-500'} />
-                </div>
-
-                {/* Name + teacher */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-[15px] font-extrabold leading-tight tracking-tight truncate ${
-                    isExpanded ? 'text-white' : 'text-slate-800'
-                  }`}>
-                    {hr.name}
-                  </p>
-                  {hr.class_teacher && (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-[15px] font-bold text-slate-900 leading-tight truncate">{hr.name}</p>
+                    {/* Only when the name doesn't already say it ("Grade 5 A"). */}
+                    {sub && !(hr.grade != null && hr.name.includes(String(hr.grade))) && (
+                      <span className="hidden sm:inline text-[10.5px] font-semibold px-1.5 py-[1px] rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
+                        {sub}
+                      </span>
+                    )}
+                  </div>
+                  {hr.class_teacher ? (
                     <div className="flex items-center gap-1.5 mt-1 min-w-0">
                       <Avatar
                         avatarUrl={hr.class_teacher.avatar_url}
@@ -722,25 +732,26 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
                         size={16}
                         userId={hr.class_teacher.id}
                       />
-                      <span className={`text-xs font-medium truncate ${
-                        isExpanded ? 'text-violet-200' : 'text-slate-400'
-                      }`}>
-                        {hr.class_teacher.full_name}
-                      </span>
+                      <span className="text-xs text-slate-500 truncate">{hr.class_teacher.full_name}</span>
                     </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-1">No class teacher</p>
                   )}
                 </div>
 
-                {/* Expand indicator */}
-                <div className={`flex items-center gap-2 flex-shrink-0 ${isExpanded ? 'text-white/80' : 'text-slate-400'}`}>
-                  {!isExpanded && (
-                    <span className="text-xs font-semibold hidden sm:block">Open Sheet</span>
-                  )}
+                <span
+                  className={`inline-flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 transition-colors ${
+                    isExpanded
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700 group-hover:bg-slate-900 group-hover:text-white'
+                  }`}
+                >
+                  <span className="hidden sm:inline">{isExpanded ? 'Close' : 'Open sheet'}</span>
                   <ChevronRight
-                    size={20}
+                    size={15}
                     className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
                   />
-                </div>
+                </span>
               </div>
 
               {/* Inline attendance sheet */}
@@ -764,6 +775,7 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
             </div>
           )
         })}
+      </div>
       </div>
 
       {/* ── Student calendar dialog ── */}

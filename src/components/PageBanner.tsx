@@ -186,24 +186,27 @@ export default function PageBanner({
       />
 
       {/* Admin edit pencil – top-right of banner. The same chip as the home
-          page's welcome banner: a 44 px dark glass circle with a white pencil. */}
+          page's welcome banner: a dark glass circle with a white pencil —
+          44 px from sm up, a 28 px version tucked in the corner on phones,
+          where every pixel of banner height is screen the content loses. */}
       {isAdmin && !editingBanner && (
         <button
           onClick={openEditor}
           aria-label="Customise banner"
-          className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
+          className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 w-7 h-7 sm:w-11 sm:h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
           title="Customise banner"
         >
-          <Pencil size={14} className="text-white" aria-hidden="true" />
+          <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" aria-hidden="true" />
         </button>
       )}
 
       {/* Main header content */}
       {/* Phones have no side margin to hold the actions clear of the admin
-          pencil, so the row drops below it instead; wider screens keep the
-          height and step the actions in (see the actions wrapper below). */}
+          pencil, so the row starts just below the small corner pencil; wider
+          screens keep the height and step the actions in (see the actions
+          wrapper below). */}
       <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${
-        isAdmin && actions && !editingBanner ? `pt-14 sm:pt-7 ${elevated ? 'pb-8 sm:pb-9' : 'pb-10'}` : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
+        isAdmin && actions && !editingBanner ? `pt-10 sm:pt-7 ${elevated ? 'pb-8 sm:pb-9' : 'pb-10'}` : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
       }`}>
         {onBack && (
           <button
