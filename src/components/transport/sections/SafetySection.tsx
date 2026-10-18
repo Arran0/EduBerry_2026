@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   AlertOctagon, ShieldCheck, MapPin, Users, Clock, ChevronDown, Loader2,
 } from 'lucide-react'
-import { ADMIN, EmptyRow } from '../glassAdmin'
+import { ADMIN } from '../glassAdmin'
 import {
   fetchIncidents, formatClock, resolveIncident,
   INCIDENT_LABELS, type TransportIncident,
@@ -50,10 +50,10 @@ export default function SafetySection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className={ADMIN.label}>Open incidents</p>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[12.5px] font-semibold text-slate-500">Open incidents</p>
           {open.length > 0 && (
             <span className="text-[11px] font-bold text-rose-600">{open.length} needing attention</span>
           )}
@@ -62,13 +62,15 @@ export default function SafetySection() {
         {loading ? (
           <div className="h-24 rounded-xl bg-[#F4F4F5] animate-pulse" />
         ) : open.length === 0 ? (
-          <div className="border border-dashed border-[#E4E4E7] rounded-xl px-4 py-8 text-center">
-            <ShieldCheck size={22} className="mx-auto text-emerald-500 mb-2" />
-            <p className="text-sm font-semibold text-[#52525B]">No open incidents</p>
-            <p className="text-[11px] text-[#A1A1AA] mt-0.5">
-              A driver holding the emergency button raises one here immediately, with
-              the bus&apos;s position and who was on board at that moment.
-            </p>
+          <div className="flex items-start gap-3 rounded-xl bg-emerald-50/70 border border-emerald-100 px-3.5 py-3">
+            <ShieldCheck size={18} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-emerald-900">No open incidents</p>
+              <p className="text-[11.5px] leading-snug text-emerald-800/70">
+                A driver holding the emergency button raises one here at once, with
+                the bus&apos;s position and who was on board.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
@@ -85,13 +87,11 @@ export default function SafetySection() {
       </div>
 
       <div>
-        <p className={`${ADMIN.label} mb-2`}>History</p>
+        <p className="mb-1.5 text-[12.5px] font-semibold text-slate-500">History</p>
         {past.length === 0 ? (
-          <EmptyRow
-            icon={<AlertOctagon size={22} />}
-            title="Nothing yet"
-            detail="Every incident stays here permanently, with the record of what was known at the time."
-          />
+          <p className="rounded-xl bg-white border border-slate-200/70 px-3.5 py-3 text-[11.5px] leading-snug text-slate-500">
+            Nothing yet. Every incident stays here for good, with what was known at the time.
+          </p>
         ) : (
           <div className="space-y-2">
             {past.map(i => (
@@ -134,7 +134,7 @@ function IncidentCard({
 
   return (
     <div className={`rounded-xl border overflow-hidden ${live ? 'border-rose-200 bg-rose-50' : 'border-[#E4E4E7] bg-white'}`}>
-      <button onClick={onToggle} className="w-full flex items-center gap-3 px-3.5 py-3 text-left">
+      <button onClick={onToggle} className="w-full flex items-center gap-3 px-3 sm:px-3.5 py-2.5 sm:py-3 text-left">
         <AlertOctagon size={16} className={live ? 'text-rose-600 flex-shrink-0' : 'text-[#A1A1AA] flex-shrink-0'} />
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-semibold truncate ${live ? 'text-rose-900' : 'text-[#27272A]'}`}>
@@ -160,7 +160,7 @@ function IncidentCard({
             <p className="text-sm text-[#52525B]">{incident.description}</p>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs">
             <Detail label="Crew">
               {snap.driver?.name ?? 'Unknown driver'}
               {snap.driver?.phone && <span className="block text-[#A1A1AA]">{snap.driver.phone}</span>}

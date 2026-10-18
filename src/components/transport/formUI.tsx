@@ -137,3 +137,151 @@ export function ModalFooter({
     </div>
   )
 }
+
+/* ── Inset grouped forms ──────────────────────────────────────────────────
+ *
+ * The iOS Settings form: related fields in one rounded group, one field per
+ * 44px row, the label on the left and the value typed straight into the row
+ * on the right, hairline separators inset from the left edge. A form reads as
+ * a list of facts about the thing being edited rather than a stack of boxes,
+ * and on a phone a row costs one line instead of a label, a box and a hint.
+ */
+
+/** A titled group of rows, with an optional note under it. */
+export function Group({ title, note, children, className = '' }: {
+  title?: string
+  note?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={className}>
+      {title && <h3 className="px-4 pb-1.5 text-[12.5px] font-semibold text-slate-500">{title}</h3>}
+      <div className="rounded-[16px] bg-white border border-slate-200/70 shadow-[0_1px_2px_rgba(15,23,42,.04)] overflow-hidden">
+        {children}
+      </div>
+      {note && <p className="px-4 pt-1.5 text-[11.5px] leading-snug text-slate-500">{note}</p>}
+    </section>
+  )
+}
+
+const ROW_RULE =
+  "relative before:content-[''] before:absolute before:top-0 before:left-4 before:right-0 before:h-px before:bg-slate-200/80 first:before:hidden"
+
+/**
+ * One field: label left, control right. `stacked` puts the label above, for
+ * controls that need the full width (notes, colour swatches, a segmented
+ * choice with long labels).
+ */
+export function Row({ label, required, hint, stacked = false, children, as: Tag = 'label' }: {
+  label: string
+  required?: boolean
+  hint?: string
+  stacked?: boolean
+  children: React.ReactNode
+  /** 'div' when the row holds buttons, so a click is not forwarded to the first one. */
+  as?: 'label' | 'div'
+}) {
+  return (
+    <Tag className={`${ROW_RULE} block px-4 py-1.5 transition-colors focus-within:bg-[#FBF8F1]`}>
+      <span className={stacked ? 'block' : 'flex items-center gap-3 min-h-[34px]'}>
+        <span className={stacked
+          ? 'block pt-1 text-[12.5px] font-medium text-slate-500'
+          : 'w-[6.75rem] sm:w-[8.5rem] flex-shrink-0 text-[13.5px] text-slate-800'}>
+          {label}{required && <span className="text-[#B8983C]"> *</span>}
+        </span>
+        <span className={stacked ? 'block pt-1 pb-1' : 'flex-1 min-w-0'}>{children}</span>
+      </span>
+      {hint && <span className={`block text-[11px] leading-snug text-slate-400 pb-0.5 ${stacked ? '' : 'pl-[7.5rem] sm:pl-[9.25rem]'}`}>{hint}</span>}
+    </Tag>
+  )
+}
+
+const ROW_CONTROL =
+  'w-full bg-transparent border-0 p-0 py-1.5 text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 disabled:text-slate-400'
+
+export function RowInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`${ROW_CONTROL} ${props.className ?? ''}`} />
+}
+
+export function RowSelect({ className = '', children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className="relative block">
+      <select {...props} className={`${ROW_CONTROL} appearance-none pr-6 cursor-pointer ${className}`}>{children}</select>
+      <svg aria-hidden viewBox="0 0 16 16" className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400">
+        <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  )
+}
+
+export function RowTextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${ROW_CONTROL} resize-none leading-snug ${props.className ?? ''}`} />
+}
+
+/** The iOS switch, in the bus gold. */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex w-[46px] h-[28px] flex-shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+        checked ? 'bg-[#34A853]' : 'bg-slate-200'
+      }`}
+    >
+      <span className={`absolute top-[2px] left-[2px] w-6 h-6 rounded-full bg-white shadow-[0_2px_5px_rgba(15,23,42,.25)] transition-transform ${
+        checked ? 'translate-x-[18px]' : ''
+      }`} />
+    </button>
+  )
+}
+
+/** A row whose control is a switch: the label is the whole statement. */
+export function SwitchRow({ label, hint, checked, onChange }: {
+  label: string
+  hint?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className={`${ROW_RULE} flex items-center gap-3 px-4 py-2 min-h-[46px]`}>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[13.5px] text-slate-800">{label}</span>
+        {hint && <span className="block text-[11px] leading-snug text-slate-400">{hint}</span>}
+      </span>
+      <Switch checked={checked} onChange={onChange} label={label} />
+    </div>
+  )
+}
+
+/** A small segmented control for a choice inside a row. */
+export function Segmented<T extends string>({ value, onChange, options }: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string }[]
+}) {
+  return (
+    <span className="flex w-full p-0.5 rounded-[10px] bg-slate-100" role="radiogroup">
+      {options.map(o => {
+        const on = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={`flex-1 h-7 rounded-[8px] text-[12.5px] font-semibold transition ${
+              on ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,.18)]' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </span>
+  )
+}

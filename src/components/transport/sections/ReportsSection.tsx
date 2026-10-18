@@ -130,23 +130,25 @@ export default function ReportsSection() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center rounded-lg border border-[#E4E4E7] overflow-hidden bg-white">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex p-0.5 rounded-[10px] bg-slate-100 flex-1 sm:flex-none" role="radiogroup" aria-label="Window">
           {REPORT_WINDOWS.map(w => (
             <button
               key={w.days}
+              role="radio"
+              aria-checked={days === w.days}
               onClick={() => setDays(w.days)}
-              className={`px-3 py-2 text-xs font-semibold transition-colors ${
-                days === w.days ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:bg-[#FAFAFA]'
+              className={`flex-1 sm:flex-none h-8 px-3.5 rounded-[8px] text-[12.5px] font-semibold transition ${
+                days === w.days ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,.18)]' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               {w.label}
             </button>
           ))}
         </div>
-        <button className={ADMIN.ghostBtn} onClick={exportCsv} disabled={loading}>
-          <Download size={13} /> Export this report
+        <button className={`${ADMIN.ghostBtn} !h-9 flex-shrink-0`} onClick={exportCsv} disabled={loading} aria-label="Export this report as CSV">
+          <Download size={14} /> <span className="hidden sm:inline">Export this report</span><span className="sm:hidden">CSV</span>
         </button>
       </div>
 
@@ -155,7 +157,7 @@ export default function ReportsSection() {
           house pattern for a rate statistic is a chart carrying the shape with
           the numbers read off beside it, not a row of single numbers. Both
           branches read the same state; nothing is fetched twice. */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:hidden">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:hidden rounded-2xl border border-slate-200/70 bg-white overflow-hidden [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t md:[&>*:nth-child(n+3)]:border-t-0 md:[&>*:not(:first-child)]:border-l [&>*]:border-slate-200/70">
         <Stat
           icon={<Clock size={14} />}
           label="Stops on time"
@@ -289,15 +291,17 @@ export default function ReportsSection() {
         </Panel>
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none border-b border-[#E4E4E7]">
+      <div className="-mx-3 sm:mx-0 px-3 sm:px-0 flex items-center gap-1 overflow-x-auto scrollbar-none" role="tablist">
         {TABS.map(t => (
           <button
             key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+            className={`flex flex-shrink-0 items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-semibold whitespace-nowrap transition ${
               tab === t.key
-                ? 'border-[#B8983C] text-[#27272A]'
-                : 'border-transparent text-[#A1A1AA] hover:text-[#52525B]'
+                ? 'bg-[#27272A] text-white [&_svg]:text-[#E9DDBB]'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200/80 hover:text-slate-900'
             }`}
           >
             {t.icon} {t.label}
@@ -443,8 +447,8 @@ export default function ReportsSection() {
         </div>
       )}
 
-      <p className="text-[11px] text-[#A1A1AA] flex items-center gap-1.5">
-        <Gauge size={11} />
+      <p className="text-[11px] leading-snug text-[#A1A1AA] flex items-start gap-1.5">
+        <Gauge size={11} className="mt-0.5 flex-shrink-0" />
         Figures are rolled up nightly, so today&apos;s trips are not included until tomorrow.
       </p>
     </div>
@@ -512,12 +516,12 @@ function Stat({ icon, label, value, detail, tone }: {
   tone: 'good' | 'warn' | 'bad' | 'flat'
 }) {
   return (
-    <div className={`${ADMIN.card} px-3.5 py-3`}>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex items-center gap-1.5">
-        {icon} {label}
+    <div className="min-w-0 px-3 py-2.5">
+      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 [&_svg]:text-slate-400">
+        {icon} <span className="truncate">{label}</span>
       </p>
-      <p className={`text-2xl font-bold mt-1 tabular-nums ${TONE_TEXT[tone]}`}>{value}</p>
-      <p className="text-[11px] text-[#71717A] truncate mt-0.5">{detail}</p>
+      <p className={`font-display text-[1.35rem] font-bold leading-tight tabular-nums ${TONE_TEXT[tone]}`}>{value}</p>
+      <p className="text-[10.5px] text-slate-400 truncate">{detail}</p>
     </div>
   )
 }
@@ -531,11 +535,15 @@ function Row({ tone, title, subtitle, cells }: {
   return (
     <div className={SHEET.row}>
       <div className={`${SHEET.bar} ${TONE_BAR[tone]}`} />
-      <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5">
+      <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#27272A] truncate">{title}</p>
+          <p className="text-[13px] sm:text-sm font-semibold text-[#27272A] truncate">{title}</p>
           <p className="text-[11px] text-[#71717A] truncate">{subtitle}</p>
         </div>
+        {/* A phone has room for one figure: the column the report is about. */}
+        {cells.filter(c => c.bold).slice(0, 1).map((c, i) => (
+          <span key={`m${i}`} className="sm:hidden flex-shrink-0 text-right text-[13px] font-bold tabular-nums text-[#27272A]">{c.text}</span>
+        ))}
         {cells.map((c, i) => (
           <span key={i}
             className={`${c.w} ${c.align} hidden sm:block text-xs tabular-nums truncate ${

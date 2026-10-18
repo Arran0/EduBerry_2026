@@ -12,7 +12,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowUpRight, IndianRupee, MapPin, Receipt, UserRound, Users, Wand2 } from 'lucide-react'
+import { ArrowUpRight, MapPin, Receipt, UserRound, Users, Wand2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINRExact } from '@/lib/formatMoney'
 import { fetchAssignments, updateAssignment } from '@/lib/transport/assignments'
@@ -23,7 +23,7 @@ import type { RouteFeeMode, TransportAssignment, TransportRoute, TransportStop }
 import { BUS, EmptyNote, GBTN, GlassSegments } from './glass'
 
 const MONEY =
-  'w-full h-8 rounded-lg bg-white border border-slate-200 pl-6 pr-2 text-sm text-right tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
+  'w-full h-7 rounded-md bg-slate-50 hover:bg-slate-100 border border-transparent pl-5 pr-2 text-[13px] text-right tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
 
 const toNum = (s: string): number | null => {
   const t = s.trim()
@@ -53,7 +53,7 @@ function MoneyInput({ value, placeholder, onCommit, label }: {
 
   return (
     <div className="relative">
-      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-400 pointer-events-none">₹</span>
+      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 pointer-events-none">₹</span>
       <input
         inputMode="decimal"
         aria-label={label}
@@ -152,97 +152,92 @@ export default function RouteFeesEditor({ route, onChanged }: { route: Transport
     )
   }
 
+  const pricedStops = stops.filter(s => grid[s.id]?.amount != null).length
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
         <GlassSegments
           layoutId={`fee-mode-${route.id}`}
           size="sm"
           value={mode}
           onChange={chooseMode}
           items={[
-            { key: 'stop', label: 'Priced by stop', icon: MapPin },
-            { key: 'student', label: 'Priced by student', icon: UserRound },
+            { key: 'stop', label: 'By stop', icon: MapPin },
+            { key: 'student', label: 'By student', icon: UserRound },
           ]}
         />
         {/* Billing happens in the fee app, under its Bus fee head. This opens
             its issue panel with the month view, the Bus fee and this route
             already picked. */}
-        <Link href={`/more/fees?tab=config&issue=bus&route=${route.id}`} className={GBTN.primary}>
-          <Receipt size={14} /> Issue in fee app <ArrowUpRight size={13} />
+        <Link href={`/more/fees?tab=config&issue=bus&route=${route.id}`} className={`${GBTN.primary} !h-8 !px-3 flex-shrink-0`}>
+          <Receipt size={13} /> <span className="hidden sm:inline">Issue in fee app</span><span className="sm:hidden">Issue</span> <ArrowUpRight size={12} />
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <Mini icon={IndianRupee} label="Billed per month" value={fmtINRExact(monthly)} />
-        <Mini icon={Users} label="Riders priced" value={`${riders.length - missing}/${riders.length}`} tone={missing > 0 ? 'warn' : undefined} />
-        {mode === 'stop' ? (
-          <Mini icon={MapPin} label="Stops priced" value={`${stops.filter(s => grid[s.id]?.amount != null).length}/${stops.length}`} />
-        ) : (
-          <Mini icon={UserRound} label="Average per rider" value={riders.length - missing > 0 ? fmtINRExact(monthly / (riders.length - missing)) : '—'} />
-        )}
-        <Mini icon={Receipt} label="Bills per month" value={String(riders.length - missing)} />
-      </div>
+      {/* The position in one line rather than four cards. */}
+      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px] text-slate-500 tabular-nums">
+        <span><span className="font-display text-[1.05rem] font-bold text-slate-900">{fmtINRExact(monthly)}</span> a month</span>
+        <span className={missing > 0 ? 'font-semibold text-amber-700' : ''}>{riders.length - missing}/{riders.length} riders priced</span>
+        {mode === 'stop'
+          ? <span>{pricedStops}/{stops.length} stops priced</span>
+          : <span>{riders.length - missing > 0 ? `${fmtINRExact(monthly / (riders.length - missing))} average` : 'no average yet'}</span>}
+      </p>
 
       {mode === 'stop' ? (
         stops.length === 0 ? (
           <EmptyNote icon={MapPin} title="No stops to price yet" detail="Add this route's stops on the Stops tab, then come back to price them." />
         ) : (
           <section>
-            <h3 className="mb-2 text-[13px] font-bold text-slate-900">
+            <h3 className="mb-1 text-[12.5px] font-semibold text-slate-500">
               Price per {route.direction === 'inbound' ? 'pickup' : 'drop'} point
             </h3>
-            <div className="rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden">
-              <div className="hidden sm:grid grid-cols-[2.25rem_1fr_5rem_8rem_7rem] gap-3 items-center px-3 py-2 bg-slate-50/80 border-b border-slate-200/70 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                <span /><span>Stop</span><span className="text-center">Riders</span><span className="text-right">Per month</span><span className="text-right">Stop total</span>
-              </div>
-              <ul className="divide-y divide-slate-200/60">
-                {stops.map(s => {
-                  const amt = grid[s.id]?.amount ?? null
-                  const n = ridersAt[s.id] ?? 0
-                  return (
-                    <li key={s.id} className="grid grid-cols-[2.25rem_1fr_7rem] sm:grid-cols-[2.25rem_1fr_5rem_8rem_7rem] gap-x-3 items-center px-3 py-2">
-                      <StopDot seq={s.seq} color={route.color} />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium text-slate-900 truncate">{s.name}</span>
-                        <span className="block text-[11px] text-slate-500 truncate sm:hidden">{n} rider{n === 1 ? '' : 's'}</span>
-                        {s.landmark && <span className="hidden sm:block text-[11px] text-slate-500 truncate">{s.landmark}</span>}
-                      </span>
-                      <span className="hidden sm:block text-center text-sm tabular-nums text-slate-600">{n}</span>
-                      <MoneyInput label={`Monthly fee for ${s.name}`} value={amt} placeholder="Set price" onCommit={v => setStopFee(s.id, v)} />
-                      <span className="hidden sm:block text-right text-sm font-semibold tabular-nums text-slate-700">
-                        {amt != null && n > 0 ? fmtINRExact(amt * n) : '—'}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
+            <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-4 rounded-xl border border-slate-200/70 bg-white/70 px-2 sm:px-2.5">
+              {stops.map(s => {
+                const amt = grid[s.id]?.amount ?? null
+                const n = ridersAt[s.id] ?? 0
+                return (
+                  <li key={s.id} className="flex items-center gap-2 h-10 border-b border-slate-200/60 last:border-b-0 lg:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
+                    <StopDot seq={s.seq} color={route.color} />
+                    <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                      <span className="text-[13px] font-medium text-slate-900 truncate">{s.name}</span>
+                      <span className="flex-shrink-0 text-[10.5px] text-slate-400 tabular-nums">{n} rider{n === 1 ? '' : 's'}</span>
+                    </span>
+                    <span className="w-24 flex-shrink-0">
+                      <MoneyInput label={`Monthly fee for ${s.name}`} value={amt} placeholder="Price" onCommit={v => setStopFee(s.id, v)} />
+                    </span>
+                    <span className="hidden sm:block w-20 flex-shrink-0 text-right text-[12px] font-semibold tabular-nums text-slate-600">
+                      {amt != null && n > 0 ? fmtINRExact(amt * n) : '—'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
           </section>
         )
       ) : null}
 
       <section>
-        <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-          <h3 className="text-[13px] font-bold text-slate-900">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[12.5px] font-semibold text-slate-500">
             {mode === 'stop' ? 'What each rider pays' : 'Amount per rider'}
           </h3>
           {mode === 'student' && riders.some(a => a.fee_amount == null) && (
             <div className="flex items-center gap-1.5">
-              <div className="relative w-28">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-slate-400 pointer-events-none">₹</span>
+              <div className="relative w-24">
+                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 pointer-events-none">₹</span>
                 <input
                   inputMode="decimal"
                   aria-label="Amount for riders without one"
-                  className={MONEY}
+                  className={`${MONEY} !bg-white !border-slate-200`}
                   value={fillAmount}
                   placeholder="Amount"
                   onChange={e => setFillAmount(e.target.value.replace(/[^\d.]/g, ''))}
                   onKeyDown={e => { if (e.key === 'Enter') fillEmpty() }}
                 />
               </div>
-              <button className={GBTN.secondary} onClick={fillEmpty} disabled={toNum(fillAmount) == null}>
-                <Wand2 size={13} /> Fill empty
+              <button className={`${GBTN.secondary} !h-7 !px-2.5 !text-[12px]`} onClick={fillEmpty} disabled={toNum(fillAmount) == null}>
+                <Wand2 size={12} /> Fill empty
               </button>
             </div>
           )}
@@ -251,30 +246,32 @@ export default function RouteFeesEditor({ route, onChanged }: { route: Transport
         {riders.length === 0 ? (
           <EmptyNote icon={Users} title="No riders on this route" detail="Add students on the Students tab." />
         ) : (
-          <ul className="rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden divide-y divide-slate-200/60">
+          // One line per rider, two columns from lg.
+          <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-4 rounded-xl border border-slate-200/70 bg-white/70 px-2 sm:px-2.5">
             {resolved.map(({ a, fee }) => (
-              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-                <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={30} userId={a.student_id} />
-                <div className="flex-1 min-w-[10rem]">
-                  <p className="text-sm font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    {route.direction === 'inbound' ? 'Picked up at ' : 'Dropped at '}
-                    {a.pickup_stop?.name ?? <span className="text-amber-600">no stop set</span>}
-                  </p>
-                </div>
+              <li key={a.id} className="flex items-center gap-2 h-10 border-b border-slate-200/60 last:border-b-0 lg:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
+                <span className="hidden sm:block flex-shrink-0">
+                  <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={22} userId={a.student_id} />
+                </span>
+                <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                  <span className="text-[13px] font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</span>
+                  <span className={`min-w-0 text-[10.5px] truncate ${a.pickup_stop ? 'text-slate-400' : 'text-amber-600'}`}>
+                    {a.pickup_stop?.name ?? 'no stop'}
+                  </span>
+                </span>
                 {mode === 'stop' ? (
-                  <span className={`w-28 text-right text-sm font-bold tabular-nums ${fee.amount == null ? 'text-amber-600' : 'text-slate-900'}`}>
+                  <span className={`flex-shrink-0 text-right text-[13px] font-bold tabular-nums ${fee.amount == null ? 'text-amber-600 !font-semibold !text-[11.5px]' : 'text-slate-900'}`}>
                     {fee.amount != null ? fmtINRExact(fee.amount) : riderStopId(a) ? 'Stop unpriced' : 'No stop'}
                   </span>
                 ) : (
-                  <div className="w-32">
+                  <span className="w-24 flex-shrink-0">
                     <MoneyInput
                       label={`Monthly fee for ${a.student?.full_name ?? 'rider'}`}
                       value={a.fee_amount ?? null}
                       placeholder="Amount"
                       onCommit={v => setStudentFee(a, v)}
                     />
-                  </div>
+                  </span>
                 )}
               </li>
             ))}
@@ -303,21 +300,9 @@ function ModeCard({ icon: Icon, title, detail, onClick }: { icon: React.ElementT
 
 function StopDot({ seq, color }: { seq: number; color: string }) {
   return (
-    <span className="w-7 h-7 rounded-full text-[11px] font-bold text-white flex items-center justify-center shadow-sm"
+    <span className="w-5 h-5 flex-shrink-0 rounded-full text-[10px] font-bold text-white flex items-center justify-center shadow-sm"
       style={{ background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 70%, black))` }}>
       {seq}
     </span>
-  )
-}
-
-function Mini({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: string; tone?: 'warn' }) {
-  return (
-    <div className="fee-mini">
-      <span className="fee-mini-icon"><Icon size={14} /></span>
-      <span className="min-w-0">
-        <span className={`block text-[15px] font-bold leading-tight tabular-nums ${tone === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</span>
-        <span className="block text-[10.5px] font-semibold text-slate-500 truncate">{label}</span>
-      </span>
-    </div>
   )
 }

@@ -6,7 +6,7 @@ import BusModal from './BusModal'
 import { createVehicle, updateVehicle } from '@/lib/transport/vehicles'
 import type { TransportVehicle, VehicleInput } from '@/lib/transport/types'
 import { VEHICLE_COMPLIANCE_FIELDS, VEHICLE_STATUS_LABELS } from '@/lib/transport/types'
-import { Field, FormError, FormGrid, FormSection, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { FormError, Group, Row, RowInput, RowSelect, RowTextArea } from './formUI'
 
 export default function VehicleFormModal({
   vehicle, onClose, onSaved,
@@ -59,78 +59,55 @@ export default function VehicleFormModal({
   return (
     <BusModal
       onClose={onClose}
-      size="md"
-      title={vehicle ? 'Edit vehicle' : 'New vehicle'}
-      subtitle="Buses that routes and schedules attach to"
+      size="lg"
+      title={vehicle ? 'Edit bus' : 'New bus'}
+      subtitle="Routes and schedules attach to it"
       icon={<Bus size={18} />}
-      iconClassName="bg-amber-100 text-amber-700"
-      footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
+      confirm={{ label: vehicle ? 'Save' : 'Add', onClick: submit, busy: saving }}
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <FormError message={error} />
 
-        <FormSection title="The bus">
-        <FormGrid>
-          <Field label="Registration number *" hint="Spacing and case don't matter — they're normalised.">
-            <TextInput
-              value={form.registration_no}
-              onChange={e => set('registration_no', e.target.value)}
-              placeholder="KL 07 AB 1234"
-              autoFocus
-            />
-          </Field>
-          <Field label="Display name" hint="What parents see, e.g. “Bus 12”.">
-            <TextInput
-              value={form.display_name ?? ''}
-              onChange={e => set('display_name', e.target.value)}
-              placeholder="Bus 12"
-            />
-          </Field>
-          <Field label="Make & model">
-            <TextInput
-              value={form.make_model ?? ''}
-              onChange={e => set('make_model', e.target.value)}
-              placeholder="Tata Starbus"
-            />
-          </Field>
-          <Field label="Seats">
-            <TextInput
-              type="number"
-              min={0}
-              value={String(form.capacity ?? 0)}
-              onChange={e => set('capacity', Number(e.target.value) || 0)}
-            />
-          </Field>
-          <Field label="Status">
-            <Select value={form.status} onChange={e => set('status', e.target.value as VehicleInput['status'])}>
-              {(Object.keys(VEHICLE_STATUS_LABELS) as (keyof typeof VEHICLE_STATUS_LABELS)[]).map(k => (
-                <option key={k} value={k}>{VEHICLE_STATUS_LABELS[k]}</option>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <Group title="Bus" note="Registration spacing and case don’t matter. Parents see the display name.">
+            <Row label="Registration" required>
+              <RowInput value={form.registration_no} onChange={e => set('registration_no', e.target.value)} placeholder="KL 07 AB 1234" autoFocus className="uppercase placeholder:normal-case" />
+            </Row>
+            <Row label="Display name">
+              <RowInput value={form.display_name ?? ''} onChange={e => set('display_name', e.target.value)} placeholder="Bus 12" />
+            </Row>
+            <Row label="Make & model">
+              <RowInput value={form.make_model ?? ''} onChange={e => set('make_model', e.target.value)} placeholder="Tata Starbus" />
+            </Row>
+            <Row label="Seats">
+              <RowInput type="number" inputMode="numeric" min={0} value={form.capacity ? String(form.capacity) : ''} placeholder="0"
+                onChange={e => set('capacity', Number(e.target.value) || 0)} />
+            </Row>
+            <Row label="Status">
+              <RowSelect value={form.status} onChange={e => set('status', e.target.value as VehicleInput['status'])}>
+                {(Object.keys(VEHICLE_STATUS_LABELS) as (keyof typeof VEHICLE_STATUS_LABELS)[]).map(k => (
+                  <option key={k} value={k}>{VEHICLE_STATUS_LABELS[k]}</option>
+                ))}
+              </RowSelect>
+            </Row>
+          </Group>
+
+          <div className="space-y-4">
+            <Group title="Papers" note="Warnings appear on the bus list 30 days before any of these expire.">
+              {VEHICLE_COMPLIANCE_FIELDS.map(({ key, label }) => (
+                <Row key={key} label={label}>
+                  <RowInput type="date" value={(form[key] as string | null) ?? ''} onChange={e => set(key, e.target.value)} />
+                </Row>
               ))}
-            </Select>
-          </Field>
-        </FormGrid>
-        </FormSection>
+            </Group>
 
-        <FormSection
-          title="Compliance"
-          hint="A lapsed certificate means the bus cannot legally carry children, so these are surfaced as warnings on the fleet list as they approach expiry."
-        >
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-4">
-            {VEHICLE_COMPLIANCE_FIELDS.map(({ key, label }) => (
-              <Field key={key} label={label}>
-                <TextInput
-                  type="date"
-                  value={(form[key] as string | null) ?? ''}
-                  onChange={e => set(key, e.target.value)}
-                />
-              </Field>
-            ))}
+            <Group title="Notes">
+              <Row label="Notes" stacked>
+                <RowTextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder="Optional" />
+              </Row>
+            </Group>
           </div>
-        </FormSection>
-
-        <FormSection title="Notes">
-          <TextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
-        </FormSection>
+        </div>
       </div>
     </BusModal>
   )

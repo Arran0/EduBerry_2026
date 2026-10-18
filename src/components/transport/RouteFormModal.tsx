@@ -6,7 +6,7 @@ import BusModal from './BusModal'
 import { createRoute, updateRoute } from '@/lib/transport/routes'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import type { RouteInput, TransportDirection, TransportRoute, TransportStaff, TransportVehicle } from '@/lib/transport/types'
-import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { FormError, Group, Row, RowInput, RowSelect, RowTextArea, Segmented } from './formUI'
 
 const COLORS = ['#F97316', '#0EA5E9', '#8B5CF6', '#10B981', '#EF4444', '#EAB308', '#EC4899', '#64748B']
 
@@ -68,114 +68,85 @@ export default function RouteFormModal({
   return (
     <BusModal
       onClose={onClose}
-      size="md"
+      size="lg"
       title={route ? 'Edit route' : 'New route'}
-      subtitle="One direction, one schedule — stops, riders and fees attach to it"
+      subtitle="One direction — stops, riders and fees attach to it"
       icon={<RouteIcon size={18} />}
-      iconClassName="bg-orange-100 text-orange-700"
-      footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
+      confirm={{ label: route ? 'Save' : 'Create', onClick: submit, busy: saving }}
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <FormError message={error} />
 
-        <FormGrid>
-          <Field label="Route name *">
-            <TextInput
-              value={form.name}
-              onChange={e => set('name', e.target.value)}
-              placeholder="North — Vadakkanchery"
-              autoFocus
-            />
-          </Field>
-          <Field label="Code" hint="Short label used on the fleet map, e.g. R-07.">
-            <TextInput value={form.code ?? ''} onChange={e => set('code', e.target.value)} placeholder="R-07" />
-          </Field>
-        </FormGrid>
-
-        <Field
-          label="Direction *"
-          hint={route && route.direction !== form.direction
-            ? 'Changing direction moves every rider and the schedule over to the new direction; riders keep their stop.'
-            : 'A route runs one way. A child who rides both ways is put on two routes.'}
-        >
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              ['inbound', 'To school', 'Riders are picked up at their stop'],
-              ['outbound', 'From school', 'Riders are dropped at their stop'],
-            ] as [TransportDirection, string, string][]).map(([key, title, sub]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => set('direction', key)}
-                aria-pressed={form.direction === key}
-                className={`rounded-2xl border px-3 py-2.5 text-left transition ${
-                  form.direction === key
-                    ? 'border-transparent bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_18px_-10px_rgba(15,23,42,.6)]'
-                    : 'border-slate-200/80 bg-white/90 text-slate-600 hover:bg-white'
-                }`}
-              >
-                <span className="block text-sm font-semibold">{title}</span>
-                <span className={`block text-[11px] ${form.direction === key ? 'text-white/70' : 'text-slate-400'}`}>{sub}</span>
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Description">
-          <TextArea
-            rows={2}
-            value={form.description ?? ''}
-            onChange={e => set('description', e.target.value)}
-            placeholder="Areas this route covers"
-          />
-        </Field>
-
-        <Field label="Colour" hint="Distinguishes this route on the fleet map.">
-          <div className="flex flex-wrap gap-2">
-            {COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => set('color', c)}
-                aria-label={`Colour ${c}`}
-                className={`w-7 h-7 rounded-full transition-transform ${
-                  form.color === c ? 'ring-2 ring-offset-2 ring-[#3D3B40] scale-110' : 'hover:scale-105'
-                }`}
-                style={{ background: c }}
-              />
-            ))}
-          </div>
-        </Field>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Default bus">
-            <Select
-              value={form.default_vehicle_id ?? ''}
-              onChange={e => set('default_vehicle_id', e.target.value)}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="space-y-4">
+            <Group
+              title="Route"
+              note={route && route.direction !== form.direction
+                ? 'Changing direction moves every rider and the schedule to the new direction; riders keep their stop.'
+                : 'A route runs one way. A child who rides both ways goes on two routes.'}
             >
-              <option value="">Not set</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}
-            </Select>
-          </Field>
-          <Field label="Default driver">
-            <Select
-              value={form.default_driver_id ?? ''}
-              onChange={e => set('default_driver_id', e.target.value)}
+              <Row label="Name" required>
+                <RowInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="North — Vadakkanchery" autoFocus />
+              </Row>
+              <Row label="Code">
+                <RowInput value={form.code ?? ''} onChange={e => set('code', e.target.value)} placeholder="R-07 · shown on the map" />
+              </Row>
+              <Row label="Direction" as="div">
+                <Segmented<TransportDirection>
+                  value={form.direction ?? 'inbound'}
+                  onChange={v => set('direction', v)}
+                  options={[{ value: 'inbound', label: 'To school' }, { value: 'outbound', label: 'From school' }]}
+                />
+              </Row>
+            </Group>
+
+            <Group title="Description">
+              <Row label="Areas covered" stacked>
+                <RowTextArea rows={2} value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Optional" />
+              </Row>
+            </Group>
+          </div>
+
+          <div className="space-y-4">
+            <Group
+              title="Defaults for every trip"
+              note={drivers.length === 0 ? 'No drivers yet — add them under Buses and drivers and they appear here.' : 'A schedule can still use a different bus or driver.'}
             >
-              <option value="">Not set</option>
-              {drivers.map(d => (
-                <option key={d.id} value={d.profile_id}>{d.profile?.full_name ?? 'Unknown'}</option>
-              ))}
-            </Select>
-          </Field>
+              <Row label="Bus">
+                <RowSelect value={form.default_vehicle_id ?? ''} onChange={e => set('default_vehicle_id', e.target.value)}>
+                  <option value="">Not set</option>
+                  {vehicles.map(v => <option key={v.id} value={v.id}>{vehicleLabel(v)}{v.capacity ? ` · ${v.capacity} seats` : ''}</option>)}
+                </RowSelect>
+              </Row>
+              <Row label="Driver">
+                <RowSelect value={form.default_driver_id ?? ''} onChange={e => set('default_driver_id', e.target.value)}>
+                  <option value="">Not set</option>
+                  {drivers.map(d => <option key={d.id} value={d.profile_id}>{d.profile?.full_name ?? 'Unknown'}</option>)}
+                </RowSelect>
+              </Row>
+            </Group>
+
+            <Group title="Map colour">
+              <Row label="Colour" as="div">
+                <span className="flex items-center justify-between gap-1 py-1">
+                  {COLORS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => set('color', c)}
+                      aria-label={`Colour ${c}`}
+                      aria-pressed={form.color === c}
+                      className={`w-6 h-6 rounded-full transition-transform ${
+                        form.color === c ? 'ring-2 ring-offset-2 ring-[#3D3B40] scale-110' : 'hover:scale-110'
+                      }`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </span>
+              </Row>
+            </Group>
+          </div>
         </div>
-
-        {drivers.length === 0 && (
-          <p className="text-[11px] text-[#A1A1AA]">
-            No driver records yet — add them under Fleet &amp; Crew and they will appear here.
-          </p>
-        )}
-
       </div>
     </BusModal>
   )

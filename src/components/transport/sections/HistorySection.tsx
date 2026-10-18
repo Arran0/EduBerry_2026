@@ -8,7 +8,7 @@
  * would otherwise be navigating back and forth to do it.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, History, Loader2, Wifi, WifiOff } from 'lucide-react'
 import { ADMIN, EmptyRow } from '../glassAdmin'
 import { fetchRoutes } from '@/lib/transport/routes'
@@ -59,8 +59,14 @@ export default function HistorySection() {
 
   useEffect(() => { load() }, [load])
 
+  const replayRef = useRef<HTMLDivElement>(null)
+
   const open = useCallback(async (run: TransportRun) => {
     setSelected(run)
+    // Stacked on a phone, the replay is below the list: bring it up.
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      requestAnimationFrame(() => replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    }
     setReplayLoading(true)
     setReplay(await fetchReplay(run.id))
     setReplayLoading(false)
@@ -80,31 +86,34 @@ export default function HistorySection() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className={ADMIN.label}>From</span>
+      {/* The filters as one grouped strip: dates side by side, the route
+          under them on a phone and beside them from sm up. */}
+      <div className="grid grid-cols-2 sm:grid-cols-[auto_auto_minmax(12rem,1fr)_auto] gap-px rounded-xl overflow-hidden border border-slate-200/70 bg-slate-200/70 sm:items-stretch">
+        <label className="bg-white px-3 py-1.5 min-w-0">
+          <span className="block text-[11px] font-medium text-slate-500">From</span>
           <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
-            className={`${ADMIN.inputPlain} w-auto`} />
+            className="w-full bg-transparent text-[13.5px] text-slate-900 focus:outline-none" />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className={ADMIN.label}>To</span>
+        <label className="bg-white px-3 py-1.5 min-w-0">
+          <span className="block text-[11px] font-medium text-slate-500">To</span>
           <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)}
-            className={`${ADMIN.inputPlain} w-auto`} />
+            className="w-full bg-transparent text-[13.5px] text-slate-900 focus:outline-none" />
         </label>
-        <label className="flex flex-col gap-1 min-w-[12rem]">
-          <span className={ADMIN.label}>Route</span>
-          <select value={routeId} onChange={e => setRouteId(e.target.value)} className={ADMIN.inputPlain}>
+        <label className="col-span-2 sm:col-span-1 bg-white px-3 py-1.5 min-w-0">
+          <span className="block text-[11px] font-medium text-slate-500">Route</span>
+          <select value={routeId} onChange={e => setRouteId(e.target.value)}
+            className="w-full bg-transparent text-[13.5px] text-slate-900 focus:outline-none cursor-pointer">
             <option value="">Every route</option>
             {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
-        <p className="text-xs text-[#71717A] ml-auto pb-2.5">
+        <p className="hidden sm:flex items-center bg-white px-3 text-xs text-[#71717A] whitespace-nowrap">
           {loading ? 'Loading…' : `${runs.length} finished trip${runs.length === 1 ? '' : 's'}`}
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[17rem_1fr] xl:grid-cols-[19rem_1fr] gap-4 lg:gap-5 items-start">
-        <div className={`${ADMIN.card} overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] overflow-y-auto`}>
+        <div className={`${ADMIN.card} overflow-hidden max-h-[45dvh] lg:max-h-[calc(100vh-6rem)] lg:sticky lg:top-4 overflow-y-auto`}>
           {loading ? (
             <div className="px-4 py-10 text-center text-xs text-[#A1A1AA]">
               <Loader2 size={16} className="animate-spin mx-auto mb-2" /> Loading trips…
@@ -164,9 +173,10 @@ export default function HistorySection() {
           ))}
         </div>
 
-        <div>
+        <div ref={replayRef} className="scroll-mt-2">
           {!selected ? (
-            <div className="border border-dashed border-[#E4E4E7] rounded-xl px-6 py-16 text-center">
+            // A phone shows the list alone until a trip is picked.
+            <div className="hidden lg:block border border-dashed border-[#E4E4E7] rounded-xl px-6 py-16 text-center">
               <History size={26} className="mx-auto text-[#A1A1AA] mb-2" />
               <p className="text-sm font-semibold text-[#52525B]">Pick a trip to replay it</p>
               <p className="text-[11px] text-[#A1A1AA] mt-1 max-w-sm mx-auto">
@@ -175,7 +185,7 @@ export default function HistorySection() {
               </p>
             </div>
           ) : replayLoading ? (
-            <div className="h-[460px] rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-center">
+            <div className="h-[300px] sm:h-[460px] rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-center">
               <Loader2 className="animate-spin text-[#A1A1AA]" size={20} />
             </div>
           ) : !replay ? (

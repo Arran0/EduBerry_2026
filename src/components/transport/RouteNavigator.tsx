@@ -308,7 +308,10 @@ function RoutePicker({ routes, selectedId, riders, onSelect }: {
       </button>
 
       {open && routes.length > 0 && (
-        <div role="listbox" className="absolute z-40 right-0 mt-2 w-[min(92vw,26rem)] lg-tooltip !bg-white/[.97] !p-1.5 max-h-[26rem] overflow-y-auto">
+        // On a phone the picker sits at the left of its row and nearly fills
+        // it, so the list hangs from both of its edges; from sm up it opens
+        // under the picker's right edge at a fixed width.
+        <div role="listbox" className="absolute z-40 left-0 right-0 sm:left-auto sm:w-[26rem] mt-2 lg-tooltip !bg-white/[.97] !p-1.5 max-h-[min(26rem,60vh)] overflow-y-auto">
           {routes.map((r, i) => {
             const first = i === 0 || routes[i - 1].direction !== r.direction
             const on = r.id === selectedId

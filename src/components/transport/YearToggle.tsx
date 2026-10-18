@@ -26,32 +26,39 @@ export default function YearToggle() {
     ? 'bg-amber-50 text-amber-900 ring-amber-300/80'
     : 'bg-white text-slate-900 ring-black/5'
 
+  // A compact capsule — the session code and a chevron, 30px tall — so it sits
+  // beside the title on the narrowest phone instead of pushing past the edge.
   return (
-    <div className="flex items-center gap-1.5">
-      <label className={`relative inline-flex items-center gap-1.5 h-9 pl-3 pr-8 rounded-full ring-1 shadow-[0_8px_22px_-10px_rgba(15,23,42,.55)] cursor-pointer ${tone}`}>
-        <CalendarRange size={14} className={isViewingPastYear ? 'text-amber-700' : 'text-[#8B6F47]'} />
-        <span className="sr-only">Academic session</span>
+    <div className="flex items-center gap-1">
+      <label className={`relative inline-flex items-center gap-1 h-[30px] pl-2.5 pr-6 rounded-full ring-1 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] cursor-pointer focus-within:ring-2 focus-within:ring-[#B8983C] ${tone}`}>
+        <CalendarRange size={12} className={`flex-shrink-0 ${isViewingPastYear ? 'text-amber-700' : 'text-[#8B6F47]'}`} />
+        <span className="text-[12px] font-bold tabular-nums leading-none">{year.code}</span>
+        {/* The real control, invisible over the capsule: the capsule keeps the
+            width of the code alone, and the option list still names the
+            current session. */}
         <select
           value={year.id}
           onChange={e => setYearId(e.target.value)}
-          className="appearance-none bg-transparent text-[13px] font-bold tabular-nums leading-none focus:outline-none cursor-pointer"
+          aria-label="Academic session"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         >
           {years.map(y => (
             <option key={y.id} value={y.id}>
-              {y.code}{y.is_active ? ' · current' : ''}
+              {y.code}{y.is_active ? ' (current)' : ''}
             </option>
           ))}
         </select>
-        <ChevronDown size={14} className="absolute right-3 pointer-events-none opacity-60" />
+        <ChevronDown size={12} className="absolute right-2 pointer-events-none opacity-60" />
       </label>
 
       {isViewingPastYear && (
         <button
           onClick={resetToActive}
           title="Back to the current session"
-          className="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-white text-[12px] font-semibold text-slate-800 ring-1 ring-black/5 shadow-[0_8px_22px_-10px_rgba(15,23,42,.55)] hover:bg-slate-50 transition"
+          aria-label="Back to the current session"
+          className="inline-flex items-center justify-center w-[30px] h-[30px] rounded-full bg-white text-slate-700 ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] hover:bg-slate-50 transition"
         >
-          <RotateCcw size={12} /> <span className="hidden sm:inline">Current</span>
+          <RotateCcw size={12} />
         </button>
       )}
     </div>

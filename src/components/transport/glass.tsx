@@ -217,7 +217,11 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
   )
 }
 
-/** A quiet glass-tile button with an icon chip — for launchers. */
+/**
+ * A launcher tile: icon chip and name. On a phone it stands upright — chip
+ * over name, the status as a dot — so three fit across; from sm up it lies
+ * flat with its one-line description.
+ */
 export function GlassTileButton({ icon: Icon, label, detail, onClick, status }: {
   icon: LucideIcon
   label: string
@@ -229,20 +233,22 @@ export function GlassTileButton({ icon: Icon, label, detail, onClick, status }: 
   return (
     <button
       onClick={onClick}
-      className="group lg-content w-full flex items-center gap-3 p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+      title={detail}
+      className="group lg-content relative w-full flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 px-1.5 py-2.5 sm:p-3 text-center sm:text-left transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
     >
-      <span className="icon-chip w-10 h-10 flex-shrink-0" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
-        <Icon size={17} className="relative z-10 text-white" />
+      <span className="icon-chip w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
+        <Icon size={15} className="relative z-10 text-white" />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-slate-900">{label}</span>
-        {detail && <span className="block text-[11.5px] leading-snug text-slate-500 truncate">{detail}</span>}
+      <span className="min-w-0 flex-1 w-full">
+        <span className="block text-[12px] sm:text-[13px] font-semibold leading-tight text-slate-900 truncate">{label}</span>
+        {detail && <span className="hidden sm:block text-[11px] leading-snug text-slate-500 truncate">{detail}</span>}
         {status && (
-          <span className="mt-1 inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600">
-            <span className={`w-1.5 h-1.5 rounded-full ${dot}`} /> {status.text}
+          <span className="hidden sm:inline-flex mt-0.5 items-center gap-1.5 text-[10.5px] font-semibold text-slate-600 max-w-full">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} /> <span className="truncate">{status.text}</span>
           </span>
         )}
       </span>
+      {status && <span className={`sm:hidden absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${dot}`} aria-label={status.text} />}
     </button>
   )
 }

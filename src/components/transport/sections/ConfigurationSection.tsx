@@ -18,8 +18,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, Bus, Copy, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Plus, Search,
-  Map as MapIcon, Radio, Route as RouteIcon, School, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
+  AlertTriangle, Bus, Copy, IdCard, MessageCircle, Pencil, Plus, Search,
+  Map as MapIcon, Radio, Route as RouteIcon, School, ScanLine, ShieldCheck, Trash2,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINR } from '@/lib/formatMoney'
@@ -171,19 +171,22 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
   return (
     <div className="space-y-5">
       {/* ── Network at a glance ───────────────────────────────────── */}
-      <GlassPanel eyebrow="Configuration" title="Transport network" icon={SlidersHorizontal} className="z-30">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 px-0.5">
-          <Tile icon={RouteIcon} value={loading ? '—' : `${live.length}`} label="Routes" sub={`${live.filter(r => r.direction === 'inbound').length} to school · ${live.filter(r => r.direction === 'outbound').length} from school`} />
-          <Tile icon={MapPin} value={loading ? '—' : `${totals.stops}`} label="Stops" sub="across all routes" />
-          <Tile icon={Users} value={loading ? '—' : `${totals.riders}`} label="Riders assigned" sub="one per route ridden" />
-          <Tile icon={Bus} value={loading ? '—' : `${vehicles.filter(v => v.status === 'active').length}`} label="Buses in service"
-            sub={totals.warnings > 0 ? `${totals.warnings} with papers due` : 'papers current'} tone={totals.warnings > 0 ? 'warn' : undefined}
+      {/* One strip of six figures rather than six cards: the numbers are a
+          glance, not a destination, and they were taking a phone's whole
+          first screen. Three across on a phone, six on a desktop. */}
+      <GlassPanel className="z-30" bodyClassName="!pt-2 sm:!pt-3">
+        <div className="lg-content grid grid-cols-3 xl:grid-cols-6">
+          <Tile i={0} value={loading ? '—' : `${live.length}`} label="Routes" sub={`${live.filter(r => r.direction === 'inbound').length} to · ${live.filter(r => r.direction === 'outbound').length} from school`} />
+          <Tile i={1} value={loading ? '—' : `${totals.stops}`} label="Stops" sub="across all routes" />
+          <Tile i={2} value={loading ? '—' : `${totals.riders}`} label="Riders" sub="one per route ridden" />
+          <Tile i={3} value={loading ? '—' : `${vehicles.filter(v => v.status === 'active').length}`} label="Buses"
+            sub={totals.warnings > 0 ? `${totals.warnings} papers due` : 'papers current'} tone={totals.warnings > 0 ? 'warn' : undefined}
             detail={totals.warnings > 0
               ? `${totals.warnings} bus${totals.warnings === 1 ? ' has' : 'es have'} insurance, fitness, permit or PUC expired or due within 30 days. The bus list below marks which.`
               : undefined} />
-          <Tile icon={IdCard} value={loading ? '—' : `${crew.filter(c => c.active).length}`} label="Drivers" sub={`${crew.length - crew.filter(c => c.active).length} inactive`} />
-          <Tile icon={IndianRupee} value={billing ? fmtINR(totals.monthly) : '—'} label="Billed per month" align="right"
-            sub={totals.unpriced > 0 ? `${totals.unpriced} riders without a price` : 'every rider priced'} tone={totals.unpriced > 0 ? 'warn' : undefined}
+          <Tile i={4} value={loading ? '—' : `${crew.filter(c => c.active).length}`} label="Drivers" sub={`${crew.length - crew.filter(c => c.active).length} inactive`} />
+          <Tile i={5} value={billing ? fmtINR(totals.monthly) : '—'} label="Per month" align="right"
+            sub={totals.unpriced > 0 ? `${totals.unpriced} unpriced` : 'all priced'} tone={totals.unpriced > 0 ? 'warn' : undefined}
             detail={totals.unpriced > 0
               ? `${totals.unpriced} rider${totals.unpriced === 1 ? ' has' : 's have'} no monthly price yet, so they would be left out of a Bus fee issue. Either their route’s pricing (by stop or by student) is not chosen, or their stop or their own amount is empty. Open each route’s Fees tab to fix it.`
               : 'Every rider on a running route has a monthly price.'} />
@@ -362,7 +365,8 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
       {/* ── Connections & settings ─────────────────────────────────── */}
       <div id="transport-settings" className="scroll-mt-4">
         <GlassPanel eyebrow="Connections & settings" title="Messaging, devices and maps" icon={Radio} delay={0.12}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
+          {/* Three across on a phone (two rows), five on a desktop (one). */}
+          <div className="grid grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2.5">
             <GlassTileButton icon={MessageCircle} label="WhatsApp" detail="Message templates and the sending account" onClick={() => onOpenPanel('whatsapp')} />
             <GlassTileButton icon={Radio} label="GPS" detail="Hardware already fitted to the buses" onClick={() => onOpenPanel('gps')} />
             <GlassTileButton icon={ScanLine} label="Scan" detail="Cards, fobs and QR — only if you want them" onClick={() => onOpenPanel('scan')} />
@@ -412,24 +416,26 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
  * A headline number. When there is more to say than fits under it, the whole
  * explanation opens in a box on hover or keyboard focus.
  */
-function Tile({ icon: Icon, value, label, sub, tone, detail, align = 'left' }: {
-  icon: React.ElementType; value: string; label: string; sub?: string; tone?: 'warn'; detail?: string
+function Tile({ i, value, label, sub, tone, detail, align = 'left' }: {
+  /** Position in the strip, for its hairlines: three across on a phone, six on a desktop. */
+  i: number
+  value: string; label: string; sub?: string; tone?: 'warn'; detail?: string
   /** Which edge the hover box lines up with — 'right' for tiles at the end of a row. */
   align?: 'left' | 'right'
 }) {
   return (
-    <div className="group relative min-w-0" tabIndex={detail ? 0 : undefined}>
-      <div className={`lg-content flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 min-w-0 ${detail ? 'cursor-help' : ''}`}>
-        <span className="fee-mini-icon !w-8 !h-8 sm:!w-9 sm:!h-9 !rounded-xl flex-shrink-0"><Icon size={15} /></span>
-        <span className="min-w-0">
-          <span className="block font-display text-[1.1rem] sm:text-[1.25rem] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
-          <span className="block text-[11px] font-semibold text-slate-600 truncate">{label}</span>
-          {sub && <span className={`block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
-        </span>
-      </div>
+    <div className={`group relative min-w-0 px-3 py-2 sm:px-4 sm:py-2.5 border-slate-200/70 ${
+      i % 3 ? 'border-l' : i > 0 ? 'xl:border-l' : ''} ${i >= 3 ? 'border-t xl:border-t-0' : ''}`}
+      tabIndex={detail ? 0 : undefined}>
+      <span className={`flex items-baseline gap-1.5 min-w-0 ${detail ? 'cursor-help' : ''}`}>
+        <span className="font-display text-[1.05rem] sm:text-[1.2rem] font-bold leading-tight text-slate-900 tabular-nums truncate">{value}</span>
+        {tone === 'warn' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 self-center" aria-hidden />}
+      </span>
+      <span className="block text-[11px] font-semibold text-slate-600 truncate">{label}</span>
+      {sub && <span className={`hidden sm:block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
       {detail && (
         <div role="tooltip"
-          className={`lg-tooltip !bg-white/[.97] absolute left-0 right-0 ${align === 'right' ? 'sm:left-auto' : 'sm:right-auto'} sm:w-72 top-full mt-2 z-40 hidden group-hover:block group-focus-visible:block text-[12px] leading-snug text-slate-700`}>
+          className={`lg-tooltip !bg-white/[.97] absolute ${align === 'right' ? 'right-0' : 'left-0'} w-64 sm:w-72 top-full mt-1 z-40 hidden group-hover:block group-focus-visible:block text-[12px] leading-snug text-slate-700`}>
           {tone === 'warn' && <AlertTriangle size={12} className="inline -mt-0.5 mr-1 text-amber-600" />}
           {detail}
         </div>

@@ -14,8 +14,9 @@ import { EmptyNote, GINPUT } from './glass'
 
 interface Candidate { id: string; full_name: string; avatar_url?: string | null; grade?: number | null; section?: string | null }
 
+/** The stop picker inside a rider row: borderless until it needs attention. */
 const SELECT =
-  'h-8 rounded-lg bg-white border border-slate-200 px-2 text-xs text-slate-800 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 min-w-[10rem]'
+  'w-full h-7 appearance-none rounded-md bg-slate-50 hover:bg-slate-100 pl-2 pr-6 text-[12px] text-slate-800 truncate focus:outline-none focus:ring-2 focus:ring-[#B8983C]/30 cursor-pointer'
 
 const directionNote = (o: AssignedRoute) =>
   o.rides_inbound && !o.rides_outbound ? ' (to school)' : !o.rides_inbound && o.rides_outbound ? ' (from school)' : ''
@@ -40,6 +41,8 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
   const [results, setResults] = useState<Candidate[]>([])
   const [elsewhere, setElsewhere] = useState<Record<string, AssignedRoute[]>>({})
   const [searching, setSearching] = useState(false)
+  /** The stop the list is narrowed to; 'none' for riders with no stop yet. */
+  const [stopFilter, setStopFilter] = useState<string | null>(null)
 
   const inbound = route.direction === 'inbound'
   const stopWord = inbound ? 'pickup point' : 'drop point'
@@ -74,6 +77,18 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
   const over = capacity > 0 && assignments.length > capacity
   const unassignedStop = assignments.filter(a => !a.pickup_stop_id).length
 
+  // Along the route, then by name, so the list reads in the order the bus
+  // meets them; riders still without a stop come first, since they need work.
+  const seqOf = useMemo(() => new Map(stops.map(s => [s.id, s.seq])), [stops])
+  const shown = useMemo(() => {
+    const list = stopFilter === 'none' ? assignments.filter(a => !a.pickup_stop_id)
+      : stopFilter ? assignments.filter(a => a.pickup_stop_id === stopFilter)
+      : assignments
+    return [...list].sort((x, y) =>
+      (x.pickup_stop_id ? seqOf.get(x.pickup_stop_id) ?? 999 : -1) - (y.pickup_stop_id ? seqOf.get(y.pickup_stop_id) ?? 999 : -1)
+      || (x.student?.full_name ?? '').localeCompare(y.student?.full_name ?? ''))
+  }, [assignments, stopFilter, seqOf])
+
   const add = async (c: Candidate) => {
     const res = await assignStudents(route.id, [c.id], {}, { inbound, outbound: !inbound })
     if (res.success) { setQuery(''); setResults([]); await load(); onChanged?.() }
@@ -87,8 +102,8 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${over ? 'text-rose-600' : 'text-slate-700'}`}>
           <Users size={15} className={over ? 'text-rose-500' : 'text-slate-400'} />
           {assignments.length} rider{assignments.length === 1 ? '' : 's'}
@@ -103,7 +118,7 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
         {unassignedStop > 0 && (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
             <MapPin size={12} />
-            {unassignedStop} without a {stopWord} — no ETA, no boarding prompt, no stop price
+            {unassignedStop} without a {stopWord}
           </span>
         )}
       </div>
@@ -111,10 +126,10 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
       <div className="relative">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
-          className={`${GINPUT} pl-9 pr-9 h-10`}
+          className={`${GINPUT} pl-9 pr-9 !h-9`}
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search a student by name to add them to this route…"
+          placeholder="Add a student — type a name…"
         />
         {query && (
           <button
@@ -167,8 +182,22 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
         </p>
       )}
 
+      {/* Riders per stop, which is also the filter. */}
+      {stops.length > 0 && assignments.length > 0 && (
+        <div className="-mx-0.5 flex gap-1 overflow-x-auto scrollbar-none px-0.5 pb-0.5">
+          <Chip on={stopFilter === null} onClick={() => setStopFilter(null)} label="All" n={assignments.length} />
+          {unassignedStop > 0 && (
+            <Chip on={stopFilter === 'none'} onClick={() => setStopFilter(stopFilter === 'none' ? null : 'none')} label="No stop" n={unassignedStop} warn />
+          )}
+          {stops.map(s => (
+            <Chip key={s.id} on={stopFilter === s.id} onClick={() => setStopFilter(stopFilter === s.id ? null : s.id)}
+              label={`${s.seq}. ${s.name}`} n={perStop[s.id] ?? 0} />
+          ))}
+        </div>
+      )}
+
       {loading ? (
-        <div className="space-y-1.5">{[0, 1, 2].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100/80 animate-pulse" />)}</div>
+        <div className="space-y-1">{[0, 1, 2, 3].map(i => <div key={i} className="h-9 rounded-lg bg-slate-100/80 animate-pulse" />)}</div>
       ) : assignments.length === 0 ? (
         <EmptyNote
           icon={Users}
@@ -176,34 +205,38 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
           detail={`Search above to add students, then give each one a ${stopWord}.`}
         />
       ) : (
-        <ul className="divide-y divide-slate-200/70 rounded-2xl border border-slate-200/70 bg-white/70 overflow-hidden">
-          {assignments.map(a => (
-            <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
-              <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={30} userId={a.student_id} />
-              <div className="flex-1 min-w-[9rem]">
-                <p className="text-sm font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</p>
-                <p className="text-[11px] text-slate-500 truncate">
-                  {a.student?.grade ? `Grade ${a.student.grade}${a.student.section ? ` · ${a.student.section}` : ''}` : 'No class'}
-                  {a.location_label && ` · “${a.location_label}”`}
-                </p>
-              </div>
+        // One line per rider, two columns from lg: a full bus of forty fits
+        // on a desktop screen and about fifteen on a phone.
+        <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-4 rounded-xl border border-slate-200/70 bg-white/70 px-2 sm:px-2.5">
+          {shown.map(a => (
+            <li key={a.id} className="flex items-center gap-2 h-10 border-b border-slate-200/60 last:border-b-0 lg:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
+              <span className="hidden sm:block flex-shrink-0">
+                <Avatar avatarUrl={a.student?.avatar_url ?? undefined} name={a.student?.full_name ?? '?'} size={22} userId={a.student_id} />
+              </span>
+              <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                <span className="text-[13px] font-medium text-slate-900 truncate">{a.student?.full_name ?? 'Unknown'}</span>
+                <span className="flex-shrink-0 text-[10.5px] text-slate-400 tabular-nums">
+                  {a.student?.grade ? `${a.student.grade}${a.student.section ? a.student.section : ''}` : ''}
+                </span>
+              </span>
 
-              <label className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{stopWord}</span>
+              <span className="relative w-[44%] sm:w-[11rem] flex-shrink-0">
                 <select
-                  className={`${SELECT} ${a.pickup_stop_id ? '' : '!border-amber-300 !bg-amber-50/60'}`}
+                  aria-label={`${stopWord} for ${a.student?.full_name ?? 'rider'}`}
+                  className={`${SELECT} ${a.pickup_stop_id ? '' : '!bg-amber-50 !text-amber-800 ring-1 ring-amber-200'}`}
                   value={a.pickup_stop_id ?? ''}
                   onChange={e => setStop(a, e.target.value || null)}
                 >
-                  <option value="">Not set</option>
+                  <option value="">No {stopWord}</option>
                   {stops.map(s => <option key={s.id} value={s.id}>{s.seq}. {s.name}</option>)}
                 </select>
-              </label>
+                <MapPin size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </span>
 
               <button
-                className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors flex-shrink-0"
-                aria-label="Remove from route"
-                title="Remove from route"
+                className="w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors flex-shrink-0"
+                aria-label={`Take ${a.student?.full_name ?? 'rider'} off this route`}
+                title="Take off this route"
                 onClick={async () => {
                   if (!confirm(`Take ${a.student?.full_name} off this route from today?`)) return
                   await endAssignment(a.id)
@@ -211,26 +244,30 @@ export default function AssignmentEditor({ route, onChanged }: { route: Transpor
                   onChanged?.()
                 }}
               >
-                <X size={15} />
+                <X size={14} />
               </button>
             </li>
           ))}
         </ul>
       )}
-
-      {stops.length > 0 && assignments.length > 0 && (
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Riders per {stopWord}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {stops.map(s => (
-              <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/80 border border-slate-200/70 text-slate-700">
-                <span className="font-semibold">{s.seq}. {s.name}</span>
-                <span className="text-slate-400 tabular-nums">{perStop[s.id] ?? 0}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
+  )
+}
+
+function Chip({ on, onClick, label, n, warn }: { on: boolean; onClick: () => void; label: string; n: number; warn?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`inline-flex flex-shrink-0 items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition ${
+        on ? 'bg-[#27272A] text-white'
+          : warn ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+          : 'bg-white/80 text-slate-700 ring-1 ring-slate-200/80 hover:bg-white'
+      }`}
+    >
+      {label}
+      <span className={`tabular-nums ${on ? 'text-white/60' : 'text-slate-400'}`}>{n}</span>
+    </button>
   )
 }

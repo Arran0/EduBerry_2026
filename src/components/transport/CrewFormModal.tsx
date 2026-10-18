@@ -5,7 +5,7 @@ import { IdCard } from 'lucide-react'
 import BusModal from './BusModal'
 import { upsertTransportStaff, updateTransportStaff } from '@/lib/transport/staff'
 import type { StaffInput, TransportStaff } from '@/lib/transport/types'
-import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } from './formUI'
+import { FormError, Group, Row, RowInput, RowSelect, RowTextArea, SwitchRow } from './formUI'
 
 interface Candidate { id: string; full_name: string; avatar_url?: string | null }
 
@@ -67,71 +67,67 @@ export default function CrewFormModal({
   return (
     <BusModal
       onClose={onClose}
-      size="md"
-      title={staff ? 'Edit crew record' : 'New crew record'}
-      subtitle="A driver who works the routes"
+      size="lg"
+      title={staff ? 'Edit driver' : 'New driver'}
+      subtitle="Someone who drives the routes"
       icon={<IdCard size={18} />}
-      iconClassName="bg-sky-100 text-sky-700"
-      footer={<ModalFooter onCancel={onClose} onSubmit={submit} saving={saving} />}
+      confirm={{ label: staff ? 'Save' : 'Add', onClick: submit, busy: saving }}
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <FormError message={error} />
 
-        <FormGrid>
-          <Field
-            label="Person *"
-            hint="Any account with the driver role. Create one in User Management first."
-          >
-            <Select
-              value={form.profile_id}
-              onChange={e => set('profile_id', e.target.value)}
-              disabled={!!staff}
-            >
-              {candidates.length === 0 && <option value="">No driver accounts yet</option>}
-              {candidates.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Phone" hint="Shown to parents on the crew card.">
-            <TextInput value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="+91 98765 43210" />
-          </Field>
-          <Field label="Employee code">
-            <TextInput value={form.employee_code ?? ''} onChange={e => set('employee_code', e.target.value)} />
-          </Field>
-          <Field label="Licence number">
-            <TextInput value={form.licence_no ?? ''} onChange={e => set('licence_no', e.target.value)} />
-          </Field>
-          <Field label="Licence expiry">
-            <TextInput type="date" value={form.licence_expiry ?? ''} onChange={e => set('licence_expiry', e.target.value)} />
-          </Field>
-          <Field label="Badge number">
-            <TextInput value={form.badge_no ?? ''} onChange={e => set('badge_no', e.target.value)} />
-          </Field>
-          <Field label="Blood group">
-            <TextInput value={form.blood_group ?? ''} onChange={e => set('blood_group', e.target.value)} placeholder="O+" />
-          </Field>
-          <Field label="Emergency contact">
-            <TextInput value={form.emergency_contact ?? ''} onChange={e => set('emergency_contact', e.target.value)} />
-          </Field>
-        </FormGrid>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="space-y-4">
+            <Group title="Driver" note={staff ? 'Parents see the name and phone on the crew card.' : 'Any account with the driver role. Create one in User Management first.'}>
+              <Row label="Account" required>
+                <RowSelect value={form.profile_id} onChange={e => set('profile_id', e.target.value)} disabled={!!staff}>
+                  {candidates.length === 0 && <option value="">No driver accounts yet</option>}
+                  {candidates.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                </RowSelect>
+              </Row>
+              <Row label="Phone">
+                <RowInput type="tel" inputMode="tel" value={form.phone ?? ''} onChange={e => set('phone', e.target.value)} placeholder="+91 98765 43210" />
+              </Row>
+              <Row label="Employee code">
+                <RowInput value={form.employee_code ?? ''} onChange={e => set('employee_code', e.target.value)} placeholder="Optional" />
+              </Row>
+              <Row label="Badge">
+                <RowInput value={form.badge_no ?? ''} onChange={e => set('badge_no', e.target.value)} placeholder="Optional" />
+              </Row>
+            </Group>
 
-        <Field label="Address">
-          <TextArea rows={2} value={form.address ?? ''} onChange={e => set('address', e.target.value)} />
-        </Field>
+            <Group title="Licence" note="The driver list flags a licence 30 days before it expires.">
+              <Row label="Number">
+                <RowInput value={form.licence_no ?? ''} onChange={e => set('licence_no', e.target.value)} placeholder="KL07 20190012345" />
+              </Row>
+              <Row label="Expires">
+                <RowInput type="date" value={form.licence_expiry ?? ''} onChange={e => set('licence_expiry', e.target.value)} />
+              </Row>
+            </Group>
+          </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm text-[#52525B]">
-            <input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} />
-            Background verification on file
-          </label>
-          <label className="flex items-center gap-2 text-sm text-[#52525B]">
-            <input type="checkbox" checked={form.active ?? true} onChange={e => set('active', e.target.checked)} />
-            Currently working
-          </label>
+          <div className="space-y-4">
+            <Group title="Status">
+              <SwitchRow label="Currently working" hint="Off keeps the record but hides the driver from pickers." checked={form.active ?? true} onChange={v => set('active', v)} />
+              <SwitchRow label="Background check on file" checked={verified} onChange={setVerified} />
+            </Group>
+
+            <Group title="In an emergency">
+              <Row label="Blood group">
+                <RowInput value={form.blood_group ?? ''} onChange={e => set('blood_group', e.target.value)} placeholder="O+" />
+              </Row>
+              <Row label="Contact">
+                <RowInput value={form.emergency_contact ?? ''} onChange={e => set('emergency_contact', e.target.value)} placeholder="Name and phone" />
+              </Row>
+              <Row label="Address" stacked>
+                <RowTextArea rows={2} value={form.address ?? ''} onChange={e => set('address', e.target.value)} placeholder="Optional" />
+              </Row>
+              <Row label="Notes" stacked>
+                <RowTextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} placeholder="Optional" />
+              </Row>
+            </Group>
+          </div>
         </div>
-
-        <Field label="Notes">
-          <TextArea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
-        </Field>
       </div>
     </BusModal>
   )

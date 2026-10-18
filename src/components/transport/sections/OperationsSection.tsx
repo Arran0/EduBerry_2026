@@ -21,7 +21,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
-  AlertTriangle, BarChart3, Bus, CalendarRange, Check, CheckCheck, History,
+  AlertTriangle, BarChart3, Bus, CalendarRange, Check, CheckCheck, ChevronLeft, ChevronRight, History,
   Loader2, Phone, Radio, RefreshCw, ShieldAlert, Users, WifiOff, Wallet, X, Clock, Gauge,
 } from 'lucide-react'
 import Modal from '../BusModal'
@@ -849,7 +849,12 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
   const [rows, setRows] = useState<MonthFeePosition[] | null>(null)
   const [hover, setHover] = useState<number | null>(null)
 
-  const calYear = session ? chartYearFor(session) : new Date().getFullYear()
+  // The calendar year on show. It starts on this year (or the session's own
+  // when the session does not reach this year) and steps a year at a time;
+  // the bills counted stay the banner session's.
+  const defaultYear = session ? chartYearFor(session) : new Date().getFullYear()
+  const [calYear, setCalYear] = useState(defaultYear)
+  useEffect(() => { setCalYear(defaultYear) }, [defaultYear])
   useEffect(() => {
     if (!session) {
       setRows(calendarMonths(calYear).map(period => ({ period, billed: 0, collected: 0, outstanding: 0, bills: 0 })))
@@ -879,9 +884,15 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
       delay={0.1}
       actions={
         <>
-          <span className="lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[11.5px] font-semibold text-slate-600 tabular-nums" title={`Months of ${calYear}, bills of session ${year}`}>
-            <CalendarRange size={12} className="text-slate-400" /> Jan–Dec {calYear}
-          </span>
+          <div className="lg-pill inline-flex items-center h-8 px-0.5" role="group" aria-label="Calendar year shown" title={`January to December ${calYear}, bills of session ${year}`}>
+            <button onClick={() => setCalYear(y => y - 1)} className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:bg-white" aria-label="Previous year">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="px-1 text-[12px] font-bold text-slate-800 tabular-nums">{calYear}</span>
+            <button onClick={() => setCalYear(y => y + 1)} className="w-7 h-7 rounded-full flex items-center justify-center text-slate-600 hover:bg-white" aria-label="Next year">
+              <ChevronRight size={14} />
+            </button>
+          </div>
           <button onClick={onOpenFees} className={`${GBTN.primary} !h-8`}>
             <Wallet size={14} /> <span className="hidden sm:inline">Collect in Fees</span><span className="sm:hidden">Collect</span>
           </button>
