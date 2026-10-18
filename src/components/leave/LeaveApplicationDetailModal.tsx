@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, CalendarDays } from 'lucide-react'
 import LeaveApplicationCard from './LeaveApplicationCard'
 import { fetchLeaveApplicationById, type LeaveApplicationWithDetails } from '@/lib/leave'
+import { SHEET_MOTION } from '@/lib/sheetMotion'
 
 interface LeaveApplicationDetailModalProps {
   /** Application to show, or null when the popup is closed. */
@@ -94,9 +95,7 @@ export default function LeaveApplicationDetailModal({
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.96, opacity: 0, y: 16 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.96, opacity: 0, y: 16 }}
+            {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
             className="lg-sheet relative rounded-[28px] w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >

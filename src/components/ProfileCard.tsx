@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { sheetMotion, SCRIM_MOTION } from '@/lib/sheetMotion'
 import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, CalendarCheck, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard, type ProfileCardSeed, type SupportCardPerson } from '@/contexts/ProfileCardContext'
@@ -234,13 +235,11 @@ function seedToProfile(seed?: ProfileCardSeed | null): UserProfile | null {
 
 /** The dimmed backdrop and the card's own surface — shared by every kind of card. */
 function CardFrame({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const reduceMotion = useReducedMotion()
   return (
     <>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
+        {...SCRIM_MOTION}
         onClick={onClose}
         // No backdrop-filter here. A blurred backdrop fading in over a page
         // that itself uses backdrop-filter (the transport admin's glass
@@ -249,13 +248,10 @@ function CardFrame({ onClose, children }: { onClose: () => void; children: React
         className="fixed inset-0 z-[9998] bg-slate-900/55"
       />
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        // A spring has no duration to wait on, which made closing drift; the
-        // exit is an explicit short tween so the card leaves as decisively as
-        // it arrives and AnimatePresence knows exactly when it is gone.
-        exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14, ease: 'easeIn' } }}
-        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        // Slides up and back down, never fades or scales: fading the card
+        // made Chrome paint it into a fresh offscreen surface on every open
+        // and close, drawn black whenever it wasn't ready — see lib/sheetMotion.
+        {...sheetMotion(reduceMotion)}
         className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none"
       >
         {/* A plain div: every slot inside is drawn whether or not it has a

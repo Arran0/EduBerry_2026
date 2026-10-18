@@ -29,6 +29,7 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { AlertTriangle, ShieldAlert, X, Info } from 'lucide-react'
 import type { LocationWarning } from '@/lib/attendance'
+import { SHEET_MOTION } from '@/lib/sheetMotion'
 
 interface Tone {
   chip: string
@@ -248,9 +249,7 @@ export function LocationWarningModal({
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.96, opacity: 0, y: 16 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+        {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
         className="lg-sheet relative rounded-[28px] w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}
         role="dialog"

@@ -387,15 +387,14 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(140deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.25) 35%,
-    rgba(255, 255, 255, 0.08) 60%,
-    rgba(255, 255, 255, 0.75) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  /* The specular rim as two inset hairlines — bright where the light lands
+     (top-left), softer opposite — instead of a masked gradient border. A CSS
+     mask makes Chrome give the element its own offscreen surface, and every
+     such surface on screen when a popup opens is one more thing that can be
+     drawn black for a frame. */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.55);
   pointer-events: none;
   z-index: 2;
 }
@@ -427,9 +426,12 @@ body {
   width: 46%;
   aspect-ratio: 1;
   border-radius: 9999px;
-  filter: blur(48px);
+  /* A soft radial falloff in the span's colour (set as `color`), not a
+     filter: blur — a large blur filter is its own offscreen surface, one more
+     thing Chrome can draw black for a frame as a popup opens over it. */
+  background: radial-gradient(closest-side, currentColor 0%, transparent 100%);
   opacity: 0.32;
-  transition: background-color 0.9s ease, background 0.9s ease;
+  transition: color 0.9s ease;
 }
 .lg-ambient > span:first-child { top: -8%; left: -4%; }
 .lg-ambient > span:last-child { bottom: -10%; right: -4%; opacity: 0.22; }
@@ -627,15 +629,14 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(140deg,
-    rgba(255, 255, 255, 1) 0%,
-    rgba(255, 255, 255, 0.35) 40%,
-    rgba(255, 255, 255, 0.10) 65%,
-    rgba(255, 255, 255, 0.8) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  /* The specular rim as two inset hairlines — bright where the light lands
+     (top-left), softer opposite — instead of a masked gradient border. A CSS
+     mask makes Chrome give the element its own offscreen surface, and every
+     such surface on screen when a popup opens is one more thing that can be
+     drawn black for a frame. */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.55);
   pointer-events: none;
   z-index: 2;
 }
@@ -710,15 +711,15 @@ body:has([data-page-theme="staff-attendance"]) {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(140deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(15, 23, 42, 0.06) 40%,
-    rgba(15, 23, 42, 0.04) 65%,
-    rgba(255, 255, 255, 0.8) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  /* The specular rim as two inset hairlines — bright where the light lands
+     (top-left), softer opposite — instead of a masked gradient border. A CSS
+     mask makes Chrome give the element its own offscreen surface, and every
+     such surface on screen when a popup opens is one more thing that can be
+     drawn black for a frame. */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 1px rgba(15, 23, 42, 0.04);
   pointer-events: none;
   z-index: 2;
 }

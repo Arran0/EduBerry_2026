@@ -289,8 +289,8 @@ export default function HomeCardDeck({ slots: allSlots, heightClass, ariaLabel =
           over a flat colour reads as a grey blob; this gives it something to
           bend, and lets the material shift colour as the cards change. */}
       <div aria-hidden className="lg-ambient">
-        <span style={{ background: active?.accent }} />
-        <span style={{ background: active?.accent }} />
+        <span style={{ color: active?.accent }} />
+        <span style={{ color: active?.accent }} />
       </div>
 
       <motion.div

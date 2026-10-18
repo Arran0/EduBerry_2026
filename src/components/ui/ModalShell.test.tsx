@@ -40,6 +40,14 @@ import { AnimatePresence, MotionGlobalConfig } from 'framer-motion'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import ModalShell from './ModalShell'
 import ModalErrorBoundary from './ModalErrorBoundary'
+import { isScrollLocked } from '@/hooks/useBodyScrollLock'
+
+/** A wheel over the page (not inside anything scrollable): was it cancelled? */
+function pageWheelCancelled(): boolean {
+  const e = new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })
+  document.body.dispatchEvent(e)
+  return e.defaultPrevented
+}
 
 // Run animations to their end instantly — the exit *completing* is what
 // matters here, not how long it looks good doing it.
@@ -150,7 +158,7 @@ describe('Download Centre → EPF/ESI → close', () => {
     // page. ModalShell's portal root is `fixed inset-0`, so one left behind is
     // invisible and swallows every click on the page.
     expect(overlays()).toHaveLength(0)
-    expect(document.body.style.overflow).not.toBe('hidden')
+    expect(isScrollLocked()).toBe(false)
 
     onPageClick.mockClear()
     click('page-button')
@@ -163,20 +171,34 @@ describe('Download Centre → EPF/ESI → close', () => {
 
     click('page-button')
     await settle()
-    expect(document.body.style.overflow).toBe('hidden')
+    expect(isScrollLocked()).toBe(true)
+    expect(pageWheelCancelled()).toBe(true)
 
     click('epf-tile')
     await settle()
     click('summary-tile')
     await settle()
     // Two shells open at once must still be one net lock to release.
-    expect(document.body.style.overflow).toBe('hidden')
+    expect(isScrollLocked()).toBe(true)
 
     closeTopmost()
     await settle()
     closeTopmost()
     await settle()
-    expect(document.body.style.overflow).not.toBe('hidden')
+    expect(isScrollLocked()).toBe(false)
+    expect(pageWheelCancelled()).toBe(false)
+  })
+
+  it('never changes the page overflow (toggling it is what made Chrome blink black)', async () => {
+    render(<Page />)
+    await settle()
+    click('page-button')
+    await settle()
+    expect(document.body.style.overflow).toBe('')
+    expect(document.documentElement.style.overflow).toBe('')
+    closeTopmost()
+    await settle()
+    expect(document.body.style.overflow).toBe('')
   })
 
   /**

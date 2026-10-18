@@ -30,6 +30,7 @@ import {
   isImageFile,
 } from '@/lib/leave'
 import ApproverDecisionPanel from '@/components/leave/ApproverDecisionPanel'
+import { SHEET_MOTION } from '@/lib/sheetMotion'
 
 /**
  * `card` is the standalone surface — a rounded panel that shows everything,
@@ -626,9 +627,7 @@ export default function LeaveApplicationCard({
               onClick={() => setShowDeleteConfirm(false)}
             >
               <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
+                {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
                 className="lg-sheet relative rounded-[28px] w-full max-w-sm p-6"
                 onClick={e => e.stopPropagation()}
               >

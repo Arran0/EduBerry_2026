@@ -940,9 +940,9 @@ export default function SchoolOverviewPanel({
     <div className="relative">
       {/* Ambient light for the glass to bend. */}
       <div aria-hidden className="lg-ambient lg-ambient-overview">
-        <span style={{ background: '#10b981' }} />
-        <span style={{ background: '#0ea5e9' }} />
-        <span style={{ background: '#f59e0b' }} />
+        <span style={{ color: '#10b981' }} />
+        <span style={{ color: '#0ea5e9' }} />
+        <span style={{ color: '#f59e0b' }} />
       </div>
 
       <motion.div

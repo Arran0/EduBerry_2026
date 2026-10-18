@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useDragControls, useIsPresent, PanInfo } from 'framer-motion'
+import { motion, useDragControls, useIsPresent, useReducedMotion, PanInfo } from 'framer-motion'
+import { sheetMotion, SCRIM_MOTION } from '@/lib/sheetMotion'
 import { X } from 'lucide-react'
 import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
@@ -109,6 +110,7 @@ export default function ModalShell({
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
+  const reduceMotion = useReducedMotion()
   const panelRef = useRef<HTMLDivElement>(null)
   // Phones still keep a slight top radius on the sheet even when sharp, so the
   // panel reads as a sheet rising over the page rather than a stuck banner.
@@ -190,10 +192,7 @@ export default function ModalShell({
             sheet reads as glass from its fill, rim and highlight instead. */}
         <motion.div
           className="absolute inset-0 bg-[#1c1a1e]/45"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          {...SCRIM_MOTION}
           onClick={onClose}
         />
 
@@ -202,10 +201,8 @@ export default function ModalShell({
           role="dialog"
           aria-modal="true"
           className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[94dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden rounded-t-[28px] sm:rounded-[28px]`}
-          initial={{ opacity: 0, y: 56, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 56, scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+          // Slides, never fades — see lib/sheetMotion.
+          {...sheetMotion(reduceMotion)}
           drag="y"
           dragControls={dragControls}
           dragListener={false}
@@ -280,10 +277,7 @@ export default function ModalShell({
           fading over it in turn, is what made Chrome flash black frames. */}
       <motion.div
         className="absolute inset-0 bg-slate-950/50"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
+        {...SCRIM_MOTION}
         onClick={onClose}
       />
 
@@ -297,10 +291,8 @@ export default function ModalShell({
             ? `overflow-hidden ${radius}`
             : `overflow-hidden ${radius} bg-white ring-1 ring-slate-900/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,1),0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[inset_0_1px_0_rgba(255,255,255,1),0_32px_80px_-20px_rgba(15,23,42,0.4)]`
         }`}
-        initial={{ opacity: 0, y: 56, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 56, scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+        // Slides, never fades — see lib/sheetMotion.
+        {...sheetMotion(reduceMotion)}
         drag="y"
         dragControls={dragControls}
         dragListener={false}

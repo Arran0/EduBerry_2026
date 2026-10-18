@@ -10,6 +10,7 @@ import {
   recomputePendingAttendance,
 } from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
+import { SHEET_MOTION } from '@/lib/sheetMotion'
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] // index matches JS Date#getDay()
 
@@ -272,10 +273,7 @@ export default function NonWorkingDayModal({
         onClick={onClose}
       >
         <motion.div
-          initial={{ y: '100%', opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: '100%', opacity: 0 }}
-          transition={{ type: 'spring', damping: 40, stiffness: 320 }}
+          {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
           className="lg-sheet relative rounded-t-[28px] sm:rounded-[28px] w-full sm:max-w-xl flex flex-col overflow-hidden"
           style={{ maxHeight: '92dvh' }}
           onClick={e => e.stopPropagation()}

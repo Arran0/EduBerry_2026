@@ -12,6 +12,7 @@ import {
   describeLocationWarning,
 } from '@/lib/attendance'
 import { LocationWarningBanner } from '@/components/attendance/LocationWarning'
+import { SHEET_MOTION } from '@/lib/sheetMotion'
 
 function formatTime(iso: string | null): string {
   if (!iso) return '—'
@@ -42,9 +43,7 @@ export default function DayAttendanceDetailModal({
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.96, opacity: 0, y: 16 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+        {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
         className="lg-sheet relative rounded-[28px] w-full max-w-md overflow-hidden"
         onClick={e => e.stopPropagation()}
         role="dialog"
