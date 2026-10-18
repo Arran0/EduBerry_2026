@@ -26,6 +26,7 @@ import {
 } from '@/lib/leave'
 import { UserProfile } from '@/lib/supabase'
 import { DateToggler } from '@/components/workspace/ui'
+import { QUICK_GROUP, quickButtonClass } from '@/components/attendance/reportKit'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,23 +53,19 @@ const STATUS_OPTIONS: AttendanceStatus[] = ['present', 'absent', 'late', 'half_d
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
   present: 'P', absent: 'A', late: 'L', on_leave: 'OL', excused: 'E', on_duty: 'OD', half_day: 'HD',
 }
-const STATUS_COLORS: Record<AttendanceStatus, string> = {
-  present:  'bg-green-500 text-white border-green-500',
-  absent:   'bg-red-500 text-white border-red-500',
+// The staff report's quick-set capsule colours, so marking reads the same in
+// both attendance apps.
+const STATUS_ACTIVE: Record<AttendanceStatus, string> = {
+  present:  'bg-emerald-600 text-white border-emerald-600',
+  absent:   'bg-red-600 text-white border-red-600',
   late:     'bg-amber-500 text-white border-amber-500',
-  on_leave: 'bg-blue-500 text-white border-blue-500',
-  excused:  'bg-purple-500 text-white border-purple-500',
-  on_duty:  'bg-teal-500 text-white border-teal-500',
+  on_leave: 'bg-blue-600 text-white border-blue-600',
+  excused:  'bg-purple-600 text-white border-purple-600',
+  on_duty:  'bg-teal-600 text-white border-teal-600',
   half_day: 'bg-orange-500 text-white border-orange-500',
 }
-const STATUS_INACTIVE: Record<AttendanceStatus, string> = {
-  present:  'border-green-200 text-green-600 hover:bg-green-50',
-  absent:   'border-red-200 text-red-600 hover:bg-red-50',
-  late:     'border-amber-200 text-amber-600 hover:bg-amber-50',
-  on_leave: 'border-blue-200 text-blue-600 hover:bg-blue-50',
-  excused:  'border-purple-200 text-purple-600 hover:bg-purple-50',
-  on_duty:  'border-teal-200 text-teal-600 hover:bg-teal-50',
-  half_day: 'border-orange-200 text-orange-600 hover:bg-orange-50',
+const STATUS_DOT: Partial<Record<AttendanceStatus, string>> = {
+  present: '#059669', absent: '#dc2626', late: '#f59e0b', half_day: '#f97316',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,32 +142,43 @@ function StudentCalendarDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4"
+    // Fades and rises in like every other sheet in the app. A fixed height:
+    // the calendar (and the applications under it) load inside it, so the
+    // sheet never opens short and then jumps when the month arrives.
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.16 }}
+      className="lg-scrim fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col max-h-[95dvh] sm:max-h-[90vh] rounded-t-2xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 bg-gradient-to-r from-violet-600 to-purple-500 flex-shrink-0">
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 32 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${student.full_name}'s attendance`}
+        className="lg-sheet relative w-full sm:max-w-lg rounded-t-[28px] sm:rounded-[28px] flex flex-col h-[88dvh] sm:h-[min(38.5rem,90vh)] overflow-hidden"
+      >
+        <div className="relative z-[3] flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
           <Avatar
             avatarUrl={student.avatar_url}
             name={student.full_name}
             email={student.email}
-            size={40}
+            size={38}
             userId={student.id}
           />
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-white text-base truncate">{student.full_name}</p>
-            <p className="text-xs text-violet-200">Monthly Attendance &amp; Applications</p>
+            <p className="font-bold text-slate-900 text-[15px] truncate leading-tight">{student.full_name}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Monthly attendance and applications</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-xl transition-colors"
-          >
-            <X size={18} />
+          <button onClick={onClose} aria-label="Close" className="lg-control w-9 h-9 flex-shrink-0">
+            <X size={16} strokeWidth={2.4} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="relative z-[3] flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pb-2 sm:px-2.5 sm:pb-2.5 space-y-2">
           <AttendanceCalendar
             studentId={student.id}
             homeroomId={homeroomId}
@@ -181,25 +189,23 @@ function StudentCalendarDialog({
           />
 
           {/* Leave applications this month */}
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-0.5">
-              Applications This Month
-            </p>
+          <div className="lg-sheet-card px-3 py-2.5">
+            <p className="text-[12px] font-semibold text-slate-500 mb-2">Applications this month</p>
             {leaveLoading ? (
-              <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
-                <Loader2 size={13} className="animate-spin" /> Loading…
+              <div className="space-y-1.5" aria-busy="true">
+                <div className="h-11 rounded-xl bg-slate-100 animate-pulse" />
               </div>
             ) : leaveApps.length === 0 ? (
-              <p className="text-xs text-slate-400 italic px-1">No applications this month.</p>
+              <p className="text-xs text-slate-400 py-3">No applications this month.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {leaveApps.map(app => {
                   const myApproval = app.approvals.find(a => a.approver_id === viewerId && a.status === 'pending')
                   return (
                     <button
                       key={app.id}
                       onClick={() => { setSelectedApp(app); setDecisionComment('') }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-violet-50 rounded-xl border border-slate-100 hover:border-violet-200 transition-colors"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2.5 bg-white hover:bg-slate-50 rounded-xl ring-1 ring-slate-900/[0.06] transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-800 truncate">{LEAVE_TYPE_LABELS[app.leave_type]}</p>
@@ -221,15 +227,15 @@ function StudentCalendarDialog({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Application detail + decision modal */}
       {selectedApp && (
         <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-4"
+          className="lg-scrim fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4"
           onClick={() => setSelectedApp(null)}
         >
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-sm rounded-[24px] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/[0.06] p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm">{LEAVE_TYPE_LABELS[selectedApp.leave_type]}</h3>
               <button onClick={() => setSelectedApp(null)} className="p-1 text-slate-400 hover:text-slate-600">
@@ -305,7 +311,7 @@ function StudentCalendarDialog({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -371,65 +377,104 @@ function InlineSheet({
 
   const hasChanges = rows.some(r => r.changed)
   const markedCount = rows.filter(r => r.changed || r.leaveLinked).length
+  const tally = STATUS_OPTIONS.map(st => ({ st, n: rows.filter(r => r.status === st).length }))
+  const markedPct = rows.length ? Math.round((markedCount / rows.length) * 100) : 0
+
+  // Two saves: one up top for short classes, one at the foot. On a phone only
+  // the foot's — the toolbar has no room for both actions on one line.
+  const saveButton = (big: boolean) => (
+    <button
+      onClick={handleSave}
+      disabled={saving || !hasChanges}
+      className={`items-center gap-1.5 rounded-full font-semibold bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-35 transition-colors flex-shrink-0 ${
+        big ? 'inline-flex px-4 py-2 text-sm' : 'hidden sm:inline-flex px-3 py-1.5 text-xs'
+      }`}
+    >
+      {saving ? <Loader2 size={big ? 14 : 12} className="animate-spin" /> : <Save size={big ? 14 : 12} />}
+      {saved && !hasChanges ? 'Saved' : 'Save'}
+    </button>
+  )
 
   return (
-    <div className="border-t border-[#E4E4E7]">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1.5 px-3 sm:px-4 py-2 bg-[#FAFAF9] border-b border-[#E4E4E7]">
+    <div className="bg-white">
+      {/* Toolbar: the day, the class at a glance, and the two actions */}
+      <div className="flex flex-wrap items-center gap-2 px-3 sm:px-3.5 py-2.5 bg-slate-50/80 border-b border-slate-100">
         {/* No `max`: a sheet can still be opened on a future date, the way the
             plain date input allowed. */}
         <DateToggler
           value={date}
           onChange={setDate}
           todayStr={todayString()}
-          className="inline-flex flex-shrink-0"
+          className="inline-flex flex-shrink-0 h-8"
           size="sm"
+          glass
         />
-        <span className="text-xs text-[#A1A1AA] hidden lg:block truncate flex-1 min-w-0">{formatDate(date)}</span>
-        <div className="flex-1 lg:hidden" />
-        {hasChanges && <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">• Unsaved</span>}
+        <span className="text-xs text-slate-400 hidden lg:block truncate">{formatDate(date)}</span>
+
+        {/* Live tally of the sheet as it stands, edits included */}
+        <div className="hidden sm:flex items-center gap-1 ml-1">
+          {tally.map(({ st, n }) => (
+            <span
+              key={st}
+              title={ATTENDANCE_STATUS_LABELS[st]}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white ring-1 ring-slate-900/[0.06] text-slate-600 tabular-nums"
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_DOT[st] }} />
+              {STATUS_SHORT[st]} {loading ? '–' : n}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+        {hasChanges && <span className="text-[11px] text-amber-600 font-semibold flex-shrink-0">Unsaved</span>}
         <button
           onClick={markAllPresent}
-          className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors flex-shrink-0"
+          disabled={loading || rows.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white text-emerald-700 ring-1 ring-emerald-600/20 rounded-full hover:bg-emerald-50 disabled:opacity-40 transition-colors flex-shrink-0"
         >
           <CheckSquare size={12} />
-          All P
+          <span className="hidden sm:inline">Mark all present</span>
+          <span className="sm:hidden">All present</span>
         </button>
-        <button
-          onClick={handleSave}
-          disabled={saving || !hasChanges}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg disabled:opacity-40 transition-colors flex-shrink-0"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-          {saved && !hasChanges ? 'Saved' : 'Save'}
-        </button>
+        {saveButton(false)}
       </div>
 
       {/* Roster — rows are sized so ~15 students fit before it starts to
           scroll, since marking a class means working down the whole list. */}
-      <div className="max-h-[620px] overflow-y-auto bg-white">
+      <div className="max-h-[620px] overflow-y-auto overscroll-contain">
         {loading ? (
-          <div className="flex items-center justify-center py-14 gap-2 text-slate-400">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Loading roster…</span>
+          // The roster's own shape in grey, so the sheet opens at its size.
+          <div className="divide-y divide-slate-100" aria-busy="true" aria-label="Loading roster">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2.5 px-3 sm:px-3.5 py-2">
+                <span className="w-[26px] h-[26px] rounded-full bg-slate-100 animate-pulse flex-shrink-0" />
+                <span className="h-3 rounded bg-slate-100 animate-pulse" style={{ width: `${30 + ((i * 17) % 25)}%` }} />
+                <span className="flex-1" />
+                <span className="h-7 w-[7.5rem] sm:w-[8.5rem] rounded-[11px] bg-slate-100 animate-pulse" />
+              </div>
+            ))}
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-14 text-center">
-            <Users size={32} className="text-slate-200 mx-auto mb-2" />
+          <div className="py-12 text-center">
+            <Users size={30} className="text-slate-200 mx-auto mb-2" />
             <p className="text-sm text-slate-400">No students in this homeroom</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-slate-100">
             {rows.map((row, idx) => {
               const isLocked = row.leaveLinked && !row.overrideLeave
               const showRemarks = expandedRemarks.has(row.student.id)
               return (
                 <div
                   key={row.student.id}
-                  className={`px-2.5 sm:px-4 py-1.5 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/60'}`}
+                  className={`relative px-3 sm:px-3.5 py-1.5 transition-colors ${row.changed ? 'bg-violet-50/50' : 'hover:bg-slate-50/70'}`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-300 w-4 text-right flex-shrink-0 tabular-nums">{idx + 1}</span>
+                  {/* Edited, not yet saved */}
+                  {row.changed && (
+                    <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full" style={{ background: 'var(--page-gradient-from, #7c3aed)' }} />
+                  )}
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <span className="text-[11px] text-slate-300 w-4 text-right flex-shrink-0 tabular-nums hidden sm:block">{idx + 1}</span>
                     <Avatar
                       avatarUrl={row.student.avatar_url}
                       name={row.student.full_name}
@@ -437,10 +482,11 @@ function InlineSheet({
                       size={26}
                       userId={row.student.id}
                     />
-                    <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
                       <button
                         onClick={() => onStudentClick(row.student)}
-                        className="group min-w-0 flex items-center gap-1 text-[13px] font-semibold text-slate-800 hover:text-violet-600 transition-colors text-left"
+                        title={`Open ${row.student.full_name}'s calendar`}
+                        className="group min-w-0 flex items-center gap-1 text-[13px] font-semibold text-slate-900 hover:text-violet-700 transition-colors text-left"
                       >
                         <span className="truncate">{row.student.full_name}</span>
                         <CalendarDays size={11} className="text-slate-300 group-hover:text-violet-400 transition-colors flex-shrink-0" />
@@ -448,31 +494,31 @@ function InlineSheet({
                       {/* Beside the name rather than under it, so the row stays
                           one line tall whether or not there is a leave on it. */}
                       {row.leaveLinked && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium text-violet-700 bg-violet-50 flex-shrink-0 hidden sm:inline">
-                          {row.status === 'present' ? 'OD Auto-marked' : 'Leave Auto-marked'}
+                        <span className="text-[9.5px] px-1.5 py-0.5 rounded-full font-semibold text-violet-700 bg-violet-50 flex-shrink-0 hidden sm:inline">
+                          {row.status === 'present' ? 'OD auto-marked' : 'Leave auto-marked'}
                         </span>
                       )}
                     </div>
                     {row.leaveLinked && (
                       <button
                         onClick={() => toggleOverride(row.student.id)}
-                        className={`p-1 rounded-lg transition-colors flex-shrink-0 ${row.overrideLeave ? 'text-amber-500 bg-amber-50 border border-amber-200' : 'text-blue-400 bg-blue-50 border border-blue-100'}`}
+                        className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${row.overrideLeave ? 'text-amber-600 bg-amber-50 ring-1 ring-amber-500/30' : 'text-blue-500 bg-blue-50 ring-1 ring-blue-500/20'}`}
                         title={row.overrideLeave ? 'Override active — click to revert' : 'Click to override leave status'}
+                        aria-pressed={row.overrideLeave}
                       >
                         {row.overrideLeave ? <Unlock size={12} /> : <Lock size={12} />}
                       </button>
                     )}
-                    <div className={`flex gap-0.5 sm:gap-1 flex-shrink-0 ${isLocked ? 'opacity-40 pointer-events-none' : ''}`}>
-                      {STATUS_OPTIONS.map(s => (
+                    <div className={`${QUICK_GROUP} ${isLocked ? 'opacity-40 pointer-events-none' : ''}`} role="group" aria-label={`Status for ${row.student.full_name}`}>
+                      {STATUS_OPTIONS.map(st => (
                         <button
-                          key={s}
-                          onClick={() => setStatus(row.student.id, s)}
-                          className={`w-6 sm:w-7 h-6 sm:h-7 rounded-md border text-[10px] font-bold transition-colors active:scale-95 ${
-                            row.status === s ? STATUS_COLORS[s] : `bg-white ${STATUS_INACTIVE[s]}`
-                          }`}
-                          title={ATTENDANCE_STATUS_LABELS[s]}
+                          key={st}
+                          onClick={() => setStatus(row.student.id, st)}
+                          aria-pressed={row.status === st}
+                          className={quickButtonClass(row.status === st, STATUS_ACTIVE[st], false)}
+                          title={ATTENDANCE_STATUS_LABELS[st]}
                         >
-                          {STATUS_SHORT[s]}
+                          {STATUS_SHORT[st]}
                         </button>
                       ))}
                     </div>
@@ -482,19 +528,20 @@ function InlineSheet({
                         next.has(row.student.id) ? next.delete(row.student.id) : next.add(row.student.id)
                         return next
                       })}
-                      className="p-1 text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0"
+                      aria-label={showRemarks ? 'Hide remark' : 'Add a remark'}
+                      className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${row.remarks ? 'text-violet-500' : 'text-slate-300'} hover:text-slate-600 hover:bg-slate-100`}
                     >
                       {showRemarks ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                     </button>
                   </div>
                   {showRemarks && (
-                    <div className="mt-1.5 ml-[68px] sm:ml-[74px]">
+                    <div className="mt-1.5 ml-[34px] sm:ml-[60px]">
                       <input
                         type="text"
                         value={row.remarks}
                         onChange={e => setRemarks(row.student.id, e.target.value)}
-                        placeholder="Add a remark (optional)…"
-                        className="w-full border border-[#D4D4D8] rounded-md px-2.5 py-1.5 text-xs text-[#18181B] placeholder:text-[#A1A1AA] bg-white focus:outline-none focus:border-[#27272A] transition-colors"
+                        placeholder="Add a remark (optional)"
+                        className="w-full rounded-xl px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 bg-slate-100 border border-transparent focus:outline-none focus:bg-white focus:border-slate-300 transition-colors"
                       />
                     </div>
                   )}
@@ -505,25 +552,26 @@ function InlineSheet({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="px-3 sm:px-4 py-2.5 border-t border-[#E4E4E7] bg-[#FAFAF9] flex items-center gap-2">
-        <span className="text-xs text-[#71717A] flex-1 min-w-0 truncate">
-          {markedCount} / {rows.length} student{rows.length !== 1 ? 's' : ''} marked
-        </span>
-        {hasChanges && !saveFailed && (
-          <span className="text-xs text-amber-600 font-medium flex-shrink-0">Unsaved changes</span>
-        )}
-        {saveFailed && (
-          <span className="text-xs font-semibold text-rose-600 flex-shrink-0">Not saved — nothing was recorded. Try again.</span>
-        )}
-        <button
-          onClick={handleSave}
-          disabled={saving || !hasChanges}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium bg-[#27272A] hover:bg-[#18181B] text-white rounded-lg disabled:opacity-40 transition-colors flex-shrink-0"
-        >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          {saved && !hasChanges ? 'Saved' : 'Save'}
-        </button>
+      {/* Footer: how much of the class is marked, and the save */}
+      <div className="px-3 sm:px-3.5 py-2.5 border-t border-slate-100 bg-slate-50/80 flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-semibold text-slate-700 tabular-nums">{markedCount} / {rows.length}</span>
+            <span className="text-slate-500 truncate">marked</span>
+            {saveFailed ? (
+              <span className="font-semibold text-rose-600 truncate">Not saved — nothing was recorded. Try again.</span>
+            ) : hasChanges ? (
+              <span className="font-semibold text-amber-600 truncate">Unsaved changes</span>
+            ) : null}
+          </div>
+          <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/70 overflow-hidden max-w-xs">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${markedPct}%`, background: 'var(--page-gradient-from, #7c3aed)' }}
+            />
+          </div>
+        </div>
+        {saveButton(true)}
       </div>
     </div>
   )
@@ -586,8 +634,8 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
             <Clock size={16} className="text-white" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-[15px] font-bold text-slate-900 leading-tight truncate">Recent homerooms</h2>
-            <p className="text-[11px] text-slate-500 truncate mt-0.5">Open a sheet to mark attendance</p>
+            <h2 className="text-[15px] font-bold text-slate-900 leading-tight whitespace-nowrap">Recent homerooms</h2>
+            <p className="hidden sm:block text-[11px] text-slate-500 truncate mt-0.5">Open a sheet to mark attendance</p>
           </div>
         </div>
         <button
@@ -600,7 +648,7 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
           }`}
         >
           {showSearch ? <X size={13} /> : <Search size={13} />}
-          {showSearch ? 'Close' : 'Find homeroom'}
+          {showSearch ? 'Close' : <><span className="sm:hidden">Find</span><span className="hidden sm:inline">Find homeroom</span></>}
         </button>
       </div>
 
@@ -692,7 +740,9 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
           return (
             <div
               key={hr.id}
-              className={`lg-content overflow-hidden transition-shadow duration-200 ${
+              // A hairline border on top of the card's own shadow, so each
+              // recent homeroom reads as a distinct button on the glass.
+              className={`lg-content !border !border-slate-900/[0.09] overflow-hidden transition-shadow duration-200 ${
                 isExpanded ? 'shadow-[0_1px_2px_rgba(15,23,42,0.06),0_22px_44px_-24px_rgba(15,23,42,0.5)]' : ''
               }`}
             >

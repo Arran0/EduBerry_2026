@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef, useId } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence, useDragControls, useReducedMotion, type PanInfo } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
@@ -519,7 +519,7 @@ const PANE_VARIANTS = {
   exit: (dir: number) => ({ x: dir > 0 ? '-100%' : '100%' }),
 }
 
-/** How far (px, with a little velocity folded in) a sideways swipe has to go. */
+/** How far (px) a sideways swipe has to travel to switch views. */
 const SWIPE_THRESHOLD = 70
 
 const SECTION_ANCHOR: Record<ReportSection, string> = {
@@ -682,7 +682,9 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
                 role="dialog"
                 aria-modal="true"
                 aria-label={`${student.full_name}'s attendance`}
-                className="lg-sheet relative rounded-[28px] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                // A fixed height, so the calendar loads inside it rather than
+                // opening short and growing when the month arrives.
+                className="lg-sheet relative rounded-[28px] w-full max-w-2xl h-[88dvh] sm:h-[min(44rem,90vh)] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
                 <div className="relative z-[3] flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
@@ -999,13 +1001,25 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     setView(v)
   }
 
-  // Swipe between the views on a touch screen (see the pane in the render).
-  const paneDrag = useDragControls()
+  // Swipe between the views on a touch screen. Read off plain touch events
+  // rather than a drag gesture: nothing here ever takes the pointer, so
+  // vertical scrolling of the records stays entirely the browser's.
   const reduceMotion = useReducedMotion()
-  const onPaneDragEnd = (_: unknown, info: PanInfo) => {
-    const swipe = info.offset.x + info.velocity.x * 0.2
-    if (swipe < -SWIPE_THRESHOLD) changeView('student')
-    else if (swipe > SWIPE_THRESHOLD) changeView('homeroom')
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  const onPaneTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    swipeStart.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, t: Date.now() } : null
+  }
+  const onPaneTouchEnd = (e: React.TouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    const t = e.changedTouches[0]
+    if (!start || !t) return
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    // Clearly sideways, far enough, and a swipe rather than a slow drag.
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - start.t > 800) return
+    changeView(dx < 0 ? 'student' : 'homeroom')
   }
 
   // The records scroll inside the report; a new list starts at its top.
@@ -1123,12 +1137,6 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     setPendingScroll(REPORT_ANCHOR)
   }
 
-  /** The summary's figures double as a way into the matching list. */
-  const openSection = (section: ReportSection) => {
-    changeView('student')
-    setActiveTab(section)
-  }
-
   // Whole-school lists can name a student once per homeroom — dedupe to one
   // row, then split by status. Keyed on the fetched rows and the scope, so
   // typing in the search box doesn't redo any of it.
@@ -1216,11 +1224,6 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     irregular: irregularCount,
   }
 
-  const summaryStats: { key: ReportSection; label: string; color: string }[] = [
-    { key: 'present',   label: 'Present',   color: PRESENT_C },
-    { key: 'absent',    label: 'Absent',    color: ABSENT_C },
-    { key: 'irregular', label: 'Irregular', color: LATE_C },
-  ]
 
   return (
     // On phones the report is full-bleed with square corners so the lists get
@@ -1237,7 +1240,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 pt-3 pb-2.5">
           {/* min-w lets the controls drop to their own row on a phone rather
               than squeezing the title to an ellipsis. */}
-          <div className="flex items-center gap-2.5 min-w-[12rem] flex-1">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <span
               className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
               style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #7c3aed), var(--page-gradient-to, #a855f7))' }}
@@ -1252,16 +1255,20 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
             </div>
           </div>
 
+          {/* Homerooms ⇄ students: a full row of its own on a phone (like the
+              staff app's school / support switch), inline from sm up. */}
+          <Segmented
+            fill
+            ariaLabel="Report view"
+            value={view}
+            onChange={changeView}
+            className="order-last basis-full sm:order-none sm:basis-auto sm:w-auto [&>button]:py-1.5 sm:[&>button]:py-1 sm:[&>button]:flex-none sm:[&>button]:px-3"
+            options={[
+              { key: 'homeroom', label: 'Homeroom-wise', icon: Home },
+              { key: 'student',  label: 'Student-wise',  icon: Users },
+            ]}
+          />
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-            <Segmented
-              ariaLabel="Report view"
-              value={view}
-              onChange={changeView}
-              options={[
-                { key: 'homeroom', label: <span className="hidden sm:inline">Homerooms</span>, icon: Home, title: 'Homeroom-wise' },
-                { key: 'student',  label: <span className="hidden sm:inline">Students</span>,  icon: Users, title: 'Student-wise' },
-              ]}
-            />
             <DateToggler
               value={date}
               onChange={changeDate}
@@ -1275,42 +1282,29 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
 
         {/* ── Content card ── */}
         <div className="lg-content mx-2 mb-2 sm:mx-2.5 sm:mb-2.5 overflow-hidden flex flex-col flex-1 min-h-0">
-          {/* Summary: the day in one line — the fraction, its bar, and the
-              three figures, each a way into its list. */}
-          <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
-            <div className="flex items-baseline gap-1.5 flex-shrink-0">
-              <span className="text-2xl font-bold text-slate-900 leading-none tabular-nums">
+          {/* Summary: present over marked and one meter, the staff app's
+              layout. The per-status counts live on the tabs below, so they are
+              not repeated here. */}
+          <div className="flex-shrink-0 flex items-center gap-4 px-3 sm:px-4 py-2.5 border-b border-slate-100">
+            <div className="flex items-baseline gap-1 flex-shrink-0">
+              <span className="font-display text-[2rem] font-bold text-slate-900 leading-none tabular-nums headline">
                 {loading ? '—' : presentFullTotal}
               </span>
-              <span className="text-sm font-medium text-slate-400 tabular-nums">/ {loading ? '…' : markedTotal}</span>
+              <span className="text-sm font-semibold text-slate-400 tabular-nums">/ {loading ? '…' : markedTotal}</span>
             </div>
-            <div className="flex-1 min-w-[8rem]">
-              <div className="flex h-1.5 rounded-full bg-slate-100 overflow-hidden" aria-hidden>
-                {markedTotal > 0 && !loading && (
-                  <>
-                    <span className="h-full transition-[width] duration-500" style={{ width: `${(presentFullTotal / markedTotal) * 100}%`, background: PRESENT_C }} />
-                    <span className="h-full transition-[width] duration-500" style={{ width: `${(absentCount / markedTotal) * 100}%`, background: ABSENT_C }} />
-                    <span className="h-full transition-[width] duration-500" style={{ width: `${(irregularCount / markedTotal) * 100}%`, background: LATE_C }} />
-                  </>
-                )}
+            <div className="flex-1 min-w-0">
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${loading ? 0 : pct}%`,
+                    background: 'linear-gradient(90deg, var(--page-gradient-to, #a855f7), var(--page-gradient-from, #7c3aed))',
+                  }}
+                />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1 truncate">
-                {loading ? 'Counting…' : markedTotal > 0 ? `${pct}% present` : 'Not marked yet'}
+              <p className="text-[12px] text-slate-500 mt-1.5 truncate min-h-[18px]">
+                {loading ? 'Counting…' : markedTotal > 0 ? `${pct}% present · ${scopeLabel}` : `Not marked yet · ${scopeLabel}`}
               </p>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {summaryStats.map(st => (
-                <button
-                  key={st.key}
-                  onClick={() => openSection(st.key)}
-                  title={`Show ${st.label.toLowerCase()} students`}
-                  className="flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full hover:bg-slate-100 transition-colors"
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ background: st.color }} />
-                  <span className="text-[11px] text-slate-500 hidden sm:inline">{st.label}</span>
-                  <span className="text-[13px] font-bold text-slate-900 tabular-nums">{loading ? '–' : tabCounts[st.key]}</span>
-                </button>
-              ))}
             </div>
           </div>
 
@@ -1329,18 +1323,9 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
                 animate="center"
                 exit="exit"
                 transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 38 }}
-                drag="x"
-                dragListener={false}
-                dragControls={paneDrag}
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.22}
-                onDragEnd={onPaneDragEnd}
-                // Touch only: a mouse drag over buttons would fight clicks, and
-                // the segmented control is right there. pan-y keeps vertical
-                // scrolling native — the browser takes it and the drag stands
-                // down; only a sideways move reaches the swipe.
-                onPointerDown={e => { if (e.pointerType === 'touch') paneDrag.start(e) }}
-                style={{ touchAction: 'pan-y' }}
+                onTouchStart={onPaneTouchStart}
+                onTouchEnd={onPaneTouchEnd}
+                onTouchCancel={() => { swipeStart.current = null }}
                 className="absolute inset-0 flex flex-col"
               >
                 <div className="flex-shrink-0 px-2.5 sm:px-3 pt-2.5 sm:pt-3 pb-2 space-y-2.5">
@@ -1406,10 +1391,6 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
 
                 <div
                   ref={el => { if (el) scrollRef.current = el }}
-                  // pan-y again here: touch-action is only inherited down to the
-                  // nearest scroll container, so without it the browser claims
-                  // a sideways swipe that starts on a record.
-                  style={{ touchAction: 'pan-y' }}
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 sm:px-3 pb-2.5 sm:pb-3"
                 >
                   {/* ── Homeroom-wise ── */}
