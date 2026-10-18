@@ -8,6 +8,7 @@ import {
   AlertTriangle, FileSpreadsheet, Download, Eye, CalendarRange,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
+import { SETUP_SHEET_HEIGHT } from '@/components/attendance/reportKit'
 import { SmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
 import { GBTN, GINPUT } from '@/components/transport/glass'
@@ -33,6 +34,8 @@ import {
   downloadReportExcel,
   downloadStatement,
 } from './generate'
+
+const DATE_INPUT = `${GINPUT} min-w-0 max-w-full px-2.5 sm:px-3 text-[13px] sm:text-sm appearance-none [&::-webkit-date-and-time-value]:text-left [&::-webkit-calendar-picker-indicator]:ml-auto`
 
 const ReportPreviewModal = dynamic(() => import('./ReportPreviewModal'), { ssr: false })
 
@@ -175,11 +178,13 @@ export default function ReportsModal({ onClose, todayStr, teams }: Props) {
   }
 
   const step = option ? 'configure' : 'choose'
+  // A cross-fade with a slight rise — never a sideways slide, which pushed the
+  // content past the sheet's edge and made the popup jiggle left and right.
   const slide = reduceMotion ? {} : {
-    initial: { opacity: 0, x: step === 'configure' ? 24 : -24 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: step === 'configure' ? -24 : 24 },
-    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const },
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -4 },
+    transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] as const },
   }
 
   return (
@@ -192,7 +197,9 @@ export default function ReportsModal({ onClose, todayStr, teams }: Props) {
         subtitle={option ? 'Pick the dates, then preview' : 'Pick a report to preview and download'}
         icon={option ? <option.icon size={17} className="text-white" /> : <FileText size={17} className="text-white" />}
         iconClassName={option?.chip ?? 'bg-[linear-gradient(135deg,#3D3B40,#27272A)]'}
-        minHClass="sm:min-h-[30rem]"
+        // One fixed height for the chooser, every document's form, loading and
+        // the too-large notice — the sheet never resizes under the finger.
+        minHClass={SETUP_SHEET_HEIGHT}
         headerActions={option && (
           <button onClick={() => { setKind(null); reset() }} aria-label="All documents" className={`${GBTN.secondary} !px-2.5 sm:!px-3.5`}>
             <ChevronLeft size={14} /> <span className="hidden sm:inline">All documents</span>
@@ -235,16 +242,36 @@ export default function ReportsModal({ onClose, todayStr, teams }: Props) {
             </motion.div>
           ) : (
             <motion.div key="configure" {...slide} className="space-y-4">
+              {/* Scope first, so its list has room to drop open below it */}
+              {teamOptions.length > 0 && (
+                <div>
+                  <span className="block text-[12px] font-medium text-slate-500 mb-1">Staff</span>
+                  <SmartSelect
+                    options={teamOptions}
+                    value={teamId}
+                    onChange={v => { setTeamId(v); reset() }}
+                    allowClear
+                    placeholder="All staff"
+                    searchPlaceholder="Search teams…"
+                    emptyText="No teams"
+                    className="w-full"
+                    leadingIcon={<Users size={14} className="text-slate-500 flex-shrink-0" />}
+                  />
+                </div>
+              )}
+
               {/* Range */}
               <div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
+                {/* One row at every width; on the narrowest phone it scrolls
+                    sideways rather than wrapping onto a second line. */}
+                <div className="flex flex-nowrap gap-1 sm:gap-1.5 mb-3 overflow-x-auto scrollbar-hide">
                   {rangePresets.map(p => {
                     const active = p.start === startDate && p.end === endDate
                     return (
                       <button
                         key={p.key}
                         onClick={() => { setStartDate(p.start); setEndDate(p.end); reset() }}
-                        className={`h-8 px-3 rounded-full text-[12px] font-semibold transition ${
+                        className={`h-8 px-2.5 sm:px-3 rounded-full text-[11.5px] sm:text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition ${
                           active
                             ? 'bg-[#27272A] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16)]'
                             : 'bg-[#F4F2EE] text-slate-600 hover:bg-[#ECE8E1] hover:text-slate-900'
@@ -255,16 +282,19 @@ export default function ReportsModal({ onClose, todayStr, teams }: Props) {
                     )
                   })}
                 </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <label className="block">
+                {/* min-w-0 all the way down: a native date field has an
+                    intrinsic minimum width that otherwise pushes the pair past
+                    the sheet's edge on a phone. */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5 min-w-0">
+                  <label className="block min-w-0">
                     <span className="block text-[12px] font-medium text-slate-500 mb-1">From</span>
                     <input type="date" value={startDate} max={todayStr}
-                      onChange={e => { setStartDate(e.target.value); reset() }} className={GINPUT} />
+                      onChange={e => { setStartDate(e.target.value); reset() }} className={DATE_INPUT} />
                   </label>
-                  <label className="block">
+                  <label className="block min-w-0">
                     <span className="block text-[12px] font-medium text-slate-500 mb-1">To</span>
                     <input type="date" value={endDate} max={todayStr}
-                      onChange={e => { setEndDate(e.target.value); reset() }} className={GINPUT} />
+                      onChange={e => { setEndDate(e.target.value); reset() }} className={DATE_INPUT} />
                   </label>
                 </div>
 
@@ -287,24 +317,6 @@ export default function ReportsModal({ onClose, todayStr, teams }: Props) {
                   </p>
                 )}
               </div>
-
-              {/* Scope */}
-              {teamOptions.length > 0 && (
-                <div>
-                  <span className="block text-[12px] font-medium text-slate-500 mb-1">Staff</span>
-                  <SmartSelect
-                    options={teamOptions}
-                    value={teamId}
-                    onChange={v => { setTeamId(v); reset() }}
-                    allowClear
-                    placeholder="All staff"
-                    searchPlaceholder="Search teams…"
-                    emptyText="No teams"
-                    className="w-full"
-                    leadingIcon={<Users size={14} className="text-slate-500 flex-shrink-0" />}
-                  />
-                </div>
-              )}
 
               {outcome.state === 'error' && (
                 <p className="flex items-start gap-2 text-[12.5px] text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">

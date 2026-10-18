@@ -78,6 +78,12 @@ interface ModalShellProps {
    * raised from them matches without each one opting in.
    */
   glass?: boolean
+  /**
+   * Glass only: the body sits straight on the sheet (no solid card around it)
+   * — for content that is already its own card, such as the month calendar.
+   * The sheet is then exactly as tall as its content.
+   */
+  cardless?: boolean
   children: React.ReactNode
 }
 
@@ -99,6 +105,7 @@ export default function ModalShell({
   minHClass = '',
   sharp = false,
   glass: glassProp,
+  cardless = false,
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
@@ -236,11 +243,11 @@ export default function ModalShell({
 
           {/* Body, on a solid card riding on the glass */}
           {bare ? (
-            <div className="relative z-[3] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+            <div className="relative z-[3] overflow-y-auto overflow-x-hidden overscroll-contain pb-[env(safe-area-inset-bottom)]">
               {children}
             </div>
           ) : (
-            <div className={`lg-sheet-card relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overscroll-contain`}>
+            <div className={`${cardless ? '' : 'lg-sheet-card '}relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overflow-x-hidden overscroll-contain`}>
               <div className={`px-4 sm:px-5 py-4 ${bodyClassName}`}>{children}</div>
             </div>
           )}
@@ -342,7 +349,7 @@ export default function ModalShell({
             {children}
           </div>
         ) : (
-          <div className={`flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${footer ? '' : 'pb-[max(1.25rem,env(safe-area-inset-bottom))]'} ${bodyClassName}`}>
+          <div className={`flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 py-4 ${footer ? '' : 'pb-[max(1.25rem,env(safe-area-inset-bottom))]'} ${bodyClassName}`}>
             {children}
           </div>
         )}

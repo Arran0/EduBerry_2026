@@ -13,7 +13,7 @@ import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 import DonutChart from '@/components/charts/DonutChart'
 const StaffAttendanceDashboard = dynamic(() => import('@/components/attendance/StaffAttendanceDashboard'))
-const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'))
+const AttendanceCalendar       = dynamic(() => import('@/components/attendance/AttendanceCalendar'), { loading: () => <CalendarSkeleton /> })
 // The whole Student OD / Leave app, hosted here in a popup. Loaded on demand —
 // its lists and form are dead weight until someone opens it.
 const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveModal'), {
@@ -27,6 +27,8 @@ const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveM
   ),
 })
 import Avatar from '@/components/Avatar'
+import StudentCalendarModal from '@/components/attendance/StudentCalendarModal'
+import { MonthCalendarSkeleton, STUDENT_CAL_LEGEND } from '@/components/attendance/MonthCalendarFrame'
 import { useStudentLeaveNotifications } from '@/hooks/useLeaveNotifications'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { Homeroom, fetchAllHomerooms, fetchHomeromsForStudent, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
@@ -149,27 +151,9 @@ function YearlySummarySkeleton() {
   )
 }
 
-/** Placeholder for the monthly calendar — the card's own shape, in grey. */
+/** Placeholder for the monthly calendar — the shared calendar frame in grey, at its exact size. */
 function CalendarSkeleton() {
-  return (
-    <div className="rounded-[20px] overflow-hidden bg-white ring-1 ring-slate-900/[0.06]">
-      <div className="flex items-center gap-3 px-4 pt-3 pb-2">
-        <div className="flex-1 space-y-2">
-          <div className="skeleton h-4 w-36 rounded" />
-          <div className="skeleton h-3 w-44 rounded-full" />
-        </div>
-        <div className="skeleton w-8 h-8 rounded-full" />
-        <div className="skeleton w-8 h-8 rounded-full" />
-      </div>
-      <div className="grid grid-cols-7 gap-1 px-1.5 pb-1.5 pt-6">
-        {Array.from({ length: 35 }).map((_, i) => (
-          <div key={i} className="h-[52px] rounded-xl bg-slate-50 flex items-center justify-center">
-            <div className="skeleton w-6 h-6 rounded-lg" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  return <MonthCalendarSkeleton legend={STUDENT_CAL_LEGEND} />
 }
 
 /** Full first-paint placeholder mirroring the student attendance layout. */
@@ -664,80 +648,40 @@ const StudentEntryRow = React.memo(function StudentEntryRow({
         </span>
       </div>
 
-      {portalMounted && typeof document !== 'undefined' && createPortal(
-        <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
-          {showModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.16 }}
-              // Plain dim, no backdrop-filter — a blurred layer fading in flashed black.
-              className="lg-scrim fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4"
-              onClick={() => setShowModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.97, opacity: 0, y: 16 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.97, opacity: 0, y: 12, transition: { duration: 0.14, ease: 'easeIn' } }}
-                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                role="dialog"
-                aria-modal="true"
-                aria-label={`${student.full_name}'s attendance`}
-                // A fixed height, so the calendar loads inside it rather than
-                // opening short and growing when the month arrives.
-                className="lg-sheet relative rounded-[28px] w-full max-w-2xl h-[88dvh] sm:h-[min(44rem,90vh)] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="relative z-[3] flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
-                  <Avatar avatarUrl={student.avatar_url ?? null} name={student.full_name} email={student.email} size={34} userId={student.id} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-900 text-[15px] truncate leading-tight">{student.full_name}</p>
-                    {subtitle && <p className="text-[11px] text-slate-500 truncate mt-0.5">{subtitle}</p>}
-                  </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ring-1 flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
-                    {ATTENDANCE_STATUS_LABELS[entry.status]}
-                  </span>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close"
-                    className="lg-control w-9 h-9 flex-shrink-0"
-                  >
-                    <X size={16} strokeWidth={2.4} />
-                  </button>
-                </div>
-                {homerooms.length > 1 && homeroomId && (
-                  <div className="relative z-[3] px-4 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
-                    <Segmented
-                      ariaLabel="Homeroom"
-                      value={homeroomId}
-                      onChange={setHomeroomId}
-                      options={homerooms.map(hr => ({ key: hr.id, label: hr.name }))}
-                    />
-                  </div>
-                )}
-                <div className="relative z-[3] overflow-y-auto overscroll-contain flex-1 px-2 pb-2 sm:px-2.5 sm:pb-2.5">
-                  {loadingHomerooms ? (
-                    <CalendarSkeleton />
-                  ) : homeroomId ? (
-                    <AttendanceCalendar
-                      studentId={student.id}
-                      homeroomId={homeroomId}
-                      year={year}
-                      month={month}
-                      onMonthChange={(y: number, m: number) => { setYear(y); setMonth(m) }}
-                      viewerUserId={viewerUserId}
-                      viewerRole={viewerRole}
-                      onAppOpen={app => { setShowModal(false); onAppOpen(app) }}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+      {/* The same calendar popup as the staff app's: fades and rises in on the
+          glass sheet, exactly the calendar's height from the first frame. */}
+      <AnimatePresence onExitComplete={() => setPortalMounted(false)}>
+        {portalMounted && showModal && (
+          <StudentCalendarModal
+            student={student}
+            subtitle={subtitle || undefined}
+            headerActions={
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ring-1 flex-shrink-0 ${STUDENT_STATUS_PILL[entry.status]}`}>
+                {ATTENDANCE_STATUS_LABELS[entry.status]}
+              </span>
+            }
+            homeroomId={homeroomId}
+            loadingHomeroom={loadingHomerooms}
+            year={year}
+            month={month}
+            onMonthChange={(y: number, m: number) => { setYear(y); setMonth(m) }}
+            viewerUserId={viewerUserId}
+            viewerRole={viewerRole}
+            onAppOpen={app => { setShowModal(false); onAppOpen(app) }}
+            onClose={() => setShowModal(false)}
+            top={homerooms.length > 1 && homeroomId ? (
+              <div className="h-9 overflow-x-auto scrollbar-hide">
+                <Segmented
+                  ariaLabel="Homeroom"
+                  value={homeroomId}
+                  onChange={setHomeroomId}
+                  options={homerooms.map(hr => ({ key: hr.id, label: hr.name }))}
+                />
+              </div>
+            ) : undefined}
+          />
+        )}
+      </AnimatePresence>
     </>
   )
 })
@@ -1233,7 +1177,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     // phone) — so the controls stay put and only the records scroll.
     <section
       id={REPORT_ANCHOR}
-      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc(100dvh-9.5rem)] sm:h-[calc(100dvh-5.5rem)] min-h-[30rem]"
+      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc((100dvh-9.5rem)*1.5)] sm:h-[calc((100dvh-5.5rem)*1.5)] min-h-[45rem]"
     >
       <div className="relative flex flex-col flex-1 min-h-0">
         {/* ── Header: what this is, which way it is cut, and which day ── */}

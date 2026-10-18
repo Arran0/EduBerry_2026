@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
-import AttendanceCalendar from '@/components/attendance/AttendanceCalendar'
+import StudentCalendarModal from '@/components/attendance/StudentCalendarModal'
 import { Homeroom, HomeroomClassTeacher, searchHomerooms } from '@/lib/homerooms'
 import {
   AttendanceStatus,
@@ -142,55 +142,26 @@ function StudentCalendarDialog({
   }
 
   return (
-    // Fades and rises in like every other sheet in the app. A fixed height:
-    // the calendar (and the applications under it) load inside it, so the
-    // sheet never opens short and then jumps when the month arrives.
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.16 }}
-      className="lg-scrim fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 40, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 32 }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${student.full_name}'s attendance`}
-        className="lg-sheet relative w-full sm:max-w-lg rounded-t-[28px] sm:rounded-[28px] flex flex-col h-[88dvh] sm:h-[min(38.5rem,90vh)] overflow-hidden"
-      >
-        <div className="relative z-[3] flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0">
-          <Avatar
-            avatarUrl={student.avatar_url}
-            name={student.full_name}
-            email={student.email}
-            size={38}
-            userId={student.id}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-900 text-[15px] truncate leading-tight">{student.full_name}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Monthly attendance and applications</p>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="lg-control w-9 h-9 flex-shrink-0">
-            <X size={16} strokeWidth={2.4} />
-          </button>
-        </div>
-
-        <div className="relative z-[3] flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pb-2 sm:px-2.5 sm:pb-2.5 space-y-2">
-          <AttendanceCalendar
-            studentId={student.id}
-            homeroomId={homeroomId}
-            year={year}
-            month={month}
-            onMonthChange={(y, m) => { setYear(y); setMonth(m) }}
-            onAppOpen={app => { setSelectedApp(app); setDecisionComment('') }}
-          />
-
-          {/* Leave applications this month */}
-          <div className="lg-sheet-card px-3 py-2.5">
-            <p className="text-[12px] font-semibold text-slate-500 mb-2">Applications this month</p>
+    <>
+      {/* The same calendar popup as the report's and the staff app's: fades
+          and rises in on the glass sheet. Its height is fixed by its parts —
+          the calendar is a fixed size and the applications box below it has
+          a fixed height of its own (its list scrolls) — so the sheet never
+          opens short and grows when the month or the applications arrive. */}
+      <StudentCalendarModal
+        student={student}
+        subtitle="Monthly attendance and applications"
+        homeroomId={homeroomId}
+        year={year}
+        month={month}
+        onMonthChange={(y, m) => { setYear(y); setMonth(m) }}
+        onAppOpen={app => { setSelectedApp(app); setDecisionComment('') }}
+        onClose={onClose}
+        below={
+          // Leave applications this month
+          <div className="lg-sheet-card px-3 py-2.5 h-[8.75rem] flex flex-col">
+            <p className="text-[12px] font-semibold text-slate-500 mb-2 flex-shrink-0">Applications this month</p>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {leaveLoading ? (
               <div className="space-y-1.5" aria-busy="true">
                 <div className="h-11 rounded-xl bg-slate-100 animate-pulse" />
@@ -225,9 +196,10 @@ function StudentCalendarDialog({
                 })}
               </div>
             )}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        }
+      />
 
       {/* Application detail + decision modal */}
       {selectedApp && (
@@ -311,7 +283,7 @@ function StudentCalendarDialog({
           </div>
         </div>
       )}
-    </motion.div>
+    </>
   )
 }
 
@@ -829,14 +801,16 @@ export default function StaffAttendanceDashboard({ staffId }: { staffId: string 
       </div>
 
       {/* ── Student calendar dialog ── */}
-      {calendarState && (
+      <AnimatePresence>
+        {calendarState && (
         <StudentCalendarDialog
           student={calendarState.student}
           homeroomId={calendarState.homeroomId}
           viewerId={staffId}
           onClose={() => setCalendarState(null)}
         />
-      )}
+        )}
+      </AnimatePresence>
     </div>
   )
 }

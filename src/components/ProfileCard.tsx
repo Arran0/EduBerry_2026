@@ -25,14 +25,11 @@ import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 import { useRouter } from 'next/navigation'
 import type { StaffAttendanceRecord } from '@/lib/attendance'
 import StaffCalendarModal from '@/components/attendance/StaffCalendarModal'
+import StudentCalendarModal from '@/components/attendance/StudentCalendarModal'
 
 // Loaded on demand — the read-only "self" view of the same calendar the
 // attendance pages open when you click a name, reused here so a profile
 // card gives a quick attendance glance without leaving the current page.
-const AttendanceCalendar = dynamic(() => import('@/components/attendance/AttendanceCalendar'), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>,
-})
 
 // Loaded on demand — the same "Download Centre" document pickers already used
 // on the fees/salary/bus admin pages, reused here so they're one tap away
@@ -697,68 +694,32 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
       </AnimatePresence>
       <AnimatePresence>
         {showAttendance && targetProfile && isStudentProfile && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowAttendance(false)}
-              className="fixed inset-0 bg-black/60 z-[10000]"
-            />
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0, y: 16 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.96, opacity: 0, y: 16 }}
-              className="fixed inset-0 z-[10001] flex items-end sm:items-center justify-center p-3 sm:p-4 pointer-events-none"
-            >
-              <div
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden pointer-events-auto"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-                  <Avatar avatarUrl={targetProfile.avatar_url} name={targetProfile.full_name} email={targetProfile.email} size={32} userId={targetProfile.id} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-sm truncate">{targetProfile.full_name}</p>
-                    <p className="text-[11px] text-slate-500">Attendance calendar</p>
-                  </div>
+          <StudentCalendarModal
+            student={targetProfile}
+            subtitle="Attendance calendar"
+            homeroomId={homeroomId}
+            loadingHomeroom={loadingHomerooms}
+            year={calYear}
+            month={calMonth}
+            onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m) }}
+            viewerUserId={viewerProfile?.id}
+            viewerRole={viewerProfile?.role}
+            onClose={() => setShowAttendance(false)}
+            zClass="z-[10000]"
+            top={homerooms.length > 1 ? (
+              <div className="h-8 flex gap-2 overflow-x-auto scrollbar-hide">
+                {homerooms.map(hr => (
                   <button
-                    onClick={() => setShowAttendance(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    key={hr.id}
+                    onClick={() => setHomeroomId(hr.id)}
+                    className={`px-3 h-8 rounded-full text-xs font-medium flex-shrink-0 transition-colors ${homeroomId === hr.id ? 'bg-violet-600 text-white' : 'bg-white/80 text-slate-600 hover:bg-white'}`}
                   >
-                    <X size={16} />
+                    {hr.name}
                   </button>
-                </div>
-                {isStudentProfile && homerooms.length > 1 && (
-                  <div className="px-5 pt-3 flex gap-2 flex-wrap flex-shrink-0">
-                    {homerooms.map(hr => (
-                      <button
-                        key={hr.id}
-                        onClick={() => setHomeroomId(hr.id)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${homeroomId === hr.id ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                      >
-                        {hr.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="overflow-y-auto flex-1 px-4 py-4">
-                  {loadingHomerooms ? (
-                      <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading calendar…</div>
-                    ) : homeroomId ? (
-                      <AttendanceCalendar
-                        studentId={targetProfile.id}
-                        homeroomId={homeroomId}
-                        year={calYear}
-                        month={calMonth}
-                        onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m) }}
-                        viewerUserId={viewerProfile?.id}
-                        viewerRole={viewerProfile?.role}
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center py-16 text-slate-400 text-sm">No homeroom assigned.</div>
-                    )}
-                </div>
+                ))}
               </div>
-            </motion.div>
-          </>
+            ) : undefined}
+          />
         )}
       </AnimatePresence>
 

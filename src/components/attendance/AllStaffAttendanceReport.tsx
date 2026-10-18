@@ -7,10 +7,11 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Users, Clock, Loader2, CircleSlash,
-  Umbrella, Ban, Repeat, Settings, FileText, ShieldAlert, HardHat,
+  Umbrella, Ban, Settings, FileText, ShieldAlert, HardHat,
 } from 'lucide-react'
 import { GlassSegments } from '@/components/transport/glass'
 import StaffCalendarModal from '@/components/attendance/StaffCalendarModal'
+import DaySetupModal from '@/components/attendance/DaySetupModal'
 import {
   ReportTabs, ReportSearch, ReportRowList as RowList, ReportEmpty, ReportSummary, ReportListSkeleton,
   QUICK_GROUP, quickButtonClass, ROW_CLASS, ROW_NAME_CLASS,
@@ -133,20 +134,8 @@ const SupportStaffAttendanceReportDynamic = dynamic(
   }
 )
 
-function formatTimeShort(t: string) {
-  const [h, m] = t.split(':').map(Number)
-  const d = new Date()
-  d.setHours(h, m, 0, 0)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
 
-function formatCutoffBadge(lateCutoff: string, checkoutCutoff: string) {
-  return `${formatTimeShort(lateCutoff)} · ${formatTimeShort(checkoutCutoff)}`
-}
 
-function formatCutoffTitle(lateCutoff: string, checkoutCutoff: string) {
-  return `Late after ${formatTimeShort(lateCutoff)} · Half day before ${formatTimeShort(checkoutCutoff)}`
-}
 
 const PAGE_SIZE = 24
 
@@ -384,8 +373,8 @@ export default function AllStaffAttendanceReport({
   const [dayTimings, setDayTimings] = useState<DayTimingGroup[] | undefined>(undefined)
   const [showTimingModal, setShowTimingModal] = useState(false)
 
-  // Holiday/Cutoff setup buttons live behind a settings toggle — collapsed by default
-  // so the toolbar stays out of the way for admins who aren't actively configuring them.
+  // Holiday / non-working day / cutoff setup lives in the Day setup popup,
+  // opened from the settings button.
   const [showAdminControls, setShowAdminControls] = useState(false)
   const [showReportsModal, setShowReportsModal] = useState(false)
 
@@ -883,12 +872,11 @@ export default function AllStaffAttendanceReport({
           )}
           {viewerRole === 'admin' && (
             <button
-              onClick={() => setShowAdminControls(v => !v)}
-              title={showAdminControls ? 'Hide holiday/cutoff setup' : 'Show holiday/cutoff setup'}
+              onClick={() => setShowAdminControls(true)}
+              title="Day setup — holiday, non-working day and cutoff times"
               aria-label="Day setup"
-              aria-pressed={showAdminControls}
               tabIndex={showSupport ? -1 : undefined}
-              className={`lg-control w-8 h-8 sm:w-9 sm:h-9 ${showAdminControls ? '!bg-[#27272A] !text-white' : ''} ${showSupport ? 'invisible' : ''}`}
+              className={`lg-control w-8 h-8 sm:w-9 sm:h-9 ${showSupport ? 'invisible' : ''}`}
             >
               <Settings size={15} />
             </button>
@@ -904,66 +892,6 @@ export default function AllStaffAttendanceReport({
           />
         </div>
       </div>
-
-      {/* Day setup — holiday, non-working day and cutoff, admin only */}
-      <AnimatePresence initial={false}>
-        {viewerRole === 'admin' && showAdminControls && !showSupport && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="relative z-[3] overflow-hidden"
-          >
-            <div className="flex flex-wrap items-center gap-1.5 px-3.5 sm:px-5 pb-3">
-              {holidayRules !== undefined && (
-                <button
-                  onClick={() => setShowHolidayModal(true)}
-                  title={holidayRules.length > 1 ? holidayRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n') : undefined}
-                  className={`lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold min-w-0 transition hover:bg-white ${holidayRules.length > 0 ? 'text-violet-700' : 'text-slate-700'}`}
-                >
-                  <Umbrella size={13} className="text-violet-500 flex-shrink-0" />
-                  <span className="truncate max-w-[7rem] sm:max-w-[10rem]">
-                    {holidayRules.length === 0 ? 'Holiday' : holidayRules.length === 1 ? holidayRules[0].name : `${holidayRules.length} holidays`}
-                  </span>
-                </button>
-              )}
-
-              {nonWorkingRules !== undefined && (
-                <button
-                  onClick={() => setShowNonWorkingModal(true)}
-                  title={nonWorkingRules.length > 1 ? nonWorkingRules.map(r => `${r.name} (${r.is_default ? 'everyone' : `${r.staff_ids.length} staff`})`).join('\n') : undefined}
-                  className="lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-slate-700 min-w-0 transition hover:bg-white"
-                >
-                  <Ban size={13} className="text-slate-500 flex-shrink-0" />
-                  <span className="truncate max-w-[7rem] sm:max-w-[10rem]">
-                    {nonWorkingRules.length === 0 ? 'Non-working day' : nonWorkingRules.length === 1 ? nonWorkingRules[0].name : `${nonWorkingRules.length} non-working`}
-                  </span>
-                </button>
-              )}
-
-              {dayTimings !== undefined && (
-                <button
-                  onClick={() => setShowTimingModal(true)}
-                  title={dayTimings.length === 0 ? undefined : dayTimings.length === 1 ? formatCutoffTitle(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff) : dayTimings.map(t => `${t.label}: ${formatCutoffTitle(t.late_cutoff, t.checkout_cutoff)}`).join('\n')}
-                  className={`lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold min-w-0 transition hover:bg-white ${dayTimings.length > 0 ? 'text-amber-800' : 'text-slate-700'}`}
-                >
-                  {dayTimings[0]?.scope_type === 'weekday'
-                    ? <Repeat size={13} className="text-amber-500 flex-shrink-0" />
-                    : <Clock size={13} className="text-amber-500 flex-shrink-0" />}
-                  <span className="truncate max-w-[8rem] sm:max-w-none">
-                    {dayTimings.length === 0
-                      ? 'Cutoff'
-                      : dayTimings.length === 1
-                        ? formatCutoffBadge(dayTimings[0].late_cutoff, dayTimings[0].checkout_cutoff)
-                        : `${dayTimings.length} cutoffs`}
-                  </span>
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {showSupport ? (
         <div className="relative z-[3] lg-content mx-2 sm:mx-2.5 mb-2 sm:mb-2.5 flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1222,6 +1150,21 @@ export default function AllStaffAttendanceReport({
 
       </div>
       )}
+
+      <AnimatePresence>
+        {showAdminControls && (
+          <DaySetupModal
+            dateLabel={`${formatDayLabel(date)}${date === todayStr ? ' · today' : ''}`}
+            holidayRules={holidayRules}
+            nonWorkingRules={nonWorkingRules}
+            dayTimings={dayTimings}
+            onOpenHoliday={() => setShowHolidayModal(true)}
+            onOpenNonWorking={() => setShowNonWorkingModal(true)}
+            onOpenTiming={() => setShowTimingModal(true)}
+            onClose={() => setShowAdminControls(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {showTimingModal && (
         <DayTimingModalDynamic

@@ -38,9 +38,16 @@ export default function StaffCalendarModal({
   avatarUserId?: string
 }) {
   return (
+    // Glass, with the calendar straight on the sheet: the calendar is a fixed
+    // size (six weeks, fixed bands) and so is its skeleton, so the sheet is
+    // exactly the calendar's height from the first frame — no empty space and
+    // no jump when the month arrives.
     <ModalShell
       onClose={onClose}
-      size="xl"
+      size="md"
+      glass
+      cardless
+      bodyClassName="!p-0"
       zClass={zClass}
       title={person.full_name}
       subtitle={subtitle}

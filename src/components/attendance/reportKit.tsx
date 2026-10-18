@@ -11,6 +11,9 @@ import { Search, X } from 'lucide-react'
  * field, the row list, the quick-set capsule, and the loading and empty states.
  */
 
+/** The Documents and Day setup popups share one fixed height. */
+export const SETUP_SHEET_HEIGHT = 'h-[min(36rem,90dvh)]'
+
 export type ReportTabKey = 'absent' | 'present' | 'irregular'
 
 const TAB_META: Record<ReportTabKey, { label: string; tone: string }> = {

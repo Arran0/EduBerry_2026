@@ -967,7 +967,7 @@ export default function StaffCheckIn({
   // Liquid Glass, as on the home deck: the clock sits straight on the glass —
   // it is the one big thing on the page — and the punches ride on a solid card.
   return (
-    <section className="lg-deck lg-panel" onPointerMove={onGlassPointerMove}>
+    <section className="lg-deck lg-panel border border-[#27272A]/[0.12]" onPointerMove={onGlassPointerMove}>
       {/* ── Clock + status readout, on the glass ── */}
       <div className="relative z-[3] overflow-hidden rounded-t-[30px]">
         <div className="absolute -bottom-12 right-4 opacity-[0.05] pointer-events-none select-none">

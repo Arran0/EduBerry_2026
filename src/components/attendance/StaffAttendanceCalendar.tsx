@@ -3,17 +3,15 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronLeft, ChevronRight, X, CalendarPlus, AlertTriangle, ShieldAlert,
+  X, CalendarPlus, AlertTriangle, ShieldAlert,
 } from 'lucide-react'
-import { CALENDAR_CELLS, CALENDAR_DAY_HEADERS, CalendarGridSkeleton, CalendarStatsSkeleton } from './StaffAttendanceCalendarSkeleton'
+import { MonthCalendarFrame, CalendarTilesSkeleton, OutsideTile, monthCells, TILE, CAL_COLORS, STAFF_CAL_LEGEND, type TallyChip } from './MonthCalendarFrame'
 import {
   StaffAttendanceRecord,
   StaffAttendanceStatus,
   StaffMonthlyStats,
   Holiday,
   NonWorkingDay,
-  STAFF_ATTENDANCE_STATUS_LABELS,
-  STAFF_ATTENDANCE_STATUS_COLORS,
   fetchMyStaffAttendance,
   fetchHolidays,
   fetchNonWorkingDays,
@@ -30,21 +28,9 @@ import {
 } from '@/lib/leave'
 import LeaveAppPreviewModal from '@/components/leave/LeaveAppPreviewModal'
 
-const DAY_HEADERS = CALENDAR_DAY_HEADERS
 
 type EffectiveStatus = StaffAttendanceStatus | 'holiday' | 'non_working'
 
-const STATUS_BG: Record<EffectiveStatus, string> = {
-  present:  'bg-green-100 text-green-800',
-  absent:   'bg-red-100 text-red-800',
-  late:     'bg-amber-100 text-amber-800',
-  on_leave: 'bg-blue-100 text-blue-800',
-  e:        'bg-violet-100 text-violet-700',
-  wfh:      'bg-cyan-100 text-cyan-800',
-  half_day: 'bg-orange-100 text-orange-800',
-  holiday:  'bg-violet-50 text-violet-500',
-  non_working: 'bg-slate-100 text-slate-500',
-}
 
 const STATUS_SHORT: Record<EffectiveStatus, string> = {
   present: 'P', absent: 'A', late: 'Late', on_leave: 'OL', wfh: 'WFH', half_day: '½', e: 'Exception', holiday: 'H', non_working: 'NW',
@@ -52,15 +38,6 @@ const STATUS_SHORT: Record<EffectiveStatus, string> = {
 // 'late'/'e' spell out as tiny-font words instead of an ambiguous single letter.
 const TINY_LABEL_STATUSES = new Set<EffectiveStatus>(['late', 'e'])
 
-function dayOfWeek(dateStr: string): number {
-  return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7
-}
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate()
-}
-function monthName(year: number, month: number) {
-  return new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-}
 function pad(n: number) { return String(n).padStart(2, '0') }
 
 function formatDayLabel(dateStr: string): string {
@@ -103,9 +80,6 @@ interface Props {
   viewerUserId?: string
   /** Current viewer's role — used to decide whether to show the "View in Leave Manager" button */
   viewerRole?: string
-  /** Stretch to fill the parent's height (day cells grow) instead of sizing to
-   *  content. Used when the calendar shares a matched-height row with the report. */
-  fill?: boolean
   /**
    * Overrides how the month's records are fetched, in place of the default
    * fetchMyStaffAttendance(staffId, ...) — for a person whose attendance
@@ -119,7 +93,7 @@ interface Props {
 
 export default function StaffAttendanceCalendar({
   staffId, staffName, mode: _mode, refreshKey = 0, initialYear, initialMonth,
-  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fill = false, fetchRecords,
+  onApplyLeave, onViewLeave, viewerUserId, viewerRole, fetchRecords,
 }: Props) {
   // Server clock in the school's timezone — "today" decides which days can turn
   // Absent, so it is not read off the device. The device date stands in only
@@ -286,259 +260,182 @@ export default function StaffAttendanceCalendar({
   const strictWarningCount = records.filter(r => describeLocationWarning(r)?.strict).length
   const detailRecord = detailDay ? recordByDate.get(detailDay) : undefined
 
-  const totalDays = daysInMonth(year, month)
-  const firstDow = dayOfWeek(`${year}-${pad(month)}-01`)
-  const cells: (number | null)[] = Array(firstDow).fill(null)
-  for (let d = 1; d <= totalDays; d++) cells.push(d)
-  // Always six weeks, so paging between a five- and a six-row month (or from
-  // the loading skeleton to the month) never changes the calendar's height.
-  while (cells.length < CALENDAR_CELLS) cells.push(null)
+  const cells = monthCells(year, month)
 
   const prevMonth = () => month === 1 ? (setYear(y => y - 1), setMonth(12)) : setMonth(m => m - 1)
   const nextMonth = () => month === 12 ? (setYear(y => y + 1), setMonth(1)) : setMonth(m => m + 1)
 
   const selectedLeave = selectedDay ? leaveByDate.get(selectedDay) : undefined
 
-  // Stats items (only those with values > 0). Late still gets its own chip
-  // for punctuality visibility, but also counts toward Present here — a late
-  // arrival is still a day the staff member showed up.
-  const statItems = ([
-    ['present', stats.present + stats.late], ['late', stats.late], ['half_day', stats.half_day],
-    ['wfh', stats.wfh], ['on_leave', stats.on_leave], ['absent', stats.absent], ['e', stats.e],
-  ] as [StaffAttendanceStatus, number][]).filter(([, v]) => v > 0)
+  // The month's tally in the header. Late also counts toward Present — a late
+  // arrival is still a day the staff member showed up — and keeps its own chip
+  // for punctuality. A month with days recorded off campus or without access
+  // says so in red, in the same row, so the card never grows a line for it.
+  const tally: TallyChip[] = [
+    { key: 'p', label: 'P', title: 'Present (incl. late)', color: CAL_COLORS.present.dot, value: loading ? null : stats.present + stats.late },
+    { key: 'a', label: 'A', title: 'Absent', color: CAL_COLORS.absent.dot, value: loading ? null : stats.absent },
+    { key: 'l', label: 'L', title: 'Late', color: CAL_COLORS.late.dot, value: loading ? null : stats.late },
+    { key: 'hd', label: 'HD', title: 'Half day', color: CAL_COLORS.half_day.dot, value: loading ? null : stats.half_day },
+    { key: 'pct', label: '', title: `${stats.working_days} working days this month`, color: '#B8983C', value: loading ? null : `${stats.present_pct}%` },
+    ...(!loading && warningDates.length > 0 ? [{
+      key: 'warn', label: '', tone: 'alert' as const,
+      title: `${warningDates.length} day${warningDates.length === 1 ? '' : 's'} recorded without a verified location${strictWarningCount > 0 ? ` (${strictWarningCount} off campus or without access)` : ''} — tap a marked day to see why.`,
+      color: strictWarningCount > 0 ? '#dc2626' : '#d97706',
+      value: `${warningDates.length} unverified`,
+    }] : []),
+  ]
 
   return (
-    <div className={`bg-white${fill ? ' flex flex-col flex-1 min-h-0' : ''}`}>
-      {/* Month header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E4E4E7]">
-        <button
-          onClick={prevMonth}
-          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors rounded-lg"
-          aria-label="Previous month"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <div className="text-center">
-          <h3 className="font-bold text-[#18181B] text-sm leading-tight">{monthName(year, month)}</h3>
-          {staffName && <p className="text-xs text-[#A1A1AA] mt-0.5">{staffName}</p>}
-        </div>
-        <button
-          onClick={nextMonth}
-          className="p-2 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] transition-colors rounded-lg"
-          aria-label="Next month"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </div>
-
-      {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-b border-[#E4E4E7] bg-[#FAFAF9]">
-        {DAY_HEADERS.map(h => (
-          <div key={h} className="py-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#A1A1AA]">
-            {h}
-          </div>
-        ))}
-      </div>
-
-      {/* Calendar grid */}
-      {loading ? (
-        <CalendarGridSkeleton fill={fill} />
-      ) : (
-        <div
-          ref={gridRef}
-          className={`grid grid-cols-7${fill ? ' flex-1 auto-rows-fr' : ''}`}
-          // Sideways drags are ours (see the touch effect); vertical panning
-          // stays with the browser.
-          style={canSelect ? { touchAction: 'pan-y' } : undefined}
-        >
-          {cells.map((day, i) => {
-            if (day === null) return (
-              <div key={`e-${i}`} className={`${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0`} />
-            )
-            const dateStr = `${year}-${pad(month)}-${pad(day)}`
-            const rec = recordByDate.get(dateStr)
-            const leave = leaveByDate.get(dateStr)
-            const eff = deriveDayStatus(dateStr, rec, holidaySet, nonWorkingSet, today)
-            const isTodayCell = dateStr === today
-            const cellBg = eff && STATUS_BG[eff] ? STATUS_BG[eff] : ''
-            // A day is a valid drag anchor when it is a plain, unclaimed
-            // workday — no record, no leave already on it, and not a holiday
-            // or non-working day. Any day can be the far end of a range that
-            // started on one.
-            const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr) && !nonWorkingSet.has(dateStr)
-            const inRange = !!range && dateStr >= range.start && dateStr <= range.end
-            const dayWarning = rec ? describeLocationWarning(rec) : null
-
-            return (
-              <button
-                key={day}
-                data-date={dateStr}
-                data-pick={pickable ? '1' : '0'}
-                onPointerDown={e => {
-                  // Touch drags are driven by the native listeners above.
-                  if (e.pointerType === 'touch') return
-                  dragged.current = false
-                  dragFrom.current = null
-                  if (!pickable || e.shiftKey) return
-                  // No preventDefault here — browsers disagree on whether that
-                  // also swallows the click, and the click is what selects a
-                  // single day. `select-none` on the cell already stops the
-                  // drag from highlighting text.
-                  dragging.current = true
-                  dragFrom.current = dateStr
-                }}
-                onPointerEnter={() => {
-                  if (!dragging.current || !dragFrom.current) return
-                  dragged.current = true
-                  setAnchor(dragFrom.current)
-                  setFocus(dateStr)
-                }}
-                onClick={e => {
-                  if (dragged.current) return
-                  if (leave) { setSelectedDay(dateStr); return }
-                  // A marked day is never selectable (it already has a record),
-                  // so the tap is free to open its punch-timing detail instead.
-                  if (rec) { setDetailDay(dateStr); return }
-                  if (!canSelect) return
-                  // Shift-click stretches the current selection to this day.
-                  if (e.shiftKey && anchor) { setFocus(dateStr); return }
-                  if (!pickable) return
-                  // Tapping the single selected day again clears it.
-                  if (range && range.start === dateStr && range.end === dateStr) { clearSelection(); return }
-                  setAnchor(dateStr)
-                  setFocus(dateStr)
-                }}
-                className={`relative ${fill ? 'min-h-14' : 'h-14'} border-b border-r border-[#F0F0EF] last:border-r-0 flex flex-col items-center justify-center gap-0.5 select-none transition-colors active:brightness-95 calendar-day-btn
-                  ${inRange ? 'bg-violet-200/80 text-violet-900 ring-2 ring-inset ring-violet-500' : cellBg}
-                  ${!inRange && isTodayCell ? 'ring-2 ring-inset ring-[#B8983C]' : ''}
-                  ${pickable && !inRange ? `cursor-pointer${eff ? '' : ' hover:bg-violet-50'}` : ''}
-                  ${(dayWarning || rec) && !inRange ? 'cursor-pointer' : ''}
-                `}
-                title={dayWarning ? `${dayWarning.title} — tap for details` : undefined}
+    <div ref={gridRef} style={canSelect ? { touchAction: 'pan-y' } : undefined}>
+      <MonthCalendarFrame
+        year={year}
+        month={month}
+        onPrev={prevMonth}
+        onNext={nextMonth}
+        tally={tally}
+        legend={STAFF_CAL_LEGEND}
+        below={canSelect ? (
+          <AnimatePresence initial={false}>
+            {range ? (
+              <motion.div
+                key="bar"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden border-t border-violet-200 bg-violet-50"
               >
-                <span className={`text-xs font-bold leading-none ${inRange ? '' : eff ? '' : 'text-[#52525B]'}`}>
-                  {day}
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-violet-900 truncate leading-tight">
+                      {range.days === 1
+                        ? formatDayLabel(range.start)
+                        : `${formatDayLabel(range.start)} → ${formatDayLabel(range.end)}`}
+                    </p>
+                    <p className="text-[10px] text-violet-500 mt-0.5">
+                      {range.days} day{range.days !== 1 ? 's' : ''} selected
+                    </p>
+                  </div>
+                  <button
+                    onClick={clearSelection}
+                    className="p-1.5 text-violet-400 hover:text-violet-700 hover:bg-violet-100 rounded-lg transition-colors flex-shrink-0"
+                    aria-label="Clear selection"
+                  >
+                    <X size={14} />
+                  </button>
+                  <button
+                    onClick={() => { onApplyLeave?.(range.start, range.end); clearSelection() }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 active:scale-95 rounded-lg transition-all flex-shrink-0"
+                  >
+                    <CalendarPlus size={13} />
+                    Apply
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <p key="hint" className="text-[10px] text-slate-400 flex items-center gap-1 px-4 py-2 border-t border-slate-100">
+                <CalendarPlus size={10} className="flex-shrink-0" />
+                Tap a day — or drag across several — to apply for OD / Leave.
+              </p>
+            )}
+          </AnimatePresence>
+        ) : undefined}
+      >
+        {loading ? <CalendarTilesSkeleton /> : cells.map((day, i) => {
+          if (day === null) return <OutsideTile key={`e-${i}`} year={year} month={month} index={i} />
+          const dateStr = `${year}-${pad(month)}-${pad(day)}`
+          const rec = recordByDate.get(dateStr)
+          const leave = leaveByDate.get(dateStr)
+          const eff = deriveDayStatus(dateStr, rec, holidaySet, nonWorkingSet, today)
+          const isTodayCell = dateStr === today
+          const colors = eff ? CAL_COLORS[eff === 'wfh' ? 'on_duty' : eff] : null
+          // A day is a valid drag anchor when it is a plain, unclaimed
+          // workday — no record, no leave already on it, and not a holiday
+          // or non-working day. Any day can be the far end of a range that
+          // started on one.
+          const pickable = canSelect && !leave && !rec && !holidaySet.has(dateStr) && !nonWorkingSet.has(dateStr)
+          const inRange = !!range && dateStr >= range.start && dateStr <= range.end
+          const dayWarning = rec ? describeLocationWarning(rec) : null
+          const clickable = !!leave || !!rec || pickable
+
+          return (
+            <button
+              key={day}
+              data-date={dateStr}
+              data-pick={pickable ? '1' : '0'}
+              onPointerDown={e => {
+                // Touch drags are driven by the native listeners above.
+                if (e.pointerType === 'touch') return
+                dragged.current = false
+                dragFrom.current = null
+                if (!pickable || e.shiftKey) return
+                dragging.current = true
+                dragFrom.current = dateStr
+              }}
+              onPointerEnter={() => {
+                if (!dragging.current || !dragFrom.current) return
+                dragged.current = true
+                setAnchor(dragFrom.current)
+                setFocus(dateStr)
+              }}
+              onClick={e => {
+                if (dragged.current) return
+                if (leave) { setSelectedDay(dateStr); return }
+                // A marked day is never selectable (it already has a record),
+                // so the tap is free to open its punch-timing detail instead.
+                if (rec) { setDetailDay(dateStr); return }
+                if (!canSelect) return
+                // Shift-click stretches the current selection to this day.
+                if (e.shiftKey && anchor) { setFocus(dateStr); return }
+                if (!pickable) return
+                // Tapping the single selected day again clears it.
+                if (range && range.start === dateStr && range.end === dateStr) { clearSelection(); return }
+                setAnchor(dateStr)
+                setFocus(dateStr)
+              }}
+              className={`${TILE} relative flex flex-col items-center justify-center gap-0.5 select-none transition-[transform,filter] ${
+                clickable ? 'cursor-pointer hover:brightness-[0.97] active:scale-[0.96]' : 'cursor-default'
+              } focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400`}
+              style={inRange
+                ? { background: '#ddd6fe', boxShadow: 'inset 0 0 0 2px #8b5cf6' }
+                : colors
+                  ? { background: colors.bg, boxShadow: `inset 0 0 0 1px ${colors.border}66` }
+                  : leave
+                    ? { background: '#fffbeb', boxShadow: 'inset 0 0 0 1px #fcd34d66' }
+                    : { background: '#fcfcfd', boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.04)' }}
+              title={dayWarning ? `${dayWarning.title} — tap for details` : undefined}
+            >
+              <span
+                className={`text-[12px] font-bold leading-none tabular-nums ${isTodayCell ? 'w-[22px] h-[22px] rounded-full flex items-center justify-center text-white' : ''}`}
+                style={isTodayCell
+                  ? { background: 'var(--page-gradient-from, #27272A)' }
+                  : { color: inRange ? '#4c1d95' : colors ? colors.text : '#94a3b8' }}
+              >
+                {day}
+              </span>
+              {eff && (
+                <span
+                  className={`font-bold leading-none ${TINY_LABEL_STATUSES.has(eff) || eff === 'holiday' || eff === 'non_working' ? 'text-[6.5px] uppercase tracking-tight' : 'text-[9.5px]'}`}
+                  style={{ color: colors?.dot }}
+                >
+                  {eff === 'holiday' ? 'Hol' : STATUS_SHORT[eff]}
                 </span>
-                {eff && eff !== 'holiday' && eff !== 'non_working' && (
-                  <span className={`font-bold leading-none opacity-60 ${TINY_LABEL_STATUSES.has(eff) ? 'text-[6.5px] uppercase tracking-tight' : 'text-[10px]'}`}>
-                    {STATUS_SHORT[eff]}
-                  </span>
-                )}
-                {eff === 'holiday' && (
-                  <span className="text-[8px] font-bold leading-none uppercase tracking-wide opacity-60">Hol</span>
-                )}
-                {eff === 'non_working' && (
-                  <span className="text-[8px] font-bold leading-none uppercase tracking-wide opacity-60">NW</span>
-                )}
-                {leave && (
-                  <span
-                    className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${leave.status === 'approved' ? 'bg-yellow-400' : 'bg-amber-400'}`}
-                  />
-                )}
-                {/* Top-left, opposite the leave dot, so a day can carry both.
-                    Red for a day marked off campus or with location access
-                    off, amber for a device that simply could not answer. */}
-                {dayWarning && !inRange && (
-                  dayWarning.strict ? (
-                    <ShieldAlert
-                      size={9}
-                      strokeWidth={2.8}
-                      className="absolute top-1 left-1 text-red-600"
-                      aria-label="Location not verified"
-                    />
-                  ) : (
-                    <AlertTriangle
-                      size={9}
-                      strokeWidth={2.8}
-                      className="absolute top-1 left-1 text-amber-600"
-                      aria-label="Location not confirmed"
-                    />
-                  )
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Selection bar — what the drag picked, and what to do with it */}
-      <AnimatePresence initial={false}>
-        {canSelect && range && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden border-t border-violet-200 bg-violet-50"
-          >
-            <div className="flex items-center gap-2 px-3 py-2.5">
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-violet-900 truncate leading-tight">
-                  {range.days === 1
-                    ? formatDayLabel(range.start)
-                    : `${formatDayLabel(range.start)} → ${formatDayLabel(range.end)}`}
-                </p>
-                <p className="text-[10px] text-violet-500 mt-0.5">
-                  {range.days} day{range.days !== 1 ? 's' : ''} selected
-                </p>
-              </div>
-              <button
-                onClick={clearSelection}
-                className="p-1.5 text-violet-400 hover:text-violet-700 hover:bg-violet-100 rounded-lg transition-colors flex-shrink-0"
-                aria-label="Clear selection"
-              >
-                <X size={14} />
-              </button>
-              <button
-                onClick={() => { onApplyLeave?.(range.start, range.end); clearSelection() }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 active:scale-95 rounded-lg transition-all flex-shrink-0"
-              >
-                <CalendarPlus size={13} />
-                Apply
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Monthly stats */}
-      {loading ? <CalendarStatsSkeleton /> : (
-      <div className="border-t border-[#E4E4E7] px-4 py-3 space-y-2 bg-[#FAFAF9]">
-        {statItems.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {statItems.map(([s, v]) => (
-              <div key={s} className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold border rounded-full ${STAFF_ATTENDANCE_STATUS_COLORS[s]}`}>
-                <span>{STAFF_ATTENDANCE_STATUS_LABELS[s]}</span>
-                <span className="font-bold">{v}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#A1A1AA]">{stats.working_days} working days this month</span>
-          <span className="font-bold text-[#52525B]">{stats.present_pct}% attendance</span>
-        </div>
-        {warningDates.length > 0 && (
-          <p className={`text-[10px] flex items-start gap-1 ${strictWarningCount > 0 ? 'text-red-700' : 'text-amber-700'}`}>
-            {strictWarningCount > 0
-              ? <ShieldAlert size={10} className="flex-shrink-0 mt-[2px]" />
-              : <AlertTriangle size={10} className="flex-shrink-0 mt-[2px]" />}
-            <span>
-              {warningDates.length} day{warningDates.length === 1 ? '' : 's'} recorded without a
-              verified location
-              {strictWarningCount > 0 && ` (${strictWarningCount} off campus or without access)`}
-              {' '}— tap a marked day to see why.
-            </span>
-          </p>
-        )}
-        {canSelect && !range && (
-          <p className="text-[10px] text-[#A1A1AA] flex items-center gap-1">
-            <CalendarPlus size={10} className="flex-shrink-0" />
-            Tap a day — or drag across several — to apply for OD / Leave.
-          </p>
-        )}
-      </div>
-      )}
+              )}
+              {leave && (
+                <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${leave.status === 'approved' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+              )}
+              {/* Top-left, opposite the leave dot, so a day can carry both.
+                  Red for a day marked off campus or with location access off,
+                  amber for a device that simply could not answer. */}
+              {dayWarning && !inRange && (
+                dayWarning.strict
+                  ? <ShieldAlert size={9} strokeWidth={2.8} className="absolute top-1 left-1 text-red-600" aria-label="Location not verified" />
+                  : <AlertTriangle size={9} strokeWidth={2.8} className="absolute top-1 left-1 text-amber-600" aria-label="Location not confirmed" />
+              )}
+            </button>
+          )
+        })}
+      </MonthCalendarFrame>
 
       {detailDay && detailRecord && (
         <DayAttendanceDetailModal
