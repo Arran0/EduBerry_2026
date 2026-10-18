@@ -9,6 +9,7 @@ import {
   fetchIncidents, formatClock, resolveIncident,
   INCIDENT_LABELS, type TransportIncident,
 } from '@/lib/transport/runs'
+import { useMaybeAcademicYear } from '@/contexts/AcademicYearContext'
 
 /**
  * The incident console.
@@ -18,6 +19,7 @@ import {
  * the children who were actually aboard, even after the roster has changed.
  */
 export default function SafetySection() {
+  const yearId = useMaybeAcademicYear()?.year?.id ?? null
   const [incidents, setIncidents] = useState<TransportIncident[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -25,9 +27,9 @@ export default function SafetySection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    setIncidents(await fetchIncidents())
+    setIncidents(await fetchIncidents(50, yearId))
     setLoading(false)
-  }, [])
+  }, [yearId])
 
   useEffect(() => { load() }, [load])
 

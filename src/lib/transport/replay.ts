@@ -85,7 +85,7 @@ export async function fetchReplay(runId: string): Promise<RunReplay | null> {
 
 /** Finished runs, newest first — the history list the replay is opened from. */
 export async function fetchRunHistory(
-  opts: { from?: string; to?: string; routeId?: string | null; limit?: number } = {},
+  opts: { from?: string; to?: string; routeId?: string | null; yearId?: string | null; limit?: number } = {},
 ): Promise<import('./types').TransportRun[]> {
   let q = supabase
     .from('transport_trip_runs')
@@ -105,6 +105,7 @@ export async function fetchRunHistory(
   if (opts.from) q = q.gte('service_date', opts.from)
   if (opts.to) q = q.lte('service_date', opts.to)
   if (opts.routeId) q = q.eq('route_id', opts.routeId)
+  if (opts.yearId) q = q.eq('academic_year_id', opts.yearId)
 
   const { data, error } = await q
   if (error) { console.error('fetchRunHistory failed:', error); return [] }

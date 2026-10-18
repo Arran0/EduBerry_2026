@@ -127,7 +127,7 @@ export function currentPeriod(d = new Date()): string {
  * routes when omitted), with their resolved amount and whether they already
  * hold a bill for it.
  */
-export async function previewBills(period: string, routeIds?: string[]): Promise<BillableRider[]> {
+export async function previewBills(period: string, routeIds?: string[], yearId?: string | null): Promise<BillableRider[]> {
   let aq = supabase
     .from('transport_student_assignments')
     .select(`id, route_id, student_id, pickup_stop_id, drop_stop_id, fee_amount,
@@ -135,6 +135,7 @@ export async function previewBills(period: string, routeIds?: string[]): Promise
       route:transport_routes!route_id(name, active, archived_at, fee_mode)`)
     .is('ended_on', null)
   if (routeIds?.length) aq = aq.in('route_id', routeIds)
+  if (yearId) aq = aq.eq('academic_year_id', yearId)
 
   let bq = supabase
     .from('bus_fees')
@@ -184,34 +185,53 @@ export function academicMonths(yearCode: string): string[] {
   })
 }
 
+/** January to December of a calendar year (`2026` → `2026-01` … `2026-12`). */
+export function calendarMonths(year: number): string[] {
+  return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+}
+
 /**
- * Billed / collected / outstanding per month across one academic year.
+ * Which calendar year the month-by-month chart shows for a session: this
+ * year when the session reaches into it, else the year the session starts in
+ * (so a past or planned session still shows its own months).
+ */
+export function chartYearFor(session: { starts_on: string; ends_on: string }, today = new Date()): number {
+  const y = today.getFullYear()
+  const startY = Number(session.starts_on.slice(0, 4))
+  const endY = Number(session.ends_on.slice(0, 4))
+  return y >= startY && y <= endY ? y : startY
+}
+
+/**
+ * Billed / collected / outstanding per month, January to December of
+ * `calendarYear`, counting only the bills of one academic session.
  *
  * Bus fees are fee-app bills now (transport_r6_c): each monthly transport
- * issue's bills carry the month on the issue. Older bills from the bus app's
- * own ledger (bus_fees) are added in by their billing month, due date or
+ * issue's bills carry the month on the issue and the session on the issue.
+ * Older bills from the bus app's own ledger (bus_fees) carry their session
+ * too (transport_r7) and are placed by their billing month, due date or
  * creation date, so history is not lost.
  */
-export async function fetchMonthlyBusFees(yearCode: string): Promise<MonthFeePosition[]> {
-  const months = academicMonths(yearCode)
+export async function fetchMonthlyBusFees(
+  session: { id: string },
+  calendarYear: number,
+): Promise<MonthFeePosition[]> {
+  const months = calendarMonths(calendarYear)
   const out = new Map(months.map(p => [p, { period: p, billed: 0, collected: 0, outstanding: 0, bills: 0 }]))
-  const start = Number(yearCode.slice(0, 4))
-  const since = `${start - 1}-10-01`
-
-  const { data: year } = await supabase.from('academic_years').select('id').eq('code', yearCode).maybeSingle()
 
   const [{ data: issues }, { data: legacy }, { data: pays }] = await Promise.all([
-    year
-      ? supabase.from('fee_issues').select('id, bill_month')
-          .eq('academic_year_id', (year as { id: string }).id).eq('status', 'issued').eq('filters->>transport', 'true')
-      : Promise.resolve({ data: [] as { id: string; bill_month: string }[] }),
+    supabase.from('fee_issues').select('id, bill_month')
+      .eq('academic_year_id', session.id).eq('status', 'issued').eq('filters->>transport', 'true'),
     supabase.from('bus_fees').select('id, amount, status, billing_period, due_date, created_at')
-      .neq('status', 'cancelled').gte('created_at', since),
-    supabase.from('bus_payments').select('fee_id, amount').eq('status', 'verified').gte('created_at', since),
+      .eq('academic_year_id', session.id).neq('status', 'cancelled'),
+    supabase.from('bus_payments').select('fee_id, amount')
+      .eq('academic_year_id', session.id).eq('status', 'verified'),
   ])
 
-  // Fee-app bills.
-  const monthOf = new Map(((issues ?? []) as { id: string; bill_month: string }[]).map(i => [i.id, i.bill_month.slice(0, 7)]))
+  // Fee-app bills, only the issues whose month falls in the chart's year.
+  const monthOf = new Map(((issues ?? []) as { id: string; bill_month: string }[])
+    .map(i => [i.id, i.bill_month.slice(0, 7)] as const)
+    .filter(([, m]) => out.has(m)))
   if (monthOf.size) {
     const { data: invoices, error } = await supabase
       .from('fee_invoices')

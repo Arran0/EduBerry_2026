@@ -111,7 +111,7 @@ export default function BusModal({
                     </span>
                   )}
                   <div className="min-w-0">
-                    <h2 className="font-display text-[1.1rem] sm:text-[1.2rem] font-bold leading-tight headline text-slate-900 truncate">{title}</h2>
+                    <h2 className="font-display text-[1.1rem] sm:text-[1.2rem] font-bold leading-[1.25] pb-[0.12em] headline text-slate-900 truncate">{title}</h2>
                     {subtitle && <p className="text-[12px] text-slate-500 truncate">{subtitle}</p>}
                   </div>
                 </div>

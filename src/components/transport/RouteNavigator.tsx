@@ -167,8 +167,8 @@ export default function RouteNavigator({
   }
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+    <div>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
         {/* Smart search */}
         <div ref={boxRef} className="relative flex-1 min-w-0">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

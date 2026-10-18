@@ -574,6 +574,16 @@ body {
    the dials and the ledger ride on it as solid content cards (radius
    concentric: 30 − 12 = 18). */
 .lg-panel { border-radius: 30px; }
+/* Transport panels run edge to edge on a phone: the page gutter (1rem) is
+   given back to the sheet, and a sheet that touches both edges has no
+   corners to round. */
+@media (max-width: 639.98px) {
+  .lg-panel.lg-bleed {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    border-radius: 0;
+  }
+}
 .lg-content {
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.86) 100%);

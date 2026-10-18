@@ -54,12 +54,12 @@ export default function RouteWorkspace({
   return (
     <div className="min-w-0">
       {/* Header — the route's identity on a tinted strip of its own colour. */}
-      <div className="relative overflow-hidden rounded-[18px] p-4 sm:p-5 text-white"
+      <div className="relative overflow-hidden rounded-[18px] p-3 sm:p-5 text-white"
         style={{ background: `linear-gradient(135deg, ${BUS.ink} 0%, ${BUS.charcoal} 60%, ${BUS.bronze} 140%)` }}>
         <div aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: route.color }} />
         <div aria-hidden className="absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,.12),transparent_45%)]" />
 
-        <div className="relative flex flex-wrap items-start justify-between gap-3">
+        <div className="relative flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {route.code && (
@@ -71,11 +71,11 @@ export default function RouteWorkspace({
                 {route.direction === 'inbound' ? 'To school' : 'From school'}
               </span>
             </div>
-            <h2 className="mt-1.5 font-display text-[1.35rem] sm:text-[1.6rem] font-bold leading-tight headline truncate">{route.name}</h2>
+            <h2 className="mt-1 sm:mt-1.5 font-display text-[1.2rem] sm:text-[1.6rem] font-bold leading-[1.25] pb-[0.12em] headline truncate">{route.name}</h2>
             {route.description && <p className="text-[12px] text-white/70 truncate max-w-xl">{route.description}</p>}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 -mr-1 sm:mr-0">
             <HeaderBtn label="Edit route" onClick={() => setEditing(true)}><Pencil size={15} /></HeaderBtn>
             <HeaderBtn
               label={route.archived_at ? 'Restore route' : 'Archive route'}
@@ -91,14 +91,16 @@ export default function RouteWorkspace({
           </div>
         </div>
 
-        <div className="relative mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {/* Three across at every width: stacked on a phone they were three
+            full-width rows for three short facts. */}
+        <div className="relative mt-3 sm:mt-4 grid grid-cols-3 gap-1.5 sm:gap-2">
           <Fact icon={Bus} label="Bus" value={route.default_vehicle ? vehicleLabel(route.default_vehicle) : 'Not set'}
             sub={capacity ? `${capacity} seats` : undefined} />
           <Fact icon={UserRound} label="Driver" value={route.default_driver?.full_name ?? 'Not set'}
             sub={route.default_driver ? 'default for every trip' : 'set one in Edit route'} />
-          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Users size={11} /> Riders</p>
-            <p className={`mt-0.5 text-sm font-semibold tabular-nums ${over ? 'text-rose-300' : ''}`}>
+          <div className="rounded-xl bg-white/10 border border-white/10 px-2 sm:px-3 py-1.5 sm:py-2 min-w-0">
+            <p className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Users size={11} className="hidden sm:block" /> Riders</p>
+            <p className={`mt-0.5 text-[13px] sm:text-sm font-semibold tabular-nums ${over ? 'text-rose-300' : ''}`}>
               {riders ?? '—'}{capacity ? <span className="text-white/60"> / {capacity}</span> : ''}
             </p>
             {fill != null && (
@@ -110,7 +112,7 @@ export default function RouteWorkspace({
         </div>
       </div>
 
-      <div className="mt-3.5 mb-3.5 flex justify-center sm:justify-start">
+      <div className="my-2.5 sm:my-3.5 flex justify-center sm:justify-start">
         <GlassSegments
           stretch
           layoutId={`route-tab-${route.id}`}
@@ -125,7 +127,7 @@ export default function RouteWorkspace({
         />
       </div>
 
-      <div className="lg-content p-3 sm:p-4">
+      <div className="lg-content p-2.5 sm:p-4">
         {tab === 'stops' && <StopEditor route={route} />}
         {tab === 'schedules' && <ScheduleEditor route={route} vehicles={vehicles} crew={crew} />}
         {tab === 'students' && <AssignmentEditor route={route} onChanged={onChanged} />}
@@ -148,7 +150,7 @@ export default function RouteWorkspace({
 function HeaderBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} title={label} aria-label={label}
-      className="w-9 h-9 inline-flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/15 transition active:scale-95">
+      className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/15 transition active:scale-95">
       {children}
     </button>
   )
@@ -156,10 +158,10 @@ function HeaderBtn({ label, onClick, children }: { label: string; onClick: () =>
 
 function Fact({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2 min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Icon size={11} /> {label}</p>
-      <p className="mt-0.5 text-sm font-semibold truncate">{value}</p>
-      {sub && <p className="text-[11px] text-white/60 truncate">{sub}</p>}
+    <div className="rounded-xl bg-white/10 border border-white/10 px-2 sm:px-3 py-1.5 sm:py-2 min-w-0">
+      <p className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider text-white/60 flex items-center gap-1"><Icon size={11} className="hidden sm:block" /> {label}</p>
+      <p className="mt-0.5 text-[13px] sm:text-sm font-semibold truncate">{value}</p>
+      {sub && <p className="hidden sm:block text-[11px] text-white/60 truncate">{sub}</p>}
     </div>
   )
 }

@@ -21,7 +21,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
-  AlertTriangle, BarChart3, Bus, Check, CheckCheck, ChevronLeft, ChevronRight, History,
+  AlertTriangle, BarChart3, Bus, CalendarRange, Check, CheckCheck, History,
   Loader2, Phone, Radio, RefreshCw, ShieldAlert, Users, WifiOff, Wallet, X, Clock, Gauge,
 } from 'lucide-react'
 import Modal from '../BusModal'
@@ -34,8 +34,8 @@ import {
 } from '@/lib/transport/runs'
 import { fetchTodaySnapshot, seatEfficiency, type TodaySnapshot } from '@/lib/transport/snapshot'
 import { fetchAttendanceMismatch, type MismatchRow } from '@/lib/transport/reports'
-import { academicMonths, fetchMonthlyBusFees, type MonthFeePosition } from '@/lib/transport/fees'
-import { currentAcademicYear, listBusAcademicYears } from '@/lib/bus'
+import { calendarMonths, chartYearFor, fetchMonthlyBusFees, type MonthFeePosition } from '@/lib/transport/fees'
+import { useMaybeAcademicYear } from '@/contexts/AcademicYearContext'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import { fetchSchoolLocation, type SchoolLocation } from '@/lib/transport/settings'
 import type { TransportAlert, TransportRun } from '@/lib/transport/types'
@@ -49,7 +49,7 @@ const ReportsSection = dynamic(() => import('./ReportsSection'))
 const TransportMap = dynamic(() => import('../TransportMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[320px] md:h-[420px] lg:h-[min(54vh,36rem)] rounded-[18px] bg-white/60 flex items-center justify-center">
+    <div className="h-[260px] sm:h-[320px] md:h-[420px] lg:h-[min(54vh,36rem)] rounded-[18px] bg-white/60 flex items-center justify-center">
       <Loader2 className="animate-spin text-slate-400" size={20} />
     </div>
   ),
@@ -78,6 +78,16 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
   /** Bumped when a settings popup closes, so the map picks up a new location. */
   settingsVersion?: number
 }) {
+  // The session on the banner. Today's trips, alerts and clashes belong to the
+  // session today falls in; looking at another one shows its alerts and an
+  // empty day, not this session's buses under last year's name.
+  const session = useMaybeAcademicYear()?.year ?? null
+  const yearId = session?.id ?? null
+  const today = todayISO()
+  const inSession = !session || (session.starts_on <= today && today <= session.ends_on)
+  const yearRef = useRef<string | null>(yearId)
+  useEffect(() => { yearRef.current = yearId }, [yearId])
+
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [riders, setRiders] = useState<Record<string, RunRiderCounts>>({})
   const [alerts, setAlerts] = useState<TransportAlert[]>([])
@@ -112,26 +122,32 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
   /** The thirty-second tick: runs, rider counts, today's clashes and the snapshot. */
   const refresh = useCallback(async () => {
     const today = todayISO()
+    if (!inSession) {
+      setRuns([]); setSnapshot(null); setClashes([]); setRiders({})
+      setUpdatedAt(new Date())
+      return [] as TransportRun[]
+    }
     const [r, s, m] = await Promise.all([
-      fetchTodayRuns(), fetchTodaySnapshot(), fetchAttendanceMismatch(today, today),
+      fetchTodayRuns(yearId), fetchTodaySnapshot(), fetchAttendanceMismatch(today, today),
     ])
     const counts = await fetchRunRiderCounts(r.map(x => x.id))
     setRuns(r); setSnapshot(s); setClashes(m); setRiders(counts)
     setUpdatedAt(new Date())
     return r
-  }, [])
+  }, [inSession, yearId])
 
   const load = useCallback(async () => {
-    const [r, a] = await Promise.all([refresh(), fetchOpenAlerts()])
+    setLoading(true)
+    const [r, a] = await Promise.all([refresh(), fetchOpenAlerts(OPEN_ALERTS_PAGE, 0, yearId)])
     setAlerts(a.alerts); setAlertTotal(a.total)
     setLoading(false)
 
-    if (r.length === 0 && !triedMaterialise.current) {
+    if (inSession && r.length === 0 && !triedMaterialise.current) {
       triedMaterialise.current = true
       const res = await materialiseRuns(todayISO())
       if (res.success && (res.created ?? 0) > 0) await refresh()
     }
-  }, [refresh])
+  }, [refresh, inSession, yearId])
 
   useEffect(() => { load() }, [load])
 
@@ -154,14 +170,16 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
 
     const refetchRuns = () => {
       if (timer) clearTimeout(timer)
-      timer = setTimeout(() => { if (alive) fetchTodayRuns().then(r => { if (alive) setRuns(r) }) }, 400)
+      timer = setTimeout(() => {
+        if (alive) fetchTodayRuns(yearRef.current).then(r => { if (alive) setRuns(r) })
+      }, 400)
     }
     const refetchAlerts = () => {
       if (alertTimer) clearTimeout(alertTimer)
       alertTimer = setTimeout(() => {
         if (!alive) return
         const span = Math.max(OPEN_ALERTS_PAGE, loadedAlerts.current)
-        fetchOpenAlerts(span, 0).then(a => {
+        fetchOpenAlerts(span, 0, yearRef.current).then(a => {
           if (!alive) return
           setAlerts(a.alerts); setAlertTotal(a.total)
         })
@@ -211,14 +229,14 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
 
   const loadMoreAlerts = useCallback(async () => {
     setLoadingMoreAlerts(true)
-    const next = await fetchOpenAlerts(OPEN_ALERTS_PAGE, alerts.length)
+    const next = await fetchOpenAlerts(OPEN_ALERTS_PAGE, alerts.length, yearId)
     setAlerts(prev => {
       const seen = new Set(prev.map(a => a.id))
       return [...prev, ...next.alerts.filter(a => !seen.has(a.id))]
     })
     setAlertTotal(next.total)
     setLoadingMoreAlerts(false)
-  }, [alerts.length])
+  }, [alerts.length, yearId])
 
   const onRoad = useMemo(() => runs.filter(r => ON_ROAD.has(r.status)), [runs])
 
@@ -332,19 +350,23 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
   return (
     <div className="space-y-5">
       {/* ── Toolbar: replay & incidents above the map ───────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
+      {/* One row at every width: on a phone the buttons drop their icons and
+          the live capsule drops its words, rather than either wrapping. */}
+      <div className="flex flex-nowrap items-center justify-between gap-2">
         <GlassButtonGroup
+          compact
+          className="min-w-0 overflow-x-auto scrollbar-none"
           items={[
             { key: 'replay', label: 'Replay', icon: History, onClick: () => onOpenPanel('replay') },
             { key: 'incidents', label: 'Incidents', icon: ShieldAlert, onClick: () => onOpenPanel('incidents') },
             { key: 'reports', label: 'Reports', icon: BarChart3, onClick: () => setReportsOpen(true) },
           ]}
         />
-        <div className="lg-pill flex items-center gap-2.5 h-10 pl-3.5 pr-1.5">
-          <LiveDot tone={onRoad.length > 0 ? 'live' : 'idle'} label={onRoad.length > 0 ? 'Live' : 'Idle'} />
-          <span className="w-px h-3.5 bg-slate-300" />
-          <span className="text-xs font-semibold text-slate-700 tabular-nums">
-            {loading ? 'Loading…' : `${onRoad.length} on the road`}
+        <div className="lg-pill flex flex-shrink-0 items-center gap-1.5 sm:gap-2.5 h-10 pl-2.5 sm:pl-3.5 pr-1 sm:pr-1.5">
+          <LiveDot tone={onRoad.length > 0 ? 'live' : 'idle'} label={onRoad.length > 0 ? 'Live' : 'Idle'} hideLabelOnMobile />
+          <span className="hidden sm:block w-px h-3.5 bg-slate-300" />
+          <span className="text-[11.5px] sm:text-xs font-semibold text-slate-700 tabular-nums whitespace-nowrap">
+            {loading ? '…' : <>{onRoad.length}<span className="sm:hidden"> on road</span><span className="hidden sm:inline"> on the road</span></>}
           </span>
           {snapshot && snapshot.runs_stale > 0 && (
             <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-rose-600">
@@ -371,7 +393,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
             selectedBusId={selectedRunId}
             onBusClick={id => setSelectedRunId(id === selectedRunId ? null : id)}
             showFences={false}
-            heightClass="h-[320px] md:h-[420px] lg:h-[min(54vh,36rem)]"
+            heightClass="h-[260px] sm:h-[320px] md:h-[420px] lg:h-[min(54vh,36rem)]"
           />
           {school === null && (
             <div className="absolute left-3 right-3 top-3 z-[1000] flex justify-center sm:justify-end pointer-events-none">
@@ -400,7 +422,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
         icon={Bus}
         delay={0.05}
         actions={
-          <div className="lg-pill flex items-center gap-3 h-8 px-3 text-[11.5px] font-semibold text-slate-600 tabular-nums">
+          <div className="lg-pill flex items-center gap-2.5 sm:gap-3 h-7 sm:h-8 px-2.5 sm:px-3 text-[11px] sm:text-[11.5px] font-semibold text-slate-600 tabular-nums whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5" title="Trips within five minutes of their timetable">
               <Clock size={12} className="text-slate-400" />
               {snapshot ? `${snapshot.runs_total - snapshot.runs_late}/${snapshot.runs_total} on time` : '—'}
@@ -408,18 +430,18 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
             <span className="w-px h-3.5 bg-slate-300" />
             <span className="inline-flex items-center gap-1.5" title="Riders aboard against seats on the road">
               <Gauge size={12} className="text-slate-400" />
-              {seats != null ? `${seats}% seats used` : 'Seats —'}
+              {seats != null ? <>{seats}%<span className="hidden sm:inline"> seats used</span><span className="sm:hidden"> seats</span></> : 'Seats —'}
             </span>
           </div>
         }
       >
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
           <Content className="xl:col-span-8 flex flex-col overflow-hidden">
-            <div className="p-4 xl:p-5 border-b border-slate-200/70">
+            <div className="px-3.5 py-3 xl:px-5 xl:py-4 border-b border-slate-200/70">
               <RiderBar tally={shownTally} focus={focusRun} loading={loading} />
             </div>
 
-            <div className="flex items-center justify-between px-4 xl:px-5 pt-3 pb-1.5">
+            <div className="flex items-center justify-between px-3.5 xl:px-5 pt-2.5 pb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Worst first</span>
               <span className="text-[11px] text-slate-400">
                 {runs.length} trip{runs.length === 1 ? '' : 's'}
@@ -427,11 +449,17 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
               </span>
             </div>
 
-            <div className="px-2 pb-2" onMouseLeave={() => setHoverRunId(null)}>
+            <div className="px-1.5 sm:px-2 pb-1.5 sm:pb-2" onMouseLeave={() => setHoverRunId(null)}>
               {loading ? (
                 <div className="space-y-1.5 p-2">
                   {[0, 1, 2].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100/80 animate-pulse" />)}
                 </div>
+              ) : !inSession ? (
+                <EmptyNote
+                  icon={CalendarRange}
+                  title={`Today is outside ${session?.code ?? 'this session'}`}
+                  detail="Live trips run in the session today falls in. Switch the session on the banner back to the current one to watch them; this session's finished trips are in Replay and its figures in Reports."
+                />
               ) : runs.length === 0 ? (
                 <EmptyNote
                   icon={Bus}
@@ -458,7 +486,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
 
           {/* Needs attention */}
           <Content className="xl:col-span-4 flex flex-col overflow-hidden">
-            <div className="px-4 pt-4 pb-2.5">
+            <div className="px-3.5 sm:px-4 pt-3 sm:pt-4 pb-2">
               <CardHead
                 icon={AlertTriangle}
                 label="Needs attention"
@@ -541,6 +569,10 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
  * was picked up first. The gold run is everyone picked up; the green run inside
  * it is the part of them already home or at school; the grey remainder has not
  * been collected yet.
+ *
+ * Three lines, not three tiles: the headline, the bar, and the three counts as
+ * one inline key under it. The key used to be a row of cards that took more
+ * room than the bar it explained.
  */
 function RiderBar({ tally, focus, loading }: { tally: Tally; focus: TransportRun | null; loading: boolean }) {
   const reduceMotion = useReducedMotion()
@@ -553,42 +585,37 @@ function RiderBar({ tally, focus, loading }: { tally: Tally; focus: TransportRun
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <div className="min-w-0">
-          <div className="h-4 relative overflow-hidden">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.p
-                key={focus?.id ?? 'fleet'}
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -10, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 truncate"
-              >
-                {focus ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: focus.route?.color ?? BUS.gold }} />
-                    {focus.route?.name ?? 'Trip'} · {DIRECTION_LABELS[focus.direction]}
-                  </>
-                ) : (
-                  <><Users size={12} /> All trips today</>
-                )}
-              </motion.p>
-            </AnimatePresence>
-          </div>
-          <p className="mt-1 font-display text-[1.75rem] xl:text-[2rem] font-black leading-none text-slate-900 tabular-nums">
-            {loading ? '—' : tally.picked}
-            <span className="ml-1.5 text-sm font-semibold text-slate-400">
-              of {loading ? '—' : tally.expected - tally.excused} picked up
-            </span>
-          </p>
+      <div className="flex items-end justify-between gap-3">
+        <p className="min-w-0 font-display text-[1.45rem] xl:text-[1.6rem] font-black leading-[1.1] text-slate-900 tabular-nums">
+          {loading ? '—' : tally.picked}
+          <span className="ml-1.5 text-[12.5px] font-semibold text-slate-400">
+            of {loading ? '—' : tally.expected - tally.excused} picked up
+          </span>
+        </p>
+        <div className="h-4 relative overflow-hidden min-w-0 flex-shrink">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.p
+              key={focus?.id ?? 'fleet'}
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -10, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex items-center gap-1.5 text-[11px] leading-4 font-semibold text-slate-500 truncate"
+            >
+              {focus ? (
+                <>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: focus.route?.color ?? BUS.gold }} />
+                  <span className="truncate">{focus.route?.name ?? 'Trip'} · {DIRECTION_LABELS[focus.direction]}</span>
+                </>
+              ) : (
+                <><Users size={12} className="flex-shrink-0" /> All trips today</>
+              )}
+            </motion.p>
+          </AnimatePresence>
         </div>
-        {tally.excused > 0 && (
-          <span className="text-[11px] font-medium text-slate-500">{tally.excused} on approved leave</span>
-        )}
       </div>
 
-      <div className="relative mt-3 h-4 rounded-full bg-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)] overflow-hidden">
+      <div className="relative mt-2 h-2.5 rounded-full bg-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)] overflow-hidden">
         {/* neither: the striped track */}
         <div className="absolute inset-0 fee-stripes" style={{ ['--fee-c' as string]: '#94a3b8' }} />
         <motion.div
@@ -607,28 +634,26 @@ function RiderBar({ tally, focus, loading }: { tally: Tally; focus: TransportRun
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <Legend color={BUS.aboard} label="Picked up" value={tally.picked} sub={`${onBoard} on board now`} />
-        <Legend color={BUS.dropped} label="Dropped off" value={tally.dropped} sub="trip complete" />
-        <Legend color="#94a3b8" striped label="Neither yet" value={waiting} sub="not collected" />
+      <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-slate-500 tabular-nums">
+        <Legend color={BUS.aboard} value={tally.picked} label="picked up" title={`${onBoard} on board now`} />
+        <Legend color={BUS.dropped} value={tally.dropped} label="dropped" title="Trip complete for these riders" />
+        <Legend color="#94a3b8" striped value={waiting} label="neither yet" title="Not collected yet" />
+        {tally.excused > 0 && <span className="text-slate-400">· {tally.excused} on leave</span>}
       </div>
     </div>
   )
 }
 
-function Legend({ color, label, value, sub, striped }: { color: string; label: string; value: number; sub: string; striped?: boolean }) {
+function Legend({ color, label, value, title, striped }: { color: string; label: string; value: number; title: string; striped?: boolean }) {
   return (
-    <div className="fee-mini !py-2">
+    <span className="inline-flex items-center gap-1.5" title={title}>
       <span
-        className={`w-3 h-3 rounded-[4px] flex-shrink-0 ${striped ? 'fee-stripes' : 'fee-solid'}`}
+        className={`w-2.5 h-2.5 rounded-[3px] flex-shrink-0 ${striped ? 'fee-stripes' : 'fee-solid'}`}
         style={{ ['--fee-c' as string]: color }}
       />
-      <span className="min-w-0">
-        <span className="block text-[15px] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
-        <span className="block text-[10.5px] font-semibold leading-tight text-slate-600">{label}</span>
-        <span className="hidden sm:block text-[10px] text-slate-400 truncate">{sub}</span>
-      </span>
-    </div>
+      <span className="font-bold text-slate-800">{value}</span>
+      <span>{label}</span>
+    </span>
   )
 }
 
@@ -661,7 +686,7 @@ function TripRow({ run: r, tally, selected, focused, onHover, onClick }: {
         onMouseEnter={onHover}
         onFocus={onHover}
         onClick={onClick}
-        className={`group w-full flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors ${
+        className={`group w-full flex items-center gap-2.5 sm:gap-3 rounded-xl px-2 sm:px-2.5 py-2 sm:py-2.5 text-left transition-colors ${
           selected ? 'bg-slate-100 ring-1 ring-slate-300' : focused ? 'bg-slate-100/70' : 'hover:bg-slate-50'
         } ${done ? 'opacity-70' : ''}`}
       >
@@ -693,9 +718,13 @@ function TripRow({ run: r, tally, selected, focused, onHover, onClick }: {
           <span className="block text-[10px] text-slate-400">{tally.dropped} dropped</span>
         </span>
 
-        <span className="flex-shrink-0 w-24 text-right">
-          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${status.cls}`}>
+        <span className="flex-shrink-0 sm:w-24 text-right">
+          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap ${status.cls}`}>
             {status.icon}{status.text}
+          </span>
+          {/* The rider count, which has its own column from sm up. */}
+          <span className="sm:hidden block text-[10.5px] font-semibold tabular-nums text-slate-500">
+            {tally.picked}/{tally.expected - tally.excused} · {tally.dropped} off
           </span>
           {late && !done && (
             <span className="block text-[11px] font-semibold text-amber-600">
@@ -804,31 +833,36 @@ const COLLECTED = '#10b981'
 const OUTSTANDING = '#f59e0b'
 
 /**
- * Collected against outstanding for each month of the academic year — the
+ * Collected against outstanding for each month, January to December — the
  * fee position as a shape rather than a total, so a month that never got
  * chased stands out.
+ *
+ * The months are the calendar year's (this year's, or the year the session
+ * starts in when the session does not reach this year); the bills counted are
+ * only those of the session on the banner. So in October a 2026-27 view
+ * fills April to December and leaves January to March for the bills the
+ * session has not reached yet.
  */
 function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
   const reduceMotion = useReducedMotion()
-  const [year, setYear] = useState(currentAcademicYear())
-  const [years, setYears] = useState<string[]>([currentAcademicYear()])
+  const session = useMaybeAcademicYear()?.year ?? null
   const [rows, setRows] = useState<MonthFeePosition[] | null>(null)
   const [hover, setHover] = useState<number | null>(null)
 
-  useEffect(() => { listBusAcademicYears().then(setYears) }, [])
+  const calYear = session ? chartYearFor(session) : new Date().getFullYear()
   useEffect(() => {
+    if (!session) {
+      setRows(calendarMonths(calYear).map(period => ({ period, billed: 0, collected: 0, outstanding: 0, bills: 0 })))
+      return
+    }
     let alive = true
     setRows(null)
-    fetchMonthlyBusFees(year).then(r => { if (alive) setRows(r) })
+    fetchMonthlyBusFees(session, calYear).then(r => { if (alive) setRows(r) })
     return () => { alive = false }
-  }, [year])
+  }, [session, calYear])
 
-  const sorted = useMemo(() => [...years].sort(), [years])
-  const idx = sorted.indexOf(year)
-  const older = idx > 0 ? sorted[idx - 1] : null
-  const newer = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null
-
-  const months = academicMonths(year)
+  const year = session?.code ?? ''
+  const months = calendarMonths(calYear)
   const max = Math.max(1, ...(rows ?? []).map(r => r.billed))
   const total = (rows ?? []).reduce((t, r) => ({
     billed: t.billed + r.billed, collected: t.collected + r.collected, outstanding: t.outstanding + r.outstanding,
@@ -845,22 +879,16 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
       delay={0.1}
       actions={
         <>
-          <div className="lg-pill flex items-center h-8 px-1" role="group" aria-label="Academic year">
-            <button onClick={() => older && setYear(older)} disabled={!older} className="w-6 h-6 rounded-full flex items-center justify-center text-slate-600 hover:bg-white disabled:opacity-30" aria-label="Previous year">
-              <ChevronLeft size={14} />
-            </button>
-            <span className="px-1.5 text-[12.5px] font-bold text-slate-800 tabular-nums">{year}</span>
-            <button onClick={() => newer && setYear(newer)} disabled={!newer} className="w-6 h-6 rounded-full flex items-center justify-center text-slate-600 hover:bg-white disabled:opacity-30" aria-label="Next year">
-              <ChevronRight size={14} />
-            </button>
-          </div>
-          <button onClick={onOpenFees} className={GBTN.primary}>
-            <Wallet size={14} /> Collect in Fees
+          <span className="lg-pill inline-flex items-center gap-1.5 h-8 px-3 text-[11.5px] font-semibold text-slate-600 tabular-nums" title={`Months of ${calYear}, bills of session ${year}`}>
+            <CalendarRange size={12} className="text-slate-400" /> Jan–Dec {calYear}
+          </span>
+          <button onClick={onOpenFees} className={`${GBTN.primary} !h-8`}>
+            <Wallet size={14} /> <span className="hidden sm:inline">Collect in Fees</span><span className="sm:hidden">Collect</span>
           </button>
         </>
       }
     >
-      <Content className="p-4 xl:p-5">
+      <Content className="p-3.5 xl:p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="flex items-baseline gap-2.5">
@@ -882,8 +910,8 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
           </div>
         </div>
 
-        <div className="relative mt-4 h-[200px] flex" onMouseLeave={() => setHover(null)}>
-          <div className="relative w-11 flex-shrink-0 text-[10px] text-slate-400 tabular-nums" aria-hidden>
+        <div className="relative mt-3 sm:mt-4 h-[170px] sm:h-[200px] flex" onMouseLeave={() => setHover(null)}>
+          <div className="relative w-9 sm:w-11 flex-shrink-0 text-[10px] text-slate-400 tabular-nums" aria-hidden>
             <div className="absolute inset-x-0 top-0 bottom-5">
               {total.billed > 0 && [1, 0.5, 0].map(f => (
                 <span key={f} className="absolute right-2 -translate-y-1/2 leading-none" style={{ top: `${(1 - f) * 100}%` }}>
@@ -898,7 +926,7 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
                 <span key={f} className={`absolute inset-x-0 border-t ${f === 1 ? 'border-slate-300' : 'border-dashed border-slate-200'}`} style={{ top: `${f * 100}%` }} />
               ))}
             </div>
-            <div className="absolute inset-0 grid grid-cols-12 gap-1">
+            <div className="absolute inset-0 grid grid-cols-12 gap-0.5 sm:gap-1">
               {months.map((p, i) => {
                 const row = rows?.[i]
                 const cH = row ? (row.collected / max) * 100 : 0
@@ -971,14 +999,14 @@ function FeeMonths({ onOpenFees }: { onOpenFees: () => void }) {
 
           {rows && total.billed === 0 && (
             <p className="absolute inset-x-0 top-1/3 text-center text-xs font-medium text-slate-400">
-              No bus fees billed in {year} yet — set fees and issue a month from Configuration.
+              No {year} bus fees billed in {calYear} yet — set fees and issue a month from Configuration.
             </p>
           )}
         </div>
 
         {rows && (
           <table className="sr-only">
-            <caption>Bus fees by month, {year}</caption>
+            <caption>Bus fees by month, {calYear}, session {year}</caption>
             <thead><tr><th>Month</th><th>Billed</th><th>Collected</th><th>Outstanding</th></tr></thead>
             <tbody>
               {rows.map(r => (

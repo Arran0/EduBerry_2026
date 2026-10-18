@@ -36,6 +36,10 @@ export const BUS = {
  *
  * The pointer moves the specular highlight exactly as the home deck does, so
  * the two pages feel like one material.
+ *
+ * On a phone the sheet runs edge to edge (`.lg-bleed`, globals.css): a
+ * floating card there gives up 32px of a 360px screen to two strips of page
+ * background, which is room every list and chart on these screens wants.
  */
 export function GlassPanel({
   eyebrow, title, icon: Icon, actions, children, className = '', bodyClassName = '', delay = 0,
@@ -61,7 +65,7 @@ export function GlassPanel({
   return (
     <div className={`relative ${className}`}>
       <motion.div
-        className="lg-deck lg-panel"
+        className="lg-deck lg-panel lg-bleed"
         onPointerMove={onPointerMove}
         // Slides, never fades: fading an element that carries backdrop-filter
         // is what makes Chrome flash black frames.
@@ -70,17 +74,19 @@ export function GlassPanel({
         transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: EASE, delay }}
       >
         {(title || actions) && (
-          <div className="relative z-[3] flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 pt-4 pb-3">
+          <div className="relative z-[3] flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 sm:px-5 pt-3 sm:pt-4 pb-2.5 sm:pb-3">
             <div className="flex items-center gap-3 min-w-0">
               {Icon && (
-                <div className="icon-chip w-9 h-9 flex-shrink-0" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
+                <div className="icon-chip w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
                   <Icon size={16} className="relative z-10 text-white drop-shadow-sm" />
                 </div>
               )}
               <div className="min-w-0">
-                {eyebrow && <p className="eyebrow text-slate-500 mb-1">{eyebrow}</p>}
+                {eyebrow && <p className="eyebrow text-slate-500 mb-0.5 sm:mb-1">{eyebrow}</p>}
+                {/* Line height and a little bottom padding hold the descenders
+                    (g, p, y) inside the box `truncate` clips to. */}
                 {title && (
-                  <h2 className="font-display text-[1.15rem] sm:text-[1.3rem] font-bold leading-none headline text-slate-900 truncate">
+                  <h2 className="font-display text-[1.1rem] sm:text-[1.3rem] font-bold leading-[1.2] pb-[0.12em] headline text-slate-900 truncate">
                     {title}
                   </h2>
                 )}
@@ -89,7 +95,7 @@ export function GlassPanel({
             {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
           </div>
         )}
-        <div className={`relative z-[3] px-2.5 sm:px-3 pb-3 ${!(title || actions) ? 'pt-3' : ''} ${bodyClassName}`}>
+        <div className={`relative z-[3] px-2 sm:px-3 pb-2 sm:pb-3 ${!(title || actions) ? 'pt-2 sm:pt-3' : ''} ${bodyClassName}`}>
           {children}
         </div>
       </motion.div>
@@ -128,9 +134,11 @@ export function CardHead({ icon: Icon, label, right, className = '' }: {
  * A glass capsule of buttons — the toolbar idiom. Each entry is a plain
  * button; the capsule is the material.
  */
-export function GlassButtonGroup({ items, className = '' }: {
+export function GlassButtonGroup({ items, className = '', compact = false }: {
   items: { key: string; label: string; icon?: LucideIcon; onClick: () => void; badge?: number | null; hideLabelOnMobile?: boolean }[]
   className?: string
+  /** On a phone: labels only, no icons, tighter — so the capsule shares its row. */
+  compact?: boolean
 }) {
   return (
     <div className={`lg-pill inline-flex items-center gap-0.5 p-1 ${className}`} role="toolbar">
@@ -140,9 +148,9 @@ export function GlassButtonGroup({ items, className = '' }: {
           <button
             key={it.key}
             onClick={it.onClick}
-            className="relative inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold text-slate-700 hover:bg-white hover:text-slate-900 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+            className={`relative inline-flex items-center gap-1.5 h-8 rounded-full font-semibold whitespace-nowrap ${compact ? 'px-2 sm:px-3 text-[11.5px] sm:text-[12.5px]' : 'px-3 text-[12.5px]'} text-slate-700 hover:bg-white hover:text-slate-900 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60`}
           >
-            {Icon && <Icon size={14} />}
+            {Icon && <Icon size={14} className={compact ? 'hidden sm:block' : ''} />}
             <span className={it.hideLabelOnMobile ? 'hidden sm:inline' : ''}>{it.label}</span>
             {it.badge ? (
               <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-[1.1rem] text-center tabular-nums">
@@ -240,7 +248,12 @@ export function GlassTileButton({ icon: Icon, label, detail, onClick, status }: 
 }
 
 /** The Live indicator capsule from the home overview. */
-export function LiveDot({ label = 'Live', tone = 'live' }: { label?: string; tone?: 'live' | 'idle' }) {
+export function LiveDot({ label = 'Live', tone = 'live', hideLabelOnMobile = false }: {
+  label?: string
+  tone?: 'live' | 'idle'
+  /** On a phone the dot alone carries it; the colour already says live or idle. */
+  hideLabelOnMobile?: boolean
+}) {
   const live = tone === 'live'
   return (
     <span className="flex items-center gap-1.5">
@@ -248,7 +261,7 @@ export function LiveDot({ label = 'Live', tone = 'live' }: { label?: string; ton
         {live && <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60" />}
         <span className={`relative w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-500' : 'bg-slate-400'}`} />
       </span>
-      <span className={`text-[10.5px] font-bold ${live ? 'text-emerald-700' : 'text-slate-500'}`}>{label}</span>
+      <span className={`text-[10.5px] font-bold ${live ? 'text-emerald-700' : 'text-slate-500'} ${hideLabelOnMobile ? 'hidden sm:inline' : ''}`}>{label}</span>
     </span>
   )
 }
@@ -275,8 +288,8 @@ export function EmptyNote({ icon: Icon, title, detail, action }: {
   action?: React.ReactNode
 }) {
   return (
-    <div className="px-4 py-10 text-center">
-      <div className="mx-auto mb-2.5 w-11 h-11 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+    <div className="px-4 py-6 sm:py-10 text-center">
+      <div className="mx-auto mb-2 sm:mb-2.5 w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
         <Icon size={20} />
       </div>
       <p className="text-sm font-semibold text-slate-700">{title}</p>

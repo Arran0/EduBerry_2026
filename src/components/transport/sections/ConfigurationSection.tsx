@@ -18,12 +18,13 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, Bus, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Plus, Search,
+  AlertTriangle, Bus, Copy, IdCard, IndianRupee, MapPin, MessageCircle, Pencil, Plus, Search,
   Map as MapIcon, Radio, Route as RouteIcon, School, ScanLine, ShieldCheck, SlidersHorizontal, Trash2, Users,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fmtINR } from '@/lib/formatMoney'
-import { fetchRouteCounts, fetchRoutes, fetchRouteSearchIndex, type RouteSearchIndex } from '@/lib/transport/routes'
+import { copyRoutesToYear, fetchRouteCounts, fetchRoutes, fetchRouteSearchIndex, type RouteSearchIndex } from '@/lib/transport/routes'
+import { useMaybeAcademicYear } from '@/contexts/AcademicYearContext'
 import { complianceWarnings, deleteVehicle, fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import { deleteTransportStaff, fetchCrewCandidates, fetchTransportStaff } from '@/lib/transport/staff'
 import { currentPeriod, previewBills, type BillableRider } from '@/lib/transport/fees'
@@ -50,6 +51,12 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
   routeId: string | null
   onRouteChange: (routeId: string | null) => void
 }) {
+  // Routes, their riders and the billing preview are the banner session's.
+  // Buses, drivers and the connection settings are the school's, shared by
+  // every session.
+  const yearScope = useMaybeAcademicYear()
+  const session = yearScope?.year ?? null
+  const yearId = session?.id ?? null
   const [routes, setRoutes] = useState<TransportRoute[]>([])
   const [counts, setCounts] = useState<{ stops: Record<string, number>; students: Record<string, number> }>({ stops: {}, students: {} })
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
@@ -83,11 +90,11 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
   useEffect(() => { selectedRef.current = selectedId }, [selectedId])
 
   const loadRoutes = useCallback(async () => {
-    const [r, c, ix] = await Promise.all([fetchRoutes(true), fetchRouteCounts(), fetchRouteSearchIndex()])
+    const [r, c, ix] = await Promise.all([fetchRoutes(true, yearId), fetchRouteCounts(), fetchRouteSearchIndex()])
     setRoutes(r); setCounts(c); setIndex(ix)
     const cur = selectedRef.current
     if (!cur || !r.some(x => x.id === cur)) setSelectedId(r.find(x => !x.archived_at)?.id ?? r[0]?.id ?? null)
-  }, [setSelectedId])
+  }, [setSelectedId, yearId])
 
   const loadFleet = useCallback(async () => {
     const [v, c, cand] = await Promise.all([fetchVehicles(), fetchTransportStaff(), fetchCrewCandidates()])
@@ -102,12 +109,34 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
   }, [settingsVersion])
 
   const loadBilling = useCallback(async () => {
-    setBilling(await previewBills(currentPeriod()))
-  }, [])
+    setBilling(await previewBills(currentPeriod(), undefined, yearId))
+  }, [yearId])
 
   useEffect(() => {
+    setLoading(true)
     Promise.all([loadRoutes(), loadFleet(), loadBilling()]).then(() => setLoading(false))
   }, [loadRoutes, loadFleet, loadBilling])
+
+  // A session with no routes yet can start from another session's network.
+  const copySources = (yearScope?.years ?? []).filter(y => y.id !== yearId)
+  const [copyFrom, setCopyFrom] = useState<string>('')
+  useEffect(() => {
+    const prefer = yearScope?.activeYear && yearScope.activeYear.id !== yearId ? yearScope.activeYear.id : copySources[0]?.id
+    setCopyFrom(prefer ?? '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearId, yearScope?.years.length])
+  const [copying, setCopying] = useState(false)
+  const copyRoutes = async () => {
+    if (!yearId || !copyFrom) return
+    const from = copySources.find(y => y.id === copyFrom)
+    if (!confirm(`Copy every running route of ${from?.code ?? 'that session'} — stops, fees, schedules and riders — into ${session?.code}?`)) return
+    setCopying(true)
+    const res = await copyRoutesToYear(copyFrom, yearId)
+    setCopying(false)
+    if (!res.success) { alert(res.error ?? 'Could not copy the routes'); return }
+    if (!res.copied) alert(`${from?.code ?? 'That session'} has no running routes to copy.`)
+    await Promise.all([loadRoutes(), loadBilling()])
+  }
 
   const onRouteChanged = useCallback(() => { loadRoutes(); loadBilling() }, [loadRoutes, loadBilling])
 
@@ -163,8 +192,8 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
 
       {/* ── Routes ────────────────────────────────────────────────── */}
       <div ref={routesRef} className="relative z-20 scroll-mt-4">
-      <GlassPanel eyebrow="Routes & trips" title="Routes" icon={RouteIcon} delay={0.04}>
-        <div className="px-0.5 pb-3">
+      <GlassPanel eyebrow={session ? `Routes & trips · ${session.code}` : 'Routes & trips'} title="Routes" icon={RouteIcon} delay={0.04}>
+        <div className="px-0.5 pb-2 sm:pb-3">
           {loading ? (
             <div className="h-10 rounded-full bg-white/60 animate-pulse" />
           ) : (
@@ -199,9 +228,24 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
           <Content>
             <EmptyNote
               icon={RouteIcon}
-              title="No routes yet"
-              detail="A route runs one way — to school or from school — with its own stops, bus, driver, schedule and riders. Create the first one."
-              action={<button className={GBTN.primary} onClick={() => setNewRoute(true)}><Plus size={14} /> New route</button>}
+              title={session ? `No routes in ${session.code} yet` : 'No routes yet'}
+              detail="A route runs one way — to school or from school — with its own stops, bus, driver, schedule and riders. Create the first one, or carry another session's routes over."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button className={GBTN.primary} onClick={() => setNewRoute(true)}><Plus size={14} /> New route</button>
+                  {copySources.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <select value={copyFrom} onChange={e => setCopyFrom(e.target.value)} aria-label="Session to copy from"
+                        className={`${GINPUT} !w-auto !h-9 !rounded-full pr-7 text-[12.5px] font-semibold`}>
+                        {copySources.map(y => <option key={y.id} value={y.id}>{y.code}</option>)}
+                      </select>
+                      <button className={GBTN.secondary} onClick={copyRoutes} disabled={copying || !copyFrom}>
+                        <Copy size={14} /> {copying ? 'Copying…' : 'Copy routes'}
+                      </button>
+                    </span>
+                  )}
+                </div>
+              }
             />
           </Content>
         )}
@@ -331,6 +375,7 @@ export default function ConfigurationSection({ onOpenPanel, routeId, onRouteChan
       {newRoute && (
         <RouteFormModal
           route={null}
+          yearId={yearId}
           vehicles={vehicles}
           crew={crew}
           onClose={() => setNewRoute(false)}
@@ -374,10 +419,10 @@ function Tile({ icon: Icon, value, label, sub, tone, detail, align = 'left' }: {
 }) {
   return (
     <div className="group relative min-w-0" tabIndex={detail ? 0 : undefined}>
-      <div className={`lg-content flex items-center gap-3 p-3 min-w-0 ${detail ? 'cursor-help' : ''}`}>
-        <span className="fee-mini-icon !w-9 !h-9 !rounded-xl"><Icon size={16} /></span>
+      <div className={`lg-content flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 min-w-0 ${detail ? 'cursor-help' : ''}`}>
+        <span className="fee-mini-icon !w-8 !h-8 sm:!w-9 sm:!h-9 !rounded-xl flex-shrink-0"><Icon size={15} /></span>
         <span className="min-w-0">
-          <span className="block font-display text-[1.25rem] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
+          <span className="block font-display text-[1.1rem] sm:text-[1.25rem] font-bold leading-tight text-slate-900 tabular-nums">{value}</span>
           <span className="block text-[11px] font-semibold text-slate-600 truncate">{label}</span>
           {sub && <span className={`block text-[10.5px] truncate ${tone === 'warn' ? 'font-semibold text-amber-700' : 'text-slate-400'}`}>{sub}</span>}
         </span>
@@ -420,7 +465,9 @@ function SearchList<T extends { id: string }>({ items, haystack, row, placeholde
           {q ? `${shown.length}/${items.length}` : items.length}
         </span>
       </div>
-      <div className="mt-2 h-[19rem] overflow-y-auto overscroll-contain -mx-1 px-1">
+      {/* A fixed height keeps the two lists level side by side; stacked on a
+          phone, a short list only takes the room it needs. */}
+      <div className="mt-2 max-h-[19rem] xl:h-[19rem] overflow-y-auto overscroll-contain -mx-1 px-1">
         {loading ? <RowSkeletons /> : items.length === 0 ? empty : shown.length === 0 ? (
           <p className="py-8 text-center text-xs text-slate-500">Nothing matches “{q}”.</p>
         ) : (

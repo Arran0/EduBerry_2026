@@ -122,16 +122,26 @@ export function pct(value: number | null | undefined): string {
   return value == null ? '—' : `${value}%`
 }
 
-/** The last N days, as the {from, to} every report takes. */
-export function windowOf(days: number): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date(to.getTime() - (days - 1) * 86_400_000)
+/**
+ * The last N days, as the {from, to} every report takes.
+ *
+ * With a session, the window is kept inside it: it ends on the session's last
+ * day when that has passed, and never reaches back before its first. So "last
+ * 30 days" of a past session is that session's final month.
+ */
+export function windowOf(
+  days: number,
+  session?: { starts_on: string; ends_on: string } | null,
+): { from: string; to: string } {
   const iso = (d: Date) => d.toLocaleDateString('en-CA')
-  return { from: iso(from), to: iso(to) }
+  let to = iso(new Date())
+  if (session && session.ends_on < to) to = session.ends_on
+  let from = iso(new Date(new Date(`${to}T12:00:00`).getTime() - (days - 1) * 86_400_000))
+  if (session && from < session.starts_on) from = session.starts_on
+  return { from, to }
 }
 
 export const REPORT_WINDOWS: { days: number; label: string }[] = [
   { days: 7, label: 'Last 7 days' },
   { days: 30, label: 'Last 30 days' },
-  { days: 90, label: 'This term' },
 ]

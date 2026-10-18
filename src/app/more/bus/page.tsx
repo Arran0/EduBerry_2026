@@ -17,6 +17,8 @@ import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { ADMIN } from '@/components/bus/adminUI'
 import Modal from '@/components/transport/BusModal'
 import { GlassSegments } from '@/components/transport/glass'
+import YearToggle from '@/components/transport/YearToggle'
+import { AcademicYearProvider } from '@/contexts/AcademicYearContext'
 const PayFeeModal          = dynamic(() => import('@/components/bus/PayFeeModal'))
 const OperationsSection = dynamic(() => import('@/components/transport/sections/OperationsSection'))
 const ConfigurationSection = dynamic(() => import('@/components/transport/sections/ConfigurationSection'))
@@ -59,7 +61,7 @@ function BusPageContent() {
     <ProtectedLayout>
       <div data-page-theme="bus">
         {isAdmin
-          ? <AdminBusHub />
+          ? <AcademicYearProvider><AdminBusHub /></AcademicYearProvider>
           : (
             /*
              * Parents and students see an under-construction notice for now.
@@ -221,6 +223,7 @@ function AdminBusHub() {
         title="Transport"
         subtitle="Live fleet, boarding, routes, fees & crew"
         isAdmin
+        actions={<YearToggle />}
         onEditingChange={setBannerEditing}
         maxWidth={ADMIN.shellWidth}
         backgroundIcon={<Bus size={150} className="text-white" />}
@@ -230,14 +233,16 @@ function AdminBusHub() {
         {/* Everything but the banner fades while the banner is being edited */}
         <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
 
-          {/* Tab switch — a glass segmented control, overlapping the banner */}
-          <div className="relative z-10 -mt-6 sm:-mt-7 mb-6 flex justify-center sm:justify-start">
+          {/* Tab switch — overlapping the banner. Solid, not glass: through a
+              translucent control the banner photo shows as noise behind the
+              labels. */}
+          <div className="relative z-10 -mt-6 sm:-mt-7 mb-4 sm:mb-6 flex justify-center sm:justify-start">
             <GlassSegments
               layoutId="bus-hub-tab"
               items={SECTIONS}
               value={section}
               onChange={selectSection}
-              className="!bg-white/75 shadow-[0_12px_30px_-14px_rgba(15,23,42,.45)]"
+              className="!bg-white ring-1 ring-black/[.06] shadow-[0_14px_30px_-12px_rgba(15,23,42,.55)]"
             />
           </div>
 

@@ -103,6 +103,11 @@ export function AcademicYearProvider({ children }: { children: React.ReactNode }
   )
 }
 
+/** The year scope when a provider is above, else null — for components also used outside one. */
+export function useMaybeAcademicYear(): AcademicYearContextValue | null {
+  return useContext(AcademicYearContext)
+}
+
 export function useAcademicYear(): AcademicYearContextValue {
   const ctx = useContext(AcademicYearContext)
   if (!ctx) {

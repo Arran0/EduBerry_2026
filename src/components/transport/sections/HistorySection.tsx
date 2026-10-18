@@ -18,12 +18,15 @@ import { formatDelay } from '@/lib/transport/reports'
 import { vehicleLabel } from '@/lib/transport/vehicles'
 import { DIRECTION_LABELS, RUN_STATUS_LABELS, type TransportRoute, type TransportRun } from '@/lib/transport/types'
 import ReplayPlayer from '../ReplayPlayer'
+import { useMaybeAcademicYear } from '@/contexts/AcademicYearContext'
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toLocaleDateString('en-CA')
 }
 
 export default function HistorySection() {
+  const session = useMaybeAcademicYear()?.year ?? null
+  const yearId = session?.id ?? null
   const [routes, setRoutes] = useState<TransportRoute[]>([])
   const [runs, setRuns] = useState<TransportRun[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,14 +37,25 @@ export default function HistorySection() {
   const [replay, setReplay] = useState<RunReplay | null>(null)
   const [replayLoading, setReplayLoading] = useState(false)
 
-  useEffect(() => { fetchRoutes().then(setRoutes) }, [])
+  useEffect(() => { fetchRoutes(false, yearId).then(setRoutes) }, [yearId])
+
+  // A session that has ended opens on its own last fortnight, not on today's.
+  useEffect(() => {
+    if (!session) return
+    const today = isoDaysAgo(0)
+    const end = session.ends_on < today ? session.ends_on : today
+    const start = new Date(new Date(`${end}T12:00:00`).getTime() - 13 * 86_400_000).toLocaleDateString('en-CA')
+    setTo(end)
+    setFrom(start < session.starts_on ? session.starts_on : start)
+    setRouteId('')
+  }, [session])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const rows = await fetchRunHistory({ from, to, routeId: routeId || null })
+    const rows = await fetchRunHistory({ from, to, routeId: routeId || null, yearId })
     setRuns(rows)
     setLoading(false)
-  }, [from, to, routeId])
+  }, [from, to, routeId, yearId])
 
   useEffect(() => { load() }, [load])
 

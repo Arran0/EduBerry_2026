@@ -27,6 +27,7 @@ import {
   type GpsHealthRow, type MismatchRow, type OnTimeRow, type StopDelayRow, type UtilisationRow,
 } from '@/lib/transport/reports'
 import { csvFile } from '@/lib/zip'
+import { useMaybeAcademicYear } from '@/contexts/AcademicYearContext'
 import { downloadBlob } from '@/lib/transport/gtfs'
 import { DIRECTION_LABELS } from '@/lib/transport/types'
 
@@ -41,6 +42,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export default function ReportsSection() {
+  const session = useMaybeAcademicYear()?.year ?? null
   const [days, setDays] = useState(30)
   const [tab, setTab] = useState<Tab>('ontime')
   const [loading, setLoading] = useState(true)
@@ -53,7 +55,7 @@ export default function ReportsSection() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { from, to } = windowOf(days)
+    const { from, to } = windowOf(days, session)
     // Five independent reads, fired together: the summary strip shows figures
     // from more than one of them, so loading them per tab would mean the strip
     // filled in as the admin clicked around.
@@ -66,7 +68,7 @@ export default function ReportsSection() {
     ])
     setOntime(a); setUtil(b); setStops(c); setGps(d); setMismatch(e)
     setLoading(false)
-  }, [days])
+  }, [days, session])
 
   useEffect(() => { load() }, [load])
 
@@ -88,7 +90,7 @@ export default function ReportsSection() {
   const riderTotal = riderBoarded + riderExcused + riderNoShow
 
   const exportCsv = () => {
-    const { from, to } = windowOf(days)
+    const { from, to } = windowOf(days, session)
     const spec: Record<Tab, { header: string[]; rows: Record<string, unknown>[]; name: string }> = {
       ontime: {
         name: 'on-time',

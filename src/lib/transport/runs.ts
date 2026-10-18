@@ -66,12 +66,14 @@ export async function fetchActiveRuns(): Promise<TransportRun[]> {
  * Every run on today's service date, finished ones included — the operations
  * trip list, where a completed trip still has a rider count worth showing.
  */
-export async function fetchTodayRuns(): Promise<TransportRun[]> {
-  const { data, error } = await supabase
+export async function fetchTodayRuns(yearId?: string | null): Promise<TransportRun[]> {
+  let q = supabase
     .from('transport_trip_runs')
     .select(RUN_SELECT)
     .eq('service_date', todayISO())
     .order('scheduled_start_at', { ascending: true })
+  if (yearId) q = q.eq('academic_year_id', yearId)
+  const { data, error } = await q
   if (error) { console.error('fetchTodayRuns failed:', error); return [] }
   return (data as unknown as TransportRun[]) || []
 }
@@ -180,8 +182,9 @@ export const OPEN_ALERTS_PAGE = 10
 export async function fetchOpenAlerts(
   limit: number = OPEN_ALERTS_PAGE,
   offset: number = 0,
+  yearId?: string | null,
 ): Promise<{ alerts: TransportAlert[]; total: number }> {
-  const { data, error, count } = await supabase
+  let q = supabase
     .from('transport_alerts')
     .select(`*,
       route:transport_routes!route_id(id, name, code, color),
@@ -191,6 +194,8 @@ export async function fetchOpenAlerts(
     .order('first_seen_at', { ascending: false })
     .order('id', { ascending: false })
     .range(offset, offset + limit - 1)
+  if (yearId) q = q.eq('academic_year_id', yearId)
+  const { data, error, count } = await q
   if (error) { console.error('fetchOpenAlerts failed:', error); return { alerts: [], total: 0 } }
   return { alerts: (data as unknown as TransportAlert[]) || [], total: count ?? 0 }
 }
@@ -426,12 +431,14 @@ export async function raiseIncident(
     : { success: false, error: res?.error ?? 'Could not raise the alarm' }
 }
 
-export async function fetchIncidents(limit = 50): Promise<TransportIncident[]> {
-  const { data, error } = await supabase
+export async function fetchIncidents(limit = 50, yearId?: string | null): Promise<TransportIncident[]> {
+  let q = supabase
     .from('transport_incidents')
     .select('*')
     .order('occurred_at', { ascending: false })
     .limit(limit)
+  if (yearId) q = q.eq('academic_year_id', yearId)
+  const { data, error } = await q
   if (error) { console.error('fetchIncidents failed:', error); return [] }
   return (data as TransportIncident[]) || []
 }

@@ -11,9 +11,11 @@ import { Field, FormError, FormGrid, ModalFooter, Select, TextArea, TextInput } 
 const COLORS = ['#F97316', '#0EA5E9', '#8B5CF6', '#10B981', '#EF4444', '#EAB308', '#EC4899', '#64748B']
 
 export default function RouteFormModal({
-  route, vehicles, crew, onClose, onSaved,
+  route, vehicles, crew, onClose, onSaved, yearId,
 }: {
   route: TransportRoute | null
+  /** The session a new route is created in — the one chosen on the banner. */
+  yearId?: string | null
   vehicles: TransportVehicle[]
   crew: TransportStaff[]
   onClose: () => void
@@ -57,7 +59,7 @@ export default function RouteFormModal({
       onSaved(route.id)
       return
     }
-    const res = await createRoute(payload)
+    const res = await createRoute(yearId ? { ...payload, academic_year_id: yearId } : payload)
     setSaving(false)
     if (!res.success) { setError(res.error ?? 'Could not save the route'); return }
     onSaved(res.id)

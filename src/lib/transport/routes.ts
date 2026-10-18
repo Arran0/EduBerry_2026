@@ -20,12 +20,28 @@ const ROUTE_SELECT = `*,
   default_driver:profiles!default_driver_id(${PROFILE_COLS}),
   default_attendant:profiles!default_attendant_id(${PROFILE_COLS})`
 
-export async function fetchRoutes(includeArchived = false): Promise<TransportRoute[]> {
+/** Routes of one academic session (`yearId`), or of every session when it is omitted. */
+export async function fetchRoutes(includeArchived = false, yearId?: string | null): Promise<TransportRoute[]> {
   let q = supabase.from('transport_routes').select(ROUTE_SELECT).order('name', { ascending: true })
   if (!includeArchived) q = q.is('archived_at', null)
+  if (yearId) q = q.eq('academic_year_id', yearId)
   const { data, error } = await q
   if (error) { console.error('fetchRoutes failed:', error); return [] }
   return (data as unknown as TransportRoute[]) || []
+}
+
+/**
+ * Carry a session's running routes — stops, stop fees, paths, schedules and
+ * current riders — into another session (transport_copy_year). Routes already
+ * in the target session are left alone, so it is safe to run twice.
+ */
+export async function copyRoutesToYear(
+  fromYearId: string,
+  toYearId: string,
+): Promise<{ success: boolean; copied?: number; error?: string }> {
+  const { data, error } = await supabase.rpc('transport_copy_year', { p_from: fromYearId, p_to: toYearId })
+  if (error) { console.error('copyRoutesToYear failed:', error); return { success: false, error: error.message } }
+  return { success: true, copied: Number(data) || 0 }
 }
 
 export async function fetchRoute(routeId: string): Promise<TransportRoute | null> {

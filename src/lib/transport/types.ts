@@ -161,6 +161,8 @@ export interface TransportRoute {
   settings: Record<string, unknown>
   active: boolean
   archived_at: string | null
+  /** The academic session the route belongs to (transport_r7). */
+  academic_year_id?: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -188,6 +190,8 @@ export interface RouteInput {
   default_driver_id?: string | null
   default_attendant_id?: string | null
   active?: boolean
+  /** The session the route belongs to; the database fills today's when omitted. */
+  academic_year_id?: string | null
 }
 
 // ── Stops ───────────────────────────────────────────────────────────────────

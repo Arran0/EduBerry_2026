@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../supabase', () => ({ supabase: {} }))
 
-import { academicMonths, resolveRiderFee, riderStopId, type StopFee } from './fees'
+import { academicMonths, calendarMonths, chartYearFor, resolveRiderFee, riderStopId, type StopFee } from './fees'
 
 const grid: Record<string, StopFee> = {
   near: { stop_id: 'near', route_id: 'r', amount: 800 },
@@ -60,5 +60,26 @@ describe('academicMonths', () => {
     expect(m[8]).toBe('2026-12')
     expect(m[9]).toBe('2027-01')
     expect(m[11]).toBe('2027-03')
+  })
+})
+
+describe('calendarMonths', () => {
+  it('runs January to December', () => {
+    const m = calendarMonths(2026)
+    expect(m).toHaveLength(12)
+    expect(m[0]).toBe('2026-01')
+    expect(m[11]).toBe('2026-12')
+  })
+})
+
+describe('chartYearFor', () => {
+  const s2627 = { starts_on: '2026-04-01', ends_on: '2027-03-31' }
+  it('shows this year while the session reaches into it', () => {
+    expect(chartYearFor(s2627, new Date(2026, 9, 18))).toBe(2026)
+    expect(chartYearFor(s2627, new Date(2027, 1, 2))).toBe(2027)
+  })
+  it('shows the starting year of a session that does not reach this year', () => {
+    expect(chartYearFor({ starts_on: '2024-04-01', ends_on: '2025-03-31' }, new Date(2026, 9, 18))).toBe(2024)
+    expect(chartYearFor({ starts_on: '2027-04-01', ends_on: '2028-03-31' }, new Date(2026, 9, 18))).toBe(2027)
   })
 })
