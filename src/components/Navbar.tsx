@@ -273,7 +273,7 @@ export default function Navbar() {
         <>
           {/* Backdrop \u2014 clicks outside the panel close the menu */}
           <div
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-40 bg-black/35 md:hidden"
             onClick={() => { setMobileMenuOpen(false); setActiveDropdown(null) }}
           />
           {/* Panel \u2014 sibling to backdrop so touch events never reach it */}

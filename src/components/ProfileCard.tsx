@@ -885,6 +885,9 @@ export default function ProfileCard() {
     // another before the first has left would otherwise mount both at once,
     // stacking two backdrops into a visible double-darkening. The exits below
     // are short tweens, so waiting for one costs a frame or two.
+    // profile-card-portal: the globals.css safety net that keeps every
+    // backdrop-filter out of the card (the cause of the black blink).
+    <div className="profile-card-portal">
     <AnimatePresence mode="wait">
       {activeSupport ? (
         <SupportStaffCardModal
@@ -900,7 +903,8 @@ export default function ProfileCard() {
           onClose={closeProfileCard}
         />
       )}
-    </AnimatePresence>,
+    </AnimatePresence>
+    </div>,
     document.body
   )
 }

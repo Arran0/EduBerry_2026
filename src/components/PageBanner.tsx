@@ -173,16 +173,12 @@ export default function PageBanner({
         </div>
       )}
 
-      {/* Bottom blur merge */}
+      {/* Bottom merge — a soft light wash, no backdrop-filter (a blurred
+          strip under a popup is what Chrome draws black as it opens; see
+          globals.css, "No backdrop-filter in the glass materials"). */}
       <div
         className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
-        style={{
-          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
-        }}
+        style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.10))' }}
       />
 
       {/* Admin edit pencil – top-right of banner. The same chip as the home
@@ -193,7 +189,7 @@ export default function PageBanner({
         <button
           onClick={openEditor}
           aria-label="Customise banner"
-          className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 w-7 h-7 sm:w-11 sm:h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
+          className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 w-7 h-7 sm:w-11 sm:h-11 rounded-full bg-black/30 hover:bg-black/45 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:bg-black/45"
           title="Customise banner"
         >
           <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" aria-hidden="true" />
@@ -232,7 +228,7 @@ export default function PageBanner({
                 {icon}
               </div>
             ) : (
-              <div className={`p-3 backdrop-blur-sm rounded-2xl border flex-shrink-0 transition-colors duration-300 ${iconBoxClass} ${onDark ? '' : '[&_svg]:!text-slate-800'}`}>
+              <div className={`p-3 rounded-2xl border flex-shrink-0 transition-colors duration-300 ${iconBoxClass} ${onDark ? '' : '[&_svg]:!text-slate-800'}`}>
                 {icon}
               </div>
             )}
@@ -277,7 +273,7 @@ export default function PageBanner({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
+            className="overflow-hidden border-t border-white/20 bg-black/45"
           >
             <div className={`${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 py-4`}>
               <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">

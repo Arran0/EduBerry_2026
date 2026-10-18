@@ -104,7 +104,7 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
   if (!user) {
     if (sessionExpired) {
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60">
           <div className="bg-white rounded-3xl shadow-2xl p-8 mx-4 max-w-sm w-full text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-50 flex items-center justify-center">
               <Clock size={32} className="text-amber-500" />

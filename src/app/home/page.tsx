@@ -1665,7 +1665,7 @@ export default function HomePage() {
               {isAdmin && (
                 <label
                   title="Change welcome banner"
-                  className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all focus-within:ring-2 focus-within:ring-white/90 focus-within:bg-black/45"
+                  className="absolute top-2 right-2 z-20 w-11 h-11 rounded-full bg-black/30 hover:bg-black/45 flex items-center justify-center cursor-pointer transition-all focus-within:ring-2 focus-within:ring-white/90 focus-within:bg-black/45"
                 >
                   <Pencil size={14} className="text-white" aria-hidden="true" />
                   <input
@@ -1681,17 +1681,25 @@ export default function HomePage() {
                 </label>
               )}
 
-              {/* Layer 1 — progressive backdrop blur */}
-              <div
-                className="absolute inset-x-0 bottom-0"
-                style={{
-                  height: '30%',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 40%)',
-                }}
-              />
+              {/* Layer 1 — progressive blur at the foot of the photo. Drawn as a
+                  blurred copy of the photo (a plain filter), masked to the
+                  bottom 30%, rather than a backdrop-filter: a backdrop-filtered
+                  layer under a popup or the profile card is what Chrome draws
+                  black for a frame as the popup opens (see globals.css, "No
+                  backdrop-filter in the glass materials"). Same look. */}
+              {welcomeBanner && (
+                <div
+                  aria-hidden
+                  className="absolute inset-0 overflow-hidden pointer-events-none"
+                  style={{
+                    maskImage: 'linear-gradient(to bottom, transparent 70%, black 82%)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, transparent 70%, black 82%)',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={welcomeBanner} alt="" className="absolute inset-0 w-full h-full object-cover scale-110" style={{ filter: 'blur(20px)' }} />
+                </div>
+              )}
 
               {/* Layer 3 — graduated dark scrim for dark photos, so the
                   greeting always clears the WCAG contrast bar. */}

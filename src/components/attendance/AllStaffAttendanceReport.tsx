@@ -1002,7 +1002,10 @@ export default function AllStaffAttendanceReport({
       </div>
 
       {/* The records — the only part that scrolls */}
-      <div className="px-3 sm:px-4 pt-3 pb-3 sm:pb-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+      {/* No overscroll containment: once the list hits its top or bottom, the
+          rest of the gesture scrolls the page, so a report filling the screen
+          never traps the scroll. */}
+      <div className="px-3 sm:px-4 pt-3 pb-3 sm:pb-4 flex-1 min-h-0 overflow-y-auto">
         {loading || teamLoading ? (
           <ReportListSkeleton />
         ) : (

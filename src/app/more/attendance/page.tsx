@@ -1177,7 +1177,7 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     // phone) — so the controls stay put and only the records scroll.
     <section
       id={REPORT_ANCHOR}
-      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc((100dvh-9.5rem)*1.5)] sm:h-[calc((100dvh-5.5rem)*1.5)] min-h-[45rem]"
+      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc(100dvh-9.5rem)] sm:h-[calc(100dvh-5.5rem)] min-h-[26rem]"
     >
       <div className="relative flex flex-col flex-1 min-h-0">
         {/* ── Header: what this is, which way it is cut, and which day ── */}
@@ -1335,7 +1335,10 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
 
                 <div
                   ref={el => { if (el) scrollRef.current = el }}
-                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2.5 sm:px-3 pb-2.5 sm:pb-3"
+                  // No overscroll containment: at the list's top or bottom the
+                  // gesture carries on into the page, so a screen-filling
+                  // report never traps the scroll.
+                  className="flex-1 min-h-0 overflow-y-auto px-2.5 sm:px-3 pb-2.5 sm:pb-3"
                 >
                   {/* ── Homeroom-wise ── */}
                   {view === 'homeroom' ? (

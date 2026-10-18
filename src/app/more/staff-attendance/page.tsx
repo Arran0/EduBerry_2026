@@ -47,7 +47,7 @@ const StaffLeaveModal = dynamic(() => import('@/components/leave/StaffLeaveModal
   ssr: false,
   // Covers the gap while the chunk arrives, so the button feels like it fired.
   loading: () => (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 backdrop-blur-md">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45">
       <div className="spinner" />
     </div>
   ),
@@ -282,15 +282,17 @@ export default function StaffAttendancePage() {
               />
             </motion.div>
 
-            {/* A fixed-height box, one and a half screens tall: switching
-                day, list or roster only changes what scrolls inside it — never
-                its height. -mx-2 claws back most of the phone gutter while
-                keeping the glass sheet's rounded edge in view. */}
+            {/* A fixed, one-screen box: scrolled to, the report fills the
+                screen under the navbar (and above the phone's bottom bar), and
+                switching day, list or roster only changes what scrolls inside
+                it — never its height. Its list hands the scroll back to the
+                page at either end. -mx-2 claws back most of the phone gutter
+                while keeping the glass sheet's rounded edge in view. */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-              className="-mx-2 sm:mx-0 h-[calc((100dvh-8.5rem)*1.5)] md:h-[calc((100dvh-5.5rem)*1.5)] min-h-[45rem]"
+              className="-mx-2 sm:mx-0 h-[calc(100dvh-8.5rem)] md:h-[calc(100dvh-5.5rem)] min-h-[26rem]"
             >
               <AllStaffAttendanceReport
                 viewerId={user.id}
