@@ -96,7 +96,7 @@ export default function AcademicYearSettings({ onChanged }: { onChanged?: () => 
   const ordered = [...years].sort((a, b) => a.starts_on.localeCompare(b.starts_on))
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {error && <Notice tone="error">{error}</Notice>}
 
       <FormGroup

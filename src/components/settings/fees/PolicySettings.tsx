@@ -60,7 +60,7 @@ export default function PolicySettings({ academicYearId }: { academicYearId: str
   if (loading) return <Loading />
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <FormGroup
         title="Taking payment"
         note="What the counter and the online payment page will accept."

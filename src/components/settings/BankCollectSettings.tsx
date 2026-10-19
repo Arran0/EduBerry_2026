@@ -140,7 +140,7 @@ export default function BankCollectSettings({ ctx }: Props) {
   const set = <K extends keyof BankCollectConfig>(key: K, value: BankCollectConfig[K]) => setCfg({ ...cfg, [key]: value })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <InfoNote tone="info">
         Shared site-wide with {isBus ? 'school fees' : 'bus fees'} — these are your school&apos;s own bank details,
         not server defaults. Fees land directly in your account.

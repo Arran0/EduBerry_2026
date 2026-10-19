@@ -78,12 +78,11 @@ export default function FeeSettingsPanel({ initialTab }: { initialTab?: PanelKey
         <ModalShell
           onClose={() => setOpen(null)}
           sharp
-          size="2xl"
+          size={open === 'permissions' ? '2xl' : 'xl'}
           title={active.label}
           subtitle={active.blurb}
           icon={<active.icon size={16} />}
           iconClassName={FEE_ICON}
-          minHClass="sm:min-h-[32rem]"
         >
           {open === 'permissions' && <PermissionMatrix />}
           {open === 'policies'    && <PolicySettings academicYearId={year?.id ?? null} />}

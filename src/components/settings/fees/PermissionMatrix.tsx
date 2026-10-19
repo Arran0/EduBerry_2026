@@ -95,21 +95,11 @@ export default function PermissionMatrix() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className={`${ADMIN.card} p-4`}>
-        <div className="flex items-start gap-3">
-          <ShieldCheck size={18} className="mt-0.5 flex-shrink-0" style={{ color: GOLD }} />
-          <div className="text-sm text-slate-600 leading-relaxed">
-            <p className="font-semibold text-slate-900 mb-1">28 switches, not one</p>
-            <p>
-              There is no single &ldquo;Fees&rdquo; permission. A front-desk clerk can be given
-              exactly &ldquo;look a student up, take the money, print the slip&rdquo; without also
-              being handed the price list and the power to reverse a completed payment.
-              A person&rsquo;s own setting always beats their role&rsquo;s.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <p className="flex items-start gap-2 text-[12.5px] text-slate-600 leading-snug">
+        <ShieldCheck size={15} className="mt-px flex-shrink-0" style={{ color: GOLD }} />
+        <span>Each fee power is its own switch. A person&rsquo;s own setting beats their role&rsquo;s.</span>
+      </p>
 
       {error && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg flex items-start gap-2">

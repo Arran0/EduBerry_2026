@@ -54,7 +54,7 @@ export default function NumberingSettingsPanel({
   if (loading) return <Loading />
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <FormGroup title="Every number starts with">
         <FormRow label="School code">
           <input value={value.school_code} maxLength={8}

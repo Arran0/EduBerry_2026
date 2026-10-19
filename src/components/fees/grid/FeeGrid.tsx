@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, Layers, Lock, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Layers, Lock, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { gradeLabel } from '@/lib/grades'
 import {
   NO_GRADE_LABEL, gridRows, indexLocks, indexRates, lockKey, rateKey, rowId,
@@ -122,6 +122,15 @@ export default function FeeGrid({
   }
 
   const tableRef = useRef<HTMLTableElement>(null)
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) setFull(false) }
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+  }, [full])
   /** Move to the same column `dr` rows away, stepping over split grades' header rows. */
   const focusCell = (r: number, c: number, dr: number) => {
     for (let k = r + dr; k >= 0 && k < rows.length; k += dr) {
@@ -144,27 +153,38 @@ export default function FeeGrid({
 
   /** Alternate terms sit on paper, so a wide grid still reads as blocks of columns. */
   const band = (b: number) => (b === terms.length ? 'bg-[#FAF8F2]' : b % 2 ? 'bg-[#FDFCF9]' : '')
-  const colW = (h: HeadRow) => (h.gender_split ? 'w-[156px] min-w-[156px]' : 'w-[104px] min-w-[104px]')
-  const HEAD1 = 'sticky top-0 z-20 bg-[#27272A] h-[40px] px-2.5 text-left align-middle border-r border-[#3F3F46]'
-  const HEAD2 = 'sticky top-[40px] z-20 bg-[#3F3F46] h-[28px] px-2.5 text-left align-middle border-r border-[#52525B]'
+  const colW = (h: HeadRow) => (h.gender_split ? 'w-[128px] min-w-[128px]' : 'w-[84px] min-w-[84px]')
+  const HEAD1 = 'sticky top-0 z-20 bg-[#F4F1E7] h-[34px] px-2.5 text-left align-middle border-r border-b border-[#E3DFD3]'
+  const HEAD2 = 'sticky top-[34px] z-20 bg-[#FAF8F2] h-[26px] px-2.5 text-left align-middle border-r border-b border-[#E3DFD3]'
 
   return (
-    <div className="fx-card fx-bleed min-w-0">
-      <div className="overflow-auto max-h-[calc(100dvh-180px)] min-h-[320px] overscroll-contain">
+    <div className={full ? 'fixed inset-0 z-[70] bg-white flex flex-col' : 'fx-card fx-bleed min-w-0'}>
+      <div className={`flex items-center gap-2 px-3 py-1.5 border-b ${RULE} bg-[#FAF8F2]`}>
+        <span className="text-[11.5px] font-semibold text-[#3F3F46]">
+          {rows.length} row{rows.length === 1 ? '' : 's'} · {columns.length} column{columns.length === 1 ? '' : 's'}
+        </span>
+        <button onClick={() => setFull(f => !f)}
+                title={full ? 'Leave full screen (Esc)' : 'Use the whole screen'}
+                className="ml-auto inline-flex items-center gap-1.5 h-7 px-2.5 border border-[#E3DFD3] bg-white text-[11.5px] font-semibold text-[#3F3F46] hover:border-[#B8983C]">
+          {full ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          <span className="hidden sm:inline">{full ? 'Exit' : 'Full screen'}</span>
+        </button>
+      </div>
+      <div className={`overflow-auto ${full ? 'flex-1 min-h-0' : 'max-h-[70dvh] min-h-[280px]'}`}>
         <table ref={tableRef} className="border-separate border-spacing-0 text-[12px] text-[#18181B] w-max min-w-full">
           <thead>
             <tr>
               <th rowSpan={2}
-                  className="sticky top-0 left-0 z-30 bg-[#27272A] w-[128px] min-w-[128px] sm:w-[184px] sm:min-w-[184px] px-3 text-left align-bottom pb-2 border-r border-[#3F3F46]">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#A1A1AA]">Grade</span>
+                  className="sticky top-0 left-0 z-30 bg-[#F4F1E7] w-[120px] min-w-[120px] sm:w-[156px] sm:min-w-[156px] px-3 text-left align-bottom pb-2 border-r border-b border-[#E3DFD3]">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8C8878]">Grade</span>
               </th>
               {terms.map(t => (
                 <th key={t.id} colSpan={Math.max(termHeads.length, 1)} className={HEAD1}>
                   <button onClick={() => onEditTerm(t)} disabled={!canEdit} className="text-left group">
-                    <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-white group-hover:text-[#B8983C] group-disabled:group-hover:text-white">
+                    <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#18181B] group-hover:text-[#8A6A12] group-disabled:group-hover:text-[#18181B]">
                       {t.name}
                     </span>
-                    <span className="block text-[10px] font-normal text-[#A1A1AA] tabular-nums">
+                    <span className="block text-[10px] font-normal text-[#8C8878] tabular-nums">
                       Due {shortDate(t.due_date)}
                       <TermState p={termProgress.get(t.id)} />
                     </span>
@@ -173,43 +193,43 @@ export default function FeeGrid({
               ))}
               {monthHeads.length > 0 && (
                 <th colSpan={monthHeads.length} className={HEAD1}>
-                  <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-white">Monthly</span>
-                  <span className="block text-[10px] font-normal text-[#A1A1AA]">Each month issued</span>
+                  <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#18181B]">Monthly</span>
+                  <span className="block text-[10px] font-normal text-[#8C8878]">Each month issued</span>
                 </th>
               )}
               <th rowSpan={2}
-                  className="sticky top-0 z-20 bg-[#27272A] min-w-[220px] px-2.5 text-left align-bottom pb-2">
-                <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-white">Other</span>
-                <span className="block text-[10px] font-normal text-[#A1A1AA]">One-off fees and fines</span>
+                  className="sticky top-0 z-20 bg-[#F4F1E7] min-w-[200px] border-b border-[#E3DFD3] px-2.5 text-left align-bottom pb-2">
+                <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#18181B]">Other</span>
+                <span className="block text-[10px] font-normal text-[#8C8878]">One-off fees and fines</span>
               </th>
             </tr>
             <tr>
               {termHeads.length === 0 && terms.map(t => (
                 <th key={t.id} className={`${HEAD2} min-w-[140px]`}>
-                  <span className="text-[9.5px] font-semibold text-[#A1A1AA] normal-case">No term-wise heads yet</span>
+                  <span className="text-[9.5px] font-semibold text-[#8C8878] normal-case">No term-wise heads yet</span>
                 </th>
               ))}
               {columns.map(col => (
                 <th key={col.key} className={`${HEAD2} ${colW(col.head)}`}>
                   <button onClick={() => onEditHead(col.head)} disabled={!canEdit}
-                          className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#E4E4E7] hover:text-[#B8983C] disabled:hover:text-[#E4E4E7] max-w-full">
+                          className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#3F3F46] hover:text-[#8A6A12] disabled:hover:text-[#3F3F46] max-w-full">
                     <span className="truncate">{col.head.name}</span>
                     {col.head.gender_split && (
                       <span className="text-[9px] tracking-normal flex-shrink-0">
-                        <span style={{ color: '#9DB0DD' }}>B</span><span className="text-[#71717A]">/</span><span style={{ color: '#E39BB3' }}>G</span>
+                        <span style={{ color: '#9DB0DD' }}>B</span><span className="text-[#A8A395]">/</span><span style={{ color: '#E39BB3' }}>G</span>
                       </span>
                     )}
                   </button>
                   {col.head.is_transport && (
                     <span title="Priced per route in Transport → Configuration"
-                          className="ml-1.5 align-middle inline-flex items-center border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#B8983C]">
+                          className="ml-1.5 align-middle inline-flex items-center border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#8A6A12]">
                       Per route
                     </span>
                   )}
                   {col.head.optional && (
                     <button onClick={() => onOptIns(col.head)}
                             title="Optional — billed only to students on its opt-in list. Open the list."
-                            className="ml-1.5 align-middle inline-flex items-center gap-1 border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#B8983C] hover:bg-[#B8983C] hover:text-[#27272A]">
+                            className="ml-1.5 align-middle inline-flex items-center gap-1 border border-[#B8983C] px-1 py-px text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#8A6A12] hover:bg-[#FAF3DF]">
                       Opt-in {optins.get(col.head.id)?.size ?? 0}
                     </button>
                   )}
@@ -237,7 +257,7 @@ export default function FeeGrid({
                 return (
                   <tr key={id}>
                     <th scope="row"
-                        className={`sticky left-0 z-10 text-left font-normal px-3 py-1.5 border-r border-b border-r-[#E3DFD3] border-b-[#E3DFD3] bg-[#F4F1E7] ${top}`}>
+                        className={`sticky left-0 z-10 text-left font-normal px-3 py-1 border-r border-b border-r-[#E3DFD3] border-b-[#E3DFD3] bg-[#F4F1E7] ${top}`}>
                       <button onClick={() => onSplit(grade)} disabled={!canEdit} className="w-full text-left group">
                         <span className="flex items-center gap-1.5">
                           <span className="text-[12.5px] font-bold text-[#18181B] truncate">{gradeLabel(grade)}</span>
@@ -270,7 +290,7 @@ export default function FeeGrid({
               return (
                 <tr key={id} className="group/row">
                   <th scope="row"
-                      className={`sticky left-0 z-10 text-left font-normal px-3 py-1 border-r border-b border-r-[#E3DFD3] border-b-[#F0ECE2] ${head} ${top}`}>
+                      className={`sticky left-0 z-10 text-left font-normal px-3 py-0.5 border-r border-b border-r-[#E3DFD3] border-b-[#F0ECE2] ${head} ${top}`}>
                     {group ? (
                       <button onClick={() => canEdit && onSplit(group.grade)} className="flex items-start gap-1.5 text-left w-full pl-2.5 border-l-2 border-[#B8983C]">
                         <span className="min-w-0">
@@ -444,12 +464,12 @@ function AmountCell({
   }
 
   const markEl = mark && (
-    <span className="pointer-events-none absolute left-1.5 top-1 text-[8.5px] font-bold" style={{ color: markColor }}>{mark}</span>
+    <span className="pointer-events-none absolute left-1 top-0.5 text-[8px] font-bold" style={{ color: markColor }}>{mark}</span>
   )
 
   if (locked) {
     return (
-      <div className="relative flex-1 min-w-0 flex items-center justify-end gap-1 h-[38px] px-2 text-[12px] tabular-nums text-[#1F6B42]"
+      <div className="relative flex-1 min-w-0 flex items-center justify-end gap-1 h-[30px] px-1.5 text-[11.5px] tabular-nums text-[#1F6B42]"
            title="Issued — undo the issue to change this">
         {markEl}
         <Lock size={9} className="flex-shrink-0 opacity-70" />
@@ -476,7 +496,7 @@ function AmountCell({
           if (e.key === 'ArrowDown') { e.preventDefault(); onNav(1) }
           if (e.key === 'ArrowUp') { e.preventDefault(); onNav(-1) }
         }}
-        className={`w-full h-[38px] bg-transparent text-right pr-2 ${mark ? 'pl-4' : 'pl-1.5'} text-[12px] tabular-nums
+        className={`w-full h-[30px] bg-transparent text-right pr-1.5 ${mark ? 'pl-4' : 'pl-1'} text-[11.5px] tabular-nums
                     placeholder:text-[#D6D2C4] focus:outline-none focus:bg-white focus:shadow-[inset_0_0_0_2px_#27272A]
                     hover:bg-[#FAF8F2] disabled:cursor-default
                     ${bad ? 'shadow-[inset_0_0_0_2px_#A93232] text-[#A93232]' : ''} ${saving ? 'opacity-50' : ''}`}

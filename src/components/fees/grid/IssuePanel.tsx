@@ -7,7 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Loader2, Lock, Send, Undo2 } from 'lucide-react'
+import { AlertTriangle, Bus, GraduationCap, Layers, Loader2, Lock, Send, Tags, Undo2 } from 'lucide-react'
+import { FilterMenu } from '@/components/fees/glass'
 import { ADMIN, INVOICE_CHIP } from '@/components/fees/ui'
 import { CELL, Col, List, ListHead, Row, Segmented, StatStrip } from '@/components/fees/shell'
 import { GRADE_OPTIONS, gradeShortLabel } from '@/lib/grades'
@@ -16,7 +17,7 @@ import {
   type Blocker, type GridRowKey, type GroupRow, type HeadRow, type IssueRow, type IssueSummary, type TermRow,
   type TransportIssueSummary,
 } from '@/lib/fees/grid'
-import { Aside, ErrorNote, FeeSheet, Field, Pick, rupees, shortDate } from './kit'
+import { Aside, ErrorNote, FeeSheet, Field, rupees, shortDate } from './kit'
 
 export type IssueMode = 'term' | 'month'
 
@@ -56,6 +57,8 @@ export function emptyScope(terms: TermRow[], months: string[]): IssueScope {
   }
 }
 
+const NO_GRADE = 'none'
+
 export function IssueBar({
   scope, setScope, terms, heads, groups, months, monthDue, canIssue, onReview, routes = [],
 }: {
@@ -78,19 +81,12 @@ export function IssueBar({
   const term = terms.find(t => t.id === scope.termId)
 
   const set = (patch: Partial<IssueScope>) => setScope({ ...scope, ...patch })
-  const toggle = (key: 'headIds' | 'rowIds' | 'routeIds', id: string) => {
-    const n = new Set(scope[key]); if (n.has(id)) n.delete(id); else n.add(id)
-    set({ [key]: n } as Partial<IssueScope>)
-  }
   const gradeRows = (g: number | null) => rows.filter(r => r.grade === g).map(rowId)
   const gradeOn = (g: number | null) => gradeRows(g).every(id => scope.rowIds.has(id))
-  const toggleGrade = (g: number | null) => {
-    const ids = gradeRows(g)
-    const n = new Set(scope.rowIds)
-    if (ids.every(id => n.has(id))) ids.forEach(id => n.delete(id)); else ids.forEach(id => n.add(id))
-    set({ rowIds: n })
-  }
   const groupedGrades = new Set(groups.filter(g => gradeOn(g.grade)).map(g => g.grade))
+  const gradeKeys = [...GRADE_OPTIONS.map(g => String(g.value)), NO_GRADE]
+  const groupRows = rows.filter(r => r.grade !== null && groupedGrades.has(r.grade))
+  const groupRowIds = groupRows.map(rowId)
 
   const ready = scope.mode === 'term' ? !!scope.termId : !!scope.month
   const period = scope.mode === 'term' ? term?.name ?? 'No term' : scope.month ? monthLabel(scope.month) : 'No month'
@@ -105,8 +101,6 @@ export function IssueBar({
     ...(bus && routes.length ? [scope.routeIds.size === 0 ? 'every route' : `${scope.routeIds.size} route${scope.routeIds.size === 1 ? '' : 's'}`] : []),
     `due ${due}`,
   ].join(' · ')
-
-  const label = `${ADMIN.label} w-[64px] flex-shrink-0`
 
   return (
     <section className="fx-card fx-bleed min-w-0">
@@ -146,55 +140,59 @@ export function IssueBar({
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
-          <span className={label}>Heads</span>
-          <Pick on={scope.headIds.size === 0} onClick={() => set({ headIds: new Set() })}>All</Pick>
-          {modeHeads.map(h => (
-            <Pick key={h.id} on={scope.headIds.has(h.id)} onClick={() => toggle('headIds', h.id)}>{h.name}</Pick>
-          ))}
-          {modeHeads.length === 0 && (
-            <span className="text-[13px] text-slate-500 ml-1">
+        <div className="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-[#F0ECE2]">
+          {modeHeads.length === 0 ? (
+            <span className="text-[13px] text-slate-500">
               No {scope.mode === 'term' ? 'term-wise' : 'monthly'} heads yet.
             </span>
+          ) : (
+            <FilterMenu
+              label="Fee heads" icon={Tags} allLabel="All" width={260}
+              value={Array.from(scope.headIds)}
+              onChange={v => set({ headIds: new Set(v) })}
+              options={modeHeads.map(h => ({ key: h.id, label: h.name }))}
+            />
+          )}
+          {bus && routes.length > 0 && (
+            <FilterMenu
+              label="Routes" icon={Bus} allLabel="All" width={280}
+              value={Array.from(scope.routeIds)}
+              onChange={v => set({ routeIds: new Set(v) })}
+              options={routes.map(r => ({
+                key: r.id,
+                label: `${r.code ? `${r.code} · ` : ''}${r.name} ${r.direction === 'inbound' ? '→ school' : '← school'}`,
+              }))}
+            />
+          )}
+          <FilterMenu
+            label="Grades" icon={GraduationCap} allLabel="All" width={220}
+            value={gradeKeys.filter(k => gradeOn(k === NO_GRADE ? null : Number(k)))}
+            onChange={v => {
+              const n = new Set(scope.rowIds)
+              for (const k of gradeKeys) {
+                const ids = gradeRows(k === NO_GRADE ? null : Number(k))
+                if (v.includes(k)) ids.forEach(id => n.add(id)); else if (ids.every(id => n.has(id))) ids.forEach(id => n.delete(id))
+              }
+              set({ rowIds: n })
+            }}
+            options={[...GRADE_OPTIONS.map(g => ({ key: String(g.value), label: gradeShortLabel(g.value) })), { key: NO_GRADE, label: 'No grade' }]}
+          />
+          {groupedGrades.size > 0 && (
+            <FilterMenu
+              label="Groups" icon={Layers} allLabel="All" width={260}
+              value={groupRowIds.filter(id => scope.rowIds.has(id))}
+              onChange={v => {
+                const n = new Set(scope.rowIds)
+                groupRowIds.forEach(id => (v.includes(id) ? n.add(id) : n.delete(id)))
+                set({ rowIds: n })
+              }}
+              options={groupRows.map(r => ({ key: rowId(r), label: rowLabel(r, groups) }))}
+            />
+          )}
+          {bus && routes.length > 0 && (
+            <span className="basis-full text-[12px] text-slate-500">The Bus fee is billed by route; grades do not apply to it.</span>
           )}
         </div>
-
-        {bus && routes.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
-            <span className={label} title="Which routes the Bus fee is billed for">Routes</span>
-            <Pick on={scope.routeIds.size === 0} onClick={() => set({ routeIds: new Set() })}>All</Pick>
-            {routes.map(r => (
-              <Pick key={r.id} on={scope.routeIds.has(r.id)} onClick={() => toggle('routeIds', r.id)}>
-                <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: r.color }} />
-                {r.code ? `${r.code} · ` : ''}{r.name}
-                <span className="ml-1 opacity-60">{r.direction === 'inbound' ? '→ school' : '← school'}</span>
-              </Pick>
-            ))}
-            <span className="w-full text-[12px] text-slate-500 pl-[68px] max-sm:pl-0">
-              The Bus fee is billed by route; grades do not apply to it.
-            </span>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
-          <span className={label}>Grades</span>
-          <Pick on={scope.rowIds.size === 0} onClick={() => set({ rowIds: new Set() })}>All</Pick>
-          {GRADE_OPTIONS.map(g => (
-            <Pick key={g.value} on={gradeOn(g.value)} onClick={() => toggleGrade(g.value)}>{gradeShortLabel(g.value)}</Pick>
-          ))}
-          <Pick on={gradeOn(null)} onClick={() => toggleGrade(null)}>No grade</Pick>
-        </div>
-
-        {groupedGrades.size > 0 && (
-          <div className="flex flex-wrap items-center gap-1 pt-2.5 border-t border-[#F0ECE2]">
-            <span className={label}>Rows</span>
-            {rows.filter(r => r.grade !== null && groupedGrades.has(r.grade)).map(r => (
-              <Pick key={rowId(r)} tone="gold" on={scope.rowIds.has(rowId(r))} onClick={() => toggle('rowIds', rowId(r))}>
-                {rowLabel(r, groups)}
-              </Pick>
-            ))}
-          </div>
-        )}
       </div>
     </section>
   )

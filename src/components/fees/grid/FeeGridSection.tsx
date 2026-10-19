@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertOctagon, BadgePercent, Copy, Lock, Plus, Receipt, Timer } from 'lucide-react'
+import { AlertOctagon, BadgePercent, Copy, Laptop, Lock, Plus, Receipt, Timer, Undo2 } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, CHIP } from '@/components/fees/ui'
@@ -29,7 +29,8 @@ import FeeGrid from './FeeGrid'
 import ChargeSheet from './ChargeSheet'
 import { HeadSheet, SplitSheet, TermSheet } from './SetupSheets'
 import OptInSheet from './OptInSheet'
-import { IssueBar, IssueSheet, IssuesLog, UndoSheet, emptyScope, type FeeRoute, type IssueScope } from './IssuePanel'
+import RefundPicker from './RefundPicker'
+import { IssueBar, IssueSheet, UndoSheet, emptyScope, type FeeRoute, type IssueScope } from './IssuePanel'
 import { shortDate } from './kit'
 
 const EMPTY: GridBundle = {
@@ -84,11 +85,12 @@ export default function FeeGridSection({ onLateFees, onConcessions }: {
   const [chargeSheet, setChargeSheet] = useState<ChargeState>(null)
   const [issueOpen, setIssueOpen] = useState(false)
   const [undo, setUndo] = useState<IssueRow | null>(null)
+  const [refunding, setRefunding] = useState(false)
 
   const canEdit = perms.can('fees.config.manage')
   const canIssue = perms.can('fees.invoice.generate')
-  const canUndo = perms.can('fees.invoice.cancel')
   const canFine = perms.can('fees.fine.apply')
+  const canRefund = perms.can('fees.collect')
 
   const months = useMemo(() => (year ? sessionMonths(year.starts_on, year.ends_on) : []), [year])
   const [scope, setScope] = useState<IssueScope>(() => emptyScope([], []))
@@ -213,6 +215,14 @@ export default function FeeGridSection({ onLateFees, onConcessions }: {
 
   return (
     <div className="pb-8">
+      <div className="sm:hidden fx-card p-5 flex flex-col items-center text-center gap-2">
+        <span className="w-10 h-10 rounded-full bg-[#F4F1E7] flex items-center justify-center text-slate-600"><Laptop size={18} /></span>
+        <p className="text-[14px] font-semibold text-slate-900">Pricing is desktop only</p>
+        <p className="text-[12.5px] text-slate-500 leading-snug">
+          Open this tab on a laptop or desktop to set prices and issue fees. Bills, Students and Reports work on the phone.
+        </p>
+      </div>
+      <div className="max-sm:hidden">
       {loadError && <Notice tone="error">{loadError}</Notice>}
       {!canEdit && (
         <Notice tone="warn">
@@ -221,7 +231,7 @@ export default function FeeGridSection({ onLateFees, onConcessions }: {
       )}
 
       {/* ── What is charged besides the grid ───────────────────────────── */}
-      {(canEdit || canFine || onLateFees || onConcessions) && (
+      {(canEdit || canFine || canRefund || onLateFees || onConcessions) && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3 sm:mb-4">
           {canEdit && (
             <button onClick={() => setChargeSheet({ kind: 'other', charge: null })} className={`${ADMIN.ghostBtn} h-9`}>
@@ -241,6 +251,11 @@ export default function FeeGridSection({ onLateFees, onConcessions }: {
           {onConcessions && (
             <button onClick={onConcessions} className={`${ADMIN.ghostBtn} h-9`}>
               <BadgePercent size={14} /> Concessions
+            </button>
+          )}
+          {canRefund && (
+            <button onClick={() => setRefunding(true)} className={`${ADMIN.ghostBtn} h-9`}>
+              <Undo2 size={14} /> Refund
             </button>
           )}
         </div>
@@ -352,20 +367,19 @@ export default function FeeGridSection({ onLateFees, onConcessions }: {
         />
       </div>
 
-      <IssuesLog
-        issues={data.issues} heads={data.heads} groups={data.groups} canUndo={canUndo} routes={routes}
-        onUndo={setUndo}
-        onOpenCharge={id => {
-          const c = data.charges.find(x => x.id === id)
-          if (c) setChargeSheet({ kind: c.kind, charge: c })
-        }}
-      />
 
       {perms.can('fees.config.clone_year') && years.length > 1 && (
         <CloneLink yearId={year.id} years={years.filter(y => y.id !== year.id)} onDone={msg => { setToast(msg); refresh() }} />
       )}
 
+      </div>
+
       {/* ── Sheets ─────────────────────────────────────────────────────── */}
+      {refunding && (
+        <RefundPicker yearId={year.id} showAmounts={!perms.amountsHidden}
+                      onClose={() => setRefunding(false)}
+                      onDone={msg => { setRefunding(false); setToast(msg) }} />
+      )}
       <TermSheet
         open={!!termSheet} onClose={() => setTermSheet(null)} yearId={year.id}
         term={termSheet?.term ?? null} nextSeq={(data.terms.at(-1)?.seq ?? 0) + 1}

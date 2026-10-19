@@ -71,7 +71,8 @@ export default function CollectionCenter({
   const [overdueStudents, setOverdueStudents] = useState<number | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(true)
   const [filters, setFilters] = useState<BillFilters>(initialFilters ?? DEFAULT_BILL_FILTERS)
-  const [overdueOnly, setOverdueOnly] = useState(false)
+  // Students opens on the families with something overdue.
+  const [overdueOnly, setOverdueOnly] = useState(true)
 
   useEffect(() => { if (initialFilters) setFilters(initialFilters) }, [initialFilters])
 
@@ -177,12 +178,14 @@ export default function CollectionCenter({
           value={active ?? 'bills'}
           onChange={onSectionChange}
           options={sections.map(s => ({ key: s.key, label: s.label, icon: s.icon }))}
-          className="max-sm:flex-1"
+          className="max-sm:w-full"
         />
+        {/* On a phone the switch has the row to itself, so its three parts sit
+            evenly; Reminders moves into the Bills and Students filter rows. */}
         {canRemind && (
-          <button onClick={() => onReminders(true)} className={`${ADMIN.ghostBtn} h-9 sm:ml-auto`}
+          <button onClick={() => onReminders(true)} className={`${ADMIN.ghostBtn} h-9 ml-auto max-sm:hidden`}
                   title="Who to remind, what was sent, and what goes out on its own">
-            <Bell size={14} /> <span className="max-[380px]:hidden">Reminders</span>
+            <Bell size={14} /> Reminders
           </button>
         )}
       </div>
@@ -192,9 +195,11 @@ export default function CollectionCenter({
         <Notice>You do not have permission to open anything here.</Notice>
       ) : active === 'bills' ? (
         <BillsSection filters={filters} onFiltersChange={setFilters}
-                      onChanged={() => void loadSummary()} />
+                      onChanged={() => void loadSummary()}
+                      onReminders={canRemind ? () => onReminders(true) : undefined} />
       ) : active === 'students' ? (
-        <StudentsSection overdueOnly={overdueOnly} onOverdueOnlyChange={setOverdueOnly} />
+        <StudentsSection overdueOnly={overdueOnly} onOverdueOnlyChange={setOverdueOnly}
+                         onReminders={canRemind ? () => onReminders(true) : undefined} />
       ) : (
         <ReportsSection />
       )}

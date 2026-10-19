@@ -170,7 +170,7 @@ export default function WhatsAppSettingsPanel() {
         </div>
       </div>
 
-      <div className={`${ADMIN.card} p-5`}>
+      <div className={`${ADMIN.card} p-4`}>
         <h3 className="text-sm font-bold text-slate-900 mb-1">Setup</h3>
         <p className="text-xs text-slate-400 mb-4">
           A tick means the app can see it is done. The rest only you can confirm.
@@ -210,7 +210,7 @@ export default function WhatsAppSettingsPanel() {
         </ol>
       </div>
 
-      <div className={`${ADMIN.card} p-5 space-y-4`}>
+      <div className={`${ADMIN.card} p-4 space-y-4`}>
         <h3 className="text-sm font-bold text-slate-900">Webhook</h3>
         <div>
           <label className={`${ADMIN.label} block mb-1.5`}>Callback URL — paste into Meta</label>
@@ -228,7 +228,7 @@ export default function WhatsAppSettingsPanel() {
         </div>
       </div>
 
-      <div className={`${ADMIN.card} p-5 space-y-4`}>
+      <div className={`${ADMIN.card} p-4 space-y-4`}>
         <h3 className="text-sm font-bold text-slate-900">Credentials</h3>
 
         <div className="grid sm:grid-cols-2 gap-4">

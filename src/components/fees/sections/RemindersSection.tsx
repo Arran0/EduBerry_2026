@@ -27,7 +27,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Bell, CalendarClock, Check, CheckCheck, History, Loader2,
-  MessageSquare, PhoneOff, Send,
+  MessageSquare, PhoneOff, Search, Send,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -81,6 +81,7 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
   const [error, setError] = useState<string | null>(null)
 
   const [klass, setKlass] = useState<string>('')
+  const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState<SendRemindersResult | null>(null)
@@ -153,9 +154,12 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
     return Array.from(s).sort()
   }, [families])
 
-  const shown = useMemo(
-    () => (klass ? families.filter(f => `${gradeLabel(f.student.grade)}${f.student.section ?? ''}` === klass) : families),
-    [families, klass])
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return families.filter(f =>
+      (!klass || `${gradeLabel(f.student.grade)}${f.student.section ?? ''}` === klass) &&
+      (!q || f.student.full_name.toLowerCase().includes(q) || (f.student.admission_no ?? '').toLowerCase().includes(q)))
+  }, [families, klass, query])
 
   const totals = useMemo(() => ({
     families: families.length,
@@ -223,6 +227,12 @@ export default function RemindersSection({ onChanged }: { onChanged?: () => void
       ) : (
         <div className={ADMIN.card}>
           <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px] basis-full sm:basis-auto">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input value={query} onChange={e => setQuery(e.target.value)}
+                     placeholder="Find a student" aria-label="Find a student"
+                     className={`${ADMIN.input} !rounded-full`} />
+            </div>
             <select value={klass} onChange={e => { setKlass(e.target.value); setSelected(new Set()) }}
                     aria-label="Class" className={ADMIN.select}>
               <option value="">Every class</option>

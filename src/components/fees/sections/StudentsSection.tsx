@@ -10,7 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlarmClock, GraduationCap, Loader2, Rows3, Search, X } from 'lucide-react'
+import { AlarmClock, Bell, GraduationCap, Loader2, Rows3, Search, X } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, CHIP, inr } from '@/components/fees/ui'
@@ -32,8 +32,9 @@ const OVERDUE_OPTIONS = [
 ]
 
 export default function StudentsSection({
-  overdueOnly, onOverdueOnlyChange,
+  overdueOnly, onOverdueOnlyChange, onReminders,
 }: {
+  onReminders?: () => void
   /** Driven by the Overdue students tile above. */
   overdueOnly: boolean
   onOverdueOnlyChange: (v: boolean) => void
@@ -95,9 +96,9 @@ export default function StudentsSection({
       (!notOverdue || r.overdue_bills === 0))
   }, [rows, query, grades, sections, overdueOnly, notOverdue])
 
-  const narrowed = query.trim() !== '' || grades.length > 0 || sections.length > 0 || overdueOnly || notOverdue
+  const narrowed = query.trim() !== '' || grades.length > 0 || sections.length > 0 || !overdueOnly || notOverdue
   const reset = () => {
-    setQuery(''); setGrades([]); setSections([]); setNotOverdue(false); onOverdueOnlyChange(false)
+    setQuery(''); setGrades([]); setSections([]); setNotOverdue(false); onOverdueOnlyChange(true)
   }
 
   if (perms.loading) {
@@ -122,24 +123,6 @@ export default function StudentsSection({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <FilterMenu
-            label="Class"
-            icon={GraduationCap}
-            value={grades}
-            onChange={setGrades}
-            options={gradeOptions.map(g => ({ key: String(g), label: gradeLabel(g) }))}
-            allLabel="All"
-            width={240}
-          />
-          <FilterMenu
-            label="Section"
-            icon={Rows3}
-            value={sections}
-            onChange={setSections}
-            options={sectionOptions.map(s => ({ key: s, label: `Section ${s}` }))}
-            allLabel="All"
-            width={220}
-          />
-          <FilterMenu
             label="Overdue"
             icon={AlarmClock}
             single
@@ -152,6 +135,31 @@ export default function StudentsSection({
             summary={overdueOnly ? 'Has overdue' : notOverdue ? 'None overdue' : 'Everyone'}
             active={overdueOnly || notOverdue}
           />
+          <div className="hidden sm:contents">
+            <FilterMenu
+              label="Class"
+              icon={GraduationCap}
+              value={grades}
+              onChange={setGrades}
+              options={gradeOptions.map(g => ({ key: String(g), label: gradeLabel(g) }))}
+              allLabel="All"
+              width={240}
+            />
+            <FilterMenu
+              label="Section"
+              icon={Rows3}
+              value={sections}
+              onChange={setSections}
+              options={sectionOptions.map(s => ({ key: s, label: `Section ${s}` }))}
+              allLabel="All"
+              width={220}
+            />
+          </div>
+          {onReminders && (
+            <button onClick={onReminders} className={`${ADMIN.ghostBtn} h-9 sm:hidden`}>
+              <Bell size={14} /> Reminders
+            </button>
+          )}
           {narrowed && <ResetChip onClick={reset} />}
           <span className="ml-auto pr-1 text-[12.5px] text-slate-500 tabular-nums">
             {filtered.length} of {rows.length}

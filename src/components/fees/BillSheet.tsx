@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, Ban, Check, Download, FileText, Loader2, Printer, Receipt, RotateCcw, UserRound,
+  AlertTriangle, ArrowUpRight, Ban, Check, Download, FileText, Loader2, Printer, Receipt, RotateCcw, UserRound,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -182,11 +182,6 @@ export default function BillSheet({
   const canCancel = perms.can('fees.invoice.cancel') && !!inv && !!state
     && state.pay !== 'cancelled' && state.pay !== 'carried' && livePayments.length === 0
 
-  const subtitle = student
-    ? [student.full_name,
-       student.grade === null ? null : `${gradeLabel(student.grade)}${student.section ? ` ${student.section}` : ''}`,
-       student.admission_no ? `Adm. ${student.admission_no}` : null].filter(Boolean).join(' · ')
-    : undefined
 
   return (
     <>
@@ -194,8 +189,8 @@ export default function BillSheet({
         onClose={onClose}
         sharp
         size="xl"
-        title={inv?.number ?? 'Bill'}
-        subtitle={subtitle}
+        title="Fee bill"
+        subtitle={inv ? `${inv.number}${student ? ` · ${student.full_name}` : ''}` : undefined}
         icon={<Receipt size={17} />}
         iconClassName={FEE_ICON}
         minHClass="sm:min-h-[30rem]"
@@ -207,64 +202,84 @@ export default function BillSheet({
           <div className="p-4"><Notice tone="error">{error ?? 'This bill could not be opened.'}</Notice></div>
         ) : (
           <div className="divide-y divide-[#EEEAE1]">
-            {/* ── Where the bill stands ─────────────────────────────────── */}
-            <div className="px-4 sm:px-5 py-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-              <div className="min-w-0 space-y-1.5">
-                <BillChips pay={state.pay} timing={state.timing} />
-                <p className="text-[13px] text-slate-600 leading-snug">
-                  Due {fmtDate(inv.due_date)}
-                  <span className="text-slate-400"> · </span>
-                  issued {fmtDate(inv.issue_date)}
-                </p>
-                {inv.cancelled_reason && (
-                  <p className="text-[12.5px] text-[#962C2C] leading-snug">Cancelled: {inv.cancelled_reason}</p>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-[12px] text-slate-500">
-                  {state.pay === 'paid' ? 'Paid in full'
-                    : state.pay === 'carried' ? 'Moved to the next session'
-                    : state.pay === 'cancelled' ? 'Billed' : 'Still owed'}
-                </p>
-                <p className={`font-display text-[1.75rem] leading-tight font-bold tabular-nums ${
-                  state.pay === 'cancelled' ? 'text-slate-400 line-through' : state.timing === 'overdue' ? 'text-[#A93232]' : 'text-slate-900'}`}>
-                  {inr(state.pay === 'paid' || state.pay === 'cancelled' || state.pay === 'carried' ? inv.net : inv.balance, showAmounts)}
-                </p>
-              </div>
-            </div>
-
-            {error && <div className="px-4 sm:px-5 pt-3"><Notice tone="error">{error}</Notice></div>}
-
-            {/* ── What it charges ───────────────────────────────────────── */}
-            <section className="px-4 sm:px-5 py-3.5">
-              <h3 className="text-[13px] font-semibold text-slate-900 mb-1.5">Charges</h3>
-              <div className="divide-y divide-[#F2EEE6]">
-                {detail.lines.map(l => (
-                  <div key={l.id} className="flex items-baseline justify-between gap-3 py-1.5">
-                    <span className={`text-[13px] leading-snug break-words min-w-0 ${l.amount < 0 ? 'text-[#1F6B42]' : 'text-slate-700'}`}>
-                      {l.label}
-                    </span>
-                    <span className={`text-[13px] tabular-nums flex-shrink-0 ${l.amount < 0 ? 'text-[#1F6B42]' : 'text-slate-900'}`}>
-                      {l.amount < 0 && showAmounts ? '−' : ''}{inr(Math.abs(l.amount), showAmounts)}
-                    </span>
+            {/* ── The bill, laid out the way a printed fee bill is ──────── */}
+            <section className="px-4 sm:px-5 py-4 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-slate-500">Billed to</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                    <p className="text-[15px] font-bold text-slate-900 leading-snug break-words">{student?.full_name}</p>
+                    {showProfileLink && student && (
+                      <Link href={`/more/fees/students/${student.id}`} title="Open the full fee profile"
+                            className="inline-flex items-center gap-1 h-6 px-2 rounded-full border border-[#E2DDD2] bg-white text-[11.5px] font-semibold text-[#8B6F47] hover:text-[#5E4A2F] hover:border-[#CFC8B8]">
+                        <UserRound size={12} /> Fee profile <ArrowUpRight size={12} />
+                      </Link>
+                    )}
                   </div>
-                ))}
+                  <p className="text-[12.5px] text-slate-500 leading-snug">
+                    {[student?.grade === null || student?.grade === undefined ? null : `${gradeLabel(student.grade)}${student.section ? ` ${student.section}` : ''}`,
+                      student?.admission_no ? `Adm. ${student.admission_no}` : null, yearCode ? `Session ${yearCode}` : null].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 text-[12.5px]">
+                  <dt className="text-slate-500">Bill no.</dt>
+                  <dd className="font-semibold text-slate-900 text-right tabular-nums"><DocNo value={inv.number} /></dd>
+                  <dt className="text-slate-500">Bill date</dt>
+                  <dd className="text-slate-900 text-right tabular-nums">{fmtDate(inv.issue_date)}</dd>
+                  <dt className="text-slate-500">Due date</dt>
+                  <dd className={`text-right tabular-nums ${state.timing === 'overdue' ? 'text-[#A93232] font-semibold' : 'text-slate-900'}`}>{fmtDate(inv.due_date)}</dd>
+                  <dt className="text-slate-500">Status</dt>
+                  <dd className="text-right"><BillChips pay={state.pay} timing={state.timing} className="justify-end" /></dd>
+                </dl>
               </div>
-              <dl className="mt-2.5 grid grid-cols-3 border border-[#EEEAE1] divide-x divide-[#EEEAE1] bg-[#FBFAF6]">
-                {[
-                  { label: 'Billed', value: inv.net, tone: 'text-slate-900' },
-                  { label: 'Received', value: inv.paid, tone: 'text-[#1F6B42]' },
-                  { label: 'Owing', value: inv.balance, tone: (inv.balance ?? 0) > 0 && state.pay !== 'cancelled' ? 'text-[#8A6A12]' : 'text-slate-900' },
-                ].map(x => (
-                  <div key={x.label} className="px-2.5 sm:px-3 py-2 min-w-0">
-                    <dt className="text-[11.5px] text-slate-500">{x.label}</dt>
-                    <dd className={`text-[14px] sm:text-[15px] font-bold tabular-nums leading-tight break-words ${x.tone}`}>
-                      {state.pay === 'cancelled' && x.label === 'Owing' ? '—' : inr(x.value, showAmounts)}
-                    </dd>
-                  </div>
-                ))}
+
+              {inv.cancelled_reason && (
+                <p className="text-[12.5px] text-[#962C2C] leading-snug">Cancelled: {inv.cancelled_reason}</p>
+              )}
+
+              <table className="w-full text-[13px] border-y border-[#E4DFD4]">
+                <thead>
+                  <tr className="bg-[#F7F5F0] text-[11.5px] text-slate-500">
+                    <th className="w-8 py-1.5 pl-2 text-left font-medium">#</th>
+                    <th className="py-1.5 text-left font-medium">Particulars</th>
+                    <th className="py-1.5 pr-2 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F2EEE6]">
+                  {detail.lines.map((l, i) => (
+                    <tr key={l.id} className={l.amount < 0 ? 'text-[#1F6B42]' : 'text-slate-800'}>
+                      <td className="py-1.5 pl-2 align-top text-slate-400 tabular-nums">{i + 1}</td>
+                      <td className="py-1.5 pr-3 break-words">{l.label}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums whitespace-nowrap">
+                        {l.amount < 0 && showAmounts ? '−' : ''}{inr(Math.abs(l.amount), showAmounts)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <dl className="ml-auto w-full sm:w-[260px] grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-[13px]">
+                {(inv.discount_total ?? 0) > 0 && (<>
+                  <dt className="text-slate-500">Gross</dt>
+                  <dd className="text-right tabular-nums">{inr(inv.gross, showAmounts)}</dd>
+                  <dt className="text-slate-500">Concessions</dt>
+                  <dd className="text-right tabular-nums text-[#1F6B42]">−{inr(inv.discount_total, showAmounts)}</dd>
+                </>)}
+                <dt className="font-semibold text-slate-900">Total</dt>
+                <dd className={`text-right tabular-nums font-semibold ${state.pay === 'cancelled' ? 'line-through text-slate-400' : 'text-slate-900'}`}>{inr(inv.net, showAmounts)}</dd>
+                <dt className="text-slate-500">Paid</dt>
+                <dd className="text-right tabular-nums text-[#1F6B42]">{inr(inv.paid, showAmounts)}</dd>
+                <dt className="pt-1.5 mt-0.5 border-t border-[#E4DFD4] font-bold text-slate-900">
+                  {state.pay === 'carried' ? 'Carried forward' : 'Balance due'}
+                </dt>
+                <dd className={`pt-1.5 mt-0.5 border-t border-[#E4DFD4] text-right tabular-nums font-display text-[17px] font-bold ${
+                  state.pay === 'cancelled' ? 'text-slate-400' : (inv.balance ?? 0) > 0 ? (state.timing === 'overdue' ? 'text-[#A93232]' : 'text-[#8A6A12]') : 'text-slate-900'}`}>
+                  {state.pay === 'cancelled' ? '—' : inr(inv.balance, showAmounts)}
+                </dd>
               </dl>
             </section>
+
+            {error && <div className="px-4 sm:px-5 pt-3"><Notice tone="error">{error}</Notice></div>}
 
             {/* ── What came in ──────────────────────────────────────────── */}
             {detail.payments.length > 0 && (
@@ -317,11 +332,6 @@ export default function BillSheet({
               <button onClick={() => void downloadBill()} disabled={busy === 'bill'} className={ADMIN.ghostBtn}>
                 {busy === 'bill' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Download bill
               </button>
-              {showProfileLink && student && (
-                <Link href={`/more/fees/students/${student.id}`} className={ADMIN.ghostBtn}>
-                  <UserRound size={14} /> Fee profile
-                </Link>
-              )}
               {canCancel && (
                 <button onClick={() => setCancelling(true)}
                         className={`${ADMIN.ghostBtn} sm:ml-auto hover:!text-[#A93232] hover:!border-[#EFC8C8]`}>

@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  CalendarDays, CircleDollarSign, Layers, Loader2, Search, SlidersHorizontal, Tags, Wallet, X,
+  Bell, CalendarDays, CircleDollarSign, Layers, Loader2, Search, SlidersHorizontal, Tags, Wallet, X,
 } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
@@ -42,9 +42,11 @@ interface Props {
   onFiltersChange: (f: BillFilters) => void
   /** Told when money moved, so the tiles above can re-read themselves. */
   onChanged?: () => void
+  /** Opens Reminders; on a phone its button lives in this row. */
+  onReminders?: () => void
 }
 
-export default function BillsSection({ filters, onFiltersChange, onChanged }: Props) {
+export default function BillsSection({ filters, onFiltersChange, onChanged, onReminders }: Props) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
   const showAmounts = !perms.amountsHidden
@@ -134,39 +136,6 @@ export default function BillsSection({ filters, onFiltersChange, onChanged }: Pr
 
           <div className="flex flex-wrap items-center gap-1.5">
             <FilterMenu
-              label="When"
-              icon={CalendarDays}
-              single
-              value={[filters.period]}
-              onChange={v => set({ period: (v[0] as PeriodKey) ?? 'today' })}
-              options={PERIODS.map(p => ({ key: p.key, label: p.label }))}
-              summary={periodLabel}
-              active={filters.period !== 'session'}
-              footer={filters.period === 'custom' ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block min-w-0">
-                    <span className="block text-[11.5px] text-slate-500 mb-0.5">From</span>
-                    <input type="date" value={filters.custom.from}
-                           onChange={e => set({ custom: { ...filters.custom, from: e.target.value } })}
-                           className={`${ADMIN.inputPlain} !px-2 !text-[12.5px]`} />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="block text-[11.5px] text-slate-500 mb-0.5">To</span>
-                    <input type="date" value={filters.custom.to}
-                           onChange={e => set({ custom: { ...filters.custom, to: e.target.value } })}
-                           className={`${ADMIN.inputPlain} !px-2 !text-[12.5px]`} />
-                  </label>
-                  <p className="col-span-2 text-[11.5px] text-slate-500 leading-snug">
-                    A bill counts if it was issued, paid or cancelled on these days.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-[11.5px] text-slate-500 leading-snug">
-                  A bill counts if it was issued, paid or cancelled in this period.
-                </p>
-              )}
-            />
-            <FilterMenu
               label="Status"
               icon={SlidersHorizontal}
               value={statusValue}
@@ -181,44 +150,86 @@ export default function BillsSection({ filters, onFiltersChange, onChanged }: Pr
               allLabel="Any"
               summary={statusSummary(filters.pay, filters.timing)}
             />
-            <FilterMenu
-              label="Paid by"
-              icon={Wallet}
-              value={filters.modes}
-              onChange={v => set({ modes: v as Mode[] })}
-              options={MODES.map(m => ({ key: m.key, label: m.label, hint: m.hint }))}
-              allLabel="Any"
-            />
-            <FilterMenu
-              label="Fee"
-              icon={Tags}
-              value={filters.heads}
-              onChange={v => set({ heads: v })}
-              options={[
-                ...facets.heads.map(h => ({ key: h.id, label: h.name, group: 'Fee heads' })),
-                ...SPECIAL_HEADS.map(h => ({ key: h.key, label: h.label, group: 'Added to bills' })),
-              ]}
-              allLabel="Any"
-            />
-            {facets.terms.length > 0 && (
+            {/* A phone gets the one filter that matters at the counter; the
+                rest are a laptop's. */}
+            <div className="hidden sm:contents">
               <FilterMenu
-                label="Term"
-                icon={Layers}
-                value={filters.terms}
-                onChange={v => set({ terms: v })}
-                options={facets.terms.map(t => ({ key: t.id, label: t.name }))}
+                label="When"
+                icon={CalendarDays}
+                single
+                value={[filters.period]}
+                onChange={v => set({ period: (v[0] as PeriodKey) ?? 'today' })}
+                options={PERIODS.map(p => ({ key: p.key, label: p.label }))}
+                summary={periodLabel}
+                active={filters.period !== 'session'}
+                footer={filters.period === 'custom' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block min-w-0">
+                      <span className="block text-[11.5px] text-slate-500 mb-0.5">From</span>
+                      <input type="date" value={filters.custom.from}
+                             onChange={e => set({ custom: { ...filters.custom, from: e.target.value } })}
+                             className={`${ADMIN.inputPlain} !px-2 !text-[12.5px]`} />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[11.5px] text-slate-500 mb-0.5">To</span>
+                      <input type="date" value={filters.custom.to}
+                             onChange={e => set({ custom: { ...filters.custom, to: e.target.value } })}
+                             className={`${ADMIN.inputPlain} !px-2 !text-[12.5px]`} />
+                    </label>
+                    <p className="col-span-2 text-[11.5px] text-slate-500 leading-snug">
+                      A bill counts if it was issued, paid or cancelled on these days.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11.5px] text-slate-500 leading-snug">
+                    A bill counts if it was issued, paid or cancelled in this period.
+                  </p>
+                )}
+              />
+              <FilterMenu
+                label="Paid by"
+                icon={Wallet}
+                value={filters.modes}
+                onChange={v => set({ modes: v as Mode[] })}
+                options={MODES.map(m => ({ key: m.key, label: m.label, hint: m.hint }))}
                 allLabel="Any"
               />
+              <FilterMenu
+                label="Fee"
+                icon={Tags}
+                value={filters.heads}
+                onChange={v => set({ heads: v })}
+                options={[
+                  ...facets.heads.map(h => ({ key: h.id, label: h.name, group: 'Fee heads' })),
+                  ...SPECIAL_HEADS.map(h => ({ key: h.key, label: h.label, group: 'Added to bills' })),
+                ]}
+                allLabel="Any"
+              />
+              {facets.terms.length > 0 && (
+                <FilterMenu
+                  label="Term"
+                  icon={Layers}
+                  value={filters.terms}
+                  onChange={v => set({ terms: v })}
+                  options={facets.terms.map(t => ({ key: t.id, label: t.name }))}
+                  allLabel="Any"
+                />
+              )}
+              <FilterMenu
+                label="Month"
+                icon={CalendarDays}
+                value={filters.months}
+                onChange={v => set({ months: v })}
+                options={months.map(m => ({ key: m, label: monthLabel(m) }))}
+                allLabel="Any"
+                width={240}
+              />
+            </div>
+            {onReminders && (
+              <button onClick={onReminders} className={`${ADMIN.ghostBtn} h-9 sm:hidden`}>
+                <Bell size={14} /> Reminders
+              </button>
             )}
-            <FilterMenu
-              label="Month"
-              icon={CalendarDays}
-              value={filters.months}
-              onChange={v => set({ months: v })}
-              options={months.map(m => ({ key: m, label: monthLabel(m) }))}
-              allLabel="Any"
-              width={240}
-            />
             {!isDefault && <ResetChip onClick={() => { setQuery(''); onFiltersChange(DEFAULT_BILL_FILTERS) }} />}
           </div>
         </div>
