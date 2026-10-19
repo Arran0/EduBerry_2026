@@ -4,17 +4,11 @@
 // Fee Settings.
 //
 // A component rather than page markup because it is mounted twice: as
-// /admin/fee-settings, and behind the Fee Manager's own settings tab. "The
-// same settings in both places" is a claim that only stays true if there is one
-// copy of them — the same reasoning as PayrollSettingsPanel, whose shape this
-// follows.
+// /admin/fee-settings, and as the Fee module's Settings tab. "The same settings
+// in both places" only stays true if there is one copy of them.
 //
-// Six tabs became six cards. A tab strip says "these are views of one thing,
-// and you are in one of them"; that is true of a ledger filtered six ways, and
-// false of six unrelated settings screens, where it costs a permanent row of
-// chrome and hides five names behind the sixth. Each card says what it governs
-// and opens it as a popup: one thing at a time, and the way back is the same
-// gesture every time.
+// Six settings screens as six tiles, each opening as a popup: one thing at a
+// time, and the way back is the same gesture every time.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState } from 'react'
@@ -28,6 +22,7 @@ import PolicySettings from '@/components/settings/fees/PolicySettings'
 import NumberingSettingsPanel from '@/components/settings/fees/NumberingSettings'
 import AcademicYearSettings from '@/components/settings/fees/AcademicYearSettings'
 import WhatsAppSettingsPanel from '@/components/settings/fees/WhatsAppSettings'
+import { FEE_ICON } from '@/components/fees/ui'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 
 const PANELS = [
@@ -36,13 +31,13 @@ const PANELS = [
   { key: 'policies',    label: 'Policies',    icon: SlidersHorizontal,
     blurb: 'Part payments, grace days, how a payment is split, what needs approval.' },
   { key: 'numbering',   label: 'Numbering',   icon: Hash,
-    blurb: 'The receipt and invoice series, previewed before it starts printing.' },
+    blurb: 'How bill and receipt numbers are written, previewed before they print.' },
   { key: 'years',       label: 'Sessions',    icon: CalendarRange,
-    blurb: 'The academic years the school runs, and which one is active.' },
+    blurb: 'The academic years, which one is active, and carrying dues forward.' },
   { key: 'collection',  label: 'Collection',  icon: Banknote,
-    blurb: 'How money reaches the school’s bank account.' },
+    blurb: 'How online payments reach the school’s bank account.' },
   { key: 'whatsapp',    label: 'WhatsApp',    icon: MessageCircle,
-    blurb: 'Bills, receipts and reminders on the channel guardians actually read.' },
+    blurb: 'Bills, receipts and reminders on the channel guardians read.' },
 ] as const
 
 type PanelKey = typeof PANELS[number]['key']
@@ -54,27 +49,26 @@ export default function FeeSettingsPanel({ initialTab }: { initialTab?: PanelKey
 
   return (
     <div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
         {PANELS.map(p => {
           const Icon = p.icon
           return (
             <button
               key={p.key}
               onClick={() => setOpen(p.key)}
-              className="group text-left bg-white border border-[#E3DFD3] hover:border-[#B8983C]
-                         p-3.5 transition-colors flex items-start gap-3"
+              className="group fx-tile text-left p-3.5 sm:p-4 flex items-start gap-3 min-w-0 transition
+                         hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
             >
-              <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                <Icon size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-bold text-[#18181B]">{p.label}</span>
-                  <ChevronRight size={14}
-                                className="text-[#C9C4B4] group-hover:text-[#B8983C] transition-colors" />
-                </div>
-                <p className="text-[11px] text-[#8C8878] leading-snug mt-0.5">{p.blurb}</p>
-              </div>
+              <span className="icon-chip w-10 h-10 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
+                <Icon size={17} className="relative z-10 text-white" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-[15px] font-bold text-slate-900 leading-snug">{p.label}</span>
+                  <ChevronRight size={16} className="flex-shrink-0 text-slate-300 group-hover:text-[#8B6F47] transition-colors" />
+                </span>
+                <span className="block text-[12.5px] text-slate-500 leading-snug mt-0.5">{p.blurb}</span>
+              </span>
             </button>
           )
         })}
@@ -87,9 +81,8 @@ export default function FeeSettingsPanel({ initialTab }: { initialTab?: PanelKey
           size="2xl"
           title={active.label}
           subtitle={active.blurb}
-          icon={<active.icon size={15} />}
-          iconClassName="bg-[#27272A] text-[#B8983C]"
-          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+          icon={<active.icon size={16} />}
+          iconClassName={FEE_ICON}
           minHClass="sm:min-h-[32rem]"
         >
           {open === 'permissions' && <PermissionMatrix />}

@@ -596,5 +596,36 @@ export async function carryForward(fromYearId: string, toYearId: string, commit 
   if (!res.ok || json?.success === false) {
     throw new Error(json?.error || 'The carry-forward did not run.')
   }
-  return json as { committed: boolean; students: number; total: number }
+  return json as { committed: boolean; students: number; bills: number; total: number; held: number }
+}
+
+// ── Collection by fee head ──────────────────────────────────────────────
+export interface HeadCollection {
+  /** A fee head id, or late_fee · fine · carry_forward · other. */
+  key: string
+  name: string
+  billed: number | null
+  collected: number | null
+}
+
+export interface HeadMonth {
+  /** First day of the month. */
+  month: string
+  head: string
+  collected: number | null
+}
+
+/**
+ * What each fee head brought in, month by month. A payment is shared across
+ * the charges on the bill it paid in proportion to their size, so the heads in
+ * a month always add up to that month's collection.
+ */
+export async function fetchCollectionByHead(yearId: string): Promise<{ heads: HeadCollection[]; months: HeadMonth[] }> {
+  const { data, error } = await supabase.rpc('fee_collection_by_head', { p_year: yearId })
+  if (error) return empty(error, { heads: [], months: [] })
+  const r = (data ?? {}) as { heads?: HeadCollection[]; months?: HeadMonth[] }
+  return {
+    heads: (r.heads ?? []).map(h => ({ ...h, billed: h.billed === null ? null : Number(h.billed), collected: h.collected === null ? null : Number(h.collected) })),
+    months: (r.months ?? []).map(m => ({ ...m, collected: m.collected === null ? null : Number(m.collected) })),
+  }
 }

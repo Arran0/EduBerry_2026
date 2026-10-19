@@ -22,8 +22,8 @@ const STATE_CHIP: Record<RefundRow['status'], string> = {
   requested: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',
   approved:  'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]',
   paid_out:  'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
-  declined:  'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
-  cancelled: 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
+  declined:  'bg-[#F4F1E7] text-slate-600 border border-[#E3DFD3]',
+  cancelled: 'bg-[#F4F1E7] text-slate-600 border border-[#E3DFD3]',
 }
 
 const STATE_LABEL: Record<RefundRow['status'], string> = {
@@ -72,7 +72,7 @@ export default function RefundQueue({
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Refunds</h3>
-        <span className="text-[11px] text-[#6B675A]">
+        <span className="text-[12px] text-slate-600">
           {waiting} waiting
           {owed > 0 && ` · ${inr(owed, showAmounts)} approved but not yet paid`}
         </span>
@@ -81,7 +81,7 @@ export default function RefundQueue({
       {error && <p className="px-4 py-2 text-[11px] text-[#A93232] bg-[#FCECEC]">{error}</p>}
 
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
+        <p className="px-4 py-8 text-[13px] text-slate-500">
           No refunds this session. One is raised from a student&rsquo;s profile when they have
           overpaid or withdrawn.
         </p>
@@ -90,21 +90,21 @@ export default function RefundQueue({
         return (
           <Row key={r.id} cols={REFUND_COLS}>
             <span className={CELL.A1}>
-              <span className="block text-[12.5px] text-[#18181B] truncate">
+              <span className="block text-[13px] text-slate-900 break-words">
                 {names.get(r.student_id) ?? 'Student'}
               </span>
-              <span className="block text-[11px] text-[#8C8878]">
+              <span className="block text-[12px] text-slate-500">
                 {r.reason}
                 {' · asked '}{fmtDate(r.requested_at.slice(0, 10))}
                 {r.paid_on ? ` · paid ${fmtDate(r.paid_on)}${r.reference ? ` · ${r.reference}` : ''}` : ''}
               </span>
             </span>
             <span className={CELL.B2}>
-              <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${STATE_CHIP[r.status]}`}>
+              <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${STATE_CHIP[r.status]}`}>
                 {STATE_LABEL[r.status]}
               </span>
             </span>
-            <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
+            <span className={`${CELL.B1} text-[11.5px] font-semibold text-slate-900 text-right tabular-nums`}>
               {inr(r.amount, showAmounts)}
             </span>
             {/* Decline and Approve are a decision, so on a phone they get their
@@ -115,7 +115,7 @@ export default function RefundQueue({
                                 ? 'max-sm:mt-1.5' : ''}`}>
               {canDecide && r.status === 'requested' && (
                 mine ? (
-                  <span className="text-[11px] text-[#8C8878]">
+                  <span className="text-[12px] text-slate-500">
                     Yours — somebody else signs this off
                   </span>
                 ) : (
@@ -177,7 +177,7 @@ function PayOutDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Pay out this refund"
                 icon={<Banknote size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
+      <p className="text-[13px] text-slate-600 leading-relaxed">
         {inr(row.amount, showAmounts)} leaves the school. It is posted to the family&rsquo;s ledger
         as a debit, so their balance goes up by that much — which is what giving it back means.
       </p>
@@ -227,7 +227,7 @@ function DeclineDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Decline this refund"
                 icon={<Undo2 size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
-      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
+      <p className="text-[13px] text-slate-600 leading-relaxed">
         {inr(row.amount, showAmounts)}. Whoever asked for it will read your reason, so write it for
         them rather than for the file.
       </p>

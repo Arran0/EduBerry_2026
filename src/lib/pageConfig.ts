@@ -464,7 +464,7 @@ export const TIMETABLE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#27272A', gradTo: '#3D3B40', imageUrl: '',
 }
 export const FEES_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#6d28d9', gradTo: '#7c3aed', imageUrl: '',
+  gradFrom: '#27272A', gradTo: '#6B5536', imageUrl: '',
 }
 export const SALARY_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#047857', gradTo: '#0f766e', imageUrl: '',

@@ -16,13 +16,13 @@ export default function NoAccess({ what }: { what: string }) {
     <div className="min-h-screen bg-[#FDFCF9] flex items-center justify-center px-6">
       <div className="max-w-md text-center">
         <AlertTriangle size={24} className="mx-auto text-[#C9C4B4] mb-3" />
-        <h2 className="font-display text-[15px] font-bold text-[#18181B]">You cannot {what}</h2>
-        <p className="text-[12.5px] text-[#8C8878] mt-1 leading-relaxed">
+        <h2 className="font-display text-[15px] font-bold text-slate-900">You cannot {what}</h2>
+        <p className="text-[12.5px] text-slate-500 mt-1 leading-relaxed">
           An administrator can grant this in Admin Space → Fee Settings → Permissions.
         </p>
         <Link href="/more/fees"
-              className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#52525B]
-                         hover:text-[#18181B] mt-4 inline-block">
+              className="text-[12px] font-semibold text-slate-600
+                         hover:text-slate-900 mt-4 inline-block">
           Back to fees
         </Link>
       </div>

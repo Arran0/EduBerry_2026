@@ -1,20 +1,21 @@
 'use client'
 
 // The student list: every student with a fee account this session, what they
-// were billed, what they paid and what they still owe.
+// were billed, what they paid and what they still owe — narrowed by class,
+// section and whether anything is overdue.
 //
-// Accounts are made the first time a fee is issued to a student from Fee
-// Configuration, so there is no separate "create profiles" step any more. The
-// group column is the fee grid's own — the group in a grade that owns the
-// student's section, if one does.
+// Accounts are made the first time a fee is issued to a student from Pricing,
+// so there is no separate "create profiles" step. The group column is the fee
+// grid's own: the group in a grade that owns the student's section, if one does.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { Loader2, Search } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { AlarmClock, GraduationCap, Loader2, Rows3, Search, X } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
-import { ADMIN, inr } from '@/components/fees/ui'
-import { CELL, Col, List, ListHead, Row, StatStrip } from '@/components/fees/shell'
+import { ADMIN, CHIP, inr } from '@/components/fees/ui'
+import { CELL, Col, Empty, List, ListHead, Row } from '@/components/fees/shell'
+import { FeeDeck, FilterMenu, ResetChip } from '@/components/fees/glass'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
@@ -22,20 +23,30 @@ import { fetchProfileList, type ProfileListRow } from '@/lib/fees/invoices'
 
 interface GridGroup { id: string; grade: number; name: string; sections: string[] }
 
-/**
- * The roster's columns on a laptop. On a phone the billed figure and the fee
- * group step aside — a name, a class and what is still owed is what the list is
- * for, and the rest is one tap away on the student's own page.
- */
-const ROSTER_COLS = 'sm:grid-cols-[minmax(0,1fr)_96px_minmax(0,148px)_104px_104px_104px]'
+/** The roster's columns on a laptop. On a phone: a name, a class, what is owed. */
+const ROSTER_COLS = 'sm:grid-cols-[minmax(0,1fr)_96px_minmax(0,140px)_104px_104px_112px]'
 
-export default function StudentsSection() {
+const OVERDUE_OPTIONS = [
+  { key: 'yes', label: 'Has an overdue bill' },
+  { key: 'no', label: 'Nothing overdue' },
+]
+
+export default function StudentsSection({
+  overdueOnly, onOverdueOnlyChange,
+}: {
+  /** Driven by the Overdue students tile above. */
+  overdueOnly: boolean
+  onOverdueOnlyChange: (v: boolean) => void
+}) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
+  const router = useRouter()
   const [rows, setRows] = useState<ProfileListRow[]>([])
   const [groups, setGroups] = useState<GridGroup[]>([])
   const [query, setQuery] = useState('')
-  const [gradeFilter, setGradeFilter] = useState<string>('')
+  const [grades, setGrades] = useState<string[]>([])
+  const [sections, setSections] = useState<string[]>([])
+  const [notOverdue, setNotOverdue] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const showAmounts = !perms.amountsHidden
@@ -57,119 +68,152 @@ export default function StudentsSection() {
 
   useEffect(() => { void load() }, [load])
 
-  const grades = useMemo(
-    () => [...new Set(rows.map(r => r.grade).filter(g => g !== null))].sort((a, b) => (a as number) - (b as number)),
+  const gradeOptions = useMemo(
+    () => [...new Set(rows.map(r => r.grade).filter((g): g is number => g !== null))].sort((a, b) => a - b),
     [rows])
+
+  // Sections follow the classes picked: with Class 6 chosen, only Class 6's
+  // sections are offered.
+  const sectionOptions = useMemo(() => {
+    const pool = grades.length ? rows.filter(r => r.grade !== null && grades.includes(String(r.grade))) : rows
+    return [...new Set(pool.map(r => (r.section ?? '').trim().toUpperCase()).filter(Boolean))].sort()
+  }, [rows, grades])
+
+  useEffect(() => {
+    setSections(s => s.filter(x => sectionOptions.includes(x)))
+  }, [sectionOptions])
+
+  const overdueValue = overdueOnly ? ['yes'] : notOverdue ? ['no'] : []
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter(r =>
       (!q || r.full_name.toLowerCase().includes(q) || (r.admission_no ?? '').toLowerCase().includes(q)) &&
-      (gradeFilter === '' || String(r.grade) === gradeFilter))
-  }, [rows, query, gradeFilter])
+      (grades.length === 0 || (r.grade !== null && grades.includes(String(r.grade)))) &&
+      (sections.length === 0 || sections.includes((r.section ?? '').trim().toUpperCase())) &&
+      (!overdueOnly || r.overdue_bills > 0) &&
+      (!notOverdue || r.overdue_bills === 0))
+  }, [rows, query, grades, sections, overdueOnly, notOverdue])
 
-  const totals = useMemo(() => ({
-    billed: filtered.reduce((a, r) => a + (r.billed ?? 0), 0),
-    paid: filtered.reduce((a, r) => a + (r.paid ?? 0), 0),
-    due: filtered.reduce((a, r) => a + (r.outstanding ?? 0), 0),
-    withDues: filtered.filter(r => (r.outstanding ?? 0) > 0).length,
-  }), [filtered])
+  const narrowed = query.trim() !== '' || grades.length > 0 || sections.length > 0 || overdueOnly || notOverdue
+  const reset = () => {
+    setQuery(''); setGrades([]); setSections([]); setNotOverdue(false); onOverdueOnlyChange(false)
+  }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see student fee profiles" />
 
   return (
-    <>
-      <StatStrip
-        loading={loading}
-        stats={[
-          { label: 'Billed', value: inr(totals.billed, showAmounts) },
-          { label: 'Collected', value: inr(totals.paid, showAmounts) },
-          { label: 'Outstanding', value: inr(totals.due, showAmounts),
-            tone: totals.due > 0 ? '#7A6220' : undefined, strong: true },
-          { label: 'Families with dues', value: String(totals.withDues) },
-        ]}
-      />
-
-      <div className="flex flex-wrap gap-2 items-center mb-3">
-        <div className="relative flex-1 min-w-[150px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
+    <FeeDeck>
+      <div className="px-1 pb-2.5 space-y-2">
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input value={query} onChange={e => setQuery(e.target.value)}
-                 placeholder="Name or admission number" className={ADMIN.input} />
+                 placeholder="Name or admission number"
+                 className={`${ADMIN.input} !h-10 !rounded-full !pl-9`} />
+          {query && (
+            <button onClick={() => setQuery('')} aria-label="Clear the search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-slate-100">
+              <X size={14} />
+            </button>
+          )}
         </div>
-        <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}
-                aria-label="Class" className={`${ADMIN.select} ${gradeFilter ? '!border-[#27272A]' : ''}`}>
-          <option value="">Every class</option>
-          {grades.map(g => <option key={g} value={String(g)}>{gradeLabel(g as number)}</option>)}
-        </select>
-        <span className="text-[11px] text-[#8C8878] tabular-nums ml-auto max-sm:hidden">
-          {filtered.length} of {rows.length}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FilterMenu
+            label="Class"
+            icon={GraduationCap}
+            value={grades}
+            onChange={setGrades}
+            options={gradeOptions.map(g => ({ key: String(g), label: gradeLabel(g) }))}
+            allLabel="All"
+            width={240}
+          />
+          <FilterMenu
+            label="Section"
+            icon={Rows3}
+            value={sections}
+            onChange={setSections}
+            options={sectionOptions.map(s => ({ key: s, label: `Section ${s}` }))}
+            allLabel="All"
+            width={220}
+          />
+          <FilterMenu
+            label="Overdue"
+            icon={AlarmClock}
+            single
+            value={overdueValue.length ? overdueValue : ['any']}
+            onChange={v => {
+              onOverdueOnlyChange(v[0] === 'yes')
+              setNotOverdue(v[0] === 'no')
+            }}
+            options={[{ key: 'any', label: 'Everyone' }, ...OVERDUE_OPTIONS]}
+            summary={overdueOnly ? 'Has overdue' : notOverdue ? 'None overdue' : 'Everyone'}
+            active={overdueOnly || notOverdue}
+          />
+          {narrowed && <ResetChip onClick={reset} />}
+          <span className="ml-auto pr-1 text-[12.5px] text-slate-500 tabular-nums">
+            {filtered.length} of {rows.length}
+          </span>
+        </div>
       </div>
 
       {loading ? (
-        <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
+        <div className="fx-card py-16 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
       ) : rows.length === 0 ? (
-        <div className={`${ADMIN.card} py-16 text-center px-6`}>
-          <p className="text-[12.5px] text-[#6B675A] max-w-md mx-auto">
+        <div className="fx-card">
+          <Empty>
             Nobody has been billed in {year?.code} yet. A student appears here the first time a
-            fee is issued to them from Fee Configuration.
-          </p>
-          {perms.can('fees.invoice.generate') && (
-            <Link href="/more/fees?tab=config" className={`${ADMIN.darkBtn} mt-4`}>
-              Go to Fee Configuration
-            </Link>
-          )}
+            fee is issued to them from Pricing.
+          </Empty>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="fx-card"><Empty>No student matches these filters.</Empty></div>
       ) : (
-        <List>
+        <List className="!mx-0 sm:!mx-0 max-sm:!border-x">
           <ListHead cols={ROSTER_COLS}>
             <Col>Student</Col>
             <Col>Class</Col>
-            <Col>Group</Col>
+            <Col>Fee group</Col>
             <Col right>Billed</Col>
             <Col right>Paid</Col>
-            <Col right>Due</Col>
+            <Col right>Owing</Col>
           </ListHead>
 
           {filtered.map(r => {
             const sec = (r.section ?? '').trim().toUpperCase()
             const group = groups.find(g => g.grade === r.grade && g.sections.includes(sec))?.name
+            const cls = r.grade === null ? '—' : `${gradeLabel(r.grade)}${r.section ? ` ${r.section}` : ''}`
             return (
-              <Row key={r.id} cols={ROSTER_COLS}>
-                <span className={`${CELL.A1} flex flex-wrap items-baseline gap-x-1.5 gap-y-1`}>
-                  <Link href={`/more/fees/students/${r.student_id}`}
-                        className="font-medium text-[12.5px] text-[#18181B] hover:underline">
-                    {r.full_name}
-                  </Link>
+              <Row key={r.id} cols={ROSTER_COLS} onClick={() => router.push(`/more/fees/students/${r.student_id}`)}>
+                <span className={`${CELL.A1} min-w-0`}>
+                  <span className="text-[13.5px] font-semibold text-slate-900 leading-snug break-words">{r.full_name}</span>
+                  <span className="inline-flex flex-wrap gap-1 ml-1.5 align-middle">
+                    {r.is_rte && <span className={`${CHIP} bg-[#E9EEFA] text-[#3A5490]`}>RTE</span>}
+                    {r.overdue_bills > 0 && (
+                      <span className={`${CHIP} bg-[#FBE7E7] text-[#A93232]`}>
+                        {r.overdue_bills} overdue
+                      </span>
+                    )}
+                  </span>
                   {r.admission_no && (
-                    <span className="text-[11px] text-[#8C8878]">{r.admission_no}</span>
-                  )}
-                  {r.is_rte && (
-                    <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]">
-                      RTE
-                    </span>
+                    <span className="hidden sm:block text-[11.5px] text-slate-500">Adm. {r.admission_no}</span>
                   )}
                 </span>
-                <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
-                  {r.grade === null ? '—' : gradeLabel(r.grade)}{r.section ? ` ${r.section}` : ''}
-                  {/* The group rides along with the class on a phone rather than
-                      costing a line of its own. */}
-                  <span className="sm:hidden">{group ? ` · ${group}` : ''}</span>
+                <span className={`${CELL.A2} text-[12px] text-slate-500 break-words`}>
+                  {cls}
+                  <span className="sm:hidden">{group ? ` · ${group}` : ''}{r.admission_no ? ` · Adm. ${r.admission_no}` : ''}</span>
                 </span>
-                <span className={`${CELL.DESKTOP} text-[12.5px] text-[#6B675A] truncate`}>
-                  {group ?? '—'}
-                </span>
-                <span className={`${CELL.DESKTOP} text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
+                <span className={`${CELL.DESKTOP} text-[12.5px] text-slate-600 break-words`}>{group ?? '—'}</span>
+                <span className={`${CELL.DESKTOP} text-right text-[12.5px] text-slate-600 tabular-nums`}>
                   {inr(r.billed, showAmounts)}
                 </span>
-                <span className={`${CELL.B2} text-[11px] text-right text-[#8C8878] tabular-nums`}>
+                <span className={`${CELL.B2} text-[12px] text-right text-slate-500 tabular-nums`}>
                   {inr(r.paid, showAmounts)}<span className="sm:hidden"> paid</span>
                 </span>
-                <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
-                  (r.outstanding ?? 0) > 0 ? 'text-[#7A6220]' : 'text-[#8C8878]'}`}>
+                <span className={`${CELL.B1} text-[13.5px] text-right font-bold tabular-nums ${
+                  (r.outstanding ?? 0) > 0 ? (r.overdue_bills > 0 ? 'text-[#A93232]' : 'text-[#8A6A12]') : 'text-slate-400'}`}>
                   {inr(r.outstanding, showAmounts)}
                 </span>
               </Row>
@@ -177,8 +221,6 @@ export default function StudentsSection() {
           })}
         </List>
       )}
-
-
-    </>
+    </FeeDeck>
   )
 }

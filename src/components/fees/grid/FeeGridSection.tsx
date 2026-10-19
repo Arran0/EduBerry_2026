@@ -14,10 +14,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertOctagon, Copy, Lock, Plus, Receipt, Timer } from 'lucide-react'
+import { AlertOctagon, BadgePercent, Copy, Lock, Plus, Receipt, Timer } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
-import { ADMIN } from '@/components/fees/ui'
+import { ADMIN, CHIP } from '@/components/fees/ui'
 import { Loading, Notice, SectionBar, TitledPanel } from '@/components/fees/shell'
 import {
   cloneGrid, defaultMonthDue, fetchFeeRoutes, fetchGrid, fetchStudents, issueProgress, monthLabel, rateKey,
@@ -62,9 +62,13 @@ type ChargeState = { kind: 'other' | 'fine'; charge: ChargeRow | null } | null
 
 const EMPTY_SET: Set<string> = new Set()
 
-const chip = 'inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] border leading-none whitespace-nowrap'
+const chip = `${CHIP} border`
 
-export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void }) {
+export default function FeeGridSection({ onLateFees, onConcessions }: {
+  onLateFees?: () => void
+  /** Concessions are given here, beside the prices they come off. */
+  onConcessions?: () => void
+}) {
   const { year, years } = useAcademicYear()
   const perms = useFeePermissions()
   const [data, setData] = useState<GridBundle>(EMPTY)
@@ -216,23 +220,49 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
         </Notice>
       )}
 
+      {/* ── What is charged besides the grid ───────────────────────────── */}
+      {(canEdit || canFine || onLateFees || onConcessions) && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3 sm:mb-4">
+          {canEdit && (
+            <button onClick={() => setChargeSheet({ kind: 'other', charge: null })} className={`${ADMIN.ghostBtn} h-9`}>
+              <Receipt size={14} /> Other fee
+            </button>
+          )}
+          {canFine && (
+            <button onClick={() => setChargeSheet({ kind: 'fine', charge: null })} className={`${ADMIN.ghostBtn} h-9`}>
+              <AlertOctagon size={14} /> Fine
+            </button>
+          )}
+          {onLateFees && (
+            <button onClick={onLateFees} className={`${ADMIN.ghostBtn} h-9`}>
+              <Timer size={14} /> Late fee rules
+            </button>
+          )}
+          {onConcessions && (
+            <button onClick={onConcessions} className={`${ADMIN.ghostBtn} h-9`}>
+              <BadgePercent size={14} /> Concessions
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── The grid's shape: terms and fee heads ──────────────────────── */}
       <div className="grid gap-3 lg:grid-cols-3 items-start">
         <TitledPanel
           title="Terms" count={data.terms.length || undefined}
           right={canEdit && (
             <button className={ADMIN.onDarkBtn} onClick={() => setTermSheet({ term: null })}>
-              <Plus size={11} strokeWidth={2.5} /> Term
+              <Plus size={13} strokeWidth={2.5} /> Term
             </button>
           )}
         >
           {data.terms.length === 0 ? (
-            <p className="px-3 py-4 text-[12px] text-[#8C8878]">Add Term 1, Term 2… each with the date its fees fall due.</p>
+            <p className="px-3.5 py-4 text-[13px] text-slate-500 leading-snug">Add Term 1, Term 2… each with the date its fees fall due.</p>
           ) : data.terms.map(t => (
             <button key={t.id} onClick={() => canEdit && setTermSheet({ term: t })}
-                    className="w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-[7px] text-left border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
-              <span className="text-[12.5px] font-semibold text-[#18181B] truncate">{t.name}</span>
-              <span className="text-[11px] text-[#6B675A] tabular-nums">due {shortDate(t.due_date)}</span>
+                    className="w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 py-2.5 text-left border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF7F0]">
+              <span className="text-[13.5px] font-semibold text-slate-900 break-words">{t.name}</span>
+              <span className="text-[12px] text-slate-600 tabular-nums">due {shortDate(t.due_date)}</span>
               <span className="min-w-[62px] text-right">
                 <IssuedChip p={progress.term.get(t.id)} kind="term" />
               </span>
@@ -250,21 +280,21 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
           title="Fee heads" count={data.heads.length || undefined}
           right={canEdit && (
             <button className={ADMIN.onDarkBtn} onClick={() => setHeadSheet({ head: null })}>
-              <Plus size={11} strokeWidth={2.5} /> Head
+              <Plus size={13} strokeWidth={2.5} /> Head
             </button>
           )}
         >
           {headRows.length === 0 ? (
-            <p className="px-3 py-4 text-[12px] text-[#8C8878]">Tuition, Bus, Uniform, ID card, Water bottle — anything the school charges.</p>
+            <p className="px-3.5 py-4 text-[13px] text-slate-500 leading-snug">Tuition, Bus, Uniform, ID card, Water bottle — anything the school charges.</p>
           ) : (
             <div>
               {headRows.map(h => (
                 <div key={h.id}
-                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-[7px] border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
+                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-2.5 border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF7F0]">
                   <button onClick={() => canEdit && setHeadSheet({ head: h })} className="text-left min-w-0">
-                    <span className="block text-[12.5px] font-semibold text-[#18181B] truncate">{h.name}</span>
+                    <span className="block text-[13.5px] font-semibold text-slate-900 break-words">{h.name}</span>
                     {h.optional && (
-                      <span className="block text-[10.5px] text-[#8C8878]">
+                      <span className="block text-[12px] text-slate-500">
                         Optional · {data.optins.get(h.id)?.size ?? 0} opted in
                       </span>
                     )}
@@ -278,11 +308,11 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
                       </button>
                     )}
                     {h.gender_split && (
-                      <span className={`${chip} bg-white text-[#52525B] border-[#E3DFD3]`}>B/G</span>
+                      <span className={`${chip} bg-white text-slate-600 border-[#E3DFD3]`}>B/G</span>
                     )}
                     <span className={`${chip} ${h.frequency === 'monthly'
-                      ? 'bg-[#27272A] text-[#B8983C] border-[#27272A]'
-                      : 'bg-[#F4F1E7] text-[#6B675A] border-[#E3DFD3]'}`}>
+                      ? 'bg-[#27272A] text-[#E9DDBB] border-[#27272A]'
+                      : 'bg-[#F4F1E7] text-slate-600 border-[#E3DFD3]'}`}>
                       {h.frequency === 'monthly' ? 'Monthly' : 'Term-wise'}
                     </span>
                   </span>
@@ -306,26 +336,7 @@ export default function FeeGridSection({ onLateFees }: { onLateFees?: () => void
       <div className="mt-5">
         <SectionBar
           title="Fee grid"
-          hint={<>Session {year.code} · type a price into a cell · <Plus size={10} className="inline -mt-px" /> beside a grade splits it into groups by section · every section must land in a group</>}
-          actions={
-            <>
-              {canEdit && (
-                <button onClick={() => setChargeSheet({ kind: 'other', charge: null })} className={ADMIN.ghostBtn}>
-                  <Receipt size={13} /> <span className="max-sm:hidden">Other</span> fee
-                </button>
-              )}
-              {canFine && (
-                <button onClick={() => setChargeSheet({ kind: 'fine', charge: null })} className={ADMIN.ghostBtn}>
-                  <AlertOctagon size={13} /> Fine
-                </button>
-              )}
-              {onLateFees && (
-                <button onClick={onLateFees} className={ADMIN.ghostBtn} title="Late fee settings">
-                  <Timer size={13} /> <span className="max-sm:hidden">Late fees</span>
-                </button>
-              )}
-            </>
-          }
+          hint={<>Type a price into a cell. The <Plus size={10} className="inline -mt-px" /> beside a grade splits it into groups by section, and every section must land in a group.</>}
         />
         <FeeGrid
           terms={data.terms} heads={data.heads} groups={data.groups} rates={data.rates}
@@ -446,14 +457,14 @@ function CloneLink({
     }
   }
 
-  const link = 'font-bold uppercase tracking-[0.08em] text-[10px] text-[#52525B] hover:text-[#18181B] underline underline-offset-2'
+  const link = 'font-semibold text-[12.5px] text-[#8B6F47] hover:text-[#5E4A2F] underline underline-offset-2'
 
   return (
-    <div className="mt-6 pt-3 border-t border-[#E3DFD3] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-[#8C8878]">
-      <Copy size={11} />
+    <div className="mt-6 pt-3 border-t border-[#DCD6C9] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12.5px] text-slate-500">
+      <Copy size={13} />
       <span>Copy terms, heads and prices from</span>
       <select value={from} onChange={e => { setFrom(e.target.value); setConfirm(false) }}
-              className="bg-transparent font-bold text-[#18181B] focus:outline-none cursor-pointer">
+              className="bg-transparent font-semibold text-slate-900 focus:outline-none cursor-pointer">
         {years.map(y => <option key={y.id} value={y.id}>{y.code}</option>)}
       </select>
       {confirm ? (
@@ -506,33 +517,35 @@ function MonthsPanel({
   return (
     <TitledPanel title="Monthly due dates">
       {!hasMonthly && (
-        <p className="px-3 pt-2.5 text-[11px] text-[#8C8878]">Used by monthly heads such as Bus. Add one to start billing by month.</p>
+        <p className="px-3.5 pt-2.5 text-[12.5px] text-slate-500 leading-snug">Used by monthly heads such as Bus. Add one to start billing by month.</p>
       )}
       {canEdit && (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-[#F0ECE2]">
-          <span className="text-[11.5px] text-[#52525B]">Every month on day</span>
+        <div className="flex flex-wrap items-center gap-1.5 px-3.5 py-2.5 border-b border-[#F0ECE2]">
+          <span className="text-[13px] text-slate-600">Every month on day</span>
           <input type="number" min={1} max={28} value={day} onChange={e => setDay(e.target.value)}
-                 className={`${ADMIN.inputPlain} !w-[54px] !py-[4px] text-center tabular-nums`} />
-          <button onClick={applyDay} disabled={busy} className={`${ADMIN.ghostBtn} !py-[5px]`}>Apply</button>
-          <span className="text-[10.5px] text-[#A8A395]">Issued months keep theirs</span>
+                 className={`${ADMIN.inputPlain} !w-[58px] !min-h-8 !py-1 text-center tabular-nums`} />
+          <button onClick={applyDay} disabled={busy} className={ADMIN.ghostBtn}>Apply</button>
+          <span className="text-[12px] text-slate-400">Issued months keep theirs</span>
         </div>
       )}
-      <div className="grid grid-cols-2">
+      {/* One column on a phone: a native date field needs the width to show
+          its whole date. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2">
         {months.map((m, i) => {
           const due = dues.get(m) ?? defaultMonthDue(m)
           const locked = issued.has(m)
           return (
             <label key={m}
-                   className={`flex items-center gap-2 px-3 py-[5px] border-b border-[#F0ECE2] ${i % 2 === 0 ? 'border-r' : ''}`}>
-              <span className="text-[11.5px] font-semibold text-[#18181B] w-[64px] flex-shrink-0">{monthLabel(m)}</span>
+                   className={`flex items-center gap-2 px-3.5 py-2 min-w-0 border-b border-[#F0ECE2] ${i % 2 === 0 ? 'sm:border-r' : ''}`}>
+              <span className="text-[12.5px] font-semibold text-slate-900 w-[62px] flex-shrink-0">{monthLabel(m)}</span>
               {locked || !canEdit ? (
-                <span className="text-[11px] text-[#6B675A] tabular-nums flex items-center gap-1">
+                <span className="text-[12px] text-slate-600 tabular-nums flex items-center gap-1 min-w-0">
                   {shortDate(due)} {locked && <Lock size={9} className="text-[#1F6B42]" />}
                 </span>
               ) : (
                 <input type="date" defaultValue={due} key={due}
                        onBlur={e => { if (e.target.value && e.target.value !== due) void save([{ month: m, due_date: e.target.value }]) }}
-                       className="min-w-0 flex-1 bg-transparent text-[11px] text-[#6B675A] tabular-nums focus:outline-none focus:text-[#18181B]" />
+                       className="min-w-0 flex-1 bg-transparent text-[12px] text-slate-600 tabular-nums focus:outline-none focus:text-slate-900" />
               )}
             </label>
           )

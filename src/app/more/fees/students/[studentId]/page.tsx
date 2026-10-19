@@ -1,79 +1,47 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// One student's money story.
+// One student's fee account.
 //
-// The summary strip answers the question a parent actually asks at the counter
-// — what do I owe — and the bills and receipts below hold the evidence for it.
-// Those two are the page, because they are what the counter is looking at while
-// somebody stands in front of it.
+// The figures answer what a parent asks at the counter — what do I owe — and
+// the bills and receipts under them are the evidence. A bill opens the same
+// popup the Bills tab uses, which is where money is taken, receipts printed
+// and cheques cleared. The ledger (every debit and credit in order, with a
+// running balance) is one button away.
 //
-// Four more views exist and are each a button: the ledger (the authoritative
-// one — every debit and credit in order with a running balance, which is what
-// the reports are computed from), the cheques being held, the concessions that
-// came off a bill and the fines and late fees added to one. They were six tabs,
-// which meant the answer to "what do I owe" arrived with five folders stacked
-// on top of it.
+// Concessions are given from Pricing, not here, and late fees and fines are
+// lines on the bills they were added to, so neither needs a screen of its own.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import {
-  BadgePercent, Clock, Download, FileText, Landmark, Loader2, Printer, Receipt,
-  Scale, ScrollText, Undo2, User,
-} from 'lucide-react'
+import { FileText, Loader2, Printer, ScrollText, Undo2, UserRound } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import ProtectedLayout from '@/components/ProtectedLayout'
+import YearToggle from '@/components/transport/YearToggle'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
-import { ADMIN, INVOICE_CHIP, INVOICE_LABEL, fmtDate, inr } from '@/components/fees/ui'
-import YearScope from '@/components/fees/config/YearScope'
-import { Btn, CELL, Col, FeeScreen, List, ListHead, Row, StatStrip, TAP, TitledPanel } from '@/components/fees/shell'
+import { CHIP, FEE_ICON, fmtDate, fmtDay, inr } from '@/components/fees/ui'
+import { Btn, CELL, Col, Empty, FeeScreen, List, ListHead, Notice, Row, StatStrip, TAP, TitledPanel } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
+import BillSheet, { BillChips } from '@/components/fees/BillSheet'
+import { DocNo } from '@/components/fees/glass'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
-import { buildInvoice, buildReceipt, printSpec } from '@/components/fees/statements/invoiceGenerate'
+import { todayIn } from '@/lib/fees/engine/dates'
+import { MODE_LABEL, billState, modeOf } from '@/lib/fees/bills'
+import { buildReceipt, printSpec } from '@/components/fees/statements/invoiceGenerate'
 import { downloadStatement } from '@/components/fees/statements/generate'
 import {
-  fetchAllocations, fetchInstruments, fetchInvoiceLines, fetchInvoices, fetchLedger,
-  fetchPayments, fetchProfile,
-  type FeeProfileRow, type InstrumentRow, type InvoiceLineRow, type InvoiceRow,
-  type LedgerRow, type PaymentRow,
+  fetchAllocations, fetchInvoiceLines, fetchInvoices, fetchLedger, fetchPayments, fetchProfile,
+  type FeeProfileRow, type InvoiceLineRow, type InvoiceRow, type LedgerRow, type PaymentRow,
 } from '@/lib/fees/invoices'
-import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
 import RequestRefundSheet from '@/components/fees/reports/RequestRefundSheet'
-import {
-  fetchConcessions, fetchDiscountTypes, fetchFineCategories, fetchFines,
-  fetchLateFeeCharges, fetchScholarships,
-  type ConcessionRow, type DiscountTypeRow, type FineCategoryRow, type FineRow,
-  type LateFeeChargeRow, type ScholarshipRow,
-} from '@/lib/fees/charges'
 
-/**
- * The lists on this page, column by column, once there is a screen wide enough
- * to have columns. A phone gets the card `Row` falls back to.
- */
-const BILL_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_96px_96px_28px]'
-const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,140px)_96px_92px_60px]'
-const CHEQUE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,150px)_104px_104px]'
+/** The lists' columns once there is room for columns; a phone gets cards. */
+const BILL_COLS = 'sm:grid-cols-[minmax(150px,1fr)_64px_minmax(0,124px)_84px_84px]'
+const RECEIPT_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,150px)_100px_76px]'
 const LEDGER_COLS = 'sm:grid-cols-[96px_minmax(0,1fr)_100px_100px_108px]'
-const CONCESSION_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_132px_108px]'
-const CHARGE_COLS = 'sm:grid-cols-[minmax(0,1fr)_112px_minmax(0,140px)_108px]'
-
-/** The four views kept behind a button rather than a tab. */
-type Sheet = 'cheques' | 'ledger' | 'concessions' | 'charges'
-
-const SHEETS: { key: Sheet; label: string; icon: React.ElementType; blurb: string }[] = [
-  { key: 'ledger',      label: 'Ledger',            icon: ScrollText,
-    blurb: 'Every debit and credit in order, with a running balance' },
-  { key: 'cheques',     label: 'Cheques',           icon: Landmark,
-    blurb: 'What the school is holding for this student' },
-  { key: 'concessions', label: 'Concessions',       icon: BadgePercent,
-    blurb: 'What has come off a bill, and who approved it' },
-  { key: 'charges',     label: 'Fines & late fees', icon: Receipt,
-    blurb: 'What has been added to a bill since it was issued' },
-]
 
 interface Student {
   id: string; full_name: string; grade: number | null; section: string | null
@@ -92,28 +60,27 @@ function ProfileInner() {
   const [lines, setLines] = useState<InvoiceLineRow[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [allocations, setAllocations] = useState<{ payment_id: string; invoice_id: string; amount: number }[]>([])
-  const [instruments, setInstruments] = useState<InstrumentRow[]>([])
   const [ledger, setLedger] = useState<LedgerRow[]>([])
-  const [concessions, setConcessions] = useState<ConcessionRow[]>([])
-  const [discountTypes, setDiscountTypes] = useState<DiscountTypeRow[]>([])
-  const [scholarships, setScholarships] = useState<ScholarshipRow[]>([])
-  const [fines, setFines] = useState<FineRow[]>([])
-  const [fineCategories, setFineCategories] = useState<FineCategoryRow[]>([])
-  const [lateFees, setLateFees] = useState<LateFeeChargeRow[]>([])
-  const [sheet, setSheet] = useState<Sheet | null>(null)
-  const [applying, setApplying] = useState(false)
+  const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [openBill, setOpenBill] = useState<string | null>(null)
   const [refunding, setRefunding] = useState(false)
+  const [printing, setPrinting] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const showAmounts = !perms.amountsHidden
+  const today = todayIn()
 
   const load = useCallback(async () => {
     if (!year || !studentId) return
     setLoading(true)
     try {
-      const [{ data: p }, { data: d }] = await Promise.all([
+      const [{ data: p }, { data: d }, prof, inv, pay, led] = await Promise.all([
         supabase.from('profiles').select('id, full_name, grade, section').eq('id', studentId).maybeSingle(),
         supabase.from('student_details').select('admission_no, guardian_phone').eq('student_id', studentId).maybeSingle(),
+        fetchProfile(studentId, year.id),
+        fetchInvoices({ academicYearId: year.id, studentId }),
+        fetchPayments({ academicYearId: year.id, studentId }),
+        fetchLedger(studentId, year.id),
       ])
       if (p) {
         setStudent({
@@ -125,31 +92,12 @@ function ProfileInner() {
           guardian_phone: (d?.guardian_phone as string) ?? null,
         })
       }
-
-      const [prof, inv, pay, instr, led, conc, types, schols, fs, cats] = await Promise.all([
-        fetchProfile(studentId, year.id),
-        fetchInvoices({ academicYearId: year.id, studentId }),
-        fetchPayments({ academicYearId: year.id, studentId }),
-        fetchInstruments({ studentId }),
-        fetchLedger(studentId, year.id),
-        fetchConcessions({ yearId: year.id, studentId }),
-        fetchDiscountTypes(year.id),
-        fetchScholarships(year.id),
-        fetchFines(year.id, studentId),
-        fetchFineCategories(),
-      ])
-      setProfile(prof); setInvoices(inv); setPayments(pay); setInstruments(instr); setLedger(led)
-      setConcessions(conc); setDiscountTypes(types); setScholarships(schols)
-      setFines(fs); setFineCategories(cats)
-      // Three round trips that each need the bills or the payments, and none
-      // of which needs another's answer — so they go together rather than one
-      // after the next.
-      const [ln, alloc, lf] = await Promise.all([
+      setProfile(prof); setInvoices(inv); setPayments(pay); setLedger(led)
+      const [ln, alloc] = await Promise.all([
         fetchInvoiceLines(inv.map(i => i.id)),
-        fetchAllocations(pay.map(p2 => p2.id)),
-        fetchLateFeeCharges(inv.map(i => i.id)),
+        fetchAllocations(pay.map(x => x.id)),
       ])
-      setLines(ln); setAllocations(alloc); setLateFees(lf)
+      setLines(ln); setAllocations(alloc)
     } finally {
       setLoading(false)
     }
@@ -167,416 +115,227 @@ function ProfileInner() {
     }
   }, [invoices])
 
+  /** Each bill's state, worked out the way the Bills tab does it. */
+  const states = useMemo(() => {
+    const paidOn = new Map(payments.filter(p => p.status === 'verified').map(p => [p.id, p.paid_on]))
+    const last = new Map<string, string>()
+    for (const a of allocations) {
+      const on = paidOn.get(a.payment_id)
+      if (on && (!last.has(a.invoice_id) || on > last.get(a.invoice_id)!)) last.set(a.invoice_id, on)
+    }
+    return new Map(invoices.map(i => [i.id, billState(
+      i, lines.filter(l => l.invoice_id === i.id), last.get(i.id) ?? null, today)]))
+  }, [invoices, lines, payments, allocations, today])
+
   const printReceipt = async (payment: PaymentRow, thermal: boolean) => {
     if (!student || !year || !payment.receipt_no) return
-    const against = allocations.filter(a => a.payment_id === payment.id).map(a => ({
-      number: invoices.find(i => i.id === a.invoice_id)?.number ?? '—',
-      amount: a.amount,
-    }))
-    const spec = await buildReceipt({
-      receipt_no: payment.receipt_no, paid_on: payment.paid_on, method: payment.method,
-      amount: payment.amount ?? 0, reference: payment.reference, status: payment.status,
-      against, verify_token: payment.receipt_hash ?? payment.id,
-    }, student, year.code, thermal)
-    if (thermal) await printSpec(spec); else await downloadStatement(spec)
-  }
-
-  const printInvoice = async (invoice: InvoiceRow) => {
-    if (!student || !year) return
-    const spec = await buildInvoice({
-      number: invoice.number, issue_date: invoice.issue_date, due_date: invoice.due_date,
-      gross: invoice.gross ?? 0, discount_total: invoice.discount_total ?? 0,
-      late_fee_total: invoice.late_fee_total ?? 0, fine_total: invoice.fine_total ?? 0,
-      net: invoice.net ?? 0, paid: invoice.paid ?? 0, balance: invoice.balance ?? 0,
-      status: invoice.status,
-      lines: lines.filter(l => l.invoice_id === invoice.id)
-        .map(l => ({ label: l.label, amount: l.amount, kind: l.kind })),
-      verify_token: invoice.verify_token,
-    }, student, year.code)
-    await downloadStatement(spec)
+    setPrinting(`${thermal ? 't' : 'a'}-${payment.id}`)
+    try {
+      const against = allocations.filter(a => a.payment_id === payment.id).map(a => ({
+        number: invoices.find(i => i.id === a.invoice_id)?.number ?? '—',
+        amount: a.amount,
+      }))
+      const spec = await buildReceipt({
+        receipt_no: payment.receipt_no, paid_on: payment.paid_on, method: payment.method,
+        amount: payment.amount ?? 0, reference: payment.reference, status: payment.status,
+        against, verify_token: payment.receipt_hash ?? payment.id,
+      }, student, year.code, thermal)
+      if (thermal) await printSpec(spec); else await downloadStatement(spec)
+    } finally {
+      setPrinting(null)
+    }
   }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
   }
   if (!perms.can('fees.profile.view')) return <NoAccess what="see student fee profiles" />
+
+  const cls = student?.grade === null || student?.grade === undefined ? null
+    : `${gradeLabel(student.grade)}${student.section ? ` ${student.section}` : ''}`
 
   return (
     <FeeScreen
       title={student?.full_name ?? 'Student'}
-      subtitle={<>
-        {student?.grade === null || student?.grade === undefined ? '—' : gradeLabel(student.grade)}
-        {student?.section ? ` ${student.section}` : ''}
-        {student?.admission_no ? ` · ${student.admission_no}` : ''}
-      </>}
-      icon={<User size={17} style={{ color: '#B8983C' }} />}
-      back={{ href: '/more/fees?tab=collection&section=students', label: 'Student fees' }}
+      subtitle={[cls, student?.admission_no ? `Adm. ${student.admission_no}` : null, student?.guardian_phone]
+        .filter(Boolean).join(' · ') || undefined}
+      icon={<UserRound size={19} />}
+      back={{ href: '/more/fees?section=students', label: 'Students' }}
       actions={<>
-        {perms.can('fees.collect') && profile && (
-          <Btn tone="dark" onClick={() => setRefunding(true)}>
-            <Undo2 size={12} /> Refund
-          </Btn>
+        {ledger.length > 0 && (
+          <Btn onClick={() => setLedgerOpen(true)}><ScrollText size={14} /> Ledger</Btn>
         )}
-        <YearScope />
+        {perms.can('fees.collect') && profile && (
+          <Btn tone="dark" onClick={() => setRefunding(true)}><Undo2 size={14} /> Refund</Btn>
+        )}
+        <YearToggle />
       </>}
     >
       {loading ? (
-        <div className={`${ADMIN.card} py-16 flex justify-center`}><Loader2 className="animate-spin text-[#8C8878]" /></div>
+        <div className="fx-card py-16 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
       ) : !profile ? (
-        <div className={`${ADMIN.card} py-14 px-6 text-center`}>
-          <p className="text-[12.5px] text-[#6B675A] max-w-md mx-auto">
-            This student has no fee profile for {year?.code}. Nothing can be billed or collected
-            until they do — create one from the{' '}
-            <Link href="/more/fees?tab=collection&section=students" className="underline">Students screen</Link>.
-          </p>
+        <div className="fx-card">
+          <Empty>
+            {student?.full_name ?? 'This student'} has no fee account in {year?.code}. One is made the
+            first time a fee is issued to them from Pricing.
+          </Empty>
         </div>
       ) : (
-        // The gutter the rest of the module gets on phones. Without it the
-        // summary strip's full-bleed negative margin had nothing to cancel and
-        // hung 12px off both edges of the screen, which is a horizontal scroll
-        // on a page that has nothing to scroll sideways to.
-        <div className="px-3 sm:px-0 space-y-2.5">
+        <div className="space-y-3 sm:space-y-4">
           <StatStrip stats={[
             { label: 'Billed', value: inr(totals.billed, showAmounts) },
             { label: 'Concessions', value: inr(totals.concessions, showAmounts) },
-            { label: 'Paid', value: inr(totals.paid, showAmounts) },
-            { label: 'Still due', value: inr(totals.due, showAmounts),
-              tone: totals.due > 0 ? '#7A6220' : undefined, strong: true },
+            { label: 'Paid', value: inr(totals.paid, showAmounts), tone: '#1F6B42' },
+            { label: 'Still owed', value: inr(totals.due, showAmounts),
+              tone: totals.due > 0 ? '#8A6A12' : undefined, strong: true },
           ]} />
 
           {profile.structure_source && (
-            <div className={`${ADMIN.card} px-4 py-3 flex items-start gap-2`}>
-              <Scale size={14} className="mt-0.5 text-[#8C8878] flex-shrink-0" />
-              <p className="text-[11px] text-[#6B675A]">
-                <span className="font-semibold text-[#52525B]">Why this price: </span>
-                {profile.structure_source.why}
-                {profile.prorate_from
-                  ? ` Charged only from ${fmtDate(profile.prorate_from)}, as a mid-year joiner.`
-                  : ''}
-              </p>
-            </div>
+            <Notice>
+              <span className="font-semibold">Why this price: </span>
+              {profile.structure_source.why}
+              {profile.prorate_from ? ` Charged only from ${fmtDate(profile.prorate_from)}, as a mid-year joiner.` : ''}
+            </Notice>
           )}
-
-          <div className="flex flex-wrap gap-1.5">
-            {SHEETS.map(sh => {
-              const Icon = sh.icon
-              return (
-                <button key={sh.key} onClick={() => setSheet(sh.key)} title={sh.blurb}
-                        className={ADMIN.ghostBtn}>
-                  <Icon size={13} /> {sh.label}
-                </button>
-              )
-            })}
-          </div>
 
           {/* Bills and receipts side by side once there is room: the two
               halves of the same account, read against each other. */}
-          <div className="grid gap-3 xl:grid-cols-2 items-start">
-          {(
-            <TitledPanel title="Bills" count={invoices.length || undefined}>
-            <Panel flush empty={invoices.length === 0 ? 'No bills issued to this student yet.' : null}>
-              {invoices.map(i => (
-                <Row key={i.id} cols={BILL_COLS} trailing={1} below={<>
-                  <div className="space-y-0.5">
-                    {lines.filter(l => l.invoice_id === i.id).map(l => (
-                      <div key={l.id} className="flex justify-between gap-3 text-[11px]">
-                        <span className={`truncate ${l.amount < 0 ? 'text-[#1F6B42]' : 'text-[#8C8878]'}`}>
-                          {l.label}
+          <div className="grid gap-3 sm:gap-4 xl:grid-cols-2 items-start">
+            <TitledPanel title="Bills" count={invoices.length || undefined}
+                         right={<span className="text-[12px] text-slate-500">Open a bill to take a payment</span>}>
+              {invoices.length === 0 ? (
+                <Empty>No bills issued to this student yet.</Empty>
+              ) : (
+                <>
+                  <ListHead cols={BILL_COLS}>
+                    <Col>Bill</Col><Col>Due</Col><Col>Status</Col><Col right>Billed</Col><Col right>Owing</Col>
+                  </ListHead>
+                  {invoices.map(i => {
+                    const st = states.get(i.id) ?? { pay: 'unpaid' as const, timing: 'on_time' as const }
+                    const first = lines.find(l => l.invoice_id === i.id)
+                    const owing = st.pay === 'unpaid' || st.pay === 'partial'
+                    const dead = st.pay === 'cancelled'
+                    return (
+                      <Row key={i.id} cols={BILL_COLS} onClick={() => setOpenBill(i.id)}>
+                        <span className={`${CELL.A1} min-w-0`}>
+                          <span className="block text-[13px] font-semibold text-slate-900 break-words tabular-nums"><DocNo value={i.number} /></span>
+                          <span className="block text-[11.5px] text-slate-500 leading-snug break-words">
+                            {first?.label ?? '—'}
+                            <span className="sm:hidden"> · due {fmtDay(i.due_date)}</span>
+                          </span>
                         </span>
-                        <span className={`tabular-nums flex-shrink-0 ${l.amount < 0 ? 'text-[#1F6B42]' : 'text-[#6B675A]'}`}>
-                          {inr(l.amount, showAmounts)}
+                        <span className={`${CELL.DESKTOP} text-[12.5px] tabular-nums ${st.timing === 'overdue' ? 'text-[#A93232] font-semibold' : 'text-slate-600'}`}>
+                          {fmtDay(i.due_date)}
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                  {i.cancelled_reason && (
-                    <p className="text-[11px] text-[#A93232] mt-1.5">Cancelled: {i.cancelled_reason}</p>
-                  )}
-                </>}>
-                  <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
-                    {i.number}
-                  </span>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
-                    due {fmtDate(i.due_date)}
-                  </span>
-                  <span className={CELL.B2}>
-                    <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${INVOICE_CHIP[i.status]}`}>
-                      {INVOICE_LABEL[i.status]}
-                    </span>
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
-                    {inr(i.net, showAmounts)}
-                  </span>
-                  <span className={CELL.END}>
-                    <button onClick={() => void printInvoice(i)} title="Download the bill"
-                            aria-label="Download the bill"
-                            className={`${TAP} text-[#8C8878] hover:text-[#18181B]`}>
-                      <Download size={14} />
-                    </button>
-                  </span>
-                </Row>
-              ))}
-            </Panel>
+                        <span className={`${CELL.B2} min-w-0`}>
+                          <BillChips pay={st.pay} timing={st.timing} className="justify-end sm:justify-start" />
+                        </span>
+                        <span className={`${CELL.DESKTOP} text-right text-[12.5px] tabular-nums ${dead ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
+                          {inr(i.net, showAmounts)}
+                        </span>
+                        <span className={`${CELL.B1} text-right text-[13.5px] font-bold tabular-nums ${
+                          dead ? 'text-slate-400 line-through' : owing ? 'text-[#8A6A12]' : 'text-slate-900'}`}>
+                          <span className="sm:hidden">{inr(owing ? i.balance : i.net, showAmounts)}</span>
+                          <span className="max-sm:hidden">{dead || st.pay === 'carried' ? '—' : inr(i.balance, showAmounts)}</span>
+                        </span>
+                      </Row>
+                    )
+                  })}
+                </>
+              )}
             </TitledPanel>
-          )}
 
-          {(
             <TitledPanel title="Receipts" count={payments.length || undefined}>
-            <Panel flush empty={payments.length === 0 ? 'No payments taken from this student yet.' : null}>
-              {payments.map(p => (
-                <Row key={p.id} cols={RECEIPT_COLS} trailing={2}
-                     below={p.reversal_reason ? (
-                       <p className="text-[11px] text-[#A93232]">Reversed: {p.reversal_reason}</p>
-                     ) : null}>
-                  <span className={`${CELL.A1} font-mono text-[11px] text-[#6B675A] truncate`}>
-                    {p.receipt_no ?? '—'}
-                  </span>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
-                    {fmtDate(p.paid_on)} · {p.method}
-                  </span>
-                  <span className={CELL.B2}>
-                    {p.status !== 'verified' && (
-                      <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
-                        p.status === 'reversed'
-                          ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
-                          : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'}`}>
-                        {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
+              {payments.length === 0 ? (
+                <Empty>No payments taken from this student yet.</Empty>
+              ) : (
+                <>
+                  <ListHead cols={RECEIPT_COLS}>
+                    <Col>Receipt</Col><Col>Paid by</Col><Col right>Amount</Col><Col right>&nbsp;</Col>
+                  </ListHead>
+                  {payments.map(p => (
+                    <Row key={p.id} cols={RECEIPT_COLS} trailing={perms.can('fees.receipt.print') ? 2 : undefined}
+                         below={p.reversal_reason ? (
+                           <p className="text-[12px] text-[#962C2C]">Reversed: {p.reversal_reason}</p>
+                         ) : null}>
+                      <span className={`${CELL.A1} min-w-0`}>
+                        <span className="block text-[13px] font-semibold text-slate-900 break-words tabular-nums">{p.receipt_no ? <DocNo value={p.receipt_no} /> : '—'}</span>
+                        <span className="block text-[11.5px] text-slate-500">{fmtDate(p.paid_on)}</span>
                       </span>
-                    )}
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-right tabular-nums ${
-                    p.status === 'reversed' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
-                    {inr(p.amount, showAmounts)}
-                  </span>
-                  <span className={`${CELL.END} flex items-center gap-1`}>
-                    {perms.can('fees.receipt.print') && (
-                      <>
-                        <button onClick={() => void printReceipt(p, true)} title="Thermal print"
-                                aria-label="Print on the thermal printer"
-                                className={`${TAP} text-[#8C8878] hover:text-[#18181B]`}><Printer size={14} /></button>
-                        <button onClick={() => void printReceipt(p, false)} title="Download A4"
-                                aria-label="Download the A4 receipt"
-                                className={`${TAP} text-[#8C8878] hover:text-[#18181B]`}><FileText size={14} /></button>
-                      </>
-                    )}
-                  </span>
-                </Row>
-              ))}
-            </Panel>
+                      <span className={`${CELL.A2} text-[12px] text-slate-600 break-words`}>
+                        {MODE_LABEL[modeOf(p.method)]}{p.reference ? ` · ${p.reference}` : ''}
+                        {p.status !== 'verified' && (
+                          <span className={`${CHIP} ml-1.5 ${p.status === 'reversed' ? 'bg-[#FBE7E7] text-[#A93232]' : 'bg-[#FBF1D6] text-[#7A5D12]'}`}>
+                            {p.status === 'reversed' ? 'Reversed' : 'Not cleared'}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`${CELL.B1} text-right text-[13.5px] font-bold tabular-nums ${
+                        p.status === 'reversed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                        {inr(p.amount, showAmounts)}
+                      </span>
+                      <span className={`${CELL.END} flex items-center justify-end gap-1`}>
+                        {perms.can('fees.receipt.print') && p.receipt_no && (
+                          <>
+                            <button onClick={() => void printReceipt(p, true)} title="Print on the receipt printer"
+                                    aria-label="Print on the receipt printer" className={`${TAP} text-slate-500 hover:text-slate-900`}>
+                              {printing === `t-${p.id}` ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+                            </button>
+                            <button onClick={() => void printReceipt(p, false)} title="Download the A4 receipt"
+                                    aria-label="Download the A4 receipt" className={`${TAP} text-slate-500 hover:text-slate-900`}>
+                              {printing === `a-${p.id}` ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    </Row>
+                  ))}
+                </>
+              )}
             </TitledPanel>
-          )}
           </div>
-
-          {sheet && (
-            <ModalShell
-              onClose={() => setSheet(null)}
-              sharp size="2xl"
-              title={SHEETS.find(x => x.key === sheet)!.label}
-              subtitle={SHEETS.find(x => x.key === sheet)!.blurb}
-              icon={React.createElement(SHEETS.find(x => x.key === sheet)!.icon, { size: 15 })}
-              iconClassName="bg-[#27272A] text-[#B8983C]"
-              bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
-            >
-          {sheet === 'cheques' && (
-            <Panel empty={instruments.length === 0 ? 'No cheques or drafts from this student.' : null}>
-              {instruments.map(r => (
-                <Row key={r.id} cols={CHEQUE_COLS}
-                     below={r.bounce_reason ? (
-                       <p className="text-[11px] text-[#A93232]">
-                         Bounced: {r.bounce_reason}
-                         {r.bounce_charge ? ` · ${inr(r.bounce_charge, showAmounts)} charge passed on` : ''}
-                       </p>
-                     ) : null}>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
-                    {r.kind === 'dd' ? 'DD' : 'Cheque'} {r.number}
-                    {r.bank ? <span className="text-[#8C8878]"> · {r.bank}</span> : null}
-                  </span>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878]`}>
-                    {r.is_postdated && r.present_on && (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock size={11} /> present {fmtDate(r.present_on)}
-                      </span>
-                    )}
-                  </span>
-                  <span className={CELL.B2}>
-                    <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
-                      r.status === 'cleared' ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                      : r.status === 'bounced' ? 'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]'
-                      : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-                      {r.status}
-                    </span>
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
-                    {inr(r.amount, showAmounts)}
-                  </span>
-                </Row>
-              ))}
-            </Panel>
-          )}
-
-          {sheet === 'ledger' && (
-            <List className="max-sm:border-x">
-              <ListHead cols={LEDGER_COLS}>
-                <Col>Date</Col><Col>Entry</Col>
-                <Col right>Charged</Col><Col right>Paid</Col><Col right>Balance</Col>
-              </ListHead>
-              {ledger.length === 0 ? (
-                <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">Nothing on the ledger yet.</p>
-              ) : ledger.map(l => (
-                <Row key={l.id} cols={LEDGER_COLS}>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
-                    {fmtDate(l.entry_date)}
-                  </span>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#52525B] truncate`}>
-                    {l.note ?? l.kind}
-                  </span>
-                  {/* Charged and paid are the two sides of one entry and an
-                      entry is almost always one or the other, so on a phone
-                      each takes a line only when it has something to say. */}
-                  <span className={`${CELL.B2} text-[11px] text-right text-[#6B675A] tabular-nums`}>
-                    {(l.debit ?? 0) > 0 ? <>{inr(l.debit, showAmounts)}<span className="sm:hidden"> charged</span></> : ''}
-                  </span>
-                  <span className={`${CELL.B3} text-[11px] text-right text-[#1F6B42] tabular-nums`}>
-                    {(l.credit ?? 0) > 0 ? <>{inr(l.credit, showAmounts)}<span className="sm:hidden"> paid</span></> : ''}
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold text-[#18181B] tabular-nums`}>
-                    {inr(l.balance_after, showAmounts)}
-                  </span>
-                </Row>
-              ))}
-            </List>
-          )}
-
-          {sheet === 'concessions' && (
-            <>
-              {perms.can('fees.discount.apply') && (
-                <div className="flex justify-end mb-3">
-                  <button onClick={() => setApplying(true)} className={ADMIN.ghostBtn}>
-                    <BadgePercent size={13} /> Apply a concession
-                  </button>
-                </div>
-              )}
-              <List className="max-sm:border-x">
-                <ListHead cols={CONCESSION_COLS}>
-                  <Col>What</Col><Col>Asked</Col><Col>State</Col><Col right>Amount</Col>
-                </ListHead>
-                {concessions.length === 0 ? (
-                  <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">
-                    No concessions for this student. Each one, when granted, is a named line on the
-                    bill it comes off.
-                  </p>
-                ) : concessions.map(c => (
-                  <Row key={c.id} cols={CONCESSION_COLS}>
-                    <span className={`${CELL.A1} min-w-0 text-[12.5px] text-[#18181B]`}>
-                      <span className="block truncate">
-                        {discountTypes.find(t => t.id === c.type_id)?.name
-                          ?? scholarships.find(s => s.id === c.scholarship_id)?.name
-                          ?? (c.kind === 'waiver' ? 'Waiver' : 'Concession')}
-                      </span>
-                      {c.reason && (
-                        <span className="block text-[11px] text-[#8C8878] truncate">{c.reason}</span>
-                      )}
-                    </span>
-                    <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
-                      {fmtDate(c.created_at.slice(0, 10))}
-                    </span>
-                    <span className={CELL.B2}>
-                      <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
-                        c.status === 'applied'
-                          ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                          : c.status === 'pending'
-                            ? 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'
-                            : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
-                        {c.status === 'applied' ? 'On the bill'
-                          : c.status === 'pending' ? 'Waiting'
-                          : c.status === 'declined' ? 'Declined' : 'Removed'}
-                      </span>
-                    </span>
-                    <span className={`${CELL.B1} text-[11.5px] text-right font-semibold text-[#1F6B42] tabular-nums`}>
-                      −{inr(c.amount, showAmounts)}
-                    </span>
-                  </Row>
-                ))}
-              </List>
-            </>
-          )}
-
-          {sheet === 'charges' && (
-            <List className="max-sm:border-x">
-              <ListHead cols={CHARGE_COLS}>
-                <Col>What</Col><Col>When</Col><Col>Bill</Col><Col right>Amount</Col>
-              </ListHead>
-              {fines.length === 0 && lateFees.length === 0 && (
-                <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">
-                  Nothing has been added to this student&rsquo;s bills since they were issued.
-                </p>
-              )}
-              {fines.map(f => (
-                <Row key={f.id} cols={CHARGE_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B]`}>
-                    <span className="block truncate">
-                      {fineCategories.find(c => c.id === f.category_id)?.name ?? 'Fine'}
-                    </span>
-                    {f.reason && <span className="block text-[11px] text-[#8C8878] truncate">{f.reason}</span>}
-                  </span>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
-                    {fmtDate(f.created_at.slice(0, 10))}
-                  </span>
-                  <span className={`${CELL.B2} font-mono text-[11px] text-[#6B675A] truncate`}>
-                    {invoices.find(i => i.id === f.invoice_id)?.number ?? '—'}
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
-                    f.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
-                    {inr(f.amount, showAmounts)}
-                  </span>
-                </Row>
-              ))}
-              {lateFees.map(c => (
-                <Row key={c.id} cols={CHARGE_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B]`}>
-                    <span className="block">Late fee</span>
-                    <span className="block text-[11px] text-[#8C8878]">{c.days_late} days past due</span>
-                  </span>
-                  <span className={`${CELL.A2} text-[11px] text-[#8C8878] whitespace-nowrap`}>
-                    {fmtDate(c.as_of)}
-                  </span>
-                  <span className={`${CELL.B2} font-mono text-[11px] text-[#6B675A] truncate`}>
-                    {invoices.find(i => i.id === c.invoice_id)?.number ?? '—'}
-                  </span>
-                  <span className={`${CELL.B1} text-[11.5px] text-right font-semibold tabular-nums ${
-                    c.status === 'waived' ? 'text-[#8C8878] line-through' : 'text-[#18181B]'}`}>
-                    {inr(c.amount, showAmounts)}
-                  </span>
-                </Row>
-              ))}
-            </List>
-          )}
-            </ModalShell>
-          )}
         </div>
       )}
 
+      {ledgerOpen && (
+        <ModalShell
+          onClose={() => setLedgerOpen(false)}
+          sharp size="2xl"
+          title="Ledger"
+          subtitle="Every charge and payment in order, with the running balance"
+          icon={<ScrollText size={16} />}
+          iconClassName={FEE_ICON}
+        >
+          <List className="!mx-0 sm:!mx-0 max-sm:!border-x">
+            <ListHead cols={LEDGER_COLS}>
+              <Col>Date</Col><Col>Entry</Col>
+              <Col right>Charged</Col><Col right>Paid</Col><Col right>Balance</Col>
+            </ListHead>
+            {ledger.map(l => (
+              <Row key={l.id} cols={LEDGER_COLS}>
+                <span className={`${CELL.A2} text-[12px] text-slate-500 whitespace-nowrap`}>{fmtDate(l.entry_date)}</span>
+                <span className={`${CELL.A1} text-[13px] text-slate-800 break-words`}>{l.note ?? l.kind}</span>
+                <span className={`${CELL.B2} text-[12px] text-right text-slate-600 tabular-nums`}>
+                  {(l.debit ?? 0) > 0 ? <>{inr(l.debit, showAmounts)}<span className="sm:hidden"> charged</span></> : ''}
+                </span>
+                <span className={`${CELL.B3} text-[12px] text-right text-[#1F6B42] tabular-nums`}>
+                  {(l.credit ?? 0) > 0 ? <>{inr(l.credit, showAmounts)}<span className="sm:hidden"> paid</span></> : ''}
+                </span>
+                <span className={`${CELL.B1} text-[13px] text-right font-bold text-slate-900 tabular-nums`}>
+                  {inr(l.balance_after, showAmounts)}
+                </span>
+              </Row>
+            ))}
+          </List>
+        </ModalShell>
+      )}
 
-      {applying && year && student && (
-        <ApplyConcessionSheet
-          yearId={year.id}
-          people={[{
-            ...(profile ?? {} as FeeProfileRow),
-            student_id: student.id,
-            full_name: student.full_name,
-            grade: student.grade,
-            section: student.section,
-            admission_no: student.admission_no,
-            billed: null, paid: null, outstanding: null,
-          }]}
-          invoices={invoices}
-          types={discountTypes}
-          scholarships={scholarships}
-          showAmounts={showAmounts}
-          canApprove={perms.canAny('fees.discount.approve', 'fees.waiver.approve')}
-          fixedStudentId={student.id}
-          onClose={() => setApplying(false)}
-          onDone={() => { setApplying(false); void load() }}
+      {openBill && (
+        <BillSheet
+          invoiceId={openBill}
+          showProfileLink={false}
+          onClose={() => setOpenBill(null)}
+          onChanged={() => void load()}
         />
       )}
 
@@ -593,15 +352,6 @@ function ProfileInner() {
         />
       )}
     </FeeScreen>
-  )
-}
-
-/** A hairline heading over one of the two lists the page always shows. */
-function Panel({ empty, flush, children }: { empty: string | null; flush?: boolean; children: React.ReactNode }) {
-  return (
-    <div className={`${flush ? '' : ADMIN.card} overflow-hidden`}>
-      {empty ? <p className="px-4 py-10 text-[12.5px] text-[#8C8878] text-center">{empty}</p> : children}
-    </div>
   )
 }
 

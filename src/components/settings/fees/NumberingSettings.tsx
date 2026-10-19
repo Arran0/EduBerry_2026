@@ -10,10 +10,13 @@
 import React, { useEffect, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { ADMIN } from '@/components/fees/ui'
+import { FormGroup, FormRow, Loading, Notice } from '@/components/fees/shell'
 import {
   DEFAULT_FEE_SETTINGS, fetchFeeSettings, formatSeriesNumber, saveFeeSetting,
   type NumberingSettings as Numbering, type SeriesSettings,
 } from '@/lib/fees/settings'
+
+const FIELD = `${ADMIN.inputPlain} !w-[176px]`
 
 export default function NumberingSettingsPanel({
   academicYearId, yearCode,
@@ -48,51 +51,28 @@ export default function NumberingSettingsPanel({
     }
   }
 
-  if (loading) {
-    return (
-      <div className={`${ADMIN.card} p-8 flex items-center justify-center gap-2 text-sm text-[#71717A]`}>
-        <Loader2 size={16} className="animate-spin" /> Loading…
-      </div>
-    )
-  }
+  if (loading) return <Loading />
 
   return (
-    <div className="space-y-4">
-      <div className={`${ADMIN.card} p-5 space-y-4`}>
-        <div>
-          <h3 className="text-sm font-bold text-[#27272A]">School code and separator</h3>
-          <p className="text-xs text-[#A1A1AA] mt-0.5">
-            The part every number starts with.
-          </p>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-4 max-w-lg">
-          <div>
-            <label className={`${ADMIN.label} block mb-1.5`}>School code</label>
-            <input
-              value={value.school_code}
-              onChange={e => setValue({ ...value, school_code: e.target.value.toUpperCase() })}
-              maxLength={8}
-              className={ADMIN.inputPlain}
-            />
-          </div>
-          <div>
-            <label className={`${ADMIN.label} block mb-1.5`}>Separator</label>
-            <select
-              value={value.separator}
-              onChange={e => setValue({ ...value, separator: e.target.value })}
-              className={ADMIN.inputPlain}
-            >
-              <option value="/">/ &nbsp; slash</option>
-              <option value="-">- &nbsp; hyphen</option>
-              <option value="">none</option>
-            </select>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <FormGroup title="Every number starts with">
+        <FormRow label="School code">
+          <input value={value.school_code} maxLength={8}
+                 onChange={e => setValue({ ...value, school_code: e.target.value.toUpperCase() })}
+                 className={FIELD} />
+        </FormRow>
+        <FormRow label="Separator">
+          <select value={value.separator} onChange={e => setValue({ ...value, separator: e.target.value })} className={FIELD}>
+            <option value="/">/  slash</option>
+            <option value="-">-  hyphen</option>
+            <option value="">none</option>
+          </select>
+        </FormRow>
+      </FormGroup>
 
       <SeriesEditor
         title="Receipts"
-        subtitle="Printed the moment money is taken. This series must never repeat a number — that is what makes a receipt provable."
+        note="Printed the moment money is taken. This series never repeats a number, which is what makes a receipt provable."
         series={value.receipt}
         onChange={receipt => setValue({ ...value, receipt })}
         preview={formatSeriesNumber(value.receipt, value.school_code, value.separator, yearCode, 1)}
@@ -100,112 +80,80 @@ export default function NumberingSettingsPanel({
       />
 
       <SeriesEditor
-        title="Invoices"
-        subtitle="On the bill sent to the guardian, and on its verification QR."
+        title="Bills"
+        note="On the bill sent to the guardian, and on its verification QR."
         series={value.invoice}
         onChange={invoice => setValue({ ...value, invoice })}
         preview={formatSeriesNumber(value.invoice, value.school_code, value.separator, yearCode, 1)}
         previewLater={formatSeriesNumber(value.invoice, value.school_code, value.separator, yearCode, 1247)}
       />
 
-      {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-4 py-3 rounded-lg">{error}</div>
-      )}
+      {error && <Notice tone="error">{error}</Notice>}
 
-      <div className="flex items-center gap-3">
-        <button onClick={() => void save()} disabled={saving} className={ADMIN.darkBtn}>
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-          Save numbering
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button onClick={() => void save()} disabled={saving} className={`${ADMIN.darkBtn} h-9`}>
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          Save
         </button>
-        {saved && <span className="text-xs text-emerald-600 font-medium">Saved as a new version</span>}
-        <span className="text-xs text-[#A1A1AA]">
-          Numbers already issued keep the format they were issued under.
-        </span>
+        {saved
+          ? <span className="text-[12.5px] text-[#1F6B42] font-medium">Saved as a new version</span>
+          : <span className="text-[12px] text-slate-500 leading-snug">Numbers already issued keep the format they were issued under.</span>}
       </div>
     </div>
   )
 }
 
 function SeriesEditor({
-  title, subtitle, series, onChange, preview, previewLater,
+  title, note, series, onChange, preview, previewLater,
 }: {
   title: string
-  subtitle: string
+  note: string
   series: SeriesSettings
   onChange: (next: SeriesSettings) => void
   preview: string
   previewLater: string
 }) {
   return (
-    <div className={`${ADMIN.card} p-5 space-y-4`}>
-      <div>
-        <h3 className="text-sm font-bold text-[#27272A]">{title}</h3>
-        <p className="text-xs text-[#A1A1AA] mt-0.5 max-w-2xl">{subtitle}</p>
+    <FormGroup title={title} note={note}>
+      <FormRow label="Prefix">
+        <input value={series.prefix} maxLength={8}
+               onChange={e => onChange({ ...series, prefix: e.target.value.toUpperCase() })}
+               className={FIELD} />
+      </FormRow>
+      <FormRow label="Digits" hint={series.width < 4
+        ? `${series.width} digit${series.width === 1 ? '' : 's'} run out at ${Math.pow(10, series.width) - 1}, and the numbers grow longer mid-series.`
+        : undefined}>
+        <input type="number" min={1} max={10} value={series.width}
+               onChange={e => onChange({ ...series, width: Number(e.target.value) || 1 })}
+               className={`${FIELD} text-right tabular-nums`} />
+      </FormRow>
+      <FormRow label="Include the session">
+        <select value={series.include_year ? 'yes' : 'no'}
+                onChange={e => onChange({ ...series, include_year: e.target.value === 'yes' })}
+                className={FIELD}>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </FormRow>
+      <FormRow label="Start again from 1">
+        <select value={series.reset}
+                onChange={e => onChange({ ...series, reset: e.target.value as SeriesSettings['reset'] })}
+                className={FIELD}>
+          <option value="year">Each session</option>
+          <option value="never">Never</option>
+        </select>
+      </FormRow>
+      <div className="px-3.5 py-3 bg-[#FBFAF6] flex flex-wrap items-baseline gap-x-6 gap-y-1.5">
+        <span className="text-[12px] text-slate-500">What prints</span>
+        <span className="min-w-0">
+          <span className="text-[12px] text-slate-500 mr-2">first</span>
+          <span className="font-mono text-[13.5px] font-semibold text-slate-900 break-all">{preview}</span>
+        </span>
+        <span className="min-w-0">
+          <span className="text-[12px] text-slate-500 mr-2">1,247th</span>
+          <span className="font-mono text-[13.5px] text-slate-600 break-all">{previewLater}</span>
+        </span>
       </div>
-
-      <div className="grid sm:grid-cols-4 gap-4">
-        <div>
-          <label className={`${ADMIN.label} block mb-1.5`}>Prefix</label>
-          <input
-            value={series.prefix}
-            onChange={e => onChange({ ...series, prefix: e.target.value.toUpperCase() })}
-            maxLength={8}
-            className={ADMIN.inputPlain}
-          />
-        </div>
-        <div>
-          <label className={`${ADMIN.label} block mb-1.5`}>Digits</label>
-          <input
-            type="number" min={1} max={10}
-            value={series.width}
-            onChange={e => onChange({ ...series, width: Number(e.target.value) || 1 })}
-            className={ADMIN.inputPlain}
-          />
-        </div>
-        <div>
-          <label className={`${ADMIN.label} block mb-1.5`}>Include year</label>
-          <select
-            value={series.include_year ? 'yes' : 'no'}
-            onChange={e => onChange({ ...series, include_year: e.target.value === 'yes' })}
-            className={ADMIN.inputPlain}
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </div>
-        <div>
-          <label className={`${ADMIN.label} block mb-1.5`}>Restart</label>
-          <select
-            value={series.reset}
-            onChange={e => onChange({ ...series, reset: e.target.value as SeriesSettings['reset'] })}
-            className={ADMIN.inputPlain}
-          >
-            <option value="year">Each academic year</option>
-            <option value="never">Never — keep counting</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg px-4 py-3">
-        <div className={`${ADMIN.label} mb-1.5`}>What will print</div>
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-          <div>
-            <span className="text-xs text-[#A1A1AA] mr-2">First:</span>
-            <span className="font-mono text-sm font-semibold text-[#27272A]">{preview}</span>
-          </div>
-          <div>
-            <span className="text-xs text-[#A1A1AA] mr-2">The 1,247th:</span>
-            <span className="font-mono text-sm text-[#52525B]">{previewLater}</span>
-          </div>
-        </div>
-        {series.width < 4 && (
-          <p className="text-xs text-amber-700 mt-2">
-            {series.width} digit{series.width === 1 ? '' : 's'} runs out
-            at {Math.pow(10, series.width) - 1}. A school of this size issues more
-            than that in a year, and the numbers will get longer mid-series.
-          </p>
-        )}
-      </div>
-    </div>
+    </FormGroup>
   )
 }

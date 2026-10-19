@@ -22,7 +22,7 @@ import {
 import ModalShell from '@/components/ui/ModalShell'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
-import { ADMIN, fmtDate, inr } from '@/components/fees/ui'
+import { ADMIN, fmtDate, inr, FEE_ICON } from '@/components/fees/ui'
 import { CELL, Row } from '@/components/fees/shell'
 import NoAccess from '@/components/fees/NoAccess'
 import ApplyConcessionSheet from '@/components/fees/concessions/ApplyConcessionSheet'
@@ -99,7 +99,7 @@ export default function ConcessionsSection() {
   const granted = concessions.filter(c => c.status === 'applied' || c.status === 'approved')
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
   }
   if (!canApply && !canApprove && !canScholarship) {
     return <NoAccess what="work with concessions" />
@@ -127,7 +127,7 @@ export default function ConcessionsSection() {
       {error && <div className="p-3 bg-[#FCECEC] border border-[#EFCCCC] text-[11px] text-[#A93232]">{error}</div>}
 
       {loading ? (
-        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+        <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
       ) : (
         <div className="space-y-4">
           {/* Waiting first, and only when something is: an approval queue that
@@ -137,7 +137,7 @@ export default function ConcessionsSection() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Inbox size={14} className="text-[#B8983C]" />
-                <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">
+                <h2 className="text-[12px] font-semibold text-slate-600">
                   Waiting for a decision · {pending.length}
                 </h2>
               </div>
@@ -149,7 +149,7 @@ export default function ConcessionsSection() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Check size={14} className="text-[#B8983C]" />
-              <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6B675A]">Granted</h2>
+              <h2 className="text-[12px] font-semibold text-slate-600">Granted</h2>
             </div>
             <Granted rows={granted} names={names} types={types} scholarships={scholarships}
                      showAmounts={showAmounts} canRemove={canApprove}
@@ -167,8 +167,8 @@ export default function ConcessionsSection() {
             ? 'What may be given, and above what amount it needs approving'
             : 'Somebody else’s money, against a budget'}
           icon={sheet === 'types' ? <BadgePercent size={15} /> : <Award size={15} />}
-          iconClassName="bg-[#27272A] text-[#B8983C]"
-          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+          iconClassName={FEE_ICON}
+          bodyClassName="!px-3 sm:!px-4 !py-3"
         >
           {sheet === 'types' ? (
             <Types rows={types} showAmounts={showAmounts} canEdit={canScholarship || canApprove}
@@ -268,25 +268,25 @@ function Queue({
       </div>
       {error && <p className="px-4 py-2 text-[11px] text-[#A93232] bg-[#FCECEC]">{error}</p>}
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
+        <p className="px-4 py-8 text-[13px] text-slate-500">
           Nothing waiting. Concessions under their type&rsquo;s threshold apply straight away and
           never reach this list.
         </p>
       ) : rows.map(r => (
         <Row key={r.id} cols={PENDING_COLS}>
-          <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[13px] font-semibold text-slate-900 break-words`}>
             {names.get(r.student_id)?.full_name ?? 'Student'}
-            <span className="font-normal text-[#8C8878]">
+            <span className="font-normal text-slate-500">
               {' · '}{gradeLabel(names.get(r.student_id)?.grade ?? null)}
               {names.get(r.student_id)?.section ?? ''}
             </span>
           </span>
-          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+          <span className={`${CELL.A2} block text-[12px] text-slate-500 break-words`}>
             {label(r, types, scholarships)}
             {r.reason ? ` · ${r.reason}` : ''}
             {' · asked '}{fmtDate(r.created_at.slice(0, 10))}
           </span>
-          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-slate-900 text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
           {/* Approving or declining is the decision this list exists for, so on
@@ -303,13 +303,13 @@ function Queue({
                 </button>
               </>
             ) : (
-              <span className="text-[11px] text-[#8C8878]">Waiting on an approver</span>
+              <span className="text-[12px] text-slate-500">Waiting on an approver</span>
             )}
           </span>
         </Row>
       ))}
       {canApprove && rows.length > 0 && (
-        <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
+        <p className="px-4 py-2.5 text-[12px] text-slate-500 border-t border-[#F0ECE2]">
           You cannot approve a request you made yourself — the server refuses it, so a second
           person always signs off.
         </p>
@@ -335,22 +335,22 @@ function Granted({
     <div className={ADMIN.card}>
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex items-center justify-between">
         <h3 className={ADMIN.label}>Granted this session</h3>
-        <span className="text-[11px] text-[#6B675A]">
+        <span className="text-[12px] text-slate-600">
           {rows.length} · {inr(total, showAmounts)} given up
         </span>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No concessions granted yet.</p>
+        <p className="px-4 py-8 text-[13px] text-slate-500">No concessions granted yet.</p>
       ) : rows.map(r => (
         <Row key={r.id} cols={GRANTED_COLS}>
-          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[13px] text-slate-900 break-words`}>
             {names.get(r.student_id)?.full_name ?? 'Student'}
           </span>
-          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+          <span className={`${CELL.A2} block text-[12px] text-slate-500 break-words`}>
             {label(r, types, scholarships)}
             {r.approved_at ? ` · approved ${fmtDate(r.approved_at.slice(0, 10))}` : ''}
           </span>
-          <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#18181B] text-right tabular-nums`}>
+          <span className={`${CELL.B1} text-[11.5px] font-semibold text-slate-900 text-right tabular-nums`}>
             {inr(r.amount, showAmounts)}
           </span>
           <span className={`${CELL.B2} flex justify-end`}>
@@ -382,15 +382,15 @@ function Types({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
+        <p className="px-4 py-8 text-[13px] text-slate-500">
           No discount types. Staff can still grant a one-off waiver, which always needs approval.
         </p>
       ) : rows.map(t => (
         <Row key={t.id} cols={TYPE_COLS}>
-          <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[13px] font-semibold text-slate-900 break-words`}>
             {t.name}
           </span>
-          <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
+          <span className={`${CELL.A2} block text-[12px] text-slate-500`}>
             {t.mode === 'percent' ? `${t.value}% off` : `${inr(t.value, showAmounts)} off`}
             {t.scope === 'heads' ? ` · ${t.head_ids.length} head${t.head_ids.length === 1 ? '' : 's'} only` : ' · the whole bill'}
             {t.approval_threshold !== null
@@ -399,10 +399,10 @@ function Types({
             {t.stackable ? ' · stacks' : ''}
           </span>
           <span className={CELL.B1}>
-            <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+            <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${
               t.active
                 ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                : 'bg-[#F4F1E7] text-slate-600 border border-[#E3DFD3]'}`}>
               {t.active ? 'Active' : 'Off'}
             </span>
           </span>
@@ -435,7 +435,7 @@ function Scholarships({
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">No scholarships this session.</p>
+        <p className="px-4 py-8 text-[13px] text-slate-500">No scholarships this session.</p>
       ) : rows.map(s => {
         const used = Number(s.awarded ?? 0)
         const budget = s.annual_budget === null ? null : Number(s.annual_budget)
@@ -445,16 +445,16 @@ function Scholarships({
           <div key={s.id} className="px-4 py-3 border-b border-[#F0ECE2] last:border-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex-1 min-w-[200px]">
-                <div className="text-[12.5px] font-semibold text-[#18181B]">{s.name}</div>
-                <p className="text-[11px] text-[#8C8878] mt-0.5">
+                <div className="text-[13px] font-semibold text-slate-900">{s.name}</div>
+                <p className="text-[12px] text-slate-500 mt-0.5">
                   {s.funder ?? 'Funded by the school'}
                   {s.seats !== null ? ` · ${s.recipients ?? 0} of ${s.seats} seats` : ''}
                 </p>
               </div>
-              <span className={`text-[12.5px] font-semibold w-40 text-right ${over ? 'text-[#A93232]' : 'text-[#18181B]'}`}>
+              <span className={`text-[13px] font-semibold w-40 text-right ${over ? 'text-[#A93232]' : 'text-slate-900'}`}>
                 {inr(used, showAmounts)}
                 {budget !== null && (
-                  <span className="text-[#8C8878] font-normal"> of {inr(budget, showAmounts)}</span>
+                  <span className="text-slate-500 font-normal"> of {inr(budget, showAmounts)}</span>
                 )}
               </span>
               {canEdit && <button onClick={() => onEdit(s)} className={ADMIN.ghostBtn}>Edit</button>}
@@ -563,18 +563,18 @@ function TypeEditor({
                  onChange={e => set('approval_threshold', e.target.value === '' ? null : Number(e.target.value))}
                  placeholder="Blank means every one needs approval"
                  className={`${ADMIN.inputPlain} mt-1`} />
-          <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">
+          <p className="mt-1 text-[12px] text-slate-500 leading-snug">
             Below this a clerk&rsquo;s concession applies straight away. Above it, it waits in the
             queue. Set it to 0 to send everything to the queue.
           </p>
         </label>
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
+          <label className="flex items-center gap-2 text-[11px] text-slate-900">
             <input type="checkbox" checked={form.stackable ?? false}
                    onChange={e => set('stackable', e.target.checked)} />
             Can stack with another discount
           </label>
-          <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
+          <label className="flex items-center gap-2 text-[11px] text-slate-900">
             <input type="checkbox" checked={form.active ?? true}
                    onChange={e => set('active', e.target.checked)} />
             Active
@@ -660,7 +660,7 @@ function ScholarshipEditor({
                    placeholder="No limit" className={`${ADMIN.inputPlain} mt-1`} />
           </label>
         </div>
-        <label className="flex items-center gap-2 text-[11px] text-[#18181B]">
+        <label className="flex items-center gap-2 text-[11px] text-slate-900">
           <input type="checkbox" checked={form.active ?? true}
                  onChange={e => set('active', e.target.checked)} />
           Active
@@ -686,7 +686,7 @@ function RemoveDialog({
   return (
     <ModalShell onClose={onClose} sharp size="sm" title="Remove this concession"
                 icon={<X size={15} />} iconClassName="bg-[#FCECEC] text-[#A93232]">
-      <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
+      <p className="text-[13px] text-slate-600 leading-relaxed">
         {inr(row.amount, showAmounts)} comes off the discount and back onto the bill. The family
         will owe that much more, so make sure somebody has told them.
       </p>

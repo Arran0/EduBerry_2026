@@ -295,6 +295,8 @@ export interface ProfileListRow extends FeeProfileRow {
   billed: number | null
   paid: number | null
   outstanding: number | null
+  /** Bills past their due date with money still owed. Counted from status, so it survives masking. */
+  overdue_bills: number
 }
 
 /**
@@ -310,9 +312,10 @@ export async function fetchProfileList(academicYearId: string): Promise<ProfileL
       .select('id, student_id, academic_year_id, fee_group_id, structure_id, structure_source, status, prorate_from, is_rte, opening_balance, notes')
       .eq('academic_year_id', academicYearId),
     supabase.from('fee_invoices_v')
-      .select('student_id, net, paid, balance, status')
+      .select('student_id, net, paid, balance, status, due_date')
       .eq('academic_year_id', academicYearId)
-      .neq('status', 'cancelled'),
+      .neq('status', 'cancelled')
+      .limit(20000),
   ])
   if (pErr) return emptyOnMissing(pErr, [])
   if (iErr) return emptyOnMissing(iErr, [])
@@ -357,14 +360,19 @@ export async function fetchProfileList(academicYearId: string): Promise<ProfileL
   const people = personCache
   const admission = admissionCache
 
-  const totals = new Map<string, { billed: number; paid: number; outstanding: number }>()
+  // Overdue by the calendar, not by the nightly sweep: a bill whose due date
+  // passed this morning is overdue now, whether or not the job has run.
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const totals = new Map<string, { billed: number; paid: number; outstanding: number; overdue: number }>()
   let anyAmountVisible = false
-  for (const inv of (invoices ?? []) as { student_id: string; net: number | null; paid: number | null; balance: number | null }[]) {
+  for (const inv of (invoices ?? []) as { student_id: string; net: number | null; paid: number | null; balance: number | null; status: string; due_date: string }[]) {
     if (inv.net !== null) anyAmountVisible = true
-    const t = totals.get(inv.student_id) ?? { billed: 0, paid: 0, outstanding: 0 }
+    const t = totals.get(inv.student_id) ?? { billed: 0, paid: 0, outstanding: 0, overdue: 0 }
     t.billed += inv.net ?? 0
     t.paid += inv.paid ?? 0
     t.outstanding += inv.balance ?? 0
+    if (['pending', 'partly_paid', 'overdue'].includes(inv.status) && inv.due_date < today) t.overdue += 1
     totals.set(inv.student_id, t)
   }
 
@@ -383,6 +391,7 @@ export async function fetchProfileList(academicYearId: string): Promise<ProfileL
       billed: anyAmountVisible ? (t?.billed ?? 0) : null,
       paid: anyAmountVisible ? (t?.paid ?? 0) : null,
       outstanding: anyAmountVisible ? (t?.outstanding ?? 0) : null,
+      overdue_bills: t?.overdue ?? 0,
     }
   }).sort((a, b) => a.full_name.localeCompare(b.full_name))
 }

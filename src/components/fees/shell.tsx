@@ -3,31 +3,29 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The Fee module's screen shell.
 //
-// Every fee screen was drawing its own header bar, its own stat cards and its
-// own tab strip. Eight copies drift, and they had: three container widths, two
-// card radii and two tab styles across nine pages.
+// One copy of the frame, the lists, the panels and the switches every fee
+// screen is built from, so nine screens and a dozen sheets cannot drift apart.
 //
-// This is one copy, and it speaks the Salary Manager's vocabulary rather than
-// a second one of its own — `salary/ui.tsx` is imported, not re-implemented.
-// Sharp corners, the warm paper ramp, hairlines instead of shadow. The two
-// modules are one product and should read like it.
-//
-// Desktop gets `max-w-[1600px]`, the same as the payroll sheet: a fee ledger
-// is a table, and a 1,152px column on a 2,560px monitor wastes half the screen
-// and then makes the reader scroll horizontally inside what is left.
+// The language is the transport app's glass with the large surfaces squared
+// (see ui.ts): panels and lists have straight edges, the controls on them are
+// capsules. Desktop runs to the same 1600px edge as the bus and payroll
+// screens, because a fee register is a table and wants the width.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React from 'react'
+import React, { useId } from 'react'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
-import { LABEL, BLEED } from '@/components/salary/ui'
+import { ADMIN, BLEED, LABEL } from '@/components/fees/ui'
 
-export { LABEL, BLEED, Panel, PanelHead, SectionBar, SearchField, Btn, Chip }
-  from '@/components/salary/ui'
+export { LABEL, BLEED }
+
+/** The admin shell's width, shared with the transport and payroll screens. */
+export const SHELL = 'w-full mx-auto max-w-7xl 2xl:max-w-[1600px]'
 
 /**
- * The page frame: paper background, the wide container, a back link, and a
- * title row that wraps rather than squeezes.
+ * The frame for a fee page that is not the hub: the stone background, the
+ * width, a way back, and a title row whose title wraps instead of clipping.
  */
 export function FeeScreen({
   title, subtitle, icon, back, actions, children,
@@ -41,39 +39,33 @@ export function FeeScreen({
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-[#FDFCF9]" style={{ minHeight: '100vh' }}>
-      {/* Phones give a dense sheet the whole viewport; the gutter returns at
-          the `sm` breakpoint where there is room to spare. */}
-      <div className="max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 py-3 sm:py-6">
+    <div data-page-theme="fees" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
+      <div className={`${SHELL} px-4 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-12`}>
         {back && (
-          <div className="px-3 sm:px-0">
-            <Link href={back.href}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase
-                             tracking-[0.08em] text-[#8C8878] hover:text-[#18181B] mb-2.5 transition-colors">
-              <ArrowLeft size={13} /> {back.label}
-            </Link>
-          </div>
+          <Link href={back.href}
+                className="lg-pill inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 mb-3 text-[12.5px] font-semibold
+                           text-slate-700 hover:text-slate-900 transition-colors">
+            <ArrowLeft size={14} /> {back.label}
+          </Link>
         )}
 
-        {/* The masthead: a dark square with the module's gold mark, the title
-            at the one display size the module has, and the session it is
-            scoped to as a micro-label under it. Controls sit level with the
-            title's baseline on the right rather than floating above it. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 sm:mb-4 px-3 sm:px-0">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#27272A] flex items-center justify-center flex-shrink-0
-                          shadow-[inset_0_-2px_0_#B8983C]">
-            {icon}
-          </div>
-          <div className="flex-1 min-w-[150px]">
-            <h1 className="font-display text-[19px] sm:text-[22px] font-bold text-[#18181B] leading-none truncate tracking-[-0.01em]">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className={`${LABEL} mt-1.5 leading-tight normal-case tracking-[0.04em] text-[10.5px] font-semibold`}>{subtitle}</p>
-            )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 mb-4 sm:mb-5">
+          <div className="flex items-center gap-3 min-w-0 flex-1 basis-[220px]">
+            <div className="icon-chip w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0 text-white [&_svg]:!text-white"
+                 style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
+              <span className="relative z-10 flex">{icon}</span>
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-[1.3rem] sm:text-[1.6rem] font-bold leading-[1.15] text-slate-900 headline break-words">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="text-[12.5px] text-slate-500 mt-0.5 leading-snug break-words">{subtitle}</p>
+              )}
+            </div>
           </div>
           {actions && (
-            <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">{actions}</div>
+            <div className="flex items-center gap-1.5 flex-wrap">{actions}</div>
           )}
         </div>
 
@@ -93,135 +85,45 @@ export interface Stat {
   strong?: boolean
 }
 
-/**
- * The summary strip: figures in a hairline grid, value over label.
- *
- * Not cards. Six floating rounded tiles cost a row of vertical space each and
- * push the actual list off the screen — this is the payroll strip's shape,
- * where the gaps are the grid's background showing through a 1px gutter.
- *
- * `loading` renders the same cells with pulsing placeholders, so the strip is
- * exactly as tall before the figures land as after. The old cards used a
- * fixed-height skeleton that did not match the loaded card, and the whole page
- * jumped when a query returned.
- */
-/**
- * Tailwind needs the finished class name in the source, so the shapes are
- * spelled out rather than interpolated.
- *
- * Past the `sm` breakpoint a cell is capped at 240px and a filler column takes
- * the rest. Four figures stretched across a 1,600px container put 380px of
- * empty paper between a number and its label, which reads as four unrelated
- * panels rather than one strip.
- */
 const STRIP_COLS: Record<number, string> = {
-  1: 'grid-cols-1 sm:grid-cols-[minmax(0,240px)_1fr]',
-  2: 'grid-cols-2 sm:grid-cols-[repeat(2,minmax(0,240px))_1fr]',
-  3: 'grid-cols-3 sm:grid-cols-[repeat(3,minmax(0,240px))_1fr]',
-  4: 'grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,240px))_1fr]',
-  5: 'grid-cols-2 sm:grid-cols-[repeat(5,minmax(0,220px))_1fr]',
-  6: 'grid-cols-3 sm:grid-cols-[repeat(6,minmax(0,200px))_1fr]',
-  7: 'grid-cols-3 sm:grid-cols-[repeat(7,minmax(0,180px))_1fr]',
-  8: 'grid-cols-3 sm:grid-cols-[repeat(8,minmax(0,170px))_1fr]',
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-2 sm:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-5',
+  6: 'grid-cols-3 sm:grid-cols-6',
 }
 
+/**
+ * A row of figures: one square sheet split by hairlines, value over label.
+ *
+ * `loading` renders the same cells with placeholders, so the strip is exactly
+ * as tall before the figures land as after.
+ */
 export function StatStrip({ stats, loading }: { stats: Stat[]; loading?: boolean }) {
-  const cols = STRIP_COLS[stats.length] ?? 'grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,240px))_1fr]'
+  const cols = STRIP_COLS[stats.length] ?? 'grid-cols-2 sm:grid-cols-4'
   return (
-    <div className={`bg-white border-[#E3DFD3] ${BLEED} border-y sm:border mb-2.5`}>
-      {/* 1px hairlines in both directions: the grid's own background shows
-          through a one-pixel gap between the white cells. */}
-      <div className={`grid ${cols} gap-px bg-[#F0ECE2]`}>
+    <div className="fx-card mb-3 overflow-hidden">
+      <div className={`grid ${cols} gap-px bg-[#EEEAE1]`}>
         {stats.map(s => (
-          <div key={s.label} className="px-2.5 py-2 min-w-0 bg-white">
+          <div key={s.label} className="px-3 py-2.5 min-w-0 bg-white">
             {loading ? (
-              // Same box, same height. The old skeleton was a fixed 74px card
-              // that did not match the loaded one, so the page jumped every
-              // time a query returned.
               <>
-                <div className="h-[19px] w-20 max-w-full bg-[#F4F1E7] animate-pulse" />
-                <div className="h-[11px] w-14 max-w-full bg-[#F4F1E7] animate-pulse mt-[3px]" />
+                <div className="h-[20px] w-20 max-w-full bg-slate-100 animate-pulse" />
+                <div className="h-[12px] w-14 max-w-full bg-slate-100 animate-pulse mt-1" />
               </>
             ) : (
               <>
-                <p className={`${s.strong ? 'text-[15px]' : 'text-[12.5px]'} font-bold tabular-nums truncate leading-[19px] text-[#18181B]`}
+                <p className={`${s.strong ? 'text-[17px]' : 'text-[15px]'} font-bold tabular-nums leading-[20px] text-slate-900 break-words`}
                    style={s.tone ? { color: s.tone } : undefined}>
                   {s.value}
                 </p>
-                <p className={`${LABEL} mt-[3px] leading-[11px] truncate`}>{s.label}</p>
+                <p className={`${LABEL} mt-0.5 leading-snug`}>{s.label}</p>
               </>
             )}
           </div>
         ))}
-        {/* Fills the rest of the row so the grid's hairline colour does not
-            show as a stripe where the cells stop. */}
-        <div className="hidden sm:block bg-white" />
       </div>
-    </div>
-  )
-}
-
-export interface TabDef<K extends string> {
-  key: K
-  label: string
-  /**
-   * What the tab is called when there is not room for `label`. A phone has
-   * room for "Collection" and not for "Collection Center", and the strip is
-   * better off saying the shorter thing than scrolling to say the longer one.
-   */
-  short?: string
-  icon?: React.ElementType
-  /** Shown beside the label — a count of what is waiting. */
-  badge?: number
-}
-
-/**
- * Underline tabs with a gold rule under the live one, the same control the
- * Salary hub uses to switch sections.
- *
- * The strip fits whatever width it is given. It never scrolls and never wraps:
- * the tabs share the row (`flex-1`), each may shrink below its text (`min-w-0`)
- * and clip rather than push, and on a phone each shows its `short` name. A
- * sideways-scrolling tab strip on a touchscreen is the worst of the three —
- * the tabs out of view are invisible rather than merely narrow, and the strip
- * fights the page's own vertical scroll for the same drag.
- */
-export function TabBar<K extends string>({
-  tabs, active, onChange,
-}: {
-  tabs: TabDef<K>[]
-  active: K
-  onChange: (key: K) => void
-}) {
-  return (
-    <div className="flex sm:gap-1 border-b border-[#E3DFD3] mb-3 sm:mb-4 px-3 sm:px-0">
-      {tabs.map(t => {
-        const on = t.key === active
-        const Icon = t.icon
-        return (
-          <button
-            key={t.key}
-            onClick={() => onChange(t.key)}
-            className={`flex-1 sm:flex-none min-w-0 flex items-center justify-center gap-1.5 px-1.5 sm:px-4 pb-2 pt-1
-                        text-[11px] font-bold uppercase tracking-[0.06em] border-b-2 -mb-px
-                        transition-colors ${
-              on ? 'border-[#B8983C] text-[#18181B]' : 'border-transparent text-[#A8A395] hover:text-[#6B675A]'
-            }`}
-          >
-            {Icon && <Icon size={13} className="flex-shrink-0" />}
-            <span className="truncate">
-              {t.short ? <><span className="sm:hidden">{t.short}</span>
-                           <span className="hidden sm:inline">{t.label}</span></> : t.label}
-            </span>
-            {t.badge !== undefined && t.badge > 0 && (
-              <span className={`flex-shrink-0 px-1 py-px text-[9px] leading-none tabular-nums ${
-                on ? 'bg-[#B8983C] text-white' : 'bg-[#F4F1E7] text-[#8C8878]'}`}>
-                {t.badge}
-              </span>
-            )}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -236,15 +138,11 @@ export interface SegmentDef<K extends string> {
 }
 
 /**
- * The module's one switch between views of the same thing: joined square
- * segments in a hairline frame, the live one dark. Used wherever a screen
- * offers "this or that" — the Collection Center's sections, the ledger's
- * status filter, term or month on the issue bar.
+ * The module's switch between views of the same thing: an iOS segmented
+ * control — a capsule track and a dark thumb that slides to the live choice.
  *
- * `fill` stretches the segments to the frame's width (a phone, or a frame that
- * owns its whole row); without it each segment is as wide as its words, which
- * is what a laptop wants — a three-way switch stretched across 1,400px reads
- * as three unrelated buttons.
+ * `fill` stretches the segments to the track's width (`'phone'` only below
+ * `sm`); without it each segment is as wide as its words.
  */
 export function Segmented<K extends string>({
   options, value, onChange, fill, size = 'md', className = '',
@@ -257,32 +155,46 @@ export function Segmented<K extends string>({
   size?: 'sm' | 'md'
   className?: string
 }) {
+  const id = useId()
   const frame = fill === true ? 'flex w-full' : fill === 'phone' ? 'flex max-sm:w-full sm:inline-flex' : 'inline-flex'
   const item = fill === true ? 'flex-1' : fill === 'phone' ? 'max-sm:flex-1' : ''
+  // A filled switch shares its width between the choices, so each gets
+  // only a little side padding and the words keep the room.
+  const pad = size === 'sm' ? 'px-2.5' : 'px-3'
+  const h = `${size === 'sm' ? 'h-7 text-[12px]' : 'h-8 text-[12.5px]'} ${fill === true ? 'px-1.5' : fill === 'phone' ? `max-sm:px-1.5 sm:${pad}` : pad}`
   return (
-    <div role="tablist"
-         className={`${frame} max-w-full bg-white border border-[#E3DFD3] p-[3px] gap-[3px] ${className}`}>
+    <div role="tablist" className={`lg-pill ${frame} max-w-full items-center gap-0.5 p-1 ${className}`}>
       {options.map(o => {
         const on = o.key === value
         const Icon = o.icon
         return (
           <button
             key={o.key}
+            type="button"
             role="tab"
             aria-selected={on}
             onClick={() => onChange(o.key)}
-            className={`${item} min-w-0 inline-flex items-center justify-center gap-1.5
-                        ${size === 'sm' ? 'px-2 py-[5px]' : 'px-2.5 sm:px-3 py-[6px]'}
-                        text-[10.5px] font-bold uppercase tracking-[0.07em] leading-none whitespace-nowrap transition-colors ${
-              on ? 'bg-[#27272A] text-white' : 'text-[#8C8878] hover:text-[#18181B] hover:bg-[#FAF8F2]'}`}
+            className={`${item} relative min-w-0 inline-flex items-center justify-center gap-1.5 rounded-full
+                        font-semibold whitespace-nowrap transition-colors ${h}
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+              on ? 'text-white' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            {Icon && <Icon size={13} className={`flex-shrink-0 ${fill === 'phone' ? 'max-sm:hidden' : ''} ${on ? 'text-[#B8983C]' : ''}`} />}
-            <span className="truncate">
-              {o.short ? <><span className="sm:hidden">{o.short}</span><span className="max-sm:hidden">{o.label}</span></> : o.label}
-            </span>
-            {o.count !== undefined && (
-              <span className={`tabular-nums text-[9.5px] ${on ? 'text-[#B8983C]' : 'text-[#B5B09F]'}`}>{o.count}</span>
+            {on && (
+              <motion.span
+                layoutId={`seg-${id}`}
+                className="absolute inset-0 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_4px_10px_-4px_rgba(15,23,42,.45)]"
+                transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+              />
             )}
+            <span className="relative z-10 inline-flex items-center gap-1.5 min-w-0">
+              {Icon && <Icon size={13} className={`flex-shrink-0 ${fill === 'phone' ? 'max-sm:hidden' : ''} ${on ? 'text-[#E9DDBB]' : ''}`} />}
+              <span className="truncate">
+                {o.short ? <><span className="sm:hidden">{o.short}</span><span className="max-sm:hidden">{o.label}</span></> : o.label}
+              </span>
+              {o.count !== undefined && (
+                <span className={`tabular-nums text-[10.5px] font-bold ${on ? 'text-white/70' : 'text-slate-400'}`}>{o.count}</span>
+              )}
+            </span>
           </button>
         )
       })}
@@ -292,7 +204,7 @@ export function Segmented<K extends string>({
 
 /**
  * A screen's control row: what narrows the list on the left, what acts on it
- * on the right. On a phone the two halves stack, the actions sharing one line.
+ * on the right. On a phone the two halves stack.
  */
 export function Toolbar({ left, right, className = '' }: {
   left?: React.ReactNode
@@ -307,9 +219,36 @@ export function Toolbar({ left, right, className = '' }: {
   )
 }
 
+/** A section's title, one line of context under it, and its controls. */
+export function SectionBar({ title, hint, actions }: {
+  title: string
+  hint?: React.ReactNode
+  actions?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 mb-2.5">
+      <div className="min-w-0 flex-1 basis-[220px]">
+        <h2 className="font-display text-[15px] sm:text-[16px] font-bold text-slate-900 leading-snug">{title}</h2>
+        {hint && <p className="text-[12px] text-slate-500 leading-snug mt-0.5">{hint}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
+    </div>
+  )
+}
+
+type BtnTone = 'dark' | 'ghost' | 'gold'
+
+/** A capsule button in one of the module's three tones. */
+export function Btn({ tone = 'ghost', className = '', children, ...rest }: {
+  tone?: BtnTone
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const cls = tone === 'dark' ? ADMIN.darkBtn : tone === 'gold' ? ADMIN.goldBtn : ADMIN.ghostBtn
+  return <button {...rest} className={`${cls} ${className}`}>{children}</button>
+}
+
 /**
- * A titled panel: the dark strip the Salary hub names its panels with, an
- * optional count beside the title, and room for one control on the right.
+ * A titled panel: a square sheet with its name, an optional count and room for
+ * a control or two in the heading row.
  */
 export function TitledPanel({ title, count, right, className = '', children }: {
   title: string
@@ -319,13 +258,15 @@ export function TitledPanel({ title, count, right, className = '', children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className={`bg-white border border-[#E3DFD3] ${BLEED} sm:mx-0 max-sm:border-x-0 ${className}`}>
-      <div className="flex items-center gap-2 bg-[#27272A] px-3 min-h-[34px] py-1.5">
-        <h3 className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8] truncate">{title}</h3>
+    <section className={`fx-card fx-bleed min-w-0 ${className}`}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3.5 min-h-[44px] py-2 border-b border-[#EEEAE1]">
+        <h3 className="text-[13.5px] font-semibold text-slate-900 leading-snug">{title}</h3>
         {count !== undefined && (
-          <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{count}</span>
+          <span className="h-5 min-w-5 px-1.5 rounded-full bg-[#F3ECD9] text-[#7A6220] text-[10.5px] font-bold tabular-nums inline-flex items-center justify-center">
+            {count}
+          </span>
         )}
-        {right && <div className="ml-auto flex items-center gap-1.5">{right}</div>}
+        {right && <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{right}</div>}
       </div>
       {children}
     </section>
@@ -340,21 +281,83 @@ export function Notice({
   children: React.ReactNode
 }) {
   const tones = {
-    info:  'bg-[#FAF8F2] border-[#E3DFD3] text-[#52525B]',
-    warn:  'bg-[#FAF3DF] border-[#E7D9AE] text-[#7A6220]',
-    error: 'bg-[#FCECEC] border-[#EFCCCC] text-[#A93232]',
-    good:  'bg-[#EAF5EE] border-[#C6E3D2] text-[#1F6B42]',
+    info:  'bg-white/80 border-[#B9B2A2] text-slate-600',
+    warn:  'bg-[#FBF4E2] border-[#B8983C] text-[#6E5513]',
+    error: 'bg-[#FCEDED] border-[#C24141] text-[#962C2C]',
+    good:  'bg-[#EAF5EE] border-[#2E8B57] text-[#1F6B42]',
   }
   return (
-    <div className={`border px-3 py-2 text-[12.5px] leading-relaxed mb-2.5 ${BLEED} sm:mx-0 ${tones[tone]}`}>
+    <div className={`border-l-[3px] px-3.5 py-2.5 text-[13px] leading-relaxed mb-3 ${tones[tone]}`}>
       {children}
     </div>
   )
 }
 
+// ── Settings forms ──────────────────────────────────────────────────────
+//
+// The iOS Settings form on a square sheet: related settings in one group, one
+// setting per row — what it is on the left, its control on the right — and a
+// note under the group for anything the rows cannot say in a line.
+
+/** A titled group of settings rows. */
+export function FormGroup({ title, note, children, className = '' }: {
+  title?: string
+  note?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={className}>
+      {title && <h3 className="px-0.5 pb-1.5 text-[13.5px] font-semibold text-slate-900">{title}</h3>}
+      <div className="fx-card divide-y divide-[#EEEAE1]">{children}</div>
+      {note && <p className="px-0.5 pt-1.5 text-[12px] leading-snug text-slate-500">{note}</p>}
+    </section>
+  )
+}
+
+/**
+ * One setting. The control sits beside the statement while there is room and
+ * drops under it when there is not; `stack` always puts it underneath.
+ */
+export function FormRow({ label, hint, children, stack = false }: {
+  label: React.ReactNode
+  hint?: React.ReactNode
+  children: React.ReactNode
+  stack?: boolean
+}) {
+  return (
+    <div className={`px-3.5 py-3 ${stack ? 'space-y-2' : 'flex flex-wrap items-center justify-between gap-x-4 gap-y-2'}`}>
+      <div className={stack ? '' : 'min-w-0 flex-1 basis-[160px]'}>
+        <p className="text-[13.5px] text-slate-900 leading-snug">{label}</p>
+        {hint && <p className="text-[12px] text-slate-500 leading-snug mt-0.5">{hint}</p>}
+      </div>
+      <div className={stack ? 'min-w-0' : 'max-w-full'}>{children}</div>
+    </div>
+  )
+}
+
+/** The iOS switch. */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex w-[46px] h-[28px] flex-shrink-0 rounded-full transition-colors
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+        checked ? 'bg-[#34A853]' : 'bg-slate-200'}`}
+    >
+      <span className={`absolute top-[2px] left-[2px] w-6 h-6 rounded-full bg-white shadow-[0_2px_5px_rgba(15,23,42,.25)] transition-transform ${
+        checked ? 'translate-x-[18px]' : ''}`} />
+    </button>
+  )
+}
+
 /** Centred placeholder for an empty list, sized so a panel does not collapse. */
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="px-3 py-10 text-[12.5px] text-[#8C8878] text-center">{children}</p>
+  return <p className="px-4 py-10 text-[13px] text-slate-500 text-center leading-relaxed">{children}</p>
 }
 
 /** The module's one spinner position, so every screen loads the same way. */
@@ -362,7 +365,7 @@ export function Loading() {
   return (
     <div className="py-16 text-center">
       <div className="spinner mx-auto mb-3" />
-      <p className="text-[12.5px] text-[#8C8878]">Loading…</p>
+      <p className="text-[13px] text-slate-500">Loading…</p>
     </div>
   )
 }
@@ -370,18 +373,10 @@ export function Loading() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Row lists — a table on a laptop, a card on a phone
 //
-// Every list in this module was a `<table>` in an `overflow-x-auto` box. On a
-// laptop that is right. On a 375px phone a seven-column ledger becomes a
-// seven-column ledger you drag sideways through, and the two figures a clerk
-// needs at the same time — who this is and what they owe — are the two columns
-// furthest apart. You cannot see a name and its amount together, and the
-// Collect button is off the right edge entirely.
-//
-// So the same cells are laid out twice from one piece of markup: a 2-column
-// card on phones, the real column template from `sm` up. One copy of the row,
-// so the two layouts cannot drift apart — the only list in the module that
-// really is drawn twice is the search answer, whose columns are whatever the
-// question asked for and so cannot be folded by CSS at all.
+// The same cells are laid out twice from one piece of markup: a 2-column card
+// on phones, the real column template from `sm` up, so the two layouts cannot
+// drift apart. On a phone the name and the amount sit on one line instead of
+// at opposite ends of a sideways scroll.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -389,13 +384,7 @@ export function Loading() {
  *
  * `A1`–`A3` are the left column, top to bottom: who or what this row is.
  * `B1`–`B3` are the right, right-aligned: the money and the state.
- * `END` pins a cell to a third column beside the first two lines, which is
- * where a trailing action button belongs.
- *
- * All of them are `max-sm:` so there is nothing to undo at the breakpoint —
- * past `sm` the row's own template places the cells in source order, and two
- * rules never fight over which wins. Spelled out as literals because Tailwind
- * only emits CSS for class names it can read in the source.
+ * `END` pins a cell to a third column beside the first two lines.
  */
 export const CELL = {
   A1: 'max-sm:col-start-1 max-sm:row-start-1 min-w-0',
@@ -404,23 +393,12 @@ export const CELL = {
   B1: 'max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end min-w-0',
   B2: 'max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-self-end min-w-0',
   B3: 'max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-self-end min-w-0',
-  /**
-   * `row-span-2`, not `row-span-full`: the card's rows are implicit (the cells
-   * above make them by asking for row 2), and a negative line index like
-   * `1 / -1` counts from the end of the *explicit* grid, which here has no rows
-   * at all. Two is the height of every card that carries a trailing action.
-   */
   END: 'max-sm:col-start-3 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center max-sm:justify-self-end',
   /** A fact worth a column on a laptop and not worth a line on a phone. */
   DESKTOP: 'max-sm:hidden',
 } as const
 
-/**
- * The same slots, shifted one column right, for a list whose first column is a
- * control the row cannot do without — a selection checkbox. `PICK` is that
- * control, pinned left beside the name it selects; `A`/`B` are the two columns
- * beside it. Pass `lead` to `Row` to widen the phone grid for it.
- */
+/** The same slots, shifted one column right, for a list that leads with a checkbox. */
 export const CELL_LEAD = {
   PICK: 'max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-2 max-sm:self-center',
   A1: 'max-sm:col-start-2 max-sm:row-start-1 min-w-0',
@@ -431,39 +409,33 @@ export const CELL_LEAD = {
   B3: 'max-sm:col-start-3 max-sm:row-start-3 max-sm:justify-self-end min-w-0',
 } as const
 
-/**
- * The frame a row list sits in. Full-bleed on phones for the same reason the
- * payroll sheet is: a ledger cannot spare 24px of gutter on a 360px screen.
- */
+/** The square sheet a row list sits on. Edge to edge on a phone. */
 export function List({ className = '', children }: {
   className?: string
   children: React.ReactNode
 }) {
   return (
-    <div className={`bg-white border-[#E3DFD3] ${BLEED} border-y sm:border ${className}`}>
+    <div className={`fx-card fx-bleed min-w-0 overflow-hidden ${className}`}>
       {children}
     </div>
   )
 }
 
-/**
- * The heading row. Phones do not get one: the rows there are cards, and a
- * header would be naming columns that are not on the screen.
- */
+/** The heading row. Phones do not get one: the rows there are cards. */
 export function ListHead({ cols, children }: {
   /** The `sm:grid-cols-[…]` literal this list's rows use. */
   cols: string
   children: React.ReactNode
 }) {
   return (
-    <div className={`hidden sm:grid ${cols} items-center gap-x-2 gap-y-1 px-3 py-[7px]
-                     bg-[#FAF8F2] border-b border-[#E3DFD3]`}>
+    <div className={`hidden sm:grid ${cols} items-center gap-x-3 px-3.5 py-2
+                     bg-[#F7F5F0] border-b border-[#EEEAE1]`}>
       {children}
     </div>
   )
 }
 
-/** A column heading, in the one type size every column heading uses. */
+/** A column heading. */
 export function Col({ right, className = '', children }: {
   right?: boolean
   className?: string
@@ -475,61 +447,49 @@ export function Col({ right, className = '', children }: {
 }
 
 /**
- * The width a trailing action column takes on a phone: one, two or three `TAP`
- * squares and the 4px gutters between them.
- *
- * Fixed, not `auto`. A column sized to its contents is a different width on
- * every row — a bill that can still be cancelled has a button, the one beside
- * it does not — and that walks the amounts in and out by 28px down the list.
- * Reserving the space costs 28px and buys a straight edge.
+ * Fixed widths for a trailing action column on a phone: one, two or three
+ * `TAP` buttons, so the amounts down a list keep a straight edge.
  */
 const TRAIL = {
-  1: 'grid-cols-[minmax(0,1fr)_auto_28px]',
-  2: 'grid-cols-[minmax(0,1fr)_auto_60px]',
-  3: 'grid-cols-[minmax(0,1fr)_auto_92px]',
+  1: 'grid-cols-[minmax(0,1fr)_auto_32px]',
+  2: 'grid-cols-[minmax(0,1fr)_auto_68px]',
+  3: 'grid-cols-[minmax(0,1fr)_auto_104px]',
 } as const
 
 /**
  * One row. Two columns and as many lines as its cells ask for on a phone; from
- * `sm` up, whatever `cols` says.
- *
- * `trailing` is how many icon buttons the row's `CELL.END` holds, and reserves
- * a column that wide for them.
+ * `sm` up, whatever `cols` says. `onClick` makes the whole row the button.
  */
-export function Row({ cols, trailing, lead, below, className = '', children }: {
+export function Row({ cols, trailing, lead, below, onClick, className = '', children }: {
   cols: string
   trailing?: 1 | 2 | 3
-  /** The row opens with a control that keeps its own column — see `CELL_LEAD`. */
   lead?: boolean
   /** Full-width content under the cells — a bill's lines, a reason, a note. */
   below?: React.ReactNode
+  onClick?: () => void
   className?: string
   children: React.ReactNode
 }) {
+  const grid = `grid ${lead
+    ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
+    : trailing
+    ? TRAIL[trailing]
+    : 'grid-cols-[minmax(0,1fr)_auto]'} ${cols}
+    items-center gap-x-3 gap-y-1 sm:gap-y-0 px-3.5 py-2.5`
   return (
-    <div className={`border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2] transition-colors ${className}`}>
-      <div className={`grid ${lead
-                        ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
-                        : trailing
-                        ? TRAIL[trailing]
-                        : 'grid-cols-[minmax(0,1fr)_auto]'} ${cols}
-                       items-center gap-x-2 gap-y-[3px] sm:gap-y-0 px-3 py-[7px]`}>
+    <div className={`border-b border-[#F0ECE3] last:border-b-0 transition-colors ${
+      onClick ? 'cursor-pointer hover:bg-[#FAF7F0] active:bg-[#F5F1E6]' : 'hover:bg-[#FBFAF6]'} ${className}`}
+         onClick={onClick}
+         role={onClick ? 'button' : undefined}
+         tabIndex={onClick ? 0 : undefined}
+         onKeyDown={onClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}>
+      <div className={grid}>
         {children}
       </div>
-      {below && <div className="px-3 pb-2 -mt-px">{below}</div>}
+      {below && <div className="px-3.5 pb-2.5 -mt-0.5">{below}</div>}
     </div>
   )
 }
 
-/**
- * An icon-only button: the square version of the module's text button, exactly
- * as tall, so a row of actions lines up whether its buttons carry words or not.
- *
- * `ADMIN.ghostBtn` is 10.5px of leading-none text in `py-[7px]` inside a 1px
- * border — 28px. This is 28px square, at every width. The icon buttons it
- * replaces were a 26px target with 3px between them, which is how a payment
- * gets reversed by somebody reaching for the printer; 28px with a 4px gutter is
- * not a generous target, but it is the one that matches the rest of the module,
- * and a button that is bigger than the type around it reads as a mistake.
- */
-export const TAP = 'inline-flex items-center justify-center w-7 h-7 flex-shrink-0 transition-colors'
+/** An icon-only round button, 32px, the size of a capsule button's height. */
+export const TAP = 'inline-flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 transition-colors hover:bg-slate-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60'

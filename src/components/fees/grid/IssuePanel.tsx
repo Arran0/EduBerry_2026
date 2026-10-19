@@ -109,20 +109,20 @@ export function IssueBar({
   const label = `${ADMIN.label} w-[64px] flex-shrink-0`
 
   return (
-    <section className="bg-white border border-[#E3DFD3] -mx-3 sm:mx-0 max-sm:border-x-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#27272A] px-3 py-1.5">
-        <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">
-          <Send size={11} className="text-[#B8983C]" /> Issue fees
+    <section className="fx-card fx-bleed min-w-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#F7F5F0] border-b border-[#EEEAE1] px-3.5 py-2.5">
+        <span className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-slate-900">
+          <Send size={14} className="text-[#8B6F47]" /> Issue fees
         </span>
-        <span className="text-[11px] text-[#A1A1AA] truncate flex-1 min-w-0 max-sm:basis-full max-sm:order-3">{summary}</span>
+        <span className="text-[12px] text-slate-500 leading-snug break-words flex-1 min-w-0 max-sm:basis-full max-sm:order-3">{summary}</span>
         <button onClick={onReview} disabled={!ready || !canIssue}
                 title={canIssue ? 'Preview exactly what this will bill' : 'You do not have permission to issue fees'}
-                className={`${ADMIN.goldBtn} !py-[6px] ml-auto`}>
+                className={`${ADMIN.goldBtn} ml-auto`}>
           Review &amp; issue
         </button>
       </div>
 
-      <div className="p-2.5 sm:p-3 space-y-2.5">
+      <div className="p-3 sm:p-3.5 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Segmented<IssueMode>
             value={scope.mode}
@@ -131,7 +131,7 @@ export function IssueBar({
           />
           {scope.mode === 'term' ? (
             terms.length === 0
-              ? <span className="text-[11.5px] text-[#8C8878]">Add a term first.</span>
+              ? <span className="text-[13px] text-slate-500">Add a term first.</span>
               : <Segmented<string> value={scope.termId ?? ''} onChange={id => set({ termId: id })}
                                    options={terms.map(t => ({ key: t.id, label: t.name }))} />
           ) : (
@@ -140,9 +140,9 @@ export function IssueBar({
               {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
             </select>
           )}
-          <span className="sm:ml-auto text-[11px] text-[#6B675A]">
-            <span className={ADMIN.label}>Due</span> <span className="font-bold text-[#18181B] tabular-nums ml-1">{due}</span>
-            <span className="text-[#A8A395]"> · {scope.mode === 'term' ? 'the term’s date' : 'set under monthly due dates'}</span>
+          <span className="sm:ml-auto text-[13px] text-slate-600">
+            <span className={ADMIN.label}>Due</span> <span className="font-bold text-slate-900 tabular-nums ml-1">{due}</span>
+            <span className="text-slate-400"> · {scope.mode === 'term' ? 'the term’s date' : 'set under monthly due dates'}</span>
           </span>
         </div>
 
@@ -153,7 +153,7 @@ export function IssueBar({
             <Pick key={h.id} on={scope.headIds.has(h.id)} onClick={() => toggle('headIds', h.id)}>{h.name}</Pick>
           ))}
           {modeHeads.length === 0 && (
-            <span className="text-[11.5px] text-[#8C8878] ml-1">
+            <span className="text-[13px] text-slate-500 ml-1">
               No {scope.mode === 'term' ? 'term-wise' : 'monthly'} heads yet.
             </span>
           )}
@@ -170,7 +170,7 @@ export function IssueBar({
                 <span className="ml-1 opacity-60">{r.direction === 'inbound' ? '→ school' : '← school'}</span>
               </Pick>
             ))}
-            <span className="w-full text-[10.5px] text-[#8C8878] pl-[68px] max-sm:pl-0">
+            <span className="w-full text-[12px] text-slate-500 pl-[68px] max-sm:pl-0">
               The Bus fee is billed by route; grades do not apply to it.
             </span>
           </div>
@@ -275,7 +275,7 @@ export function IssueSheet({
       subtitle={preview ? `Due ${shortDate(preview.due_date)} · ${headNames}` : headNames}
       footer={
         <div className="flex items-center gap-2">
-          <p className="text-[11px] text-[#8C8878] mr-auto leading-snug max-w-[44ch]">
+          <p className="text-[12px] text-slate-500 mr-auto leading-snug max-w-[44ch]">
             Issued cells lock. You can undo while nobody has paid against them.
           </p>
           <button onClick={onClose} className={ADMIN.ghostBtn}>Cancel</button>
@@ -288,7 +288,7 @@ export function IssueSheet({
       }
     >
       {loading && (
-        <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+        <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
       )}
       {preview && (
         <>
@@ -344,13 +344,13 @@ export function IssueSheet({
               </ListHead>
               {bus.by_route.map(r => (
                 <Row key={r.route_id} cols={BY_ROW_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
+                  <span className={`${CELL.A1} text-[13px] text-slate-900 break-words`}>
                     {r.route_name}
                     {r.unset && <span className="ml-1.5 text-[11px] text-[#A93232]">· pricing not chosen</span>}
                     {r.unpriced > 0 && <span className="ml-1.5 text-[11px] text-[#A93232]">· {r.unpriced} without a price</span>}
-                    {r.already > 0 && <span className="ml-1.5 text-[11px] text-[#8C8878]">· {r.already} already billed</span>}
+                    {r.already > 0 && <span className="ml-1.5 text-[12px] text-slate-500">· {r.already} already billed</span>}
                   </span>
-                  <span className={`${CELL.A2} sm:text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
+                  <span className={`${CELL.A2} sm:text-right text-[11.5px] text-slate-600 tabular-nums`}>
                     {r.ready}<span className="sm:hidden"> riders</span>
                   </span>
                   <span className={`${CELL.B1} text-right text-[11.5px] font-semibold tabular-nums`}>{rupees(r.total)}</span>
@@ -373,10 +373,10 @@ export function IssueSheet({
               </ListHead>
               {preview.by_row.map(r => (
                 <Row key={rowId(r)} cols={BY_ROW_COLS}>
-                  <span className={`${CELL.A1} text-[12.5px] text-[#18181B] truncate`}>
+                  <span className={`${CELL.A1} text-[13px] text-slate-900 break-words`}>
                     {r.grade === null ? NO_GRADE_LABEL : rowLabel(r, groups)}
                   </span>
-                  <span className={`${CELL.A2} sm:text-right text-[11.5px] text-[#6B675A] tabular-nums`}>
+                  <span className={`${CELL.A2} sm:text-right text-[11.5px] text-slate-600 tabular-nums`}>
                     {r.students}<span className="sm:hidden"> students</span>
                   </span>
                   <span className={`${CELL.B1} text-right text-[11.5px] font-semibold tabular-nums`}>{rupees(r.total)}</span>
@@ -433,7 +433,7 @@ export function UndoSheet({
       }
     >
       {blockers === null && !error && (
-        <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+        <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
       )}
       {blocked && (
         <>
@@ -441,14 +441,14 @@ export function UndoSheet({
             Students have paid against these bills. Reverse each payment, or refund it in full, before this issue can be undone.
           </ErrorNote>
           <div className="bg-white border border-[#E3DFD3]">
-            <div className="bg-[#27272A] px-3 py-1.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">
+            <div className="bg-[#F7F5F0] border-b border-[#EEEAE1] px-3.5 py-2.5 text-[12px] font-semibold text-slate-700">
               Money held
             </div>
             {blockers!.map(b => (
               <div key={b.payment_id} className="flex items-center gap-3 px-3 py-2 border-b border-[#F0ECE2] last:border-b-0">
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] text-[#18181B] truncate">{b.student_name}</div>
-                  <div className="text-[11px] text-[#8C8878] truncate">
+                  <div className="text-[13px] text-slate-900 break-words">{b.student_name}</div>
+                  <div className="text-[12px] text-slate-500 break-words">
                     <span className="font-mono">{b.receipt_no ?? 'No receipt yet'}</span>
                     {' · '}{b.status === 'pending' ? 'payment in progress' : 'paid'}
                     {b.refunded > 0 && ` · ${rupees(b.refunded)} refunded`}
@@ -495,8 +495,8 @@ export function IssuesLog({
     <section className="mt-5">
       <div className="flex items-end justify-between gap-2 mb-2">
         <div>
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#3F3F46] leading-tight">Issued</h2>
-          <p className="text-[10.5px] text-[#8C8878] mt-0.5">
+          <h2 className="font-display text-[15px] sm:text-[16px] font-bold text-slate-900 leading-snug">Issued</h2>
+          <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
             What has been billed from the grid. Undo withdraws the bills and unlocks the cells.
           </p>
         </div>
@@ -510,7 +510,7 @@ export function IssuesLog({
         <ListHead cols={LOG_COLS}>
           <Col>Issue</Col><Col>What it covered</Col><Col>Due</Col><Col right>Bills</Col><Col right>Total</Col><Col right>&nbsp;</Col>
         </ListHead>
-        {list.length === 0 && <p className="px-3 py-5 text-[12px] text-[#8C8878]">Nothing is issued right now.</p>}
+        {list.length === 0 && <p className="px-3 py-5 text-[12px] text-slate-500">Nothing is issued right now.</p>}
         {list.map(i => {
           const h = i.filters?.head_ids?.length ? i.filters.head_ids.map(id => headName.get(id) ?? 'Head').join(', ') : null
           const r = i.filters?.rows?.length ? i.filters.rows.map(x => rowLabel(x, groups)).join(', ') : null
@@ -526,26 +526,26 @@ export function IssuesLog({
           return (
             <Row key={i.id} cols={LOG_COLS} trailing={1} className={isUndone ? 'opacity-60' : ''}>
               <span className={`${CELL.A1} flex items-center gap-1.5 min-w-0`}>
-                <span className={`flex-shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+                <span className={`flex-shrink-0 inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${
                   isUndone ? INVOICE_CHIP.draft : INVOICE_CHIP.paid}`}>
                   {isUndone ? 'Undone' : 'Issued'}
                 </span>
                 {i.kind === 'charge' && i.charge_id ? (
                   <button onClick={() => onOpenCharge(i.charge_id!)}
-                          className="text-[12.5px] font-medium text-[#18181B] truncate hover:underline text-left">
+                          className="text-[13px] font-medium text-slate-900 break-words hover:underline text-left">
                     {i.title}
                   </button>
                 ) : (
-                  <span className="text-[12.5px] font-medium text-[#18181B] truncate">
+                  <span className="text-[13px] font-medium text-slate-900 break-words">
                     {i.bill_month ? monthLabel(i.bill_month) : i.title}
                   </span>
                 )}
               </span>
-              <span className={`${CELL.A2} text-[11px] text-[#8C8878] truncate`}>
+              <span className={`${CELL.A2} text-[12px] text-slate-500 break-words`}>
                 {isUndone ? `Undone — ${i.undo_reason ?? ''}` : scope}
               </span>
-              <span className={`${CELL.DESKTOP} text-[11px] text-[#6B675A] whitespace-nowrap`}>{shortDate(i.due_date)}</span>
-              <span className={`${CELL.DESKTOP} text-right text-[11.5px] text-[#6B675A] tabular-nums`}>{i.invoice_count}</span>
+              <span className={`${CELL.DESKTOP} text-[12px] text-slate-600 whitespace-nowrap`}>{shortDate(i.due_date)}</span>
+              <span className={`${CELL.DESKTOP} text-right text-[11.5px] text-slate-600 tabular-nums`}>{i.invoice_count}</span>
               <span className={`${CELL.B1} text-right text-[11.5px] font-semibold tabular-nums`}>{rupees(i.total)}</span>
               <span className={`${CELL.END} flex justify-end`}>
                 {!isUndone && canUndo && (

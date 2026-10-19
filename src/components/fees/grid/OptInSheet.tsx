@@ -88,8 +88,8 @@ export default function OptInSheet({
       title={title} subtitle={subtitle}
       footer={
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#8C8878] mr-auto tabular-nums">
-            <span className="font-bold text-[#18181B]">{picked.size}</span> opted in
+          <span className="text-[12px] text-slate-500 mr-auto tabular-nums">
+            <span className="font-bold text-slate-900">{picked.size}</span> opted in
             {(add.length > 0 || remove.length > 0) && <> · {add.length} to add, {remove.length} to remove</>}
           </span>
           <button onClick={onClose} className={ADMIN.ghostBtn}>{canEdit ? 'Cancel' : 'Close'}</button>
@@ -112,7 +112,7 @@ export default function OptInSheet({
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-[#F0ECE2]">
           <div className="relative flex-1 min-w-[180px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8C8878]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input value={query} onChange={e => setQuery(e.target.value)} className={ADMIN.input}
                    placeholder="Name or admission number" />
           </div>
@@ -126,12 +126,12 @@ export default function OptInSheet({
       </div>
 
       <div className="bg-white border border-[#E3DFD3]">
-        <div className="flex items-center gap-2 bg-[#27272A] px-3 py-1.5">
-          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">Students</span>
+        <div className="flex items-center gap-2 bg-[#F7F5F0] border-b border-[#EEEAE1] px-3.5 py-2.5">
+          <span className="text-[12px] font-semibold text-slate-700">Students</span>
           <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{shownPicked} of {shown.length} ticked</span>
         </div>
         <div className="max-h-[360px] overflow-y-auto">
-          {shown.length === 0 && <p className="px-3 py-5 text-[12px] text-[#8C8878]">Nobody matches.</p>}
+          {shown.length === 0 && <p className="px-3 py-5 text-[12px] text-slate-500">Nobody matches.</p>}
           {shown.map(s => {
             const on = picked.has(s.id)
             const locked = isBilled(s.id)
@@ -142,13 +142,13 @@ export default function OptInSheet({
                   on ? 'bg-[#27272A] border-[#27272A] text-[#B8983C]' : 'bg-white border-[#C9C4B4]'}`}>
                   {on && <Check size={11} strokeWidth={3} />}
                 </span>
-                <span className="text-[12.5px] text-[#18181B] flex-1 truncate">{s.full_name}</span>
+                <span className="text-[13px] text-slate-900 flex-1 break-words">{s.full_name}</span>
                 {locked && (
-                  <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
+                  <span className="inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">
                     Billed
                   </span>
                 )}
-                <span className="text-[11px] text-[#8C8878] tabular-nums w-[84px] text-right">
+                <span className="text-[12px] text-slate-500 tabular-nums w-[84px] text-right">
                   {s.grade === null ? 'No grade' : `${gradeLabel(s.grade)}${s.section ? ` ${s.section}` : ''}`}
                 </span>
               </button>

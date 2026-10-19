@@ -132,7 +132,7 @@ export default function LateFeeRuleBuilder({
       iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-[#8C8878]">
+          <span className="text-[12px] text-slate-500">
             {blocking.length > 0
               ? 'Fix the errors above to save.'
               : rule?.enabled
@@ -175,7 +175,7 @@ export default function LateFeeRuleBuilder({
               <select value={form.scope_id ?? ''}
                       disabled={form.scope === 'all'}
                       onChange={e => set('scope_id', e.target.value || null)}
-                      className={`${ADMIN.inputPlain} disabled:bg-[#FAF8F2] disabled:text-[#8C8878]`}>
+                      className={`${ADMIN.inputPlain} disabled:bg-[#FAF8F2] disabled:text-slate-500`}>
                 <option value="">{form.scope === 'all' ? '—' : 'Choose…'}</option>
                 {scopes.filter(s => s.kind === form.scope).map(s => (
                   <option key={s.id} value={s.id}>{s.label}</option>
@@ -251,35 +251,35 @@ export default function LateFeeRuleBuilder({
             <div className="flex items-center justify-between gap-2">
               <span className={ADMIN.label}>On a sample bill of</span>
               <div className="flex items-center gap-1">
-                <span className="text-[12.5px] text-[#6B675A]">₹</span>
+                <span className="text-[13px] text-slate-600">₹</span>
                 <input type="number" min={0} value={sample}
                        onChange={e => setSample(Number(e.target.value))}
-                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-[12.5px] text-right
-                                  text-[#18181B] focus:outline-none focus:border-[#27272A]" />
+                       className="w-28 bg-white border border-[#E3DFD3] px-2 py-1 text-[13px] text-right
+                                  text-slate-900 focus:outline-none focus:border-[#27272A]" />
               </div>
             </div>
-            <table className="w-full mt-3 text-[12.5px]">
+            <table className="w-full mt-3 text-[13px]">
               <tbody>
                 {horizons.map(h => (
                   <tr key={h.days} className="border-t border-[#E3DFD3] first:border-0">
-                    <td className="py-1.5 text-[#6B675A]">
+                    <td className="py-1.5 text-slate-600">
                       {h.days === 365 ? 'A year late' : `${h.days} days late`}
                     </td>
-                    <td className="py-1.5 text-right font-semibold text-[#18181B]">
+                    <td className="py-1.5 text-right font-semibold text-slate-900">
                       {formatPaise(h.result.amount)}
                       {h.result.cappedBy && (
-                        <span className="ml-1.5 text-[9px] font-bold uppercase tracking-[0.08em]
+                        <span className="ml-1.5 text-[12px] font-semibold
                                          text-[#7A6220]">capped</span>
                       )}
                     </td>
-                    <td className="py-1.5 pl-3 text-right text-[11px] text-[#8C8878] w-24">
+                    <td className="py-1.5 pl-3 text-right text-[12px] text-slate-500 w-24">
                       {sample > 0 ? `${Math.round((h.result.amount / toPaise(sample)) * 100)}% of bill` : ''}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[11px] text-[#8C8878] leading-relaxed">
+            <p className="mt-2 text-[12px] text-slate-500 leading-relaxed">
               {horizons[1]?.result.why}
             </p>
           </div>
@@ -324,7 +324,7 @@ function Field({
     <label className="block">
       <span className={ADMIN.label}>{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">{hint}</p>}
+      {hint && <p className="mt-1 text-[12px] text-slate-500 leading-snug">{hint}</p>}
     </label>
   )
 }

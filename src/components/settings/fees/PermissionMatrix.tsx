@@ -21,7 +21,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, Loader2, Search, ShieldCheck, User, X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { supabase } from '@/lib/supabase'
-import { ADMIN, GOLD } from '@/components/fees/ui'
+import { ADMIN, GOLD, FEE_ICON } from '@/components/fees/ui'
 import { invalidateFeePermissions } from '@/hooks/useFeePermissions'
 import {
   FEE_PRESETS, applyPreset, fetchFeePermissionCatalogue, fetchPermissionHolders,
@@ -76,7 +76,7 @@ export default function PermissionMatrix() {
 
   if (loading) {
     return (
-      <div className={`${ADMIN.card} p-8 flex items-center justify-center gap-2 text-sm text-[#71717A]`}>
+      <div className={`${ADMIN.card} p-8 flex items-center justify-center gap-2 text-sm text-slate-500`}>
         <Loader2 size={16} className="animate-spin" /> Loading permissions…
       </div>
     )
@@ -85,9 +85,9 @@ export default function PermissionMatrix() {
   if (catalogue.length === 0) {
     return (
       <div className={`${ADMIN.card} p-6`}>
-        <p className="text-sm text-[#71717A]">
+        <p className="text-sm text-slate-500">
           The fee permission tables are not in this database yet. Apply
-          <code className="mx-1 px-1.5 py-0.5 bg-[#F4F4F5] text-[#27272A] text-xs">supabase-migrations/fee_r1_permissions.sql</code>
+          <code className="mx-1 px-1.5 py-0.5 bg-[#F4F4F5] text-slate-900 text-xs">supabase-migrations/fee_r1_permissions.sql</code>
           and reload.
         </p>
       </div>
@@ -99,8 +99,8 @@ export default function PermissionMatrix() {
       <div className={`${ADMIN.card} p-4`}>
         <div className="flex items-start gap-3">
           <ShieldCheck size={18} className="mt-0.5 flex-shrink-0" style={{ color: GOLD }} />
-          <div className="text-sm text-[#52525B] leading-relaxed">
-            <p className="font-semibold text-[#27272A] mb-1">28 switches, not one</p>
+          <div className="text-sm text-slate-600 leading-relaxed">
+            <p className="font-semibold text-slate-900 mb-1">28 switches, not one</p>
             <p>
               There is no single &ldquo;Fees&rdquo; permission. A front-desk clerk can be given
               exactly &ldquo;look a student up, take the money, print the slip&rdquo; without also
@@ -149,8 +149,8 @@ export default function PermissionMatrix() {
             ? 'An override on top of what the role grants'
             : 'Everybody who holds one permission, whichever way they got it'}
           icon={sheet === 'people' ? <User size={15} /> : <Search size={15} />}
-          iconClassName="bg-[#27272A] text-[#B8983C]"
-          bodyClassName="bg-[#FDFCF9] !px-3 sm:!px-4 !py-3"
+          iconClassName={FEE_ICON}
+          bodyClassName="!px-3 sm:!px-4 !py-3"
         >
           {sheet === 'people'
             ? <PersonOverrides byCategory={byCategory} onError={setError} />
@@ -199,11 +199,11 @@ function RoleGrid({
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#FAFAFA] border-b border-[#E4E4E7]">
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A]">
+              <th className="text-left px-4 py-2.5 text-[12px] font-semibold text-slate-500">
                 Permission
               </th>
               {ROLES.map(role => (
-                <th key={role} className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#71717A] w-24">
+                <th key={role} className="px-3 py-2.5 text-[12px] font-semibold text-slate-500 w-24">
                   {role}
                 </th>
               ))}
@@ -214,7 +214,7 @@ function RoleGrid({
               <React.Fragment key={category}>
                 <tr className="bg-[#FAFAFA]">
                   <td colSpan={ROLES.length + 1}
-                      className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">
+                      className="px-4 py-1.5 text-[12px] font-semibold text-slate-400">
                     {category}
                   </td>
                 </tr>
@@ -226,8 +226,8 @@ function RoleGrid({
                           <AlertTriangle size={13} className="text-amber-500 mt-0.5 flex-shrink-0" />
                         )}
                         <div>
-                          <div className="font-medium text-[#27272A]">{p.label}</div>
-                          <div className="text-xs text-[#A1A1AA] mt-0.5 max-w-xl">{p.help}</div>
+                          <div className="font-medium text-slate-900">{p.label}</div>
+                          <div className="text-xs text-slate-400 mt-0.5 max-w-xl">{p.help}</div>
                         </div>
                       </div>
                     </td>
@@ -243,7 +243,7 @@ function RoleGrid({
                             className={`w-7 h-7 inline-flex items-center justify-center rounded transition-colors disabled:opacity-40 ${
                               on
                                 ? 'bg-[#27272A] text-white hover:bg-[#18181B]'
-                                : 'bg-white border border-[#E4E4E7] text-[#D4D4D8] hover:border-[#A1A1AA]'
+                                : 'bg-white border border-[#E4E4E7] text-slate-700 hover:border-[#A1A1AA]'
                             }`}
                           >
                             {busy
@@ -346,7 +346,7 @@ function PersonOverrides({
     <div className="grid md:grid-cols-[260px_1fr] gap-4">
       <div className={`${ADMIN.card} p-3`}>
         <div className="relative mb-2">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -363,34 +363,34 @@ function PersonOverrides({
                 selected?.id === person.id ? 'bg-[#27272A] text-white' : 'hover:bg-[#F4F4F5]'
               }`}
             >
-              <div className="text-sm font-medium truncate">{person.full_name}</div>
-              <div className={`text-xs ${selected?.id === person.id ? 'text-zinc-400' : 'text-[#A1A1AA]'}`}>
+              <div className="text-sm font-medium break-words">{person.full_name}</div>
+              <div className={`text-xs ${selected?.id === person.id ? 'text-zinc-400' : 'text-slate-400'}`}>
                 {person.role}
               </div>
             </button>
           ))}
           {filtered.length === 0 && (
-            <p className="px-3 py-4 text-xs text-[#A1A1AA]">No staff match that.</p>
+            <p className="px-3 py-4 text-xs text-slate-400">No staff match that.</p>
           )}
         </div>
       </div>
 
       <div className={`${ADMIN.card} p-4`}>
         {!selected ? (
-          <div className="py-16 text-center text-sm text-[#A1A1AA]">
-            <User size={22} className="mx-auto mb-2 text-[#D4D4D8]" />
+          <div className="py-16 text-center text-sm text-slate-400">
+            <User size={22} className="mx-auto mb-2 text-slate-700" />
             Pick someone to give or take away a permission.
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 className="text-sm font-bold text-[#27272A]">{selected.full_name}</h3>
-                <p className="text-xs text-[#A1A1AA]">
+                <h3 className="text-sm font-bold text-slate-900">{selected.full_name}</h3>
+                <p className="text-xs text-slate-400">
                   Anything left on <em>Inherit</em> follows the {selected.role} role.
                 </p>
               </div>
-              {busy && <Loader2 size={15} className="animate-spin text-[#A1A1AA]" />}
+              {busy && <Loader2 size={15} className="animate-spin text-slate-400" />}
             </div>
 
             <div className="flex flex-wrap gap-1.5 mb-4 pb-4 border-b border-[#F4F4F5]">
@@ -410,7 +410,7 @@ function PersonOverrides({
             <div className="space-y-3 max-h-[380px] overflow-y-auto">
               {byCategory.map(([category, perms]) => (
                 <div key={category}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-1">
+                  <div className="text-[12px] font-semibold text-slate-400 mb-1">
                     {category}
                   </div>
                   {perms.map(p => {
@@ -422,14 +422,14 @@ function PersonOverrides({
                         onClick={() => void cycle(p.key)}
                         className="w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-[#FAFAFA] text-left disabled:opacity-50"
                       >
-                        <span className="text-sm text-[#27272A] flex items-center gap-1.5">
+                        <span className="text-sm text-slate-900 flex items-center gap-1.5">
                           {p.is_dangerous && <AlertTriangle size={12} className="text-amber-500" />}
                           {p.label}
                         </span>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded flex-shrink-0 ${
+                        <span className={`text-[12px] font-semibold px-2 py-1 rounded flex-shrink-0 ${
                           state === true  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : state === false ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : 'bg-[#F4F4F5] text-[#A1A1AA] border border-[#E4E4E7]'
+                          : 'bg-[#F4F4F5] text-slate-400 border border-[#E4E4E7]'
                         }`}>
                           {state === true ? 'Granted' : state === false ? 'Denied' : 'Inherit'}
                         </span>
@@ -477,11 +477,11 @@ function CoverageCheck({ catalogue }: { catalogue: FeePermission[] }) {
         ))}
       </select>
 
-      {permission && <p className="text-xs text-[#A1A1AA] mt-2 max-w-2xl">{permission.help}</p>}
+      {permission && <p className="text-xs text-slate-400 mt-2 max-w-2xl">{permission.help}</p>}
 
       <div className="mt-4">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-[#A1A1AA]">
+          <div className="flex items-center gap-2 text-sm text-slate-400">
             <Loader2 size={14} className="animate-spin" /> Checking…
           </div>
         ) : holders && holders.length === 0 ? (
@@ -494,19 +494,19 @@ function CoverageCheck({ catalogue }: { catalogue: FeePermission[] }) {
           </div>
         ) : (
           <div className="space-y-1">
-            <p className="text-xs text-[#71717A] mb-2">
+            <p className="text-xs text-slate-500 mb-2">
               {holders?.length} {holders?.length === 1 ? 'person holds' : 'people hold'} this.
             </p>
             {holders?.map(h => (
               <div key={h.id} className="flex items-center justify-between py-1.5 px-3 bg-[#FAFAFA] rounded">
                 <div>
-                  <span className="text-sm text-[#27272A]">{h.full_name}</span>
-                  <span className="text-xs text-[#A1A1AA] ml-2">{h.role}</span>
+                  <span className="text-sm text-slate-900">{h.full_name}</span>
+                  <span className="text-xs text-slate-400 ml-2">{h.role}</span>
                 </div>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                <span className={`text-[12px] font-semibold px-2 py-0.5 rounded ${
                   h.via === 'override'
                     ? 'bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]'
-                    : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'
+                    : 'bg-[#F4F4F5] text-slate-500 border border-[#E4E4E7]'
                 }`}>
                   {h.via === 'override' ? 'Given personally' : 'Via role'}
                 </span>

@@ -46,7 +46,7 @@ export default function RequestRefundSheet({
     return (
       <ModalShell onClose={onDone} sharp size="sm" title="Sent for approval"
                   icon={<Undo2 size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-        <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
+        <p className="text-[13px] text-slate-600 leading-relaxed">
           The request is in the refund queue on the Collection Center&rsquo;s Instruments tab.
           Nothing has left the school and the family&rsquo;s balance has not changed — that happens
           when somebody approves it and then pays it out.
@@ -124,7 +124,7 @@ export default function RequestRefundSheet({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-[#8C8878] leading-snug">
+          <p className="mt-1 text-[12px] text-slate-500 leading-snug">
             Naming the receipt lets whoever approves it check the refund against what was taken.
           </p>
         </label>

@@ -89,7 +89,7 @@ interface ModalShellProps {
 }
 
 /** Page themes whose popups default to the glass sheet. */
-const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave'])
+const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave', 'fees'])
 
 export default function ModalShell({
   onClose,
@@ -181,6 +181,10 @@ export default function ModalShell({
   const glass = glassProp ?? (!!pageTheme && GLASS_THEMES.has(pageTheme))
 
   if (glass) {
+    // `sharp` on glass is the fee module's sheet: the same material, with the
+    // square edges its pages use for anything that holds records. A phone keeps
+    // a small top radius so the sheet still reads as rising from the bottom.
+    const sheetRadius = sharp ? 'rounded-t-[14px] sm:rounded-none' : 'rounded-t-[28px] sm:rounded-[28px]'
     return createPortal(
       <div
         data-page-theme={pageTheme}
@@ -200,7 +204,7 @@ export default function ModalShell({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
-          className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[94dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden rounded-t-[28px] sm:rounded-[28px]`}
+          className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[94dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden ${sheetRadius}`}
           // Slides, never fades — see lib/sheetMotion.
           {...sheetMotion(reduceMotion)}
           drag="y"
@@ -225,10 +229,12 @@ export default function ModalShell({
                   <span className="relative z-10 flex">{icon}</span>
                 </div>
               )}
+              {/* Wraps rather than truncates: a long student name is the part
+                  of the title that matters, and an ellipsis would cut it. */}
               <div className="flex-1 min-w-0">
-                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-slate-900 leading-tight headline truncate">{title}</h2>
+                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-slate-900 leading-snug headline break-words">{title}</h2>
                 {subtitle != null && (
-                  <p className="text-[12px] text-slate-500 truncate mt-0.5">{subtitle}</p>
+                  <p className="text-[12px] leading-snug text-slate-500 break-words mt-0.5">{subtitle}</p>
                 )}
               </div>
               {headerActions}
@@ -244,7 +250,7 @@ export default function ModalShell({
               {children}
             </div>
           ) : (
-            <div className={`${cardless ? '' : 'lg-sheet-card '}relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overflow-x-hidden overscroll-contain`}>
+            <div className={`${cardless ? '' : `lg-sheet-card ${sharp ? '!rounded-none ' : ''}`}relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overflow-x-hidden overscroll-contain`}>
               <div className={`px-4 sm:px-5 py-4 ${bodyClassName}`}>{children}</div>
             </div>
           )}

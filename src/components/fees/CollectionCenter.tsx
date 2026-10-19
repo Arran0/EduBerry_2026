@@ -3,89 +3,77 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The Collection Center.
 //
-// Laid out the way the Bus module's fee screen is, because that arrangement
-// works and two fee screens in one product should not be read two different
-// ways: the money at the top as cards you can press, one segmented control for
-// the two or three places you actually go, and everything else behind a button.
+//   The tiles   — collected, outstanding, efficiency, and how many students
+//                 are overdue. Pressing one opens the bills (or students)
+//                 behind it.
+//   The switch  — Bills, Students, Reports.
+//   Reminders   — a popup, because it is an errand: opened, done, closed.
 //
-//   The cards   — collected, outstanding, efficiency, students billed. Pressing
-//                 one narrows the ledger below it; pressing it again clears it.
-//   The control — Collection (the ledger and the counter, together), Students,
-//                 Reports. Three, where there were six tabs.
-//   The tools   — Reminders, Late fees, Concessions. Popups, because they are
-//                 errands: opened, done, closed.
-//
-// The URL carries both the section and whichever tool is open, so a clerk can
-// bookmark the one place they live and the old routes still land somewhere
-// sensible.
+// The Bills tab's filters live here rather than in the tab, so a press on a
+// tile can set them and switching to Students and back keeps them.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import {
-  BadgePercent, BarChart3, Bell, CalendarCheck, CheckCircle2, Clock,
-  GraduationCap, Timer, Users, Wallet,
+  AlarmClock, BarChart3, Bell, CheckCircle2, Gauge, GraduationCap, Hourglass, ReceiptText,
 } from 'lucide-react'
 import { useAcademicYear } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { ADMIN, inr } from '@/components/fees/ui'
-import { LABEL, Loading, Segmented } from '@/components/fees/shell'
+import { Loading, Notice, Segmented } from '@/components/fees/shell'
+import { StatTile } from '@/components/fees/glass'
 import FeeToolModal from '@/components/fees/FeeToolModal'
-import type { LedgerFilter } from '@/components/fees/sections/CollectionSection'
 import { fetchYearSummary, type YearSummaryRow } from '@/lib/fees/reports'
+import {
+  DEFAULT_BILL_FILTERS, countOverdueStudents, isoDay, sameFilters, type BillFilters,
+} from '@/lib/fees/bills'
 import type { FeePermissionKey } from '@/lib/fees/permissions'
 
-// ssr:false because every one of these reads Supabase on mount; server
-// rendering them buys a flash of empty tables and nothing else. The tools are
-// loaded only once their button is pressed, so the page does not carry three
-// screens nobody opened.
-const CollectionSection = dynamic(() => import('@/components/fees/sections/CollectionSection'), { ssr: false, loading: () => <Loading /> })
-const StudentsSection   = dynamic(() => import('@/components/fees/sections/StudentsSection'), { ssr: false, loading: () => <Loading /> })
-const ReportsSection    = dynamic(() => import('@/components/fees/sections/ReportsSection'), { ssr: false, loading: () => <Loading /> })
-const RemindersSection  = dynamic(() => import('@/components/fees/sections/RemindersSection'), { ssr: false, loading: () => <Loading /> })
-const LateFeeTracking   = dynamic(() => import('@/components/fees/sections/LateFeeTrackingSection'), { ssr: false, loading: () => <Loading /> })
-const ConcessionsSection = dynamic(() => import('@/components/fees/sections/ConcessionsSection'), { ssr: false, loading: () => <Loading /> })
+// ssr:false because every one of these reads Supabase on mount.
+const BillsSection     = dynamic(() => import('@/components/fees/sections/BillsSection'), { ssr: false, loading: () => <Loading /> })
+const StudentsSection  = dynamic(() => import('@/components/fees/sections/StudentsSection'), { ssr: false, loading: () => <Loading /> })
+const ReportsSection   = dynamic(() => import('@/components/fees/sections/ReportsSection'), { ssr: false, loading: () => <Loading /> })
+const RemindersSection = dynamic(() => import('@/components/fees/sections/RemindersSection'), { ssr: false, loading: () => <Loading /> })
 
-export type CenterSection = 'collection' | 'students' | 'reports'
-export type CenterTool = 'reminders' | 'latefees' | 'concessions'
+export type CenterSection = 'bills' | 'students' | 'reports'
 
 const CENTER_SECTIONS: {
   key: CenterSection; label: string; icon: React.ElementType; needs: FeePermissionKey[]
 }[] = [
-  { key: 'collection', label: 'Collection', icon: Wallet,        needs: ['fees.collect', 'fees.profile.view'] },
-  { key: 'students',   label: 'Students',   icon: GraduationCap, needs: ['fees.profile.view'] },
-  { key: 'reports',    label: 'Reports',    icon: BarChart3,     needs: ['fees.reports.view'] },
-]
-
-const TOOLS: {
-  key: CenterTool; label: string; title: string; subtitle: string
-  icon: React.ElementType; needs: FeePermissionKey[]
-}[] = [
-  { key: 'reminders', label: 'Reminders', title: 'Reminders',
-    subtitle: 'Who to remind, what was sent, and what goes out on its own',
-    icon: Bell, needs: ['fees.profile.view'] },
-  { key: 'latefees', label: 'Late fees', title: 'Late fees & fines',
-    subtitle: 'What the rules have actually charged',
-    icon: Timer, needs: ['fees.latefee.manage', 'fees.fine.apply'] },
-  { key: 'concessions', label: 'Concessions', title: 'Concessions',
-    subtitle: 'Discounts, scholarships and waivers',
-    icon: BadgePercent, needs: ['fees.discount.apply', 'fees.discount.approve', 'fees.scholarship.manage'] },
+  { key: 'bills',    label: 'Bills',    icon: ReceiptText,   needs: ['fees.collect', 'fees.profile.view'] },
+  { key: 'students', label: 'Students', icon: GraduationCap, needs: ['fees.profile.view'] },
+  { key: 'reports',  label: 'Reports',  icon: BarChart3,     needs: ['fees.reports.view'] },
 ]
 
 interface Props {
   section: CenterSection
   onSectionChange: (s: CenterSection) => void
-  tool: CenterTool | null
-  onToolChange: (t: CenterTool | null) => void
+  remindersOpen: boolean
+  onReminders: (open: boolean) => void
+  /** Filters a link arrived with (the home page's fee cards). */
+  initialFilters: BillFilters | null
 }
 
-export default function CollectionCenter({ section, onSectionChange, tool, onToolChange }: Props) {
+/** The four presets a tile press can put on the Bills tab. */
+const TILE_FILTERS: Record<'collected' | 'outstanding', BillFilters> = {
+  collected:   { ...DEFAULT_BILL_FILTERS, period: 'session', pay: ['paid', 'partial'] },
+  outstanding: { ...DEFAULT_BILL_FILTERS, period: 'session', pay: ['unpaid', 'partial'] },
+}
+
+export default function CollectionCenter({
+  section, onSectionChange, remindersOpen, onReminders, initialFilters,
+}: Props) {
   const { year } = useAcademicYear()
   const perms = useFeePermissions()
 
   const [summary, setSummary] = useState<YearSummaryRow | null>(null)
+  const [overdueStudents, setOverdueStudents] = useState<number | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(true)
-  const [filter, setFilter] = useState<LedgerFilter>('all')
+  const [filters, setFilters] = useState<BillFilters>(initialFilters ?? DEFAULT_BILL_FILTERS)
+  const [overdueOnly, setOverdueOnly] = useState(false)
+
+  useEffect(() => { if (initialFilters) setFilters(initialFilters) }, [initialFilters])
 
   const canSeeSummary = perms.can('fees.reports.view')
   const showAmounts = !perms.amountsHidden
@@ -94,11 +82,17 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
     if (!year || !canSeeSummary) { setLoadingSummary(false); return }
     setLoadingSummary(true)
     try {
-      setSummary(await fetchYearSummary(year.id))
+      const [s, n] = await Promise.all([
+        fetchYearSummary(year.id),
+        countOverdueStudents(year.id, isoDay(new Date())),
+      ])
+      setSummary(s)
+      setOverdueStudents(n)
     } catch {
-      // The cards are a headline, not the screen. A view that will not answer
-      // must not take the ledger down with it.
+      // The tiles are a headline, not the screen. A view that will not answer
+      // must not take the bills down with it.
       setSummary(null)
+      setOverdueStudents(null)
     } finally {
       setLoadingSummary(false)
     }
@@ -108,156 +102,111 @@ export default function CollectionCenter({ section, onSectionChange, tool, onToo
 
   const sections = useMemo(
     () => CENTER_SECTIONS.filter(s => perms.canAny(...s.needs)), [perms])
-  const tools = useMemo(() => TOOLS.filter(t => perms.canAny(...t.needs)), [perms])
+  const canRemind = perms.can('fees.profile.view')
 
   // A section the viewer cannot open falls back to the first they can.
   const active = sections.some(s => s.key === section) ? section : sections[0]?.key
-  const openTool = tool && tools.some(t => t.key === tool) ? tool : null
-  const openToolDef = TOOLS.find(t => t.key === openTool)
 
-  /** A card press narrows the ledger; pressing the live one clears it. */
-  const pickFilter = (next: LedgerFilter) => {
-    setFilter(f => (f === next ? 'all' : next))
-    onSectionChange('collection')
+  const showBills = (preset: BillFilters) => {
+    setFilters(f => (sameFilters(f, preset) ? DEFAULT_BILL_FILTERS : preset))
+    onSectionChange('bills')
   }
 
   if (perms.loading) return <Loading />
 
-  const cards: {
-    key: string; label: string; value: string; sub: string
-    icon: React.ReactNode; tone: 'dark' | 'light' | 'muted'
-    filter?: LedgerFilter; onClick?: () => void
-  }[] = [
-    {
-      key: 'collected', label: 'Collected',
-      value: inr(summary?.collected, showAmounts),
-      sub: `${summary?.bills ?? 0} bill${summary?.bills === 1 ? '' : 's'} issued`,
-      icon: <CheckCircle2 size={15} />, tone: 'dark', filter: 'paid',
-    },
-    {
-      key: 'outstanding', label: 'Outstanding',
-      value: inr(summary?.outstanding, showAmounts),
-      sub: `${summary?.overdue_bills ?? 0} past due`,
-      icon: <Clock size={15} />, tone: 'light', filter: 'overdue',
-    },
-    {
-      key: 'efficiency', label: 'Efficiency',
-      value: summary?.efficiency === null || summary?.efficiency === undefined
-        ? '—' : `${summary.efficiency}%`,
-      sub: 'of what was billed',
-      icon: <CalendarCheck size={15} />, tone: 'muted',
-    },
-    {
-      key: 'students', label: 'Students billed',
-      value: String(summary?.students ?? 0), sub: 'this session',
-      icon: <Users size={15} />, tone: 'light',
-      onClick: () => onSectionChange('students'),
-    },
-  ]
+  const live = (preset: BillFilters) => active === 'bills' && sameFilters(filters, preset)
+  const efficiency = summary?.efficiency
+  const progress = summary?.session_progress
 
   return (
     <>
-      {/* ── The money, as cards you can press ───────────────────────────── */}
+      {/* ── The money ────────────────────────────────────────────────────── */}
       {canSeeSummary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-2.5 px-3 sm:px-0">
-          {cards.map(c => {
-            const live = c.filter !== undefined && filter === c.filter && active === 'collection'
-            const clickable = Boolean(c.onClick || c.filter)
-            const base = c.tone === 'dark' ? 'bg-[#27272A] border-[#B8983C]'
-              : c.tone === 'muted' ? 'bg-[#F4F2EC] border-[#E7E2D8]'
-              : 'bg-white border-[#E3DFD3]'
-            const Tag = clickable ? 'button' : 'div'
-            return (
-              <Tag
-                key={c.key}
-                onClick={c.onClick ?? (c.filter ? () => pickFilter(c.filter!) : undefined)}
-                title={c.filter ? 'Show these bills' : undefined}
-                className={`text-left border p-2.5 transition-all flex flex-col justify-between
-                            min-h-[70px] ${base} ${
-                  clickable ? 'hover:border-[#B8983C] cursor-pointer' : ''
-                } ${live ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`${LABEL} truncate ${
-                    c.tone === 'dark' ? '!text-[#8C8878]' : '!text-[#6B675A]'}`}>
-                    {c.label}
-                  </span>
-                  <span className={c.tone === 'dark' ? 'text-[#B8983C]' : 'text-[#8C8878]'}>{c.icon}</span>
-                </div>
-                <div>
-                  {loadingSummary ? (
-                    <div className="h-[22px] w-24 max-w-full bg-[#F4F1E7] animate-pulse" />
-                  ) : (
-                    <p className={`text-[17px] font-bold tabular-nums leading-tight truncate ${
-                      c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'}`}>
-                      {c.value}
-                    </p>
-                  )}
-                  <p className={`text-[10px] mt-0.5 truncate ${
-                    c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#8C8878]'}`}>
-                    {c.sub}
-                  </p>
-                </div>
-              </Tag>
-            )
-          })}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-5">
+          <StatTile
+            dark
+            label="Collected"
+            icon={CheckCircle2}
+            loading={loadingSummary}
+            value={inr(summary?.collected, showAmounts)}
+            sub={`against ${summary?.bills ?? 0} bill${summary?.bills === 1 ? '' : 's'}`}
+            live={live(TILE_FILTERS.collected)}
+            onClick={() => showBills(TILE_FILTERS.collected)}
+            title="Show the bills money came in against"
+          />
+          <StatTile
+            label="Outstanding"
+            icon={Hourglass}
+            loading={loadingSummary}
+            value={inr(summary?.outstanding, showAmounts)}
+            sub={`${summary?.overdue_bills ?? 0} bill${summary?.overdue_bills === 1 ? '' : 's'} past due`}
+            live={live(TILE_FILTERS.outstanding)}
+            onClick={() => showBills(TILE_FILTERS.outstanding)}
+            title="Show the bills still owed"
+          />
+          <StatTile
+            label="Efficiency"
+            icon={Gauge}
+            loading={loadingSummary}
+            value={efficiency === null || efficiency === undefined ? '—' : `${efficiency}%`}
+            sub={progress === null || progress === undefined
+              ? 'of what was billed'
+              : `of what was billed · ${Math.round(progress)}% of the session gone`}
+          />
+          <StatTile
+            label="Overdue students"
+            icon={AlarmClock}
+            loading={loadingSummary}
+            value={overdueStudents === null ? '—' : String(overdueStudents)}
+            sub="a bill past its due date"
+            live={active === 'students' && overdueOnly}
+            onClick={() => {
+              const next = !(active === 'students' && overdueOnly)
+              setOverdueOnly(next)
+              onSectionChange('students')
+            }}
+            title="Show the students with an overdue bill"
+          />
         </div>
       )}
 
-      {/* ── One switch for where you are, the errands to its right ─────── */}
-      <div className="flex flex-wrap items-center gap-2 mb-3 px-3 sm:px-0">
+      {/* ── Where you are, and the one errand ───────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-4">
         <Segmented<CenterSection>
           fill="phone"
-          value={active ?? 'collection'}
+          value={active ?? 'bills'}
           onChange={onSectionChange}
           options={sections.map(s => ({ key: s.key, label: s.label, icon: s.icon }))}
+          className="max-sm:flex-1"
         />
-        {tools.length > 0 && (
-          <div className="grid grid-cols-3 sm:flex gap-1.5 max-sm:w-full sm:ml-auto">
-            {tools.map(t => {
-              const Icon = t.icon
-              return (
-                <button key={t.key} onClick={() => onToolChange(t.key)}
-                        className={`${ADMIN.ghostBtn} max-sm:px-1.5`}>
-                  <Icon size={13} className="flex-shrink-0 max-sm:hidden" /> <span className="truncate">{t.label}</span>
-                </button>
-              )
-            })}
-          </div>
+        {canRemind && (
+          <button onClick={() => onReminders(true)} className={`${ADMIN.ghostBtn} h-9 sm:ml-auto`}
+                  title="Who to remind, what was sent, and what goes out on its own">
+            <Bell size={14} /> <span className="max-[380px]:hidden">Reminders</span>
+          </button>
         )}
       </div>
 
-      {/* ── The section itself ──────────────────────────────────────────── */}
-      <div className="px-3 sm:px-0">
-        {!active ? (
-          <p className="px-3 py-10 text-[12.5px] text-[#8C8878] text-center">
-            You do not have permission to open anything here.
-          </p>
-        ) : active === 'collection' ? (
-          <CollectionSection filter={filter} onFilterChange={setFilter}
-                             onChanged={() => void loadSummary()} />
-        ) : active === 'students' ? (
-          <StudentsSection />
-        ) : (
-          <ReportsSection />
-        )}
-      </div>
+      {/* ── The section ─────────────────────────────────────────────────── */}
+      {!active ? (
+        <Notice>You do not have permission to open anything here.</Notice>
+      ) : active === 'bills' ? (
+        <BillsSection filters={filters} onFiltersChange={setFilters}
+                      onChanged={() => void loadSummary()} />
+      ) : active === 'students' ? (
+        <StudentsSection overdueOnly={overdueOnly} onOverdueOnlyChange={setOverdueOnly} />
+      ) : (
+        <ReportsSection />
+      )}
 
-      {/* ── The tools ───────────────────────────────────────────────────── */}
-      {openToolDef && (
+      {remindersOpen && canRemind && (
         <FeeToolModal
-          title={openToolDef.title}
-          subtitle={openToolDef.subtitle}
-          icon={<openToolDef.icon size={15} />}
-          onClose={() => onToolChange(null)}
+          title="Reminders"
+          subtitle="Who to remind, what was sent, and what goes out on its own"
+          icon={<Bell size={16} />}
+          onClose={() => onReminders(false)}
         >
-          {openTool === 'reminders' ? (
-            <RemindersSection onChanged={() => void loadSummary()} />
-          ) : openTool === 'latefees' ? (
-            <LateFeeTracking onChanged={() => void loadSummary()} />
-          ) : (
-            <ConcessionsSection />
-          )}
+          <RemindersSection onChanged={() => void loadSummary()} />
         </FeeToolModal>
       )}
     </>

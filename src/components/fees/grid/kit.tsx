@@ -1,26 +1,25 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The fee grid's small parts, in the fee module's own vocabulary: square
-// corners, the warm paper ramp, hairlines, zinc and one gold.
+// The fee grid's small parts, in the fee module's own vocabulary.
 //
-// Nothing here invents a style. The sheet is the module's sharp popup with the
-// gold-on-dark icon square every fee tool uses; fields are `ADMIN.label` over
-// `ADMIN.inputPlain`; a toggle is the same square chip the ledger filters use.
+// Nothing here invents a style. The sheet is the module's squared glass popup
+// with the charcoal-and-bronze icon every fee popup carries; a field is a
+// label over `ADMIN.inputPlain`; a toggle is a capsule, dark when on.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from 'react'
 import { AnimatePresence } from 'framer-motion'
 import ModalShell from '@/components/ui/ModalShell'
-import { ADMIN } from '@/components/fees/ui'
+import { ADMIN, FEE_ICON } from '@/components/fees/ui'
 
 /** Boys and girls in a double cell. Blue and rose, muted to sit on paper. */
 export const BOY = '#3A5490'
 export const GIRL = '#A93259'
 
 /**
- * A fee-grid popup: the module's sharp sheet, paper body, gold-on-dark icon.
- * Rendered inside AnimatePresence so it can animate out.
+ * A fee-grid popup: the module's squared glass sheet. Rendered inside
+ * AnimatePresence so it can animate out.
  */
 export function FeeSheet({
   open, onClose, title, subtitle, icon, footer, size = 'md', children,
@@ -44,8 +43,8 @@ export function FeeSheet({
           title={title}
           subtitle={subtitle}
           icon={icon}
-          iconClassName="bg-[#27272A] text-[#B8983C]"
-          bodyClassName="bg-[#FDFCF9] !px-4 !py-4 space-y-4"
+          iconClassName={FEE_ICON}
+          bodyClassName="space-y-4"
           footer={footer}
         >
           {children}
@@ -65,16 +64,16 @@ export function Field({ label, hint, error, children, className = '' }: {
 }) {
   return (
     <div className={className}>
-      <span className={`${ADMIN.label} block mb-1.5`}>{label}</span>
+      <span className={`${ADMIN.label} block mb-1`}>{label}</span>
       {children}
       {error
-        ? <p className="text-[11px] text-[#A93232] mt-1.5 leading-snug">{error}</p>
-        : hint && <p className="text-[11px] text-[#8C8878] mt-1.5 leading-snug">{hint}</p>}
+        ? <p className="text-[12px] text-[#A93232] mt-1 leading-snug">{error}</p>
+        : hint && <p className="text-[12px] text-slate-500 mt-1 leading-snug">{hint}</p>}
     </div>
   )
 }
 
-/** A square toggle chip: dark when on, a hairline box when off. */
+/** A capsule toggle: dark when on, a hairline capsule when off. */
 export function Pick({
   on, onClick, children, disabled, tone = 'dark', title,
 }: {
@@ -95,10 +94,10 @@ export function Pick({
       disabled={disabled}
       aria-pressed={on}
       title={title}
-      className={`inline-flex items-center gap-1 border px-2 py-[5px] text-[10.5px] font-bold uppercase
-                  tracking-[0.06em] leading-none whitespace-nowrap transition-colors disabled:opacity-40
+      className={`inline-flex items-center gap-1 h-8 px-3 rounded-full border text-[12.5px] font-semibold
+                  leading-none whitespace-nowrap transition active:scale-[0.97] disabled:opacity-40
                   disabled:pointer-events-none ${on ? onCls
-                    : 'bg-white border-[#E3DFD3] text-[#6B675A] hover:border-[#C9C4B4] hover:text-[#18181B]'}`}
+                    : 'bg-white border-[#E2DDD2] text-slate-600 hover:border-[#CFC8B8] hover:text-slate-900'}`}
     >
       {children}
     </button>
@@ -109,16 +108,16 @@ export function Pick({
 export function ErrorNote({ children }: { children: React.ReactNode }) {
   if (!children) return null
   return (
-    <div className="bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[12.5px] px-3 py-2.5">{children}</div>
+    <div className="bg-[#FCEDED] border-l-[3px] border-[#C24141] text-[#962C2C] text-[13px] leading-relaxed px-3.5 py-2.5">{children}</div>
   )
 }
 
 /** A quiet one-line note with a coloured edge — what a lock or a warning means. */
 export function Aside({ tone = 'info', children }: { tone?: 'info' | 'good' | 'warn'; children: React.ReactNode }) {
-  const t = tone === 'good' ? 'border-[#1F6B42] bg-[#EAF5EE] text-[#1F6B42]'
-    : tone === 'warn' ? 'border-[#B8983C] bg-[#FAF3DF] text-[#7A6220]'
-    : 'border-[#C9C4B4] bg-[#FAF8F2] text-[#52525B]'
-  return <div className={`border-l-2 px-3 py-2 text-[11.5px] leading-snug ${t}`}>{children}</div>
+  const t = tone === 'good' ? 'border-[#2E8B57] bg-[#EAF5EE] text-[#1F6B42]'
+    : tone === 'warn' ? 'border-[#B8983C] bg-[#FBF4E2] text-[#6E5513]'
+    : 'border-[#B9B2A2] bg-[#F8F6F1] text-slate-600'
+  return <div className={`border-l-[3px] px-3.5 py-2.5 text-[12.5px] leading-snug ${t}`}>{children}</div>
 }
 
 export function rupees(n: number | null | undefined): string {

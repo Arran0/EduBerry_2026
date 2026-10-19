@@ -22,7 +22,7 @@ const STATE_LABEL: Record<RteRow['status'], string> = {
 }
 
 const STATE_CHIP: Record<RteRow['status'], string> = {
-  enrolled:        'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
+  enrolled:        'bg-[#F4F1E7] text-slate-600 border border-[#E3DFD3]',
   claimed:         'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]',
   part_reimbursed: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',
   reimbursed:      'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
@@ -30,7 +30,7 @@ const STATE_CHIP: Record<RteRow['status'], string> = {
 }
 
 /** The register's columns on a laptop; a phone folds each row into a card. */
-const RTE_COLS = 'sm:grid-cols-[minmax(0,1fr)_minmax(0,260px)_124px_104px_112px_84px]'
+const RTE_COLS = 'sm:grid-cols-[minmax(140px,1.2fr)_minmax(0,1fr)_112px_96px_104px_84px]'
 
 export default function RteRegister({
   rows, names, yearId, showAmounts, canManage, onChanged,
@@ -55,7 +55,7 @@ export default function RteRegister({
       <div className="px-4 py-2.5 border-b border-[#F0ECE2] flex flex-wrap items-center gap-2">
         <h3 className={`${ADMIN.label} flex-1`}>RTE register</h3>
         {rows.length > 0 && (
-          <span className="text-[11px] text-[#6B675A]">
+          <span className="text-[12px] text-slate-600">
             {inr(totals.reimbursed, showAmounts)} of {inr(totals.claimed, showAmounts)} received
             {pending > 0 && ` · ${inr(pending, showAmounts)} still with the state`}
           </span>
@@ -81,25 +81,25 @@ export default function RteRegister({
       </div>
 
       {rows.length === 0 ? (
-        <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
+        <p className="px-4 py-8 text-[13px] text-slate-500">
           Nobody on the RTE register this session.
         </p>
       ) : rows.map(r => (
         <Row key={r.id} cols={RTE_COLS}>
-          <span className={`${CELL.A1} block text-[12.5px] text-[#18181B] truncate`}>
+          <span className={`${CELL.A1} block text-[13px] text-slate-900 break-words`}>
             {names.get(r.student_id) ?? 'Student'}
           </span>
-          <span className={`${CELL.A2} block text-[11px] text-[#8C8878] truncate`}>
+          <span className={`${CELL.A2} block text-[12px] text-slate-500 break-words`}>
             {r.claim_period ?? 'Whole year'}
             {r.government_ref ? ` · ${r.government_ref}` : ''}
             {r.reimbursed_on ? ` · received ${fmtDate(r.reimbursed_on)}` : ''}
           </span>
           <span className={CELL.A3}>
-            <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${STATE_CHIP[r.status]}`}>
+            <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${STATE_CHIP[r.status]}`}>
               {STATE_LABEL[r.status]}
             </span>
           </span>
-          <span className={`${CELL.B2} text-[11px] text-[#6B675A] text-right tabular-nums`}>
+          <span className={`${CELL.B2} text-[12px] text-slate-600 text-right tabular-nums`}>
             {inr(r.claimed_amount, showAmounts)}<span className="sm:hidden"> claimed</span>
           </span>
           <span className={`${CELL.B1} text-[11.5px] font-semibold text-[#1F6B42] text-right tabular-nums`}>
@@ -147,10 +147,10 @@ function RteEditor({
   return (
     <ModalShell onClose={onClose} sharp size="sm"
                 title={row ? 'Update this claim' : 'Record an RTE claim'}
-                icon={<Landmark size={15} />} iconClassName="bg-[#F4F1E7] text-[#52525B]">
+                icon={<Landmark size={15} />} iconClassName="bg-[#F4F1E7] text-slate-600">
       <div className="space-y-3">
         {row ? (
-          <div className="bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2 text-[12.5px] text-[#18181B]">
+          <div className="bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2 text-[13px] text-slate-900">
             {names.get(row.student_id) ?? 'Student'}
           </div>
         ) : (
@@ -159,7 +159,7 @@ function RteEditor({
             <input value={studentId} onChange={e => setStudentId(e.target.value)}
                    placeholder="Paste the student’s id from their profile page"
                    className={`${ADMIN.inputPlain} mt-1 font-mono text-[11px]`} />
-            <p className="mt-1 text-[11px] text-[#8C8878]">
+            <p className="mt-1 text-[12px] text-slate-500">
               A claim is usually raised from the student&rsquo;s own fee profile, where the id is
               already known. This box is for entering a batch from a government list.
             </p>
@@ -200,7 +200,7 @@ function RteEditor({
                  className={`${ADMIN.inputPlain} mt-1`} />
         </label>
 
-        <p className="text-[11px] text-[#8C8878] leading-relaxed">
+        <p className="text-[12px] text-slate-500 leading-relaxed">
           A reimbursement is posted to the student&rsquo;s ledger as money received, marked as
           coming from the state. Nothing here bills the family.
         </p>

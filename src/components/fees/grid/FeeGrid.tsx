@@ -132,7 +132,7 @@ export default function FeeGrid({
 
   if (terms.length === 0 && heads.length === 0) {
     return (
-      <div className="bg-white border border-[#E3DFD3] px-6 py-14 text-center">
+      <div className="fx-card px-6 py-14 text-center">
         <p className="text-[12.5px] font-semibold text-[#18181B]">Build this session’s fee grid</p>
         <p className="text-[12px] text-[#8C8878] mt-1 max-w-[52ch] mx-auto leading-relaxed">
           Add the terms and the fee heads the school charges above. Each grade then gets a row, and every
@@ -149,7 +149,7 @@ export default function FeeGrid({
   const HEAD2 = 'sticky top-[40px] z-20 bg-[#3F3F46] h-[28px] px-2.5 text-left align-middle border-r border-[#52525B]'
 
   return (
-    <div className="bg-white border border-[#E3DFD3] -mx-3 sm:mx-0 max-sm:border-x-0">
+    <div className="fx-card fx-bleed min-w-0">
       <div className="overflow-auto max-h-[calc(100dvh-180px)] min-h-[320px] overscroll-contain">
         <table ref={tableRef} className="border-separate border-spacing-0 text-[12px] text-[#18181B] w-max min-w-full">
           <thead>

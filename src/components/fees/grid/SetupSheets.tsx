@@ -93,7 +93,7 @@ export function TermSheet({
         </Field>
         <Field label="Due date">
           <input type="date" value={due} disabled={locked} onChange={e => setDue(e.target.value)}
-                 className={`${ADMIN.inputPlain} disabled:bg-[#F4F1E7] disabled:text-[#8C8878]`} />
+                 className={`${ADMIN.inputPlain} disabled:bg-[#F4F1E7] disabled:text-slate-500`} />
         </Field>
       </div>
       {locked && (
@@ -340,7 +340,7 @@ export function SplitSheet({
               <input value={d.name} disabled={locked}
                      onChange={e => setDrafts(ds => ds.map(x => x.key === d.key ? { ...x, name: e.target.value } : x))}
                      className={`${ADMIN.inputPlain} flex-1`} placeholder="Science stream" />
-              <span className="text-[11px] text-[#8C8878] tabular-nums w-[72px] text-right">
+              <span className="text-[12px] text-slate-500 tabular-nums w-[72px] text-right">
                 {(n => `${n} student${n === 1 ? '' : 's'}`)(sections.filter(sec => owner[sec] === d.key).reduce((a, sec) => a + countIn(sec), 0))}
               </span>
               {!locked && (
@@ -352,7 +352,7 @@ export function SplitSheet({
             </div>
           ))}
           {!locked && (
-            <button onClick={addGroup} className="w-full text-left px-2.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#6B675A] hover:text-[#18181B] hover:bg-[#FAF8F2]">
+            <button onClick={addGroup} className="w-full text-left px-2.5 py-2 text-[12px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-[#FAF8F2]">
               + Add a group
             </button>
           )}
@@ -364,15 +364,15 @@ export function SplitSheet({
              error={tried && problem ? problem : undefined}>
         <div className="bg-white border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
           {sections.length === 0 && (
-            <p className="px-3 py-3 text-[12px] text-[#8C8878]">No sections found for this grade yet — add one below.</p>
+            <p className="px-3 py-3 text-[12px] text-slate-500">No sections found for this grade yet — add one below.</p>
           )}
           {sections.map(sec => {
             const missing = !drafts.some(d => d.key === owner[sec])
             return (
               <div key={sec} className={`flex flex-wrap items-center gap-2 px-2.5 py-2 ${missing && tried ? 'bg-[#FCECEC]' : ''}`}>
                 <span className="w-[86px] flex-shrink-0">
-                  <span className="text-[12.5px] font-bold text-[#18181B]">Section {sec}</span>
-                  <span className="block text-[10.5px] text-[#8C8878] tabular-nums">{countIn(sec)} student{countIn(sec) === 1 ? '' : 's'}</span>
+                  <span className="text-[13px] font-bold text-slate-900">Section {sec}</span>
+                  <span className="block text-[12px] text-slate-500 tabular-nums">{countIn(sec)} student{countIn(sec) === 1 ? '' : 's'}</span>
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {drafts.map(d => (
@@ -382,7 +382,7 @@ export function SplitSheet({
                     </Pick>
                   ))}
                 </div>
-                {missing && <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.08em] text-[#A93232]">No group</span>}
+                {missing && <span className="ml-auto text-[12px] font-semibold text-[#A93232]">No group</span>}
               </div>
             )
           })}

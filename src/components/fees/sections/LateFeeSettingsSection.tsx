@@ -115,12 +115,12 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
   }
 
   if (perms.loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
   }
   if (!canManage) return <NoAccess what="manage late fees" />
 
   if (loading) {
-    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#8C8878]" /></div>
+    return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-slate-500" /></div>
   }
 
   return (
@@ -131,8 +131,8 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
 
       <div className={`${ADMIN.card} p-4 flex flex-wrap items-start gap-3`}>
         <div className="flex-1 min-w-[240px]">
-          <h2 className="text-[12.5px] font-bold text-[#18181B]">The nightly sweep</h2>
-          <p className="text-[11px] text-[#8C8878] mt-1 leading-relaxed">
+          <h2 className="text-[13px] font-bold text-slate-900">The nightly sweep</h2>
+          <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">
             Runs on its own every night. Preview it here first — the preview is the same
             calculation with committing switched off, so what it shows is what it will charge.
           </p>
@@ -156,8 +156,8 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
           <div className="flex items-center gap-2">
             {sweep.committed
               ? <CheckCircle2 size={14} className="text-[#1F6B42]" />
-              : <Play size={14} className="text-[#8C8878]" />}
-            <span className="text-[12.5px] font-semibold text-[#18181B]">
+              : <Play size={14} className="text-slate-500" />}
+            <span className="text-[13px] font-semibold text-slate-900">
               {sweep.committed ? 'Charged' : 'Preview'} as at {fmtDate(sweep.as_of)}
             </span>
           </div>
@@ -174,7 +174,7 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {Object.entries(sweep.by_class).map(([klass, amount]) => (
                   <span key={klass}
-                        className="text-[11px] px-2 py-1 bg-[#F4F1E7] border border-[#E3DFD3] text-[#52525B]">
+                        className="text-[11px] px-2 py-1 bg-[#F4F1E7] border border-[#E3DFD3] text-slate-600">
                     {klass} · {inr(amount, showAmounts)}
                   </span>
                 ))}
@@ -197,23 +197,23 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
           </button>
         </div>
         {rules.length === 0 ? (
-          <p className="px-4 py-8 text-[12.5px] text-[#8C8878]">
+          <p className="px-4 py-8 text-[13px] text-slate-500">
             No late-fee rules. Bills fall overdue but nothing is charged.
           </p>
         ) : rules.map(r => (
           <Row key={r.id} cols={RULE_COLS}>
-            <span className={`${CELL.A1} block text-[12.5px] font-semibold text-[#18181B] truncate`}>
+            <span className={`${CELL.A1} block text-[13px] font-semibold text-slate-900 break-words`}>
               {r.name}
             </span>
-            <span className={`${CELL.A2} block text-[11px] text-[#8C8878]`}>
+            <span className={`${CELL.A2} block text-[12px] text-slate-500`}>
               {describeRule(r)}
               {r.enabled && r.enabled_from ? ` · on since ${fmtDate(r.enabled_from)}` : ''}
             </span>
             <span className={CELL.B1}>
-              <span className={`inline-block text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+              <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${
                 r.enabled
                   ? 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]'
-                  : 'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]'}`}>
+                  : 'bg-[#F4F1E7] text-slate-600 border border-[#E3DFD3]'}`}>
                 {r.enabled ? 'Live' : 'Off'}
               </span>
             </span>
@@ -228,7 +228,7 @@ export default function LateFeeSettingsSection({ onChanged }: { onChanged?: () =
             </span>
           </Row>
         ))}
-        <p className="px-4 py-2.5 text-[11px] text-[#8C8878] border-t border-[#F0ECE2]">
+        <p className="px-4 py-2.5 text-[12px] text-slate-500 border-t border-[#F0ECE2]">
           Switching a rule on always starts it from today. Days before that are never charged,
           so turning one on in October cannot back-charge a term.
         </p>

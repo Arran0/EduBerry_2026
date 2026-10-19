@@ -118,7 +118,7 @@ export default function ApplyConcessionSheet({
     return (
       <ModalShell onClose={onDone} sharp size="sm" title={result.needsApproval ? 'Sent for approval' : 'Applied'}
                   icon={<BadgePercent size={15} />} iconClassName="bg-[#EAF5EE] text-[#1F6B42]">
-        <p className="text-[12.5px] text-[#6B675A] leading-relaxed">
+        <p className="text-[13px] text-slate-600 leading-relaxed">
           {result.needsApproval
             ? `${result.label} of ${inr(effective, showAmounts)} is waiting for an approver. The bill has not changed yet — do not tell the family it has.`
             : `${result.label} of ${inr(effective, showAmounts)} is off the bill. The new balance is ${inr(after, showAmounts)}.`}
@@ -136,7 +136,7 @@ export default function ApplyConcessionSheet({
       icon={<BadgePercent size={15} />} iconClassName="bg-[#FAF3DF] text-[#7A6220]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-[#8C8878]">
+          <span className="text-[12px] text-slate-500">
             {!bill ? 'Pick a bill first.'
               : willWait ? 'This will wait for an approver.'
               : 'This applies straight away.'}
@@ -158,12 +158,12 @@ export default function ApplyConcessionSheet({
             <span className={ADMIN.label}>Student</span>
             {student ? (
               <div className="mt-1 flex items-center justify-between gap-2 bg-[#FAF8F2] border border-[#E3DFD3] px-3 py-2">
-                <span className="text-[12.5px] text-[#18181B]">
+                <span className="text-[13px] text-slate-900">
                   {student.full_name}
-                  <span className="text-[#8C8878]"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
+                  <span className="text-slate-500"> · {gradeLabel(student.grade)}{student.section ?? ''}</span>
                 </span>
                 <button onClick={() => { setStudent(null); setInvoiceId('') }}
-                        className="text-[11px] text-[#6B675A] hover:text-[#18181B]">Change</button>
+                        className="text-[12px] text-slate-600 hover:text-slate-900">Change</button>
               </div>
             ) : (
               <>
@@ -174,9 +174,9 @@ export default function ApplyConcessionSheet({
                   <div className="mt-1 border border-[#E3DFD3] divide-y divide-[#F0ECE2]">
                     {matches.map(p => (
                       <button key={p.student_id} onClick={() => { setStudent(p); setQuery('') }}
-                              className="w-full text-left px-3 py-2 text-[12.5px] text-[#18181B] hover:bg-[#FAF8F2]">
+                              className="w-full text-left px-3 py-2 text-[13px] text-slate-900 hover:bg-[#FAF8F2]">
                         {p.full_name}
-                        <span className="text-[#8C8878]"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
+                        <span className="text-slate-500"> · {gradeLabel(p.grade)}{p.section ?? ''}</span>
                       </button>
                     ))}
                   </div>
@@ -198,7 +198,7 @@ export default function ApplyConcessionSheet({
             ))}
           </select>
           {student && bills.length === 0 && (
-            <p className="mt-1 text-[11px] text-[#8C8878]">
+            <p className="mt-1 text-[12px] text-slate-500">
               Nothing outstanding. A concession can only come off a bill that is still owed.
             </p>
           )}
@@ -245,7 +245,7 @@ export default function ApplyConcessionSheet({
             </label>
           ) : (
             <div className="flex items-end">
-              <p className="text-[11px] text-[#8C8878] leading-snug pb-2">
+              <p className="text-[12px] text-slate-500 leading-snug pb-2">
                 A waiver is a decision, not a policy. It always goes to an approver.
               </p>
             </div>
@@ -259,7 +259,7 @@ export default function ApplyConcessionSheet({
                  placeholder={suggested ? String(suggested) : '0'}
                  className={`${ADMIN.inputPlain} mt-1`} />
           {suggested !== null && amount === 0 && (
-            <p className="mt-1 text-[11px] text-[#8C8878]">
+            <p className="mt-1 text-[12px] text-slate-500">
               {type?.mode === 'percent'
                 ? `${type.value}% of what is still owing.`
                 : 'The type’s standard amount.'} Change it if this case is different.
@@ -282,11 +282,11 @@ export default function ApplyConcessionSheet({
                 concession cannot push a bill into credit — reduce it, or split it across bills.
               </p>
             ) : (
-              <div className="flex items-center justify-between text-[12.5px]">
-                <span className="text-[#6B675A]">
+              <div className="flex items-center justify-between text-[13px]">
+                <span className="text-slate-600">
                   {inr(bill.balance, showAmounts)} owing, less {inr(effective, showAmounts)}
                 </span>
-                <span className="font-bold text-[#18181B]">{inr(after, showAmounts)}</span>
+                <span className="font-bold text-slate-900">{inr(after, showAmounts)}</span>
               </div>
             )}
           </div>

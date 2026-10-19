@@ -207,9 +207,9 @@ export default function ChargeSheet({
 
   const footer = editing ? (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[11px] text-[#8C8878] mr-auto tabular-nums">
+      <span className="text-[12px] text-slate-500 mr-auto tabular-nums">
         {selected.length} student{selected.length === 1 ? '' : 's'}
-        {total > 0 && <> · <span className="font-bold text-[#18181B]">{rupees(total)}</span></>}
+        {total > 0 && <> · <span className="font-bold text-slate-900">{rupees(total)}</span></>}
       </span>
       <button onClick={() => (charge ? setEditing(false) : onClose())} className={ADMIN.ghostBtn}>Cancel</button>
       {kind === 'other' && (
@@ -275,11 +275,11 @@ export default function ChargeSheet({
     >
       {charge && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+          <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${
             kind === 'fine' ? INVOICE_CHIP.overdue : 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]'}`}>
             {kind === 'fine' ? 'Fine' : 'Other fee'}
           </span>
-          <span className={`text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] ${
+          <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap ${
             issue ? INVOICE_CHIP.paid : INVOICE_CHIP.draft}`}>
             {issue ? 'Issued' : 'Draft'}
           </span>
@@ -335,11 +335,11 @@ export default function ChargeSheet({
           ]).map(x => (
             <div key={x.k} className="px-3 py-2 min-w-0">
               <dt className={ADMIN.label}>{x.k}</dt>
-              <dd className="text-[15px] font-bold tabular-nums text-[#18181B] truncate">{x.v}</dd>
+              <dd className="text-[15px] font-bold tabular-nums text-slate-900 break-words">{x.v}</dd>
             </div>
           ))}
           {description && (
-            <p className="col-span-3 px-3 py-2 border-t border-[#E3DFD3] !border-l-0 text-[12px] text-[#52525B] whitespace-pre-wrap">
+            <p className="col-span-3 px-3 py-2 border-t border-[#E3DFD3] !border-l-0 text-[12px] text-slate-600 whitespace-pre-wrap">
               {description}
             </p>
           )}
@@ -373,12 +373,12 @@ export default function ChargeSheet({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2.5 border-t border-[#F0ECE2]">
               <div className="flex flex-wrap items-center gap-1">
                 <span className={`${ADMIN.label} mr-1`}>Sections</span>
-                {sectionOptions.length === 0 && <span className="text-[11px] text-[#A8A395]">Pick a grade first</span>}
+                {sectionOptions.length === 0 && <span className="text-[12px] text-slate-400">Pick a grade first</span>}
                 {sectionOptions.map(sec => (
                   <Pick key={sec} on={sections.has(sec)} onClick={() => toggleSet(sections, sec, setSections)}>{sec}</Pick>
                 ))}
                 {sections.size > 0 && (
-                  <button className="text-[10.5px] font-semibold text-[#6B675A] hover:text-[#18181B] underline ml-1"
+                  <button className="text-[10.5px] font-semibold text-slate-600 hover:text-slate-900 underline ml-1"
                           onClick={() => setSections(new Set())}>All</button>
                 )}
               </div>
@@ -390,7 +390,7 @@ export default function ChargeSheet({
             </div>
 
             <div className="relative pt-2.5 border-t border-[#F0ECE2]">
-              <Search size={14} className="absolute left-3 top-[calc(50%+5px)] -translate-y-1/2 text-[#8C8878]" />
+              <Search size={14} className="absolute left-3 top-[calc(50%+5px)] -translate-y-1/2 text-slate-500" />
               <input value={query} onChange={e => setQuery(e.target.value)} className={ADMIN.input}
                      placeholder="Add one student by name or admission number" />
               {search.length > 0 && (
@@ -403,8 +403,8 @@ export default function ChargeSheet({
                               setQuery('')
                             }}
                             className="w-full text-left px-3 py-2 hover:bg-[#FAF8F2] flex items-center gap-2 border-b border-[#F0ECE2] last:border-b-0">
-                      <span className="text-[12.5px] text-[#18181B] flex-1 truncate">{s.full_name}</span>
-                      <span className="text-[11px] text-[#8C8878]">
+                      <span className="text-[13px] text-slate-900 flex-1 break-words">{s.full_name}</span>
+                      <span className="text-[12px] text-slate-500">
                         {s.grade === null ? NO_GRADE_LABEL : `${gradeShortLabel(s.grade)}${s.section ? ` ${s.section}` : ''}`}
                       </span>
                     </button>
@@ -418,8 +418,8 @@ export default function ChargeSheet({
 
       {/* The students */}
       <div className="bg-white border border-[#E3DFD3]">
-        <div className="flex items-center gap-2 bg-[#27272A] px-3 py-1.5">
-          <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#D4D4D8]">
+        <div className="flex items-center gap-2 bg-[#F7F5F0] border-b border-[#EEEAE1] px-3.5 py-2.5">
+          <span className="text-[12px] font-semibold text-slate-700">
             {(editing ? payers === 'optin' : charge?.optional) ? 'Offered to' : 'Students'}
           </span>
           <span className="text-[9.5px] font-bold tabular-nums text-[#B8983C]">{selected.length}</span>
@@ -430,7 +430,7 @@ export default function ChargeSheet({
           )}
         </div>
         {selected.length === 0 ? (
-          <p className="px-3 py-5 text-[12px] text-[#8C8878]">
+          <p className="px-3 py-5 text-[12px] text-slate-500">
             {editing ? 'Choose a grade, or search for a student, to start.' : 'No students.'}
           </p>
         ) : (
@@ -440,8 +440,8 @@ export default function ChargeSheet({
               .sort((a, b) => (a.grade ?? 99) - (b.grade ?? 99) || (a.section ?? '').localeCompare(b.section ?? '') || a.full_name.localeCompare(b.full_name))
               .map(s => (
                 <div key={s.id} className="flex items-center gap-2 px-3 py-[6px] border-b border-[#F0ECE2] last:border-b-0 hover:bg-[#FAF8F2]">
-                  <span className="text-[12.5px] text-[#18181B] flex-1 truncate">{s.full_name}</span>
-                  <span className="text-[11px] text-[#8C8878] tabular-nums">
+                  <span className="text-[13px] text-slate-900 flex-1 break-words">{s.full_name}</span>
+                  <span className="text-[12px] text-slate-500 tabular-nums">
                     {s.grade === null ? 'No grade' : `${gradeLabel(s.grade)}${s.section ? ` ${s.section}` : ''}`}
                   </span>
                   {editing && (
@@ -451,10 +451,10 @@ export default function ChargeSheet({
                     </button>
                   )}
                   {optionalView && (billed.has(s.id)
-                    ? <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">Billed</span>
+                    ? <span className="inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]">Billed</span>
                     : optins.has(s.id)
-                    ? <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-1.5 py-[2px] bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">Opted in</span>
-                    : <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#A8A395]">Not opted</span>)}
+                    ? <span className="inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]">Opted in</span>
+                    : <span className="text-[12px] font-semibold text-slate-400">Not opted</span>)}
                   {!editing && issue && !charge?.optional && <Check size={12} className="text-[#1F6B42]" />}
                 </div>
               ))}

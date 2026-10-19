@@ -1,84 +1,83 @@
 // Shared visual tokens for the Fee module.
 //
-// The Salary Manager's vocabulary, not a second one: warm paper surfaces,
-// hairline rules instead of shadow, and square corners so dense rows sit flush
-// against each other. See `src/components/salary/ui.tsx`, which this follows.
+// The transport app's glass language, squared for records. Two rules:
 //
-// `ADMIN` keeps the key names the fee screens already call — `card`, `label`,
-// `darkBtn` — and changes only what they resolve to. That is deliberate: it
-// re-skins nine screens and a dozen sheets from one place, and it leaves the
-// Salary Manager's own `ADMIN` (in adminUi.ts) untouched, so neither module
-// can restyle the other by accident.
-
-export { ADMIN_GOLD, SHARP } from '@/components/salary/adminUi'
-export { LABEL, BLEED } from '@/components/salary/ui'
+//   Large surfaces — panels, lists, tiles, popups — have square corners. A fee
+//   register is a ledger, and straight edges let dense rows and hairlines sit
+//   flush the way a printed account book does.
+//
+//   Controls — buttons, segments, filters, inputs, chips — are rounded, the
+//   iOS capsule. They are what a finger presses, and the round shape is how the
+//   page says so.
+//
+// `ADMIN` keeps the key names the fee screens already call (`card`, `label`,
+// `darkBtn`…) so every screen and sheet in the module re-skins from here.
 
 /**
- * The module's type scale. Eight sizes, each with one job:
- *
- *   9px     a state chip — uppercase, tracked
- *   9.5px   a micro-label — `ADMIN.label` / `LABEL`
- *   10.5px  a button — `ADMIN.darkBtn` / `ADMIN.ghostBtn`
- *   11px    a second line: a class, a date, a method, a reason, a bill number
- *   11.5px  a figure
- *   12.5px  a row's subject, a form field, a sentence of prose
- *   15px    a card or section heading
- *   17px    the one figure a panel is about
- *
- * None of them changes at a breakpoint. The module used to carry twenty-five
- * size expressions, thirteen of which were a phone size and a laptop size
- * glued together (`text-[13px] sm:text-sm`), so a name was 13px beside a 14px
- * date beside an 11px class and the same row read differently either side of
- * 640px. A list is easier to read when the sizes in it mean something, and
- * "which breakpoint am I" is not one of the things a size should mean.
- *
- * Above this sits one display size, the page title (`text-lg`), and below it
- * 10px for a chart's tick labels and a card's caption.
+ * Cancels the page gutter so a list reaches both edges of a phone screen. The
+ * fee pages use a 1rem gutter (`px-4`) at every width below `sm`, matching it.
  */
+export const BLEED = '-mx-4 sm:mx-0'
 
+/** A column heading, a field name, a tile caption. Sentence case, quiet. */
+export const LABEL = 'text-[11.5px] font-medium text-slate-500'
+
+/**
+ * The module's type scale:
+ *
+ *   10.5px  a status chip
+ *   11.5px  a label, a second line: a class, a date, a method, a bill number
+ *   12.5px  a button, a figure in a row
+ *   13.5px  a row's subject, a form field, a sentence
+ *   15px    a panel heading
+ *   20px+   the one figure a tile is about
+ */
 export const ADMIN = {
-  /** A raised surface. Square, hairlined, no shadow. */
-  card: 'bg-white border border-[#E3DFD3]',
+  /** A raised sheet of content. Square, solid, hairlined. */
+  card: 'fx-card',
   /** Search input, with room for a leading icon and a trailing clear. */
-  input: 'w-full bg-white border border-[#E3DFD3] pl-8 pr-8 py-[7px] text-[12.5px] text-[#18181B] placeholder:text-[#A8A395] focus:outline-none focus:border-[#27272A] transition-colors',
+  input: 'w-full h-9 rounded-[10px] bg-white border border-[#DDD8CC] pl-8 pr-8 text-[13.5px] text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition',
   /** Plain form field. */
-  inputPlain: 'w-full bg-white border border-[#E3DFD3] px-2.5 py-[7px] text-[12.5px] text-[#18181B] placeholder:text-[#A8A395] focus:outline-none focus:border-[#27272A] transition-colors',
-  /** The uppercase micro-label used for every field name and tile caption. */
-  label: 'text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#8C8878]',
-  darkBtn: 'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white border border-[#27272A] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
-  ghostBtn: 'inline-flex items-center justify-center gap-1.5 bg-white text-[#52525B] hover:text-[#18181B] border border-[#E3DFD3] hover:border-[#C9C4B4] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
-  /** The one action a screen is about — issuing, collecting. Used once per view. */
-  goldBtn: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap flex-shrink-0 bg-[#B8983C] hover:bg-[#A2842F] text-white border border-[#B8983C] text-[10.5px] font-bold uppercase tracking-[0.08em] leading-none px-2.5 py-[7px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
-  /** A quiet button that sits on a dark panel strip. */
-  onDarkBtn: 'inline-flex items-center justify-center gap-1 text-[#D4D4D8] hover:text-white border border-[#3F3F46] hover:border-[#71717A] text-[9.5px] font-bold uppercase tracking-[0.08em] leading-none px-2 py-[5px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
-  /**
-   * A native picker sized to its contents, level with the search field. Not
-   * `inputPlain`, which is `w-full` and so takes a whole row in a toolbar.
-   */
-  select: 'bg-white border border-[#E3DFD3] pl-2.5 pr-2 py-[7px] text-[12.5px] font-semibold text-[#18181B] focus:outline-none focus:border-[#27272A] transition-colors cursor-pointer',
+  inputPlain: 'w-full min-h-9 rounded-[10px] bg-white border border-[#DDD8CC] px-3 py-[7px] text-[13.5px] text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition disabled:bg-slate-50 disabled:text-slate-400',
+  /** The name above a field, or a caption. */
+  label: LABEL,
+  darkBtn: 'inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white whitespace-nowrap bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] hover:from-[#46444A] hover:to-[#2E2E31] active:scale-[0.97] transition disabled:opacity-45 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+  ghostBtn: 'inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-slate-700 whitespace-nowrap bg-white border border-[#E2DDD2] shadow-[0_1px_2px_rgba(15,23,42,.05)] hover:text-slate-900 hover:border-[#CFC8B8] active:scale-[0.97] transition disabled:opacity-45 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+  /** The one action a view is about — collecting, issuing. Used once per view. */
+  goldBtn: 'inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white whitespace-nowrap flex-shrink-0 bg-gradient-to-b from-[#C7A84C] to-[#A9892F] shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_6px_14px_-8px_rgba(122,98,32,.7)] hover:from-[#CDAF55] hover:to-[#9E8029] active:scale-[0.97] transition disabled:opacity-45 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+  /** A small quiet button in a panel's heading row. */
+  onDarkBtn: 'inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold text-slate-700 whitespace-nowrap bg-white border border-[#E2DDD2] hover:text-slate-900 hover:border-[#CFC8B8] active:scale-[0.97] transition disabled:opacity-45 disabled:pointer-events-none',
+  /** A native picker sized to its contents, level with the search field. */
+  select: 'h-9 rounded-full bg-white border border-[#DDD8CC] pl-3 pr-2 text-[13px] font-medium text-slate-800 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition cursor-pointer',
 } as const
 
 export const GOLD = '#B8983C'
 
+/** The icon square in a fee popup's header: charcoal into bronze, white mark. */
+export const FEE_ICON = 'text-white [background:linear-gradient(135deg,#3D3B40,#8B6F47)]'
+
+/** A status chip's frame; the tone classes below fill it. */
+export const CHIP = 'inline-flex items-center gap-1 h-5 px-2 rounded-full text-[10.5px] font-semibold leading-none whitespace-nowrap'
+
 /** Where an invoice sits in its life. */
 export const INVOICE_CHIP: Record<string, string> = {
-  draft:       'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
-  pending:     'bg-[#EEF2FB] text-[#3A5490] border border-[#CFDAEF]',
-  partly_paid: 'bg-[#FAF3DF] text-[#7A6220] border border-[#E7D9AE]',
-  paid:        'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
-  overdue:     'bg-[#FCECEC] text-[#A93232] border border-[#EFCCCC]',
-  cancelled:   'bg-[#27272A] text-white border border-[#27272A]',
+  draft:       `${CHIP} bg-slate-100 text-slate-600`,
+  pending:     `${CHIP} bg-slate-100 text-slate-700`,
+  partly_paid: `${CHIP} bg-[#FBF1D6] text-[#7A5D12]`,
+  paid:        `${CHIP} bg-[#E6F2EA] text-[#1F6B42]`,
+  overdue:     `${CHIP} bg-[#FBE7E7] text-[#A93232]`,
+  cancelled:   `${CHIP} bg-zinc-200/80 text-zinc-600`,
 }
 
 export const INVOICE_LABEL: Record<string, string> = {
-  draft: 'Draft', pending: 'Pending', partly_paid: 'Partly paid',
+  draft: 'Draft', pending: 'Unpaid', partly_paid: 'Partly paid',
   paid: 'Paid', overdue: 'Overdue', cancelled: 'Cancelled',
 }
 
 export const STRUCTURE_CHIP: Record<string, string> = {
-  draft:     'bg-[#F4F1E7] text-[#6B675A] border border-[#E3DFD3]',
-  published: 'bg-[#EAF5EE] text-[#1F6B42] border border-[#C6E3D2]',
-  archived:  'bg-[#E3DFD3] text-[#6B675A] border border-[#C9C4B4]',
+  draft:     `${CHIP} bg-slate-100 text-slate-600`,
+  published: `${CHIP} bg-[#E6F2EA] text-[#1F6B42]`,
+  archived:  `${CHIP} bg-zinc-200/80 text-zinc-600`,
 }
 
 /**
@@ -111,4 +110,14 @@ export function fmtDate(iso: string | null | undefined): string {
   const mi = Number(m) - 1
   if (!months[mi]) return iso
   return `${Number(d)} ${months[mi]} ${y}`
+}
+
+/** '2026-04-10' → '10 Apr'. For a row where the session already names the year. */
+export function fmtDay(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const [, m, d] = iso.slice(0, 10).split('-')
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const mi = Number(m) - 1
+  if (!months[mi]) return iso
+  return `${Number(d)} ${months[mi]}`
 }

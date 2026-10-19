@@ -92,7 +92,7 @@ export default function WhatsAppSettingsPanel() {
 
   if (loading) {
     return (
-      <div className={`${ADMIN.card} p-8 flex items-center justify-center gap-2 text-sm text-[#71717A]`}>
+      <div className={`${ADMIN.card} p-8 flex items-center justify-center gap-2 text-sm text-slate-500`}>
         <Loader2 size={16} className="animate-spin" /> Loading…
       </div>
     )
@@ -157,8 +157,8 @@ export default function WhatsAppSettingsPanel() {
       <div className={`${ADMIN.card} p-4`}>
         <div className="flex items-start gap-3">
           <MessageCircle size={18} className="mt-0.5 flex-shrink-0" style={{ color: GOLD }} />
-          <div className="text-sm text-[#52525B] leading-relaxed">
-            <p className="font-semibold text-[#27272A] mb-1">
+          <div className="text-sm text-slate-600 leading-relaxed">
+            <p className="font-semibold text-slate-900 mb-1">
               Configure this now; sending arrives with Round 3
             </p>
             <p>
@@ -171,8 +171,8 @@ export default function WhatsAppSettingsPanel() {
       </div>
 
       <div className={`${ADMIN.card} p-5`}>
-        <h3 className="text-sm font-bold text-[#27272A] mb-1">Setup</h3>
-        <p className="text-xs text-[#A1A1AA] mb-4">
+        <h3 className="text-sm font-bold text-slate-900 mb-1">Setup</h3>
+        <p className="text-xs text-slate-400 mb-4">
           A tick means the app can see it is done. The rest only you can confirm.
         </p>
         <ol className="space-y-3">
@@ -188,19 +188,19 @@ export default function WhatsAppSettingsPanel() {
                     {step.n}
                   </span>
                 ) : (
-                  <span className="w-5 h-5 rounded-full border border-[#E4E4E7] flex items-center justify-center text-[10px] font-bold text-[#A1A1AA]">
+                  <span className="w-5 h-5 rounded-full border border-[#E4E4E7] flex items-center justify-center text-[10px] font-bold text-slate-400">
                     {step.n}
                   </span>
                 )}
               </span>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[#27272A]">{step.title}</div>
-                <div className="text-xs text-[#71717A] mt-0.5 leading-relaxed [&_code]:bg-[#F4F4F5] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[11px]">
+                <div className="text-sm font-medium text-slate-900">{step.title}</div>
+                <div className="text-xs text-slate-500 mt-0.5 leading-relaxed [&_code]:bg-[#F4F4F5] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[11px]">
                   {step.detail}
                 </div>
                 {step.link && (
                   <a href={step.link.href} target="_blank" rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1 text-xs text-[#27272A] hover:underline mt-1">
+                     className="inline-flex items-center gap-1 text-xs text-slate-900 hover:underline mt-1">
                     {step.link.label} <ExternalLink size={11} />
                   </a>
                 )}
@@ -211,7 +211,7 @@ export default function WhatsAppSettingsPanel() {
       </div>
 
       <div className={`${ADMIN.card} p-5 space-y-4`}>
-        <h3 className="text-sm font-bold text-[#27272A]">Webhook</h3>
+        <h3 className="text-sm font-bold text-slate-900">Webhook</h3>
         <div>
           <label className={`${ADMIN.label} block mb-1.5`}>Callback URL — paste into Meta</label>
           <div className="flex gap-2">
@@ -221,7 +221,7 @@ export default function WhatsAppSettingsPanel() {
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          <p className="text-xs text-[#A1A1AA] mt-1.5">
+          <p className="text-xs text-slate-400 mt-1.5">
             Subscribe to the <strong>messages</strong> field so delivery and read receipts, and
             inbound STOP, reach the app.
           </p>
@@ -229,7 +229,7 @@ export default function WhatsAppSettingsPanel() {
       </div>
 
       <div className={`${ADMIN.card} p-5 space-y-4`}>
-        <h3 className="text-sm font-bold text-[#27272A]">Credentials</h3>
+        <h3 className="text-sm font-bold text-slate-900">Credentials</h3>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
@@ -252,7 +252,7 @@ export default function WhatsAppSettingsPanel() {
           </div>
           <div className="sm:col-span-2">
             <label className={`${ADMIN.label} block mb-1.5`}>
-              Display number <span className="font-normal normal-case tracking-normal text-[#A1A1AA]">(what parents will see)</span>
+              Display number <span className="font-normal normal-case tracking-normal text-slate-400">(what parents will see)</span>
             </label>
             <input
               value={settings.display_number}
@@ -264,7 +264,7 @@ export default function WhatsAppSettingsPanel() {
         </div>
 
         <div className="pt-3 border-t border-[#F4F4F5] space-y-4">
-          <p className="text-xs text-[#A1A1AA] flex items-start gap-1.5">
+          <p className="text-xs text-slate-400 flex items-start gap-1.5">
             <Info size={13} className="mt-0.5 flex-shrink-0" />
             These three are stored in the admin-only credential table, never in the
             world-readable settings. Leave a box empty to keep what is already saved.
@@ -332,7 +332,7 @@ function SecretField({
       <div className="flex items-center gap-2 mb-1.5">
         <label className={ADMIN.label}>{label}</label>
         {saved && (
-          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="text-[12px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
             Saved
           </span>
         )}
@@ -345,7 +345,7 @@ function SecretField({
         placeholder={saved ? 'Stored — leave blank to keep it' : 'Paste here'}
         className={`${ADMIN.inputPlain} font-mono text-xs`}
       />
-      <p className="text-xs text-[#A1A1AA] mt-1">{help}</p>
+      <p className="text-xs text-slate-400 mt-1">{help}</p>
     </div>
   )
 }
@@ -355,7 +355,7 @@ function StatusPill({ complete }: { complete: boolean }) {
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
       complete
         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-        : 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]'
+        : 'bg-[#F4F4F5] text-slate-500 border border-[#E4E4E7]'
     }`}>
       {complete ? <Check size={12} /> : <Circle size={10} />}
       {complete ? 'Ready for Round 3' : 'Not connected yet'}
