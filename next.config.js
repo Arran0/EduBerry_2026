@@ -8,6 +8,10 @@ const nextConfig = {
     domains: ['tgxxqzeaqxiwoqzopcku.supabase.co'],
   },
   experimental: {},
+  // Next 15 lists @react-pdf/renderer as a server-external package and loads it
+  // with require(), but v4 is ESM-only. Bundling it instead fixes SSR of the
+  // pages that import the PDF previews.
+  transpilePackages: ['@react-pdf/renderer'],
   async headers() {
     return [
       {

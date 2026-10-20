@@ -12,10 +12,8 @@ export const runtime = 'nodejs'
  * the link was opened, which is what the reminder log's "seen" column is built
  * from.
  */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { token: string } },
-) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const db = adminClient()
   if (!db) {
     return NextResponse.json({ success: false, ok: false, reason: 'not_found' }, { status: 500 })

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import type { DocumentProps } from '@react-pdf/renderer'
 import { fetchBranding } from '@/lib/pageConfig'
 import { SalaryRecord, SalaryCycle, StaffBankAccount, formatPeriod } from '@/lib/salary'
 import type { StatutoryConfig, EpfTotals, EsiTotals } from '@/lib/statutory'
@@ -13,7 +14,7 @@ export interface StatementSpec {
 
 export async function downloadStatement(spec: StatementSpec): Promise<void> {
   const { pdf } = await import('@react-pdf/renderer')
-  const blob = await pdf(spec.element).toBlob()
+  const blob = await pdf(spec.element as React.ReactElement<DocumentProps>).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

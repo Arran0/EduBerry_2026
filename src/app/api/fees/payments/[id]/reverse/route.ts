@@ -10,10 +10,8 @@ import { requireFeePermission } from '@/lib/fees/serverGuard'
  * receipt's QR starts answering CANCELLED to anyone who scans it. Nothing is
  * deleted, so the clerk who took the payment keeps the evidence that they did.
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireFeePermission(request, 'fees.payment.reverse')
   if (!guard.ok) return guard.response
 

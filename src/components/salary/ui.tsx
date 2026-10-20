@@ -569,7 +569,7 @@ export function MenuOption({ selected, onClick, children }: {
 export function useMenuDismiss<T extends string>(
   open: T | null,
   setOpen: (v: T | null) => void,
-  ref: React.RefObject<HTMLElement>,
+  ref: React.RefObject<HTMLElement | null>,
 ) {
   React.useEffect(() => {
     if (!open) return

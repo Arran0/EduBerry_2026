@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import dynamic from 'next/dynamic'
+import type { DocumentProps } from '@react-pdf/renderer'
 import { Download, FileText, Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { Btn, SALARY_ICON } from '@/components/salary/ui'
@@ -60,7 +61,7 @@ export default function StatementPreviewModal({ spec, title, onClose, sharp = tr
       }
     >
       <PDFViewer showToolbar={false} style={{ width: '100%', height: '100%', border: 'none' }}>
-        {spec.element}
+        {spec.element as React.ReactElement<DocumentProps>}
       </PDFViewer>
     </ModalShell>
   )

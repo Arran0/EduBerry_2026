@@ -7,10 +7,8 @@ import type { NextRequest } from 'next/server'
 // safe snapshot fields a verifier needs — never the full data JSONB or internal
 // ids. This is what the QR code on every certificate points at.
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { certNo: string } }
-) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ certNo: string }> }) {
+  const params = await props.params;
   const certNo = decodeURIComponent(params.certNo ?? '').trim()
   if (!certNo) {
     return NextResponse.json({ found: false, error: 'Missing certificate number' }, { status: 400 })

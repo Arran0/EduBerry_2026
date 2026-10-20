@@ -25,7 +25,8 @@ import type { EngineResult, SettlementInput } from '@/lib/payroll/engine/types'
 
 export const maxDuration = 300
 
-export async function POST(request: NextRequest, { params }: { params: { runId: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ runId: string }> }) {
+  const params = await props.params;
   const guard = await requireAdmin(request)
   if (!guard.ok) return guard.response
   const { db, userId } = guard

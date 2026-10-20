@@ -11,7 +11,8 @@ import { canTransition, type RunStatus } from '@/lib/payroll/engine/workflow'
 // and refused again by the database triggers if anything ever reaches them by
 // another path.
 
-export async function POST(request: NextRequest, { params }: { params: { runId: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ runId: string }> }) {
+  const params = await props.params;
   const guard = await requireAdmin(request)
   if (!guard.ok) return guard.response
   const { db, userId } = guard

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import dynamic from 'next/dynamic'
+import type { DocumentProps } from '@react-pdf/renderer'
 import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { GBTN } from '@/components/transport/glass'
@@ -74,7 +75,7 @@ export default function ReportPreviewModal({ spec, data, title, subtitle, onClos
           <p className="text-sm">Rendering preview…</p>
         </div>
         <PDFViewer showToolbar={false} style={{ position: 'relative', width: '100%', height: '100%', border: 'none' }}>
-          {spec.element}
+          {spec.element as React.ReactElement<DocumentProps>}
         </PDFViewer>
       </div>
     </ModalShell>

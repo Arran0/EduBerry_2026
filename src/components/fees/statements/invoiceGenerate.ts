@@ -5,6 +5,7 @@
 // statement builders follow.
 
 import React from 'react'
+import type { DocumentProps } from '@react-pdf/renderer'
 import { fetchBranding } from '@/lib/pageConfig'
 import type { StatementSpec } from './generate'
 import type { StudentLike } from './StatementShell'
@@ -76,7 +77,7 @@ export async function buildReceipt(
  */
 export async function printSpec(spec: StatementSpec): Promise<void> {
   const { pdf } = await import('@react-pdf/renderer')
-  const blob = await pdf(spec.element).toBlob()
+  const blob = await pdf(spec.element as React.ReactElement<DocumentProps>).toBlob()
   const url = URL.createObjectURL(blob)
 
   const frame = document.createElement('iframe')

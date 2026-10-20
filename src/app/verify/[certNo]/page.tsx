@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, use } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react'
 
 // Public certificate verification page. Deliberately NOT wrapped in
@@ -34,7 +34,8 @@ function fmt(date?: string | null): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function VerifyCertificatePage({ params }: { params: { certNo: string } }) {
+export default function VerifyCertificatePage(props: { params: Promise<{ certNo: string }> }) {
+  const params = use(props.params);
   const certNo = decodeURIComponent(params.certNo)
   const [loading, setLoading] = useState(true)
   const [result, setResult] = useState<VerifyResult | null>(null)

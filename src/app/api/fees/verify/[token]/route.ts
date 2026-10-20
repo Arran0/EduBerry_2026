@@ -16,10 +16,8 @@ export const runtime = 'nodejs'
  * It returns only what is already printed on the document, so there is nothing
  * here that a person holding it does not already have.
  */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { token: string } },
-) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const db = adminClient()
   if (!db) {
     return NextResponse.json({ success: false, error: 'Server not configured' }, { status: 500 })

@@ -19,7 +19,7 @@ interface UseAutoLoadMoreResult {
   visibleCount: number
   hasMore: boolean
   /** Attach to the scrollable list — used to auto-scroll newly revealed items into view. */
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement | null>
   /** Call from a "Load more" button. */
   loadMore: () => void
   /** Attach to the scrollable container's onScroll — resets the auto-load countdown. */

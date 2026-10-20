@@ -3,10 +3,8 @@ import type { NextRequest } from 'next/server'
 import { requireFeePermission } from '@/lib/fees/serverGuard'
 
 /** Move a cheque or DD through its lifecycle: deposited, cleared, or bounced. */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireFeePermission(request, 'fees.instrument.manage')
   if (!guard.ok) return guard.response
 

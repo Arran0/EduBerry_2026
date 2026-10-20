@@ -10,10 +10,8 @@ import { requireFeePermission } from '@/lib/fees/serverGuard'
  * the actor passed explicitly the database would see NULL and let anyone sign
  * off their own.
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireFeePermission(request, 'fees.refund.approve')
   if (!guard.ok) return guard.response
 

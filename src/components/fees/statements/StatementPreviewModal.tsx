@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import type { DocumentProps } from '@react-pdf/renderer'
 import { X, Download, FileText } from 'lucide-react'
 import { StatementSpec, downloadStatement } from './generate'
 
@@ -66,7 +67,7 @@ export default function StatementPreviewModal({ spec, title, onClose }: Props) {
         </div>
         <div className="flex-1 bg-slate-100 min-h-0">
           <PDFViewer showToolbar={false} style={{ width: '100%', height: '100%', border: 'none' }}>
-            {spec.element}
+            {spec.element as React.ReactElement<DocumentProps>}
           </PDFViewer>
         </div>
       </motion.div>

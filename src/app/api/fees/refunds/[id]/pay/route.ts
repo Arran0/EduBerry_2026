@@ -5,10 +5,8 @@ import { requireFeePermission } from '@/lib/fees/serverGuard'
 const METHODS = new Set(['cash', 'bank_transfer', 'cheque', 'upi', 'adjustment'])
 
 /** Pay out an approved refund. The only step that moves money. */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireFeePermission(request, 'fees.refund.approve')
   if (!guard.ok) return guard.response
 

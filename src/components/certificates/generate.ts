@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import type { DocumentProps } from '@react-pdf/renderer'
 import {
   CertType, CertContext, CertificateTemplate,
   buildCertContext, registerCertificate, placeholderValues, BuildContextOptions,
@@ -13,7 +14,7 @@ import {
 
 async function render(element: React.ReactElement, fileName: string): Promise<void> {
   const { pdf } = await import('@react-pdf/renderer')
-  const blob = await pdf(element).toBlob()
+  const blob = await pdf(element as React.ReactElement<DocumentProps>).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
