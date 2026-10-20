@@ -15,6 +15,8 @@ interface SmartTypeaheadProps<T> {
   renderSuggestion: (item: T, active: boolean) => React.ReactNode
   placeholder?: string
   className?: string
+  /** Classes for the suggestion panel, for pages whose menus are rounded. */
+  dropdownClassName?: string
   loading?: boolean
   autoFocus?: boolean
   inputRef?: React.RefObject<HTMLInputElement | null>
@@ -29,6 +31,7 @@ export default function SmartTypeahead<T>({
   renderSuggestion,
   placeholder,
   className,
+  dropdownClassName,
   loading = false,
   autoFocus = false,
   inputRef: externalInputRef,
@@ -105,6 +108,8 @@ export default function SmartTypeahead<T>({
       e.preventDefault()
       if (visible[activeIdx]) handleSelect(visible[activeIdx])
     } else if (e.key === 'Escape') {
+      // Closes the suggestions, not the popup the field sits in.
+      e.stopPropagation()
       setOpen(false)
     }
   }
@@ -113,7 +118,7 @@ export default function SmartTypeahead<T>({
     <div
       ref={dropdownRef}
       style={dropdownStyle}
-      className="bg-white border border-[#D4D4D8] shadow-xl overflow-hidden"
+      className={dropdownClassName ?? 'bg-white border border-[#D4D4D8] shadow-xl overflow-hidden'}
     >
       {loading && visible.length === 0 ? (
         <div className="px-3 py-2 text-xs text-[#A1A1AA]">Searching…</div>

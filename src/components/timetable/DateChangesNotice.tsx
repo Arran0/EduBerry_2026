@@ -42,31 +42,31 @@ export default function DateChangesNotice({
   if (upcoming.length === 0) return null
 
   return (
-    <div className={`border border-[#E4E4E7] bg-white ${className}`}>
-      <p className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#E4E4E7] bg-[#FAFAF9] text-[10px] font-bold uppercase tracking-widest text-[#525252]">
-        <CalendarClock size={12} className="text-[#B8983C]" aria-hidden />
-        Changes on specific dates
+    <div className={`fx-card fx-bleed ${className}`}>
+      <p className="flex items-center gap-1.5 px-4 sm:px-3.5 py-2 border-b border-[#EEEAE1] bg-[#F7F5F0] text-[12.5px] font-semibold text-slate-700">
+        <CalendarClock size={13} className="text-[#B8983C]" aria-hidden />
+        Changes on certain dates
       </p>
-      <ul className="divide-y divide-[#F0F0F0]">
+      <ul className="divide-y divide-[#F0ECE3]">
         {upcoming.map((o) => (
-          <li key={o.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-2 text-xs">
-            <span className="font-semibold text-[#18181B] tabular-nums">
+          <li key={o.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 sm:px-3.5 py-2.5 text-[12.5px]">
+            <span className="font-semibold text-slate-900 tabular-nums">
               {describeSpan(o as EntryOverride)}
             </span>
-            <span className="text-[#71717A]">
+            <span className="text-slate-500">
               {WEEKDAY_LABELS[o.day]} · {slotLabel(o.slot_id)}
             </span>
-            <span className="text-[#18181B]">
+            <span className="text-slate-900 break-words">
               {o.kind === 'cancel' ? (
-                <span className="text-rose-700">no lesson</span>
+                <span className="text-rose-700">No lesson</span>
               ) : (
                 <>
                   {o.subject?.name ?? 'Changed lesson'}
-                  {o.room?.name && <span className="text-[#71717A]"> · {o.room.name}</span>}
+                  {o.room?.name && <span className="text-slate-500"> · {o.room.name}</span>}
                 </>
               )}
             </span>
-            {o.note && <span className="text-[#A1A1AA] italic">{o.note}</span>}
+            {o.note && <span className="text-slate-400 break-words">{o.note}</span>}
           </li>
         ))}
       </ul>

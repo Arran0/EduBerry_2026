@@ -1,44 +1,77 @@
 'use client'
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The timetable workspace.
+//
+// Laid out like the transport, fee and salary admins: the banner, a capsule
+// switch on its foot for the three ways of looking at the week, then the
+// workspace deck — which timetable, the three steps that build and publish
+// it, and the four editors as tiles. The grid is never replaced by a settings
+// page: the editors open over it, on the shared glass sheet.
+//
+// The view lives in the URL so a link or a refresh lands on the same one.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import dynamic from 'next/dynamic'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { AnimatePresence } from 'framer-motion'
 import {
-  Settings, BookOpen, Loader2, CalendarRange, Users, GraduationCap, LayoutGrid,
+  Settings, BookOpen, CalendarRange, Users, GraduationCap, LayoutGrid, Rows3, UserCog,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { fetchConfigs } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
-import SetupTab from './admin/SetupTab'
+import ModalShell from '@/components/ui/ModalShell'
+import { GlassSegments } from '@/components/transport/glass'
+import { SALARY_ICON } from '@/components/salary/ui'
 import GenerateTab from './admin/GenerateTab'
+import type { DeckProps, View } from './admin/GenerateTab'
 import { TimetableDraftProvider } from './draft/TimetableDraftContext'
-import HomeroomModal from './admin/homeroom/HomeroomModal'
-import TeacherModal from './admin/teacher/TeacherModal'
-import SubjectModal from './admin/subject/SubjectModal'
-import Modal from '../workspace/Modal'
-import { SmartSelect, TAP, FOCUS, BTN_PRIMARY } from './ui'
+import { SmartSelect, BTN_PRIMARY, ConfirmHost, Loading, FOCUS } from './ui'
 import type { SmartOption } from './ui'
 
-type EntityModal = 'config' | 'homeroom' | 'teacher' | 'subjects' | null
+// The editors are opened on demand, and between them they are most of the
+// timetable's code — so they load when first opened, not with the page.
+const editorLoading = () => <Loading />
+const SetupTab = dynamic(() => import('./admin/SetupTab'), { loading: editorLoading })
+const HomeroomModal = dynamic(() => import('./admin/homeroom/HomeroomModal'), { loading: editorLoading })
+const TeacherModal = dynamic(() => import('./admin/teacher/TeacherModal'), { loading: editorLoading })
+const SubjectModal = dynamic(() => import('./admin/subject/SubjectModal'), { loading: editorLoading })
 
-// Toolbar buttons that open the entity editors as modal overlays on top of the
-// always-visible master grid. Each button carries the icon + label used on the
-// modal header, plus a short label so all four fit one line on a phone.
-const TOOLBAR: { key: Exclude<EntityModal, null>; label: string; shortLabel: string; icon: typeof Settings }[] = [
-  { key: 'config', label: 'Configuration', shortLabel: 'Setup', icon: Settings },
-  { key: 'homeroom', label: 'Homeroom', shortLabel: 'Homeroom', icon: Users },
-  { key: 'teacher', label: 'Teacher', shortLabel: 'Teacher', icon: GraduationCap },
-  { key: 'subjects', label: 'Subjects', shortLabel: 'Subjects', icon: BookOpen },
+type Editor = 'config' | 'homeroom' | 'teacher' | 'subjects'
+
+const EDITORS: { key: Editor; label: string; shortLabel: string; subtitle: string; icon: LucideIcon }[] = [
+  { key: 'config', label: 'Configuration', shortLabel: 'Setup', subtitle: 'Working days, periods and period groups', icon: Settings },
+  { key: 'homeroom', label: 'Classes', shortLabel: 'Classes', subtitle: 'Class teacher, groups, lessons and time off', icon: Users },
+  { key: 'teacher', label: 'Teachers', shortLabel: 'Teachers', subtitle: 'Time off, load limits and periods in a row', icon: GraduationCap },
+  { key: 'subjects', label: 'Subjects', shortLabel: 'Subjects', subtitle: 'Limits, time off and rooms', icon: BookOpen },
+]
+
+const VIEWS: { key: View; label: string; icon: LucideIcon }[] = [
+  { key: 'master', label: 'Whole school', icon: LayoutGrid },
+  { key: 'class', label: 'By class', icon: Rows3 },
+  { key: 'teacher', label: 'By teacher', icon: UserCog },
 ]
 
 export default function AdminTimetableBuilder() {
+  const router = useRouter()
+  const params = useSearchParams()
+  const viewParam = params.get('view')
+  const view: View = VIEWS.some((v) => v.key === viewParam) ? (viewParam as View) : 'master'
+  const setView = useCallback((next: View) => {
+    router.replace(next === 'master' ? '/more/timetable' : `/more/timetable?view=${next}`, { scroll: false })
+  }, [router])
+
   const [configs, setConfigs] = useState<TimetableConfig[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [openModal, setOpenModal] = useState<EntityModal>(null)
+  const [editor, setEditor] = useState<Editor | null>(null)
 
   const loadConfigs = useCallback(async () => {
-    setLoading(true)
     const list = await fetchConfigs()
     setConfigs(list)
-    // Default selection: active config, else most recent.
+    // Default selection: the active config, else the most recent.
     setSelectedConfigId((prev) => {
       if (prev && list.some((c) => c.id === prev)) return prev
       const active = list.find((c) => c.is_active)
@@ -47,138 +80,179 @@ export default function AdminTimetableBuilder() {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    loadConfigs()
-  }, [loadConfigs])
+  useEffect(() => { loadConfigs() }, [loadConfigs])
 
   const selectedConfig = configs.find((c) => c.id === selectedConfigId) ?? null
 
   const configOptions: SmartOption[] = useMemo(
-    () =>
-      configs.map((c) => ({
-        value: c.id,
-        label: c.name,
-        sublabel: c.academic_year || undefined,
-        badge: c.is_active ? 'Active' : undefined,
-      })),
+    () => configs.map((c) => ({
+      value: c.id,
+      label: c.name,
+      sublabel: c.academic_year || undefined,
+      badge: c.is_active ? 'Active' : undefined,
+    })),
     [configs],
   )
 
-  const closeModal = () => setOpenModal(null)
-  const currentBtn = TOOLBAR.find((b) => b.key === openModal)
+  const picker = (
+    <SmartSelect
+      options={configOptions}
+      value={selectedConfigId ?? ''}
+      onChange={(v) => setSelectedConfigId(v || null)}
+      placeholder={configs.length === 0 ? 'No timetable yet' : 'Choose a timetable'}
+      searchPlaceholder="Search timetables…"
+      leadingIcon={<CalendarRange size={14} className="text-slate-400 flex-shrink-0" />}
+    />
+  )
 
-  // The master grid and the entity editors share one in-memory draft: the
-  // Homeroom / Teacher / Subject calendars show the same lessons and move the
-  // same pins, so the draft is owned above all of them rather than by the grid.
-  return (
-    <div className="border border-[#D4D4D8] bg-white">
-      {/* Toolbar — above the grid at all times. Left: which timetable is being
-          worked on. Right: the four editors, which open as modal overlays so
-          the grid is never replaced by a settings page. */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-1.5 border-b border-[#E4E4E7] bg-[#FAFAF9] px-2 py-1.5">
-        <div className="flex items-center gap-2 lg:w-[22rem] lg:flex-shrink-0">
-          <CalendarRange size={15} className="text-[#71717A] flex-shrink-0" />
-          <SmartSelect
-            options={configOptions}
-            value={selectedConfigId ?? ''}
-            onChange={(v) => setSelectedConfigId(v || null)}
-            placeholder={configs.length === 0 ? 'No timetable — create one' : 'Select timetable…'}
-            searchPlaceholder="Search timetables…"
-          />
-        </div>
-        {/* Four buttons on one line at every width — equal columns on a phone
-            with the icon over a short label so the row never wraps, a tighter
-            inline row from sm up where the pointer is precise. */}
-        <div className="grid grid-cols-4 gap-1 sm:flex sm:items-center sm:gap-1 lg:flex-1 lg:justify-end">
-          {TOOLBAR.map((b) => {
-            const Icon = b.icon
-            const active = openModal === b.key
-            return (
-              <button
-                key={b.key}
-                onClick={() => setOpenModal(b.key)}
-                aria-pressed={active}
-                className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 px-1 sm:px-2.5 py-1.5 min-h-[2.75rem] sm:min-h-0 text-[10px] sm:text-[13px] font-medium border ${TAP} ${FOCUS} ${
-                  active
-                    ? 'bg-[#27272A] text-white border-[#27272A]'
-                    : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-[#18181B]'
-                }`}
-              >
-                <Icon size={14} className={active ? 'text-[#B8983C]' : 'text-[#71717A]'} />
-                <span className="sm:hidden truncate max-w-full">{b.shortLabel}</span>
-                <span className="hidden sm:inline">{b.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+  const deck = (p: DeckProps) => (
+    <WorkspaceDeck {...p} picker={picker} active={editor} onOpen={setEditor} />
+  )
 
-      {/* Master grid canvas — always visible. */}
-      <div className="p-1.5 sm:p-3">
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-[#A1A1AA]">
-            <Loader2 className="animate-spin" size={22} />
-          </div>
-        ) : selectedConfig ? (
-          <TimetableDraftProvider config={selectedConfig} key={selectedConfig.id}>
-            <GenerateTab />
-            <Modal
-              open={openModal !== null}
-              onClose={closeModal}
-              title={currentBtn?.label ?? ''}
-              icon={currentBtn?.icon}
-              size="2xl"
-              fullHeight
-            >
-              {openModal === 'config' && (
-                <SetupTab
-                  configs={configs}
-                  selectedConfig={selectedConfig}
-                  onSelectConfig={setSelectedConfigId}
-                  onChanged={loadConfigs}
-                />
-              )}
-              {openModal === 'homeroom' && <HomeroomModal config={selectedConfig} />}
-              {openModal === 'teacher' && <TeacherModal config={selectedConfig} />}
-              {openModal === 'subjects' && <SubjectModal config={selectedConfig} />}
-            </Modal>
-          </TimetableDraftProvider>
-        ) : (
-          <div className="py-16 text-center">
-            <LayoutGrid size={30} className="mx-auto text-[#D4D4D8]" />
-            <p className="mt-3 text-sm text-[#71717A]">No timetable configuration yet.</p>
-            <button onClick={() => setOpenModal('config')} className={`${BTN_PRIMARY} mt-4`}>
-              <Settings size={14} className="text-[#B8983C]" />
-              Open Configuration
-            </button>
-          </div>
-        )}
-      </div>
+  const meta = EDITORS.find((e) => e.key === editor) ?? null
 
-      {/* With no config there is no draft to provide, so the editors render on
-          their own — only Configuration has anything to show at that point. */}
-      {!selectedConfig && (
-        <Modal
-          open={openModal !== null}
-          onClose={closeModal}
-          title={currentBtn?.label ?? ''}
-          icon={currentBtn?.icon}
-          size="2xl"
-          fullHeight
+  // The editors are the same four with or without a draft; outside one only
+  // Configuration has anything to show.
+  const editorModal = (
+    <AnimatePresence>
+      {meta && (
+        <ModalShell
+          key={meta.key}
+          onClose={() => setEditor(null)}
+          size={meta.key === 'config' ? '2xl' : 'wide'}
+          fullHeight={meta.key !== 'config'}
+          fill={meta.key !== 'config'}
+          sharp
+          glass
+          title={meta.label}
+          subtitle={meta.subtitle}
+          icon={<meta.icon size={17} />}
+          iconClassName={SALARY_ICON}
+          minHClass={meta.key === 'config' ? 'sm:min-h-[30rem]' : ''}
         >
-          {openModal === 'config' && (
+          {meta.key === 'config' && (
             <SetupTab
               configs={configs}
-              selectedConfig={null}
+              selectedConfig={selectedConfig}
               onSelectConfig={setSelectedConfigId}
               onChanged={loadConfigs}
             />
           )}
-          {openModal === 'homeroom' && <HomeroomModal config={null} />}
-          {openModal === 'teacher' && <TeacherModal config={null} />}
-          {openModal === 'subjects' && <SubjectModal config={null} />}
-        </Modal>
+          {meta.key === 'homeroom' && <HomeroomModal config={selectedConfig} />}
+          {meta.key === 'teacher' && <TeacherModal config={selectedConfig} />}
+          {meta.key === 'subjects' && <SubjectModal config={selectedConfig} />}
+        </ModalShell>
       )}
-    </div>
+    </AnimatePresence>
+  )
+
+  return (
+    <>
+      <ConfirmHost />
+
+      {/* The switch overlaps the banner. Solid, not glass: through a
+          translucent control the banner photo shows as noise. */}
+      <div className="relative z-10 -mt-6 sm:-mt-7 mb-4 sm:mb-5 flex justify-center sm:justify-start">
+        <GlassSegments
+          layoutId="tt-view"
+          items={VIEWS}
+          value={view}
+          onChange={setView}
+          stretch
+          className="!bg-white ring-1 ring-black/[.06] shadow-[0_14px_30px_-12px_rgba(15,23,42,.55)]"
+        />
+      </div>
+
+      {loading ? (
+        <Loading />
+      ) : selectedConfig ? (
+        <TimetableDraftProvider config={selectedConfig} key={selectedConfig.id}>
+          <GenerateTab view={view} onViewChange={setView} renderDeck={deck} />
+          {editorModal}
+        </TimetableDraftProvider>
+      ) : (
+        <div className="space-y-4">
+          {deck({})}
+          <div className="fx-card fx-bleed px-4 py-12 text-center">
+            <LayoutGrid size={28} className="mx-auto text-slate-300" />
+            <p className="mt-3 text-[14px] font-semibold text-slate-800">No timetable yet</p>
+            <p className="mt-1 text-[12.5px] text-slate-500">Create one in Configuration, then add its periods.</p>
+            <button onClick={() => setEditor('config')} className={`${BTN_PRIMARY} mt-4`}>
+              <Settings size={14} className="text-[#E9DDBB]" />
+              Open configuration
+            </button>
+          </div>
+          {editorModal}
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * The workspace deck: which timetable, its status, the build steps, and the
+ * four editors. Square glass, edge to edge on a phone.
+ */
+function WorkspaceDeck({ picker, status, actions, counts, active, onOpen }: DeckProps & {
+  picker: React.ReactNode
+  active: Editor | null
+  onOpen: (e: Editor) => void
+}) {
+  return (
+    <section className="fx-deck fx-bleed min-w-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 sm:px-4 pt-3 pb-2.5">
+        <div className="flex items-center gap-2 min-w-0 flex-1 basis-[280px]">
+          <div className="min-w-0 flex-1 lg:max-w-[24rem]">{picker}</div>
+          {status}
+        </div>
+        {actions && <div className="flex w-full sm:w-auto items-center gap-1.5">{actions}</div>}
+      </div>
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 px-2.5 sm:px-3 pb-2.5 sm:pb-3">
+        {EDITORS.map((e) => (
+          <EditorTile
+            key={e.key}
+            icon={e.icon}
+            label={e.label}
+            shortLabel={e.shortLabel}
+            detail={counts?.[e.key]}
+            pressed={active === e.key}
+            onClick={() => onOpen(e.key)}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * A launcher tile, square. On a phone it stands upright — chip over a short
+ * name — so four fit across; from sm up it lies flat with what it holds.
+ */
+function EditorTile({ icon: Icon, label, shortLabel, detail, pressed, onClick }: {
+  icon: LucideIcon
+  label: string
+  shortLabel: string
+  detail?: string
+  pressed: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={pressed}
+      title={detail ? `${label} · ${detail}` : label}
+      className={`fx-tile min-w-0 flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 px-1 py-2.5 sm:p-3 text-center sm:text-left transition hover:-translate-y-px hover:border-[#B8983C]/60 active:translate-y-0 ${FOCUS}`}
+    >
+      <span className="icon-chip w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
+        <Icon size={15} className="relative z-10 text-white" />
+      </span>
+      <span className="min-w-0 w-full sm:flex-1">
+        <span className="block text-[12px] sm:text-[13px] font-semibold leading-tight text-slate-900">
+          <span className="sm:hidden">{shortLabel}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </span>
+        {detail && <span className="hidden sm:block mt-0.5 text-[11.5px] leading-snug text-slate-500 break-words">{detail}</span>}
+      </span>
+    </button>
   )
 }

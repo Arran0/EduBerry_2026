@@ -6,7 +6,7 @@ import {
   ArrowRight, HelpCircle, ArrowUp, ArrowDown, Minus,
 } from 'lucide-react'
 import type { HealthComponent, HealthReport } from '@/lib/timetable/health'
-import { TAP, FOCUS } from './ui'
+import { FOCUS } from './ui'
 
 const BAND_COLOR: Record<HealthReport['band'], string> = {
   green: '#059669',
@@ -23,7 +23,7 @@ const SEVERITY_ICON = {
 const SEVERITY_COLOR = {
   critical: 'text-rose-600',
   warning: 'text-amber-600',
-  info: 'text-[#71717A]',
+  info: 'text-slate-500',
 } as const
 
 /**
@@ -58,34 +58,34 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
 
   return (
     <div
-      className={`border bg-white transition-colors duration-700 ${
-        flash ? 'border-[#B8983C] bg-[#FDFBF4]' : 'border-[#E4E4E7]'
+      className={`fx-card min-w-0 transition-[border-color,background-color] duration-700 ${
+        flash ? '!border-[#B8983C] !bg-[#FDFBF4]' : ''
       }`}
     >
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-[#FAFAF9] ${TAP} ${FOCUS}`}
+        className={`w-full flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-3.5 py-2.5 text-left hover:bg-[#FAF7F0] transition-colors ${FOCUS}`}
       >
         <Activity size={15} className="flex-shrink-0" style={{ color }} aria-hidden />
         <span className="flex items-baseline gap-1 flex-shrink-0">
           <span className="text-lg font-bold tabular-nums leading-none" style={{ color }}>
             {report.score}
           </span>
-          <span className="text-[10px] text-[#A1A1AA]">/100</span>
+          <span className="text-[11px] text-slate-400">/100</span>
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-widest flex-shrink-0" style={{ color }}>
+        <span className="text-[12px] font-semibold flex-shrink-0" style={{ color }}>
           {report.band === 'green' ? 'Healthy' : report.band === 'amber' ? 'Needs work' : 'Problems'}
         </span>
         {delta !== null && <Delta value={delta} />}
 
         {/* Mini bars — one per component. Kept at every width: it is the only
             shape in the header that says WHERE the score comes from. */}
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-[3rem] px-1">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-[5rem] px-1">
           {report.components.map((c) => (
             <div
               key={c.key}
-              className="flex-1 h-1.5 bg-[#F0F0F0]"
+              className="flex-1 h-1.5 rounded-full overflow-hidden bg-[#EFEBE3]"
               title={`${c.label}: ${Math.round(c.score)}`}
             >
               <div
@@ -100,19 +100,19 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
         </div>
 
         {report.hardViolations > 0 && (
-          <span className="text-[11px] text-rose-600 font-semibold flex-shrink-0 tabular-nums">
+          <span className="text-[11.5px] text-rose-600 font-semibold flex-shrink-0 tabular-nums">
             {report.hardViolations} blocker{report.hardViolations > 1 ? 's' : ''}
           </span>
         )}
         {!open && report.suggestions.length > 0 && (
-          <span className="hidden lg:inline-flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0 max-w-[20rem] truncate">
+          <span className="hidden xl:inline-flex items-center gap-1 text-[11.5px] text-slate-500 min-w-0 max-w-[26rem]">
             <Lightbulb size={12} className="text-[#B8983C] flex-shrink-0" aria-hidden />
-            {report.suggestions[0].title}
+            <span className="truncate" title={report.suggestions[0].title}>{report.suggestions[0].title}</span>
           </span>
         )}
         {open
-          ? <ChevronUp size={15} className="text-[#A1A1AA] flex-shrink-0" aria-hidden />
-          : <ChevronDown size={15} className="text-[#A1A1AA] flex-shrink-0" aria-hidden />}
+          ? <ChevronUp size={15} className="text-slate-400 flex-shrink-0" aria-hidden />
+          : <ChevronDown size={15} className="text-slate-400 flex-shrink-0" aria-hidden />}
       </button>
 
       {open && (
@@ -120,21 +120,21 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
           {/* What to do, ranked — above the breakdown, because it is the part
               that moves the score. */}
           {report.suggestions.length > 0 && (
-            <div className="border-t border-[#E4E4E7] p-3 bg-[#FAFAF9]">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-2 flex items-center gap-1.5">
-                <Lightbulb size={12} className="text-[#B8983C]" aria-hidden /> What to do
+            <div className="border-t border-[#EEEAE1] px-3.5 py-3 bg-[#FAF8F3]">
+              <p className="text-[12.5px] font-semibold text-slate-900 mb-2 flex items-center gap-1.5">
+                <Lightbulb size={13} className="text-[#B8983C]" aria-hidden /> What to do
               </p>
-              <ol className="space-y-1.5">
+              <ol className="space-y-2">
                 {report.suggestions.map((sg, i) => (
                   <li key={i} className="flex items-start gap-2">
-                    <span className="flex-shrink-0 w-4 h-4 mt-px bg-[#27272A] text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#27272A] text-white text-[10.5px] font-bold flex items-center justify-center tabular-nums">
                       {i + 1}
                     </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#18181B]">{sg.title}</p>
-                      <p className="text-xs text-[#52525B] leading-snug">{sg.detail}</p>
-                      <p className="text-[11px] text-[#A1A1AA] inline-flex items-center gap-1">
-                        <ArrowRight size={11} aria-hidden /> {sg.where}
+                    <div className="min-w-0 break-words">
+                      <p className="text-[12.5px] font-semibold text-slate-900 leading-snug">{sg.title}</p>
+                      <p className="text-[12.5px] text-slate-600 leading-snug">{sg.detail}</p>
+                      <p className="text-[11.5px] text-slate-400 flex items-start gap-1">
+                        <ArrowRight size={11} aria-hidden className="flex-shrink-0 mt-[3px]" /> <span>{sg.where}</span>
                       </p>
                     </div>
                   </li>
@@ -142,27 +142,27 @@ export default function HealthPanel({ report }: { report: HealthReport }) {
               </ol>
             </div>
           )}
-          <div className="border-t border-[#E4E4E7] p-3 grid gap-3 md:gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Breakdown</p>
+          <div className="border-t border-[#EEEAE1] px-3.5 py-3 grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 min-w-0">
+              <p className="text-[12.5px] font-semibold text-slate-900">Breakdown</p>
               {report.components.map((c) => (
                 <ComponentRow key={c.key} component={c} />
               ))}
             </div>
 
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Top issues</p>
+            <div className="space-y-1.5 min-w-0">
+              <p className="text-[12.5px] font-semibold text-slate-900">Top issues</p>
               {report.issues.length === 0 ? (
-                <p className="text-xs text-emerald-600">None.</p>
+                <p className="text-[12.5px] text-emerald-700">None.</p>
               ) : (
                 report.issues.map((issue, i) => {
                   const Icon = SEVERITY_ICON[issue.severity]
                   return (
-                    <div key={i} className="flex items-start gap-1.5 text-xs">
+                    <div key={i} className="flex items-start gap-1.5 text-[12.5px] leading-snug">
                       <Icon size={13} className={`${SEVERITY_COLOR[issue.severity]} flex-shrink-0 mt-0.5`} aria-hidden />
-                      <span className="text-[#52525B]">
+                      <span className="text-slate-600 min-w-0 break-words">
                         {issue.message}
-                        {issue.fix && <span className="text-[#A1A1AA]"> {issue.fix}</span>}
+                        {issue.fix && <span className="text-slate-400"> {issue.fix}</span>}
                       </span>
                     </div>
                   )
@@ -185,7 +185,7 @@ function Delta({ value }: { value: number }) {
     <span
       title={same ? 'Unchanged since the last version of this week' : 'Change since the last version of this week'}
       className={`inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums flex-shrink-0 ${
-        same ? 'text-[#A1A1AA]' : up ? 'text-emerald-600' : 'text-rose-600'
+        same ? 'text-slate-400' : up ? 'text-emerald-600' : 'text-rose-600'
       }`}
     >
       <Icon size={11} aria-hidden />
@@ -215,34 +215,34 @@ function ComponentRow({ component: c }: { component: HealthComponent }) {
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
         onClick={() => setShow((v) => !v)}
-        className={`flex items-center gap-2 text-xs cursor-help ${FOCUS}`}
+        className={`flex items-center gap-2 text-[12.5px] cursor-help rounded-md ${FOCUS}`}
         aria-describedby={show ? `help-${c.key}` : undefined}
       >
-        <span className="w-24 sm:w-28 flex-shrink-0 text-[#52525B] inline-flex items-center gap-1">
-          <span className="truncate">{c.label}</span>
-          <HelpCircle size={10} className={`flex-shrink-0 transition-colors ${show ? 'text-[#71717A]' : 'text-[#D4D4D8]'}`} />
+        <span className="w-28 sm:w-32 flex-shrink-0 text-slate-600 inline-flex items-center gap-1 leading-tight">
+          <span className="break-words min-w-0">{c.label}</span>
+          <HelpCircle size={11} className={`flex-shrink-0 transition-colors ${show ? 'text-slate-500' : 'text-slate-300'}`} />
         </span>
-        <div className="flex-1 h-2 bg-[#F0F0F0]">
+        <div className="flex-1 h-2 rounded-full overflow-hidden bg-[#EFEBE3]">
           <div className="h-full transition-[width] duration-500" style={{ width: `${c.score}%`, background: barColor(c.score) }} />
         </div>
-        <span className="w-8 text-right tabular-nums text-[#71717A]">{Math.round(c.score)}</span>
+        <span className="w-8 text-right tabular-nums text-slate-500">{Math.round(c.score)}</span>
       </div>
 
       {show && (
         <div
           id={`help-${c.key}`}
           role="tooltip"
-          className="absolute left-0 right-0 top-full mt-1 z-20 border border-[#D4D4D8] bg-[#18181B] text-white px-2.5 py-2 shadow-lg"
+          className="absolute left-0 right-0 top-full mt-1.5 z-20 rounded-[12px] bg-[#27272A] text-white px-3 py-2.5 shadow-[0_18px_40px_-16px_rgba(15,23,42,.6)]"
         >
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C] flex items-baseline justify-between gap-2">
+          <p className="text-[12px] font-semibold text-[#E9DDBB] flex flex-wrap items-baseline justify-between gap-x-2">
             <span>{c.label}</span>
-            <span className="font-normal normal-case tracking-normal text-[#A1A1AA] tabular-nums">
+            <span className="font-normal text-white/50 tabular-nums">
               {Math.round(c.weight * 100)}% of the score
             </span>
           </p>
-          <p className="text-[11px] leading-snug mt-1 text-[#E4E4E7]">{c.help}</p>
+          <p className="text-[12px] leading-snug mt-1 text-white/85">{c.help}</p>
           {c.lever && (
-            <p className="text-[11px] leading-snug mt-1.5 pt-1.5 border-t border-white/15 text-[#A1A1AA]">{c.lever}</p>
+            <p className="text-[12px] leading-snug mt-1.5 pt-1.5 border-t border-white/15 text-white/55">{c.lever}</p>
           )}
         </div>
       )}

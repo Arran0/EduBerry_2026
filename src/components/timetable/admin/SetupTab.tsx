@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, AlertTriangle, Layers, Users, Pencil, X,
+  Plus, Trash2, CheckCircle2, Loader2, Clock, Coffee, Layers, Users, Pencil, X,
   Search, GraduationCap,
 } from 'lucide-react'
 import {
@@ -14,7 +14,10 @@ import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
 import type { TimetableConfig, PeriodSlot, SlotGroup, Weekday } from '@/lib/timetable'
 import { useTimetableDraftOptional } from '../draft/TimetableDraftContext'
 import type { Homeroom } from '@/lib/homerooms'
-import { INPUT, BTN_PRIMARY, BTN_NEUTRAL, Section, Field, SECTION_LABEL } from '../ui'
+import {
+  INPUT, BTN_PRIMARY, BTN_NEUTRAL, BTN_QUIET, Section, Field, ICON_BTN, ICON_BTN_DANGER,
+  CHECK, Switch, Notice, Chip, Loading, askConfirm, choice,
+} from '../ui'
 
 const _cy = new Date().getFullYear()
 const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
@@ -58,104 +61,101 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
   return (
     <div>
       {/* Configurations */}
-      <Section title="Timetable configurations" first>
-        <div className="space-y-px">
-          {configs.map((c) => {
-            const isSelected = selectedConfig?.id === c.id
-            return (
-              <div
-                key={c.id}
-                onClick={() => onSelectConfig(c.id)}
-                className={`flex items-center gap-3 px-3 py-2.5 border cursor-pointer transition-colors ${
-                  isSelected
-                    ? 'border-[#27272A] bg-white'
-                    : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-[#EBEBEB]'
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[#18181B] text-sm truncate">{c.name}</div>
-                  <div className="text-[11px] text-[#71717A]">
-                    {c.academic_year || 'No academic year'} · {c.working_days.length} working days
-                  </div>
-                </div>
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation()
-                    if (c.is_active) {
-                      await deactivateConfig(c.id)
-                    } else {
-                      await setActiveConfig(c.id)
-                    }
-                    onChanged()
-                  }}
-                  role="switch"
-                  aria-checked={c.is_active}
-                  title={c.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
-                  className={`relative flex-shrink-0 w-8 h-[1.15rem] rounded-full transition-colors ${
-                    c.is_active ? 'bg-emerald-500' : 'bg-[#D4D4D8]'
+      <Section title="Timetables" hint="Each one has its own working days, periods and lessons. Switch one on to make it the timetable people see." first>
+        {configs.length === 0 ? (
+          <p className="text-[12.5px] text-slate-400 py-1">No timetables yet.</p>
+        ) : (
+          <div className="fx-card">
+            {configs.map((c) => {
+              const isSelected = selectedConfig?.id === c.id
+              return (
+                <div
+                  key={c.id}
+                  className={`relative flex items-center gap-2.5 pl-3.5 pr-1.5 py-2 border-b border-[#EEEAE1] last:border-b-0 transition-colors ${
+                    isSelected ? 'bg-[#FAF7F0]' : 'hover:bg-[#FAF8F3]'
                   }`}
                 >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${
-                      c.is_active ? 'translate-x-[0.75rem]' : ''
-                    }`}
+                  {isSelected && <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#B8983C]" />}
+                  <button
+                    onClick={() => onSelectConfig(c.id)}
+                    aria-current={isSelected ? 'true' : undefined}
+                    className="flex-1 min-w-0 text-left py-0.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+                  >
+                    <span className="block text-[13.5px] font-semibold text-slate-900 leading-snug break-words">{c.name}</span>
+                    <span className="block text-[12px] text-slate-500">
+                      {c.academic_year || 'No academic year'} · {c.working_days.length} working days
+                    </span>
+                  </button>
+                  {c.is_active && <Chip tone="good" className="hidden sm:inline-flex">Active</Chip>}
+                  <Switch
+                    checked={c.is_active}
+                    label={c.is_active ? `Switch ${c.name} off` : `Make ${c.name} active`}
+                    onChange={async () => {
+                      if (c.is_active) await deactivateConfig(c.id)
+                      else await setActiveConfig(c.id)
+                      onChanged()
+                    }}
                   />
-                </button>
-                <button
-                  onClick={async (e) => {
-                    e.stopPropagation()
-                    if (confirm(`Delete "${c.name}" and all its periods, requirements and timetables?`)) {
+                  <button
+                    onClick={async () => {
+                      const ok = await askConfirm({
+                        title: `Delete ${c.name}?`,
+                        body: 'Its periods, lessons and saved timetables are deleted with it. This cannot be undone.',
+                        confirmLabel: 'Delete timetable',
+                        tone: 'danger',
+                      })
+                      if (!ok) return
                       await deleteConfig(c.id)
                       onChanged()
-                    }
-                  }}
-                  className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            )
-          })}
-          {configs.length === 0 && (
-            <p className="text-xs text-[#A1A1AA] py-2">No configurations yet. Create one below.</p>
-          )}
-        </div>
+                    }}
+                    aria-label={`Delete ${c.name}`}
+                    title="Delete"
+                    className={ICON_BTN_DANGER}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
-        {/* Create — the compose box only appears after clicking "New configuration". */}
+        {/* The compose box only appears after "New timetable" is pressed. */}
         {showCreate ? (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem_auto_auto] gap-2 items-end">
             <Field label="Name">
               <input
                 className={INPUT}
                 placeholder="e.g. Main 2025–26"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
                 autoFocus
               />
             </Field>
             <Field label="Academic year">
-              <select className={`${INPUT} w-full sm:w-40`} value={newYear} onChange={(e) => setNewYear(e.target.value)}>
-                <option value="">Select year</option>
+              <select className={INPUT} value={newYear} onChange={(e) => setNewYear(e.target.value)}>
+                <option value="">None</option>
                 {ACADEMIC_YEARS.map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
             </Field>
-            <button onClick={handleCreate} disabled={creating || !newName.trim()} className={`${BTN_PRIMARY} w-full sm:w-auto`}>
+            <button onClick={handleCreate} disabled={creating || !newName.trim()} className={BTN_PRIMARY}>
               {creating ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
               Add
             </button>
             <button
               onClick={() => { setShowCreate(false); setNewName(''); setNewYear('') }}
-              className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
+              className={BTN_QUIET}
             >
               Cancel
             </button>
           </div>
         ) : (
-          <button onClick={() => setShowCreate(true)} className={`${BTN_PRIMARY} mt-3`}>
+          <button onClick={() => setShowCreate(true)} className={`${BTN_NEUTRAL} mt-3`}>
             <Plus size={15} />
-            New configuration
+            New timetable
           </button>
         )}
       </Section>
@@ -167,8 +167,8 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
       {selectedConfig ? (
         <PeriodGroupsSection config={selectedConfig} onChanged={onChanged} />
       ) : (
-        <Section title="Working days & periods">
-          <p className="text-xs text-[#71717A]">Select or create a configuration to set its working days and period slots.</p>
+        <Section title="Working days and periods">
+          <p className="text-[12.5px] text-slate-500">Create a timetable above to set its working days and periods.</p>
         </Section>
       )}
     </div>
@@ -247,38 +247,41 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
     return (
       <div
         key={key}
-        onClick={() => setSelected(group?.id ?? null)}
-        className={`flex items-center gap-3 px-3 py-2.5 border cursor-pointer transition-colors ${
-          active ? 'border-[#27272A] bg-white' : 'border-[#E4E4E7] bg-[#F5F5F5] hover:bg-[#EBEBEB]'
+        className={`relative flex items-center gap-2.5 pl-3.5 pr-1.5 py-2 border-b border-[#EEEAE1] last:border-b-0 transition-colors ${
+          active ? 'bg-[#FAF7F0]' : 'hover:bg-[#FAF8F3]'
         }`}
       >
+        {active && <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#B8983C]" />}
         {isBase
-          ? <Clock size={14} className="text-[#71717A] flex-shrink-0" />
+          ? <Clock size={14} className="text-slate-400 flex-shrink-0" />
           : <Layers size={14} className="text-indigo-500 flex-shrink-0" />}
-        <div className="flex-1 min-w-0">
-          {group && renaming === group.id ? (
-            <input
-              autoFocus
-              className={`${INPUT} py-0.5`}
-              value={renameTo}
-              onChange={(e) => setRenameTo(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => handleRename(group)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRename(group)
-                if (e.key === 'Escape') setRenaming(null)
-              }}
-            />
-          ) : (
-            <div className="font-medium text-[#18181B] text-sm truncate">{name}</div>
-          )}
-          <div className="text-[11px] text-[#71717A]">
-            {days.length} working day{days.length === 1 ? '' : 's'}
-            {isBase && ' · every class not in a group'}
-          </div>
-        </div>
+        {group && renaming === group.id ? (
+          <input
+            autoFocus
+            className={`${INPUT} flex-1`}
+            value={renameTo}
+            onChange={(e) => setRenameTo(e.target.value)}
+            onBlur={() => handleRename(group)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRename(group)
+              if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) }
+            }}
+          />
+        ) : (
+          <button
+            onClick={() => setSelected(group?.id ?? null)}
+            aria-current={active ? 'true' : undefined}
+            className="flex-1 min-w-0 text-left py-0.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+          >
+            <span className="block text-[13.5px] font-semibold text-slate-900 leading-snug break-words">{name}</span>
+            <span className="block text-[12px] text-slate-500">
+              {days.length} working day{days.length === 1 ? '' : 's'}
+              {isBase && ' · every class not in a group'}
+            </span>
+          </button>
+        )}
         <span
-          className="inline-flex items-center gap-1 text-[11px] text-[#71717A] flex-shrink-0"
+          className="inline-flex items-center gap-1 text-[12px] text-slate-500 flex-shrink-0 tabular-nums"
           title="Classes following this schedule"
         >
           <Users size={12} /> {classCount(group?.id ?? null)}
@@ -286,20 +289,28 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
         {group && (
           <>
             <button
-              onClick={(e) => { e.stopPropagation(); setRenaming(group.id); setRenameTo(group.name) }}
-              className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
+              onClick={() => { setRenaming(group.id); setRenameTo(group.name) }}
+              className={ICON_BTN}
+              aria-label={`Rename ${group.name}`}
               title="Rename"
             >
               <Pencil size={14} />
             </button>
             <button
-              onClick={async (e) => {
-                e.stopPropagation()
-                if (!confirm(`Delete "${group.name}"? Its periods go with it and its classes fall back to the base schedule.`)) return
+              onClick={async () => {
+                const ok = await askConfirm({
+                  title: `Delete ${group.name}?`,
+                  body: 'Its periods are deleted with it, and its classes go back to the base schedule.',
+                  confirmLabel: 'Delete group',
+                  tone: 'danger',
+                })
+                if (!ok) return
                 await deleteSlotGroup(group.id)
                 await reload()
               }}
-              className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
+              className={ICON_BTN_DANGER}
+              aria-label={`Delete ${group.name}`}
+              title="Delete"
             >
               <Trash2 size={15} />
             </button>
@@ -313,9 +324,9 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
     <>
       <Section
         title="Period groups"
-        hint="Different parts of the school can run different bells. Each group has its own working days and periods; assign classes to one from the Homeroom editor."
+        hint="Parts of the school can run different bells. Each group has its own working days and periods."
       >
-        <div className="space-y-px">
+        <div className="fx-card">
           {row('base', 'Base schedule', config.working_days, true, null)}
           {groups.map((g) =>
             row(g.id, g.name, g.working_days.length > 0 ? g.working_days : config.working_days, false, g),
@@ -324,7 +335,7 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
 
         {adding ? (
           <div className="mt-3 flex items-end gap-2">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <Field label="Group name">
                 <input
                   className={INPUT}
@@ -341,22 +352,25 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
             </button>
             <button
               onClick={() => { setAdding(false); setNewName('') }}
-              className="text-sm text-[#71717A] hover:text-[#18181B] px-2 py-2 transition-colors"
+              className={ICON_BTN}
+              aria-label="Cancel"
+              title="Cancel"
             >
               <X size={15} />
             </button>
           </div>
         ) : (
-          <button onClick={() => setAdding(true)} className={`${BTN_PRIMARY} mt-3`}>
+          <button onClick={() => setAdding(true)} className={`${BTN_NEUTRAL} mt-3`}>
             <Plus size={15} /> New period group
           </button>
         )}
       </Section>
 
-      <div className="border-l-2 border-[#E4E4E7] pl-3 mt-4">
-        <div className={`${SECTION_LABEL} mb-1`}>
-          Editing {selectedGroup ? selectedGroup.name : 'the base schedule'}
-        </div>
+      <div className="border-t border-[#EEEAE1] mt-5 pt-4">
+        <p className="mb-3 inline-flex flex-wrap items-center gap-1.5 text-[12.5px] text-slate-500">
+          Editing
+          <Chip tone="dark">{selectedGroup ? selectedGroup.name : 'Base schedule'}</Chip>
+        </p>
         <WorkingDaysSection
           config={config}
           group={selectedGroup}
@@ -412,19 +426,11 @@ function WorkingDaysSection({
 
   return (
     <Section title="Working days" first>
-      <div className="flex flex-wrap gap-px">
+      <div className="flex flex-wrap gap-1.5">
         {WEEKDAYS.map((d) => {
           const on = days.includes(d)
           return (
-            <button
-              key={d}
-              onClick={() => toggle(d)}
-              className={`px-3.5 py-2 text-sm font-medium border transition-colors ${
-                on
-                  ? 'bg-[#27272A] text-[#F5F5F5] border-[#27272A]'
-                  : 'bg-[#F5F5F5] text-[#52525B] border-[#E4E4E7] hover:bg-[#EBEBEB]'
-              }`}
-            >
+            <button key={d} onClick={() => toggle(d)} aria-pressed={on} className={`${choice(on)} min-w-[3.25rem] justify-center`}>
               {WEEKDAY_LABELS[d].slice(0, 3)}
             </button>
           )
@@ -488,7 +494,7 @@ function PeriodSlotsSection({
   // quietly corrupt every grid built on it — refuse it at the form.
   const slotProblem = ((): string | null => {
     if (multiGroup || !start || !end) return null
-    if (end <= start) return 'The end time must be after the start time.'
+    if (end <= start) return 'The end time has to be after the start time.'
     const prev = [...slots].reverse().find((s) => s.end_time)
     if (prev?.end_time && start < prev.end_time.slice(0, 5)) {
       return `This overlaps “${prev.label}”, which runs until ${prev.end_time.slice(0, 5)}.`
@@ -529,18 +535,20 @@ function PeriodSlotsSection({
 
   return (
     <Section
-      title="Period slots"
+      title="Periods"
       hint={`The rows of the grid${
         group ? ` for ${group.name}` : ''
-      }. Mark lunch or recess as a break — the generator skips those.`}
+      }. Mark lunch or recess as a break and nothing is scheduled in it.`}
       right={
         multiGroup && timedSlots.length > 0 ? (
           <button
             onClick={async () => {
-              if (!confirm(
-                `Remove the clock times from ${timedSlots.length} period(s)? ` +
-                'The grid keeps its rows; only the times go.',
-              )) return
+              const ok = await askConfirm({
+                title: 'Remove the clock times?',
+                body: `${timedSlots.length} period${timedSlots.length === 1 ? ' keeps its' : 's keep their'} place in the grid. Only the times go.`,
+                confirmLabel: 'Remove times',
+              })
+              if (!ok) return
               setClearing(true)
               await clearPeriodSlotTimes(config.id, groupId)
               setClearing(false)
@@ -556,51 +564,50 @@ function PeriodSlotsSection({
       }
     >
       {loading ? (
-        <div className="flex justify-center py-6 text-[#A1A1AA]">
-          <Loader2 className="animate-spin" size={18} />
-        </div>
+        <Loading className="py-6" />
+      ) : slots.length === 0 ? (
+        <p className="text-[12.5px] text-slate-400 py-1">No periods yet.</p>
       ) : (
-        <div className="space-y-px">
+        <div className="fx-card">
           {(() => {
             let teachingPosition = 0
             return slots.map((s) => {
               if (!s.is_break) teachingPosition += 1
               return (
-            <div
-              key={s.id}
-              className={`flex items-center gap-3 px-3 py-2 border ${
-                s.is_break ? 'border-amber-200 bg-amber-50/70' : 'border-[#E4E4E7] bg-[#F5F5F5]'
-              }`}
-            >
-              <span className="text-[11px] font-mono text-[#A1A1AA] w-5">{s.is_break ? '—' : teachingPosition}</span>
-              {s.is_break ? (
-                <Coffee size={14} className="text-amber-500 flex-shrink-0" />
-              ) : (
-                <Clock size={14} className="text-[#71717A] flex-shrink-0" />
-              )}
-              <span className="text-sm font-medium text-[#18181B] flex-1 truncate">{s.label}</span>
-              <span className="text-sm text-[#71717A] tabular-nums">
-                {s.start_time && s.end_time
-                  ? `${s.start_time.slice(0, 5)} – ${s.end_time.slice(0, 5)}`
-                  : <span className="text-[#A1A1AA] not-italic">—</span>}
-              </span>
-              <button
-                onClick={async () => {
-                  await deletePeriodSlot(s.id)
-                  load()
-                  onChanged()
-                }}
-                className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+                <div
+                  key={s.id}
+                  className={`flex items-center gap-2.5 pl-3 pr-1.5 py-1.5 border-b border-[#EEEAE1] last:border-b-0 ${
+                    s.is_break ? 'bg-[#FBF6E9]' : ''
+                  }`}
+                >
+                  <span className="text-[11.5px] font-mono text-slate-400 w-5 text-right flex-shrink-0">{s.is_break ? '–' : teachingPosition}</span>
+                  {s.is_break ? (
+                    <Coffee size={14} className="text-amber-500 flex-shrink-0" />
+                  ) : (
+                    <Clock size={14} className="text-slate-400 flex-shrink-0" />
+                  )}
+                  <span className="text-[13.5px] font-medium text-slate-900 flex-1 min-w-0 break-words">{s.label}</span>
+                  {s.start_time && s.end_time && (
+                    <span className="text-[12.5px] text-slate-500 tabular-nums flex-shrink-0">
+                      {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}
+                    </span>
+                  )}
+                  <button
+                    onClick={async () => {
+                      await deletePeriodSlot(s.id)
+                      load()
+                      onChanged()
+                    }}
+                    className={ICON_BTN_DANGER}
+                    aria-label={`Delete ${s.label}`}
+                    title="Delete"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               )
             })
           })()}
-          {slots.length === 0 && (
-            <p className="text-xs text-[#A1A1AA] py-2">No period slots yet.</p>
-          )}
         </div>
       )}
 
@@ -611,51 +618,43 @@ function PeriodSlotsSection({
           impossible to place. Untimed periods collide position-for-position —
           a clean 1:1 — and staff can be shared freely. */}
       {multiGroup && (
-        <p className="mt-3 flex items-start gap-2 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-[12px] text-[#52525B]">
-          <Clock size={14} className="flex-shrink-0 mt-0.5 text-[#A1A1AA]" />
-          <span>
-            Periods are numbered, not timed, while this config has more than one period group.
-            Two bells on different clocks overlap each other awkwardly, and a teacher working
-            across both ends up unplaceable. Numbered periods line up one-for-one across groups,
-            so staff can be shared.
-          </span>
-        </p>
+        <Notice tone="info" icon={Clock} className="mt-3">
+          Periods are numbered, not timed, while there is more than one period group. Bells on
+          different clocks overlap, and a teacher who works across both cannot be placed.
+          Numbered periods line up one for one, so staff can be shared.
+        </Notice>
       )}
 
       {/* Add slot */}
       <div className={`mt-3 grid grid-cols-2 gap-2 items-end ${
-        multiGroup ? 'sm:grid-cols-[1fr_auto_auto]' : 'sm:grid-cols-[auto_auto_1fr_auto_auto]'
+        multiGroup ? 'sm:grid-cols-[minmax(0,1fr)_auto_auto]' : 'sm:grid-cols-[8rem_8rem_minmax(0,1fr)_auto_auto]'
       }`}>
         {!multiGroup && (
           <>
-            <Field label="Start" hint="Optional">
+            <Field label="Starts">
               <input type="time" className={INPUT} value={start} onChange={(e) => setStart(e.target.value)} />
             </Field>
-            <Field label="End" hint="Optional">
+            <Field label="Ends">
               <input type="time" className={INPUT} value={end} onChange={(e) => setEnd(e.target.value)} />
             </Field>
           </>
         )}
         <div className="col-span-2 sm:col-span-1">
-          <Field label="Label" hint="Optional — defaults to the next period number">
-            <input className={INPUT} placeholder="Period 1 / Lunch" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <Field label="Name">
+            <input className={INPUT} placeholder={isBreak ? 'Break' : 'Next period number'} value={label} onChange={(e) => setLabel(e.target.value)} />
           </Field>
         </div>
-        <label className="flex items-center gap-1.5 text-sm text-[#52525B] pb-2">
-          <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} className="accent-[#27272A]" />
+        <label className="flex items-center gap-2 h-10 sm:h-9 text-[13.5px] text-slate-700 cursor-pointer">
+          <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} className={CHECK} />
           Break
         </label>
         <button onClick={handleAdd} disabled={adding || slotProblem !== null} className={BTN_PRIMARY}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-          Add slot
+          Add period
         </button>
       </div>
-      {slotProblem && (
-        <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-          <span>{slotProblem}</span>
-        </div>
-      )}
+      {!multiGroup && <p className="mt-1.5 text-[11.5px] text-slate-400">Times are optional.</p>}
+      {slotProblem && <Notice tone="error" className="mt-2">{slotProblem}</Notice>}
     </Section>
   )
 }
@@ -788,7 +787,7 @@ function GroupClassesSection({
         ].filter(Boolean).join(' · '),
       )
     } else {
-      setNote('Could not save the assignment — check console.')
+      setNote('Could not save. Nothing changed.')
     }
     setSaving(false)
   }
@@ -800,21 +799,21 @@ function GroupClassesSection({
       title={group ? `Classes on ${group.name}` : 'Classes on the base schedule'}
       hint={
         group
-          ? 'Tick the classes that ring to this schedule. A grade chip ticks the whole year group at once. Unticking puts a class back on the base schedule.'
-          : 'Every class not assigned to a period group follows this schedule. Tick one here to move it back off a group.'
+          ? 'Tick the classes that follow this schedule. A grade ticks the whole year at once. Unticking a class puts it back on the base schedule.'
+          : 'Every class not in a period group follows this schedule. Tick one to move it back from a group.'
       }
       right={
-        <span className="text-sm font-semibold tabular-nums text-[#18181B]">
+        <span className="text-sm font-semibold tabular-nums text-slate-900">
           {picked.size}
-          <span className="text-[#A1A1AA] font-normal">/{homerooms.length}</span>
+          <span className="text-slate-400 font-normal">/{homerooms.length}</span>
         </span>
       }
     >
       {homerooms.length === 0 ? (
-        <p className="text-xs text-[#A1A1AA] py-2">No active homerooms.</p>
+        <p className="text-[12.5px] text-slate-400 py-1">No active classes.</p>
       ) : (
         <>
-          <div className="flex flex-wrap gap-1 mb-2.5">
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
             {grades.map(([label, members]) => {
               const allIn = members.every((h) => picked.has(h.id))
               const someIn = !allIn && members.some((h) => picked.has(h.id))
@@ -822,36 +821,32 @@ function GroupClassesSection({
                 <button
                   key={label}
                   onClick={() => toggleGrade(members)}
+                  aria-pressed={allIn}
                   title={allIn ? `Remove all of ${label}` : `Add all ${members.length} classes in ${label}`}
-                  className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium border transition-colors ${
-                    allIn
-                      ? 'bg-[#27272A] text-white border-[#27272A]'
-                      : someIn
-                        ? 'bg-white text-[#18181B] border-[#27272A]'
-                        : 'bg-[#F5F5F5] text-[#52525B] border-[#E4E4E7] hover:bg-[#EBEBEB]'
-                  }`}
+                  className={`${choice(allIn)} ${someIn ? '!border-[#27272A]' : ''}`}
                 >
-                  <GraduationCap size={12} className={allIn ? 'text-[#B8983C]' : 'text-[#71717A]'} />
+                  <GraduationCap size={12} className={allIn ? 'text-[#E9DDBB]' : 'text-slate-400'} />
                   {label}
-                  <span className={allIn ? 'text-white/60' : 'text-[#A1A1AA]'}>{members.length}</span>
+                  <span className={`tabular-nums ${allIn ? 'text-white/60' : 'text-slate-400'}`}>{members.length}</span>
                 </button>
               )
             })}
           </div>
 
-          <div className="flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 py-1.5 mb-1.5">
-            <Search size={13} className="text-[#A1A1AA] flex-shrink-0" />
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search classes…"
-              className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none"
+              aria-label="Search classes"
+              className={`${INPUT} pl-8`}
             />
           </div>
 
-          <div className="max-h-56 overflow-y-auto border border-[#E4E4E7] divide-y divide-[#F5F5F5]">
+          <div className="fx-card max-h-64 overflow-y-auto overscroll-contain divide-y divide-[#F0ECE3]">
             {filtered.length === 0 ? (
-              <p className="text-xs text-[#A1A1AA] p-2.5">No classes match.</p>
+              <p className="text-[12.5px] text-slate-400 p-3">No classes match.</p>
             ) : filtered.map((h) => {
               const on = picked.has(h.id)
               const current = assigned[h.id] ?? null
@@ -860,47 +855,37 @@ function GroupClassesSection({
               return (
                 <label
                   key={h.id}
-                  className={`flex items-center gap-2.5 px-2.5 py-1.5 text-sm cursor-pointer transition-colors ${
-                    on ? 'bg-[#FAFAF9]' : 'hover:bg-[#FAFAF9]'
+                  className={`flex items-center gap-2.5 px-3 py-2 text-[13.5px] cursor-pointer transition-colors ${
+                    on ? 'bg-[#FAF7F0]' : 'hover:bg-[#FAF8F3]'
                   }`}
                 >
-                  <input type="checkbox" checked={on} onChange={() => toggle(h.id)} className="accent-[#27272A]" />
-                  <span className="flex-1 min-w-0 truncate text-[#18181B]">{h.name}</span>
-                  {elsewhere && (
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 bg-[#F5F5F5] border border-[#E4E4E7] text-[#71717A] flex-shrink-0"
-                      title={`Currently follows ${elsewhere}`}
-                    >
-                      {elsewhere}
-                    </span>
-                  )}
+                  <input type="checkbox" checked={on} onChange={() => toggle(h.id)} className={CHECK} />
+                  <span className="flex-1 min-w-0 break-words text-slate-900">{h.name}</span>
+                  {elsewhere && <Chip title={`Follows ${elsewhere} now`}>{elsewhere}</Chip>}
                 </label>
               )
             })}
           </div>
 
-          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-            <button onClick={save} disabled={!dirty || saving} className={`${BTN_PRIMARY} disabled:opacity-40`}>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <button onClick={save} disabled={!dirty || saving} className={BTN_PRIMARY}>
               {saving ? <Loader2 className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
-              Save assignment
+              Save
             </button>
             {dirty && (
-              <button
-                onClick={() => setPicked(new Set(stored))}
-                className={`${BTN_NEUTRAL} py-2`}
-              >
+              <button onClick={() => setPicked(new Set(stored))} className={BTN_QUIET}>
                 Reset
               </button>
             )}
             {dirty && (
-              <span className="text-[11px] text-[#71717A]">
+              <span className="text-[12px] text-slate-500 leading-snug min-w-0">
                 {added.length > 0 && `${added.length} to add`}
                 {added.length > 0 && removed.length > 0 && ' · '}
                 {removed.length > 0 && `${removed.length} to remove`}
-                {' — their current lessons are cleared and rebuilt on the next generate.'}
+                {'. Their lessons are cleared and rebuilt on the next generate.'}
               </span>
             )}
-            {!dirty && note && <span className="text-[11px] text-emerald-700">{note}</span>}
+            {!dirty && note && <span className="text-[12px] text-emerald-700">{note}</span>}
           </div>
         </>
       )}

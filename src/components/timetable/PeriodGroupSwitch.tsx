@@ -59,8 +59,8 @@ export default function PeriodGroupSwitch({
   if (shown.length < 2) return null
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <CalendarRange size={14} className="text-[#A1A1AA] flex-shrink-0" aria-hidden />
+    <div className={`flex items-center gap-2 min-w-0 max-w-full ${className}`}>
+      <CalendarRange size={14} className="text-slate-400 flex-shrink-0" aria-hidden />
       <MiniTabs
         ariaLabel="Period group"
         tabs={shown.map((w) => ({

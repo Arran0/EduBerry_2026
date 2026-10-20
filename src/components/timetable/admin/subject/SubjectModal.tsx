@@ -10,7 +10,9 @@ import type { Subject, Room, RoomType, TimetableConfig, Weekday } from '@/lib/ti
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { searchSubjects } from '@/lib/cbseSubjects'
-import { INPUT, INPUT_SIZED as FIELD, BTN_PRIMARY, SmartSelect, Section, Field } from '../../ui'
+import {
+  INPUT, BTN_PRIMARY, SmartSelect, Section, Field, Loading, Chip, ICON_BTN_DANGER, askConfirm, choice,
+} from '../../ui'
 import type { SmartOption } from '../../ui'
 import { TimeOffGrid, LoadLimitFields } from '../constraintAtoms'
 import LessonStatsCard from '../../LessonStatsCard'
@@ -22,7 +24,7 @@ import PeriodGroupSwitch, { usePeriodGroupSwitch } from '../../PeriodGroupSwitch
 import {
   EntityShell, EntityList, EntityRow, DetailHeader, EmptyDetail,
 } from '../EntityList'
-import { BTN_SM, TAP, FOCUS } from '../../ui'
+
 
 const ROOM_TYPES: RoomType[] = ['classroom', 'science_lab', 'computer_lab', 'other']
 
@@ -35,9 +37,10 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   // Subject and room changes colour the grid and feed the next generate, so
   // the shared draft has to hear about them too.
   const draft = useTimetableDraftOptional()
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [homerooms, setHomerooms] = useState<Homeroom[]>([])
-  const [loading, setLoading] = useState(true)
+  // Inside the workspace the draft already holds the subjects and classes, and
+  // refreshReference() re-reads them after a change; only without a draft
+  // does the editor read them itself.
+  const [own, setOwn] = useState<{ subjects: Subject[]; homerooms: Homeroom[] } | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [showRooms, setShowRooms] = useState(false)
@@ -52,14 +55,19 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
   const inputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
+    if (draft) { await draft.refreshReference(); return }
     const [subs, hr] = await Promise.all([fetchSubjects(), fetchAllHomerooms()])
-    setSubjects(subs)
-    setHomerooms(hr)
-    setLoading(false)
-  }, [])
+    setOwn({ subjects: subs, homerooms: hr })
+    // Only whether there is a draft matters here, not its every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!draft])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (!draft) load() }, [draft, load])
+
+  const fromDraft = !!draft && !draft.loading
+  const subjects = useMemo(() => (fromDraft ? draft!.subjects : own?.subjects ?? []), [fromDraft, draft, own])
+  const homerooms = useMemo(() => (fromDraft ? draft!.homerooms : own?.homerooms ?? []), [fromDraft, draft, own])
+  const loading = draft ? draft.loading : own === null
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -86,25 +94,24 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
     setAdding(false)
     if (created) {
       setName(''); setCode(''); setSuggestions([]); setShowSuggestions(false)
-      await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
+      await load()
       setSelectedId(created.id)
     }
   }
 
-  if (loading) {
-    return <div className="flex justify-center py-16 text-[#A1A1AA]"><Loader2 className="animate-spin" size={22} /></div>
-  }
+  if (loading) return <Loading />
 
   const addSubjectForm = (
         /* The CBSE name typeahead, a thumb-friendly colour strip (no hidden
            popover — every swatch is visible and directly tappable), then code
            + submit. */
-        <div className="p-2 border-t border-[#E4E4E7] bg-white space-y-2">
+        <div className="p-2.5 border-t border-[#EEEAE1] bg-white space-y-2">
+          <p className="text-[12px] font-semibold text-slate-500 px-0.5">New subject</p>
           <div className="relative">
             <input
               ref={inputRef}
-              className={`${FIELD} w-full`}
-              placeholder="Add subject…"
+              className={INPUT}
+              placeholder="Subject name"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               onFocus={() => name && suggestions.length > 0 && setShowSuggestions(true)}
@@ -113,9 +120,9 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
               autoComplete="off"
             />
             {showSuggestions && (
-              <div className="absolute z-20 bottom-full left-0 right-0 mb-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-44 overflow-y-auto">
+              <div className="absolute z-20 bottom-full left-0 right-0 mb-1.5 rounded-[14px] bg-white border border-black/[.07] shadow-[0_24px_60px_-20px_rgba(15,23,42,.45)] max-h-44 overflow-y-auto py-1">
                 {suggestions.map((sug) => (
-                  <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3 py-2 text-sm text-[#18181B] hover:bg-[#F5F5F5]">{sug}</button>
+                  <button key={sug} type="button" onMouseDown={() => { setName(sug); setShowSuggestions(false); inputRef.current?.focus() }} className="w-full text-left px-3.5 py-2 text-[13.5px] text-slate-900 hover:bg-[#FAF7F0]">{sug}</button>
                 ))}
               </div>
             )}
@@ -123,9 +130,9 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
 
           <ColorPicker colors={SUBJECT_COLORS} value={color} onChange={setColor} ariaLabel="Subject colour" />
 
-          <div className="flex items-stretch gap-1.5">
+          <div className="flex items-center gap-1.5">
             <input
-              className={`${FIELD} w-20 flex-none`}
+              className={`${INPUT} !w-24 flex-none`}
               placeholder="Code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -133,7 +140,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             />
             <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} flex-1 min-w-0`}>
               {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-              Add subject
+              Add
             </button>
           </div>
         </div>
@@ -154,18 +161,14 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
               <button
                 onClick={() => setShowRooms((v) => !v)}
                 aria-pressed={showRooms}
-                className={`w-full ${BTN_SM} border ${
-                  showRooms
-                    ? 'bg-[#27272A] text-white border-[#27272A]'
-                    : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
-                }`}
+                className={`${choice(showRooms)} w-full justify-center`}
               >
-                <DoorOpen size={13} /> {showRooms ? 'Back to subjects' : 'Manage rooms'}
+                <DoorOpen size={13} /> {showRooms ? 'Back to subjects' : 'Rooms'}
               </button>
             }
           >
             {filtered.length === 0 ? (
-              <p className="text-xs text-[#A1A1AA] p-2">No subjects yet.</p>
+              <p className="text-[12.5px] text-slate-400 p-3.5">No subjects yet.</p>
             ) : filtered.map((s) => (
               <EntityRow
                 key={s.id}
@@ -173,9 +176,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
                 onClick={() => { setSelectedId(s.id); setShowRooms(false) }}
                 title={s.name}
                 swatch={s.color}
-                trailing={s.code
-                  ? <span className={`text-[10px] font-mono ${s.id === selectedId && !showRooms ? 'text-white/60' : 'text-[#A1A1AA]'}`}>{s.code}</span>
-                  : undefined}
+                trailing={s.code ? <span className="text-[11px] font-mono text-slate-400">{s.code}</span> : undefined}
               />
             ))}
           </EntityList>
@@ -184,7 +185,7 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
       }
     >
       {showRooms ? (
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4"><RoomsPanel /></div>
+        <div className="flex-1 sm:overflow-y-auto overscroll-contain p-3.5 sm:p-5"><RoomsPanel /></div>
       ) : !selected ? (
         <EmptyDetail>Select a subject.</EmptyDetail>
       ) : (
@@ -195,25 +196,32 @@ export default function SubjectModal({ config }: { config: TimetableConfig | nul
             right={
               <button
                 onClick={async () => {
-                  if (!confirm(`Delete subject "${selected.name}"?`)) return
+                  const ok = await askConfirm({
+                    title: `Delete ${selected.name}?`,
+                    body: 'Every class requirement for this subject is deleted with it. Saved lessons keep their period but lose the subject.',
+                    confirmLabel: 'Delete subject',
+                    tone: 'danger',
+                  })
+                  if (!ok) return
                   await deleteSubject(selected.id)
                   setSelectedId('')
-                  await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
+                  await load()
                 }}
                 aria-label={`Delete ${selected.name}`}
-                className={`text-[#D4D4D8] hover:text-rose-500 ${TAP} ${FOCUS}`}
+                title="Delete subject"
+                className={ICON_BTN_DANGER}
               ><Trash2 size={15} /></button>
             }
           >
-            <span className="inline-flex items-center gap-2">
-              <span className="w-3 h-3 flex-shrink-0" style={{ background: selected.color || '#94a3b8' }} aria-hidden />
-              {selected.name}
+            <span className="inline-flex items-start gap-2">
+              <span className="w-3 h-3 rounded-[3px] flex-shrink-0 mt-[6px]" style={{ background: selected.color || '#94a3b8' }} aria-hidden />
+              <span className="min-w-0 break-words">{selected.name}</span>
             </span>
           </DetailHeader>
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="flex-1 sm:overflow-y-auto overscroll-contain p-3.5 sm:p-5">
             {config
               ? <SubjectConstraintsPanel config={config} subject={selected} homerooms={homerooms} />
-              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to set this subject&rsquo;s limits.</p>}
+              : <p className="text-[13px] text-slate-500 py-4">Create a timetable in Configuration to set this subject&rsquo;s limits.</p>}
           </div>
         </>
       )}
@@ -235,7 +243,7 @@ function SubjectConstraintsPanel({
   const hrTarget = homeroomTarget || null
 
   const homeroomOptions: SmartOption[] = useMemo(
-    () => [{ value: '', label: 'All homerooms' }, ...homerooms.map((h) => ({ value: h.id, label: h.name }))],
+    () => [{ value: '', label: 'Every class' }, ...homerooms.map((h) => ({ value: h.id, label: h.name }))],
     [homerooms],
   )
 
@@ -264,14 +272,14 @@ function SubjectConstraintsPanel({
     ),
   )
 
-  if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
-  if (slots.length === 0) return <p className="text-sm text-[#71717A] py-4">Add teaching period slots first (Configuration).</p>
+  if (loading) return <Loading className="py-8" />
+  if (slots.length === 0) return <p className="text-[13px] text-slate-500 py-4">Add the periods of the day in Configuration first.</p>
 
   return (
     <div>
       <Section
         title="Time off"
-        hint="Tap a free period this subject must never be taught in. The draft is drawn in — click a lesson to open it."
+        hint="Tap a free period this subject must never be taught in. Tap a lesson to open it."
         first
         right={
           <PeriodGroupSwitch
@@ -303,10 +311,10 @@ function SubjectConstraintsPanel({
         <LessonStatsCard dimension="subject" id={scopeId} className="mt-2.5" />
       </Section>
 
-      <Section title="Per day / per week limits" hint="Leave blank for no limit. Applies to all homerooms, or restrict to a specific one.">
+      <Section title="Limits per day and week" hint="Leave a box empty for no limit. Pick a class to set limits for that class only.">
         <div className="mb-3 max-w-xs">
-          <Field label="Applies to homeroom">
-            <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="All homerooms" searchPlaceholder="Search classes…" />
+          <Field label="Applies to" group>
+            <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="Every class" searchPlaceholder="Search classes…" />
           </Field>
         </div>
         <LoadLimitFields
@@ -326,19 +334,22 @@ function SubjectConstraintsPanel({
 
 function RoomsPanel() {
   const draft = useTimetableDraftOptional()
-  const [rooms, setRooms] = useState<Room[]>([])
-  const [loading, setLoading] = useState(true)
+  const [own, setOwn] = useState<Room[] | null>(null)
   const [name, setName] = useState('')
   const [roomType, setRoomType] = useState<RoomType>('classroom')
   const [capacity, setCapacity] = useState('')
   const [adding, setAdding] = useState(false)
 
+  // The draft's rooms when there is one; refreshReference() re-reads them.
   const load = useCallback(async () => {
-    setLoading(true)
-    setRooms(await fetchRooms())
-    setLoading(false)
-  }, [])
-  useEffect(() => { load() }, [load])
+    if (draft) await draft.refreshReference()
+    else setOwn(await fetchRooms())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!draft])
+  useEffect(() => { if (!draft) load() }, [draft, load])
+
+  const rooms = draft ? draft.rooms : own ?? []
+  const loading = draft ? draft.loading : own === null
 
   const handleAdd = async () => {
     if (!name.trim()) return
@@ -347,35 +358,57 @@ function RoomsPanel() {
     setAdding(false)
     if (created) {
       setName(''); setCapacity('')
-      await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()])
+      await load()
     }
   }
 
   return (
-    <Section title="Rooms" hint="Rooms available to the scheduler. A requirement's room type is matched against these." first>
+    <Section title="Rooms" hint="The rooms the generator can use. A lesson that needs a lab is only placed in a room of that type." first>
       {loading ? (
-        <div className="flex justify-center py-6 text-[#A1A1AA]"><Loader2 className="animate-spin" size={18} /></div>
+        <Loading className="py-6" />
+      ) : rooms.length === 0 ? (
+        <p className="text-[12.5px] text-slate-400 py-2">No rooms yet.</p>
       ) : (
-        <div className="space-y-px">
+        <div className="fx-card">
           {rooms.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7]">
-              <span className="text-sm font-medium text-[#18181B] flex-1 truncate">{r.name}</span>
-              <span className="text-[11px] px-2 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A]">{ROOM_TYPE_LABELS[r.room_type]}</span>
-              {r.capacity != null && <span className="text-[11px] text-[#A1A1AA]">{r.capacity} seats</span>}
-              <button onClick={async () => { if (confirm(`Delete room "${r.name}"?`)) { await deleteRoom(r.id); await Promise.all([load(), draft?.refreshReference() ?? Promise.resolve()]) } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"><Trash2 size={15} /></button>
+            <div key={r.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.5 pr-1.5 py-1.5 border-b border-[#EEEAE1] last:border-b-0">
+              <span className="text-[13.5px] font-medium text-slate-900 flex-1 min-w-[8rem] break-words">{r.name}</span>
+              <Chip>{ROOM_TYPE_LABELS[r.room_type]}</Chip>
+              {r.capacity != null && <span className="text-[12px] text-slate-400 tabular-nums">{r.capacity} seats</span>}
+              <button
+                onClick={async () => {
+                  const ok = await askConfirm({
+                    title: `Delete ${r.name}?`,
+                    body: 'Lessons placed in this room keep their period but lose the room.',
+                    confirmLabel: 'Delete room',
+                    tone: 'danger',
+                  })
+                  if (ok) { await deleteRoom(r.id); await load() }
+                }}
+                aria-label={`Delete ${r.name}`}
+                title="Delete room"
+                className={ICON_BTN_DANGER}
+              ><Trash2 size={15} /></button>
             </div>
           ))}
-          {rooms.length === 0 && <p className="text-xs text-[#A1A1AA] py-2">No rooms yet.</p>}
         </div>
       )}
-      <div className="mt-4 grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
-        <input className={`${INPUT} w-full`} placeholder="Room name" value={name} onChange={(e) => setName(e.target.value)} />
-        <select className={`${FIELD} w-36`} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
-          {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
-        </select>
-        <input className={`${FIELD} w-20`} placeholder="Seats" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
-        <button onClick={handleAdd} disabled={adding || !name.trim()} className={BTN_PRIMARY}>
-          {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />} Add
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_10rem_6rem_auto] gap-2 items-end">
+        <div className="col-span-2 sm:col-span-1">
+          <Field label="Room name">
+            <input className={INPUT} placeholder="e.g. Physics lab" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Type">
+          <select className={INPUT} value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)}>
+            {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABELS[t]}</option>)}
+          </select>
+        </Field>
+        <Field label="Seats">
+          <input className={INPUT} placeholder="—" type="number" inputMode="numeric" min={0} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+        </Field>
+        <button onClick={handleAdd} disabled={adding || !name.trim()} className={`${BTN_PRIMARY} col-span-2 sm:col-span-1`}>
+          {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />} Add room
         </button>
       </div>
     </Section>

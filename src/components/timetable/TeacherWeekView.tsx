@@ -74,20 +74,20 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
   }, [lessons])
 
   if (!teacher) {
-    return <p className="text-sm text-[#A1A1AA] py-8 text-center">Select a teacher.</p>
+    return <p className="text-[13px] text-slate-400 py-8 text-center">Choose a teacher.</p>
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-[#18181B]">
-          <UserCog size={15} className="text-[#71717A]" /> {teacher.full_name}
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-slate-900 min-w-0 break-words">
+          <UserCog size={15} className="text-slate-400 flex-shrink-0" /> {teacher.full_name}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-[#71717A] tabular-nums">
-          <Gauge size={13} /> {periodCount} period{periodCount === 1 ? '' : 's'}/week
+        <span className="inline-flex items-center gap-1 text-[12px] text-slate-500 tabular-nums">
+          <Gauge size={13} /> {periodCount} period{periodCount === 1 ? '' : 's'} a week
           {busiestDay && ` · busiest ${busiestDay[0].slice(0, 3)} (${busiestDay[1]})`}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-[#A1A1AA]">
+        <span className="hidden sm:inline-flex items-center gap-1 text-[12px] text-slate-400">
           <CalendarOff size={13} /> Tap a free period to block it
         </span>
         <PeriodGroupSwitch
@@ -116,8 +116,8 @@ export default function TeacherWeekView({ teacherId }: { teacherId: string }) {
         />
       )}
 
-      {/* The teacher's contract: what their week adds up to, class by class. */}
-      <LessonStatsCard dimension="teacher" id={teacherId} className="mt-2.5" />
+      {/* What their week adds up to, class by class. */}
+      <LessonStatsCard dimension="teacher" id={teacherId} />
     </div>
   )
 }

@@ -73,7 +73,7 @@ export default function MultiTeacherSelect({
         emptyText="No more staff"
       />
       {value.length === 0 ? (
-        <p className={`text-[11px] text-[#A1A1AA] ${compact ? 'mt-1' : 'mt-1.5'}`}>{emptyLabel}</p>
+        <p className={`text-[12px] text-slate-400 ${compact ? 'mt-1' : 'mt-1.5'}`}>{emptyLabel}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5 mt-1.5">
           {value.map((id, i) => {
@@ -85,16 +85,16 @@ export default function MultiTeacherSelect({
               title={
                 w
                   ? w.over > 0
-                    ? `${w.assigned} periods assigned, only ${w.capacity} available — ${w.over} cannot be scheduled`
+                    ? `${w.assigned} periods given, room for ${w.capacity}. ${w.over} cannot be placed.`
                     : `${w.assigned} of ${w.capacity} periods assigned`
                   : undefined
               }
-              className={`inline-flex items-center gap-1 pl-2 pr-1 py-1 text-xs border ${
+              className={`inline-flex items-center gap-1 min-h-[30px] max-w-full pl-2.5 pr-1 py-0.5 rounded-full text-[12.5px] ${
                 tone === 'over'
-                  ? 'bg-rose-50 text-rose-800 border-rose-300'
+                  ? 'bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-200'
                   : i === 0
-                    ? 'bg-[#27272A] text-white border-[#27272A]'
-                    : 'bg-[#F5F5F5] text-[#3F3F46] border-[#E4E4E7]'
+                    ? 'bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white'
+                    : 'bg-[#F1EEE7] text-slate-800'
               }`}
             >
               {i === 0 ? (
@@ -103,13 +103,14 @@ export default function MultiTeacherSelect({
                 <button
                   type="button"
                   onClick={() => makePrimary(id)}
-                  title="Make primary teacher"
-                  className="text-[#A1A1AA] hover:text-[#B8983C]"
+                  title="Make main teacher"
+                  aria-label="Make main teacher"
+                  className="text-slate-400 hover:text-[#B8983C] flex-shrink-0"
                 >
                   <Star size={11} />
                 </button>
               )}
-              <span className="truncate max-w-[10rem]">{byId.get(id)?.full_name ?? 'Teacher'}</span>
+              <span className="min-w-0 break-words leading-tight">{byId.get(id)?.full_name ?? 'Teacher'}</span>
               {w && w.assigned > 0 && (
                 <span
                   className={`tabular-nums text-[10px] ${
@@ -117,7 +118,7 @@ export default function MultiTeacherSelect({
                       ? 'text-rose-600 font-semibold'
                       : tone === 'tight'
                         ? 'text-amber-600'
-                        : i === 0 ? 'text-white/60' : 'text-[#A1A1AA]'
+                        : i === 0 ? 'text-white/60' : 'text-slate-400'
                   }`}
                 >
                   {w.assigned}/{w.capacity}
@@ -127,11 +128,12 @@ export default function MultiTeacherSelect({
                 type="button"
                 onClick={() => remove(id)}
                 title="Remove"
-                className={
+                aria-label={`Remove ${byId.get(id)?.full_name ?? 'teacher'}`}
+                className={`w-6 h-6 rounded-full inline-flex items-center justify-center flex-shrink-0 ${
                   tone === 'over'
-                    ? 'text-rose-400 hover:text-rose-600'
-                    : i === 0 ? 'text-white/60 hover:text-white' : 'text-[#A1A1AA] hover:text-rose-500'
-                }
+                    ? 'text-rose-400 hover:text-rose-600 hover:bg-white'
+                    : i === 0 ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-rose-500 hover:bg-white'
+                }`}
               >
                 <X size={12} />
               </button>
@@ -141,13 +143,13 @@ export default function MultiTeacherSelect({
         </div>
       )}
       {picked.length > 0 && (
-        <p className="flex items-start gap-1.5 text-[11px] text-rose-700 mt-1.5">
+        <p className="flex items-start gap-1.5 text-[12px] text-rose-700 mt-1.5 leading-snug">
           <AlertTriangle size={12} className="flex-shrink-0 mt-px" />
           <span>
             {picked.length === 1
               ? `${byId.get(picked[0]!.teacherId)?.full_name ?? 'This teacher'} is already over their week by ${picked[0]!.over} period${picked[0]!.over === 1 ? '' : 's'}.`
               : `${picked.length} of these teachers are already over their week.`}{' '}
-            Adding more here cannot be scheduled.
+            More periods for them cannot be placed.
           </span>
         </p>
       )}

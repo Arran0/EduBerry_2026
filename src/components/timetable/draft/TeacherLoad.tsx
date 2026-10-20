@@ -24,15 +24,15 @@ export function loadTone(w: TeacherWorkload | undefined) {
 const TONE_TEXT = {
   over: 'text-rose-600',
   tight: 'text-amber-600',
-  ok: 'text-[#71717A]',
-  none: 'text-[#A1A1AA]',
+  ok: 'text-slate-500',
+  none: 'text-slate-400',
 } as const
 
 const TONE_BAR = {
   over: 'bg-rose-500',
   tight: 'bg-amber-500',
   ok: 'bg-emerald-600',
-  none: 'bg-[#D4D4D8]',
+  none: 'bg-slate-300',
 } as const
 
 /** "28/30" with a tone, for a list row or a chip. */
@@ -46,10 +46,10 @@ export function TeacherLoadBadge({
   const tone = loadTone(workload)
   return (
     <span
-      className={`inline-flex items-center gap-0.5 text-[10px] tabular-nums flex-shrink-0 ${TONE_TEXT[tone]}`}
+      className={`inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums flex-shrink-0 ${TONE_TEXT[tone]}`}
       title={
         workload.over > 0
-          ? `${workload.assigned} periods assigned but only ${workload.capacity} available — ${workload.over} cannot be scheduled`
+          ? `${workload.assigned} periods given, room for ${workload.capacity}. ${workload.over} cannot be placed.`
           : `${workload.assigned} of ${workload.capacity} periods assigned`
       }
     >
@@ -67,18 +67,18 @@ export function TeacherLoadMeter({ workload }: { workload: TeacherWorkload | und
   const pct = capacity === 0 ? (assigned > 0 ? 100 : 0) : Math.min(100, (assigned / capacity) * 100)
 
   return (
-    <div className="w-40 sm:w-52">
+    <div className="w-full max-w-[16rem]">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Weekly load</span>
-        <span className={`text-sm font-semibold tabular-nums ${tone === 'over' ? 'text-rose-600' : 'text-[#18181B]'}`}>
+        <span className="text-[12px] font-semibold text-slate-500">Weekly load</span>
+        <span className={`text-sm font-semibold tabular-nums ${tone === 'over' ? 'text-rose-600' : 'text-slate-900'}`}>
           {assigned}
-          <span className="text-[#A1A1AA] font-normal">/{capacity}</span>
+          <span className="text-slate-400 font-normal">/{capacity}</span>
         </span>
       </div>
-      <div className="h-1.5 bg-[#E4E4E7] mt-1.5">
-        <div className={`h-full ${TONE_BAR[tone]} transition-all`} style={{ width: `${pct}%` }} />
+      <div className="h-1.5 rounded-full overflow-hidden bg-[#EFEBE3] mt-1.5">
+        <div className={`h-full rounded-full ${TONE_BAR[tone]} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-[11px] text-[#71717A] mt-1 leading-snug">
+      <p className="text-[11.5px] text-slate-500 mt-1 leading-snug">
         {workload?.timeOff ? `${workload.timeOff} off · ` : ''}
         {workload?.weeklyCap != null ? `capped at ${workload.weeklyCap}/week · ` : ''}
         {tone === 'over' ? (
@@ -110,9 +110,9 @@ export function OverloadedTeachersNotice({
   const rest = overloaded.length - shown.length
 
   return (
-    <div className={`flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800 ${className}`}>
-      <Gauge size={14} className="flex-shrink-0 mt-0.5" />
-      <div>
+    <div className={`flex items-start gap-2 border-l-[3px] border-[#C24141] bg-[#FCEDED] px-3 py-2.5 text-[12.5px] leading-relaxed text-[#962C2C] ${className}`}>
+      <Gauge size={14} className="flex-shrink-0 mt-[3px]" />
+      <div className="min-w-0 break-words">
         <p>
           <strong>
             {overloaded.length === 1
@@ -120,12 +120,12 @@ export function OverloadedTeachersNotice({
               : `${overloaded.length} teachers are assigned more periods than their weeks have`}
           </strong>
         </p>
-        <p className="mt-0.5 text-rose-700">
+        <p className="mt-0.5">
           {shown.map((w) => `${teacherName(w.teacherId)} ${w.assigned}/${w.capacity}`).join(' · ')}
           {rest > 0 && ` · and ${rest} more`}
         </p>
-        <p className="mt-0.5 text-rose-600/80">
-          Share the subject, cut its periods, or free up their time off.
+        <p className="mt-0.5 opacity-80">
+          Share the subject with another teacher, cut its periods, or free up their time off.
         </p>
       </div>
     </div>

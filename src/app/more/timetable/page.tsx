@@ -1,21 +1,26 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { Suspense, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { CalendarRange } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { CalendarRange } from 'lucide-react'
 import { TIMETABLE_BANNER_DEFAULT } from '@/lib/pageConfig'
-import dynamic from 'next/dynamic'
-const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/AdminTimetableBuilder'))
-const StaffTimetableView    = dynamic(() => import('@/components/timetable/StaffTimetableView'))
-const StudentTimetableView  = dynamic(() => import('@/components/timetable/StudentTimetableView'))
 
-// The admin builder hosts an information-dense master grid, so it gets a much
-// wider canvas than the single-week student / staff views.
-const MAX_W_ADMIN = 'max-w-[112rem]'
-const MAX_W_VIEWER = 'max-w-7xl'
+// Kept local rather than imported from the timetable kit, so the page shell
+// does not pull the kit in before the view it is waiting for.
+const Loading = () => <div className="flex justify-center py-16"><div className="spinner" /></div>
+
+const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/AdminTimetableBuilder'), { loading: () => <Loading /> })
+const StaffTimetableView    = dynamic(() => import('@/components/timetable/StaffTimetableView'), { loading: () => <Loading /> })
+const StudentTimetableView  = dynamic(() => import('@/components/timetable/StudentTimetableView'), { loading: () => <Loading /> })
+
+// The admin builder hosts a dense master grid, so it gets a wider canvas than
+// the single-week student and staff views.
+const MAX_W_ADMIN = 'max-w-7xl 2xl:max-w-[1720px]'
+const MAX_W_VIEWER = 'max-w-5xl'
 
 export default function TimetablePage() {
   const { user, profile } = useAuth()
@@ -26,38 +31,42 @@ export default function TimetablePage() {
 
   return (
     <ProtectedLayout>
-      <div data-page-theme="timetable">
+      <div data-page-theme="timetable" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
         <PageBanner
           settingKey="timetable_banner"
           defaultBanner={TIMETABLE_BANNER_DEFAULT}
           icon={<CalendarRange size={24} className="text-white" />}
-          backgroundIcon={<CalendarRange size={180} className="text-white" />}
+          backgroundIcon={<CalendarRange size={150} className="text-white" />}
           title="Timetable"
-          subtitle={
-            isAdmin
-              ? 'Build, generate, and publish class timetables'
-              : isStaff
-                ? 'Your weekly teaching schedule'
-                : 'Your weekly class schedule'
-          }
+          subtitle={isAdmin ? 'Periods, lessons and the published week' : isStaff ? 'The periods you teach' : 'Your class week'}
           isAdmin={isAdmin}
           maxWidth={MAX_W}
           onEditingChange={setBannerEditing}
         />
 
-        <div
-          className={`${MAX_W} mx-auto px-1.5 sm:px-3 lg:px-5 py-3 sm:py-4 transition-all duration-200 ${
-            bannerEditing ? 'opacity-30 blur-[1px] pointer-events-none select-none' : ''
-          }`}
-          aria-hidden={bannerEditing}
-        >
-          {!user ? null : isAdmin ? (
-            <AdminTimetableBuilder />
-          ) : isStaff ? (
-            <StaffTimetableView staffId={user.id} />
-          ) : (
-            <StudentTimetableView studentId={user.id} />
-          )}
+        <div className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 pb-14`}>
+          {/* Everything but the banner fades while the banner is being edited. */}
+          <div
+            aria-hidden={bannerEditing}
+            style={{
+              opacity: bannerEditing ? 0.35 : 1,
+              pointerEvents: bannerEditing ? 'none' : 'auto',
+              userSelect: bannerEditing ? 'none' : 'auto',
+              transition: 'opacity 0.25s ease',
+            }}
+          >
+            {!user ? null : isAdmin ? (
+              // The view lives in the URL, which needs a Suspense boundary to
+              // stay out of the static-render bailout.
+              <Suspense fallback={<Loading />}>
+                <AdminTimetableBuilder />
+              </Suspense>
+            ) : (
+              <div className="pt-5 sm:pt-6">
+                {isStaff ? <StaffTimetableView staffId={user.id} /> : <StudentTimetableView studentId={user.id} />}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </ProtectedLayout>

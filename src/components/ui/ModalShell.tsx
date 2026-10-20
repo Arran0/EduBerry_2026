@@ -32,6 +32,8 @@ const SIZE_CLASS = {
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
   '2xl': 'sm:max-w-4xl',
+  // Editors with their own two-pane layout (the timetable hubs).
+  wide: 'sm:max-w-[min(96rem,calc(100vw-2rem))]',
 } as const
 
 // '2xl' gets extra vertical room too — it's used for dense, table-like
@@ -42,6 +44,7 @@ const MAX_H_CLASS: Record<keyof typeof SIZE_CLASS, string> = {
   lg: 'sm:max-h-[min(88dvh,46rem)]',
   xl: 'sm:max-h-[min(88dvh,46rem)]',
   '2xl': 'sm:max-h-[min(92dvh,60rem)]',
+  wide: 'sm:max-h-[92dvh]',
 }
 
 interface ModalShellProps {
@@ -85,11 +88,22 @@ interface ModalShellProps {
    * The sheet is then exactly as tall as its content.
    */
   cardless?: boolean
+  /**
+   * Pin the panel to its full height instead of letting it shrink to fit, so
+   * a popup whose screens change underneath it never visibly resizes.
+   */
+  fullHeight?: boolean
+  /**
+   * Glass only: the body card holds its content edge to edge with no padding,
+   * and gives it a definite height — for a two-pane editor whose panes scroll
+   * on their own. On a phone the card still scrolls as a whole.
+   */
+  fill?: boolean
   children: React.ReactNode
 }
 
 /** Page themes whose popups default to the glass sheet. */
-const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave', 'fees', 'salary'])
+const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave', 'fees', 'salary', 'timetable'])
 
 export default function ModalShell({
   onClose,
@@ -107,6 +121,8 @@ export default function ModalShell({
   sharp = false,
   glass: glassProp,
   cardless = false,
+  fullHeight = false,
+  fill = false,
   children,
 }: ModalShellProps) {
   const dragControls = useDragControls()
@@ -149,13 +165,20 @@ export default function ModalShell({
   // was asked from disappears with it. The stack is a module-level array
   // rather than context because the shells are portals into <body> with no
   // common provider between them.
+  //
+  // Registered once per shell, with the latest onClose read through a ref:
+  // re-registering whenever a caller passes a fresh arrow would move this shell
+  // back to the top of the stack on every parent render, above a popup opened
+  // from inside it.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   useEffect(() => {
     const token = {}
     ESCAPE_STACK.push(token)
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (ESCAPE_STACK[ESCAPE_STACK.length - 1] !== token) return
-      onClose()
+      onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => {
@@ -163,7 +186,7 @@ export default function ModalShell({
       const at = ESCAPE_STACK.indexOf(token)
       if (at !== -1) ESCAPE_STACK.splice(at, 1)
     }
-  }, [onClose])
+  }, [])
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     if (info.offset.y > 90 || info.velocity.y > 600) onClose()
@@ -204,7 +227,7 @@ export default function ModalShell({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
-          className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} max-h-[94dvh] ${MAX_H_CLASS[size]} ${minHClass} sm:mx-4 overflow-hidden ${sheetRadius}`}
+          className={`lg-sheet relative flex flex-col w-full ${SIZE_CLASS[size]} ${fullHeight ? 'h-[94dvh] sm:h-[90dvh]' : `max-h-[94dvh] ${MAX_H_CLASS[size]}`} ${minHClass} sm:mx-4 overflow-hidden ${sheetRadius}`}
           // Slides, never fades — see lib/sheetMotion.
           {...sheetMotion(reduceMotion)}
           drag="y"
@@ -251,7 +274,7 @@ export default function ModalShell({
             </div>
           ) : (
             <div className={`${cardless ? '' : `lg-sheet-card ${sharp ? '!rounded-none ' : ''}`}relative z-[3] flex-1 min-h-0 mx-2 sm:mx-2.5 ${footer ? '' : 'mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-2.5'} overflow-y-auto overflow-x-hidden overscroll-contain`}>
-              <div className={`px-4 sm:px-5 py-4 ${bodyClassName}`}>{children}</div>
+              <div className={`${fill ? 'sm:h-full flex flex-col' : 'px-4 sm:px-5 py-4'} ${bodyClassName}`}>{children}</div>
             </div>
           )}
 

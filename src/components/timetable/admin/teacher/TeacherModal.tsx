@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Loader2, GraduationCap, UserCog, Gauge, CalendarRange } from 'lucide-react'
+import { GraduationCap, UserCog, Gauge, CalendarRange } from 'lucide-react'
 import { fetchAllHomerooms } from '@/lib/homerooms'
 import type { Homeroom } from '@/lib/homerooms'
 import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import type { TimetableConfig, Weekday } from '@/lib/timetable'
-import { SmartSelect, Section, Field } from '../../ui'
+import { SmartSelect, Section, Field, Loading, Notice, Chip, SECTION_LABEL } from '../../ui'
 import type { SmartOption } from '../../ui'
 import NameLink from '../../NameLink'
 import { TimeOffGrid, ValueInput, valueOf, LoadLimitFields } from '../constraintAtoms'
@@ -29,21 +29,23 @@ import { teacherIdsOf } from '@/lib/timetable'
  */
 export default function TeacherModal({ config }: { config: TimetableConfig | null }) {
   const draft = useTimetableDraftOptional()
-  const [teachers, setTeachers] = useState<UserProfile[]>([])
-  const [homerooms, setHomerooms] = useState<Homeroom[]>([])
-  const [loading, setLoading] = useState(true)
+  // The draft has already read the staff list and every class; only without
+  // one (no timetable yet) does the editor read them itself.
+  const [own, setOwn] = useState<{ teachers: UserProfile[]; homerooms: Homeroom[] } | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState('')
 
   const load = useCallback(async () => {
-    setLoading(true)
     const [profiles, hr] = await Promise.all([fetchStaffProfiles(), fetchAllHomerooms()])
-    setTeachers(profiles)
-    setHomerooms(hr)
-    setLoading(false)
+    setOwn({ teachers: profiles, homerooms: hr })
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const fromDraft = !!draft && !draft.loading
+  useEffect(() => { if (!draft) load() }, [draft, load])
+
+  const teachers = useMemo(() => (fromDraft ? draft!.teachers : own?.teachers ?? []), [fromDraft, draft, own])
+  const homerooms = useMemo(() => (fromDraft ? draft!.homerooms : own?.homerooms ?? []), [fromDraft, draft, own])
+  const loading = draft ? draft.loading : own === null
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -62,9 +64,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
     [homerooms, selectedId],
   )
 
-  if (loading) {
-    return <div className="flex justify-center py-16 text-[#A1A1AA]"><Loader2 className="animate-spin" size={22} /></div>
-  }
+  if (loading) return <Loading />
 
   return (
     <EntityShell
@@ -77,7 +77,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
           total={teachers.length}
         >
           {filtered.length === 0 ? (
-            <p className="text-xs text-[#A1A1AA] p-2">No staff found.</p>
+            <p className="text-[12.5px] text-slate-400 p-3.5">No staff found.</p>
           ) : filtered.map((t) => {
             const owns = homerooms.filter((h) => h.class_teacher_id === t.id).length
             const w = draft?.workloadOf(t.id)
@@ -110,9 +110,9 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
             meta={selected.email}
             right={<TeacherBands teacherId={selected.id} />}
           >
-            <NameLink kind="teacher" id={selected.id} name={selected.full_name} className="font-semibold text-[#18181B]" />
+            <NameLink kind="teacher" id={selected.id} name={selected.full_name} />
           </DetailHeader>
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="flex-1 sm:overflow-y-auto overscroll-contain p-3.5 sm:p-5">
 
             {/* What they are asked for against what their week holds — the
                 arithmetic that decides whether a timetable can exist at all. */}
@@ -128,15 +128,15 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
                   }
                   const worst = [...byClass.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
                   return (
-                    <div className="mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
+                    <Notice tone="error" className="mt-2">
                       <p>
                         <strong>{w.over} period{w.over === 1 ? '' : 's'} cannot be scheduled.</strong>{' '}
-                        No timetable can give them more than {w.capacity} periods a week.
+                        Their week has room for {w.capacity}.
                       </p>
-                      <p className="mt-0.5 text-rose-700">
+                      <p className="mt-0.5">
                         Heaviest classes: {worst.map(([hr, n]) => `${homerooms.find((h) => h.id === hr)?.name ?? 'Class'} ${n}`).join(' · ')}
                       </p>
-                    </div>
+                    </Notice>
                   )
                 })()}
               </div>
@@ -144,15 +144,15 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
 
             {/* Class-teacher homerooms */}
             <div className="mb-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Class teacher of</p>
+              <p className={`${SECTION_LABEL} mb-1.5`}>Class teacher of</p>
               {ownedHomerooms.length === 0 ? (
-                <p className="text-xs text-[#A1A1AA]">Not a class teacher of any homeroom.</p>
+                <p className="text-[12.5px] text-slate-400">No class yet.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {ownedHomerooms.map((h) => (
-                    <span key={h.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-[#F5F5F5] border border-[#E4E4E7]">
-                      <GraduationCap size={12} className="text-[#71717A]" />
-                      <NameLink kind="homeroom" id={h.id} name={h.name} className="text-[#18181B]" />
+                    <span key={h.id} className="inline-flex items-center gap-1.5 min-h-[28px] px-2.5 rounded-full bg-[#F1EEE7] text-[12.5px] text-slate-800">
+                      <GraduationCap size={12} className="text-slate-400 flex-shrink-0" />
+                      <NameLink kind="homeroom" id={h.id} name={h.name} />
                     </span>
                   ))}
                 </div>
@@ -161,7 +161,7 @@ export default function TeacherModal({ config }: { config: TimetableConfig | nul
 
             {config
               ? <TeacherConstraintsPanel config={config} teacher={selected} homerooms={homerooms} />
-              : <p className="text-sm text-[#71717A] py-4">Select or create a timetable configuration to edit this teacher&rsquo;s constraints.</p>}
+              : <p className="text-[13px] text-slate-500 py-4">Create a timetable in Configuration to set this teacher&rsquo;s limits.</p>}
           </div>
         </>
       )}
@@ -194,13 +194,9 @@ function TeacherBands({ teacherId }: { teacherId: string }) {
 
   if (bands.length === 0) return null
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-[#71717A]">
-      <CalendarRange size={12} className="text-[#A1A1AA]" aria-hidden />
-      {bands.map((b) => (
-        <span key={b.groupId ?? 'base'} className="px-1.5 py-0.5 bg-[#F5F5F5] border border-[#E4E4E7]">
-          {b.name}
-        </span>
-      ))}
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <CalendarRange size={12} className="text-slate-400" aria-hidden />
+      {bands.map((b) => <Chip key={b.groupId ?? 'base'}>{b.name}</Chip>)}
     </span>
   )
 }
@@ -219,7 +215,7 @@ function TeacherConstraintsPanel({
   const hrTarget = homeroomTarget || null
 
   const homeroomOptions: SmartOption[] = useMemo(
-    () => [{ value: '', label: 'Any homeroom' }, ...homerooms.map((h) => ({ value: h.id, label: h.name }))],
+    () => [{ value: '', label: 'Any class' }, ...homerooms.map((h) => ({ value: h.id, label: h.name }))],
     [homerooms],
   )
 
@@ -248,14 +244,14 @@ function TeacherConstraintsPanel({
     ),
   )
 
-  if (loading) return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
-  if (slots.length === 0) return <p className="text-sm text-[#71717A] py-4">Add teaching period slots first (Configuration).</p>
+  if (loading) return <Loading className="py-8" />
+  if (slots.length === 0) return <p className="text-[13px] text-slate-500 py-4">Add the periods of the day in Configuration first.</p>
 
   return (
     <div>
       <Section
         title="Time off"
-        hint="Tap a free period to block it. The draft is drawn in — click a lesson to open it."
+        hint="Tap a free period to block it. Tap a lesson to open it."
         first
         right={
           <PeriodGroupSwitch
@@ -287,10 +283,10 @@ function TeacherConstraintsPanel({
         <LessonStatsCard dimension="teacher" id={scopeId} className="mt-2.5" />
       </Section>
 
-      <Section title="Load limits" hint="Leave blank for no limit. Optionally restrict per-day / per-week caps to one homeroom.">
+      <Section title="Load limits" hint="Leave a box empty for no limit. Pick a class to set limits for that class only.">
         <div className="mb-3 max-w-xs">
-          <Field label="Applies to homeroom">
-            <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="Any homeroom" searchPlaceholder="Search classes…" />
+          <Field label="Applies to" group>
+            <SmartSelect options={homeroomOptions} value={homeroomTarget} onChange={setHomeroomTarget} placeholder="Any class" searchPlaceholder="Search classes…" />
           </Field>
         </div>
         <LoadLimitFields
@@ -303,9 +299,9 @@ function TeacherConstraintsPanel({
         />
       </Section>
 
-      <Section title="Max periods in a row" hint="The most consecutive periods this teacher can teach without a gap.">
-        <div className="max-w-[10rem] flex items-center gap-2">
-          <Gauge size={15} className="text-[#71717A] flex-shrink-0" />
+      <Section title="Most periods in a row" hint="How many periods this teacher can teach back to back.">
+        <div className="max-w-[11rem] flex items-center gap-2">
+          <Gauge size={15} className="text-slate-400 flex-shrink-0" />
           <ValueInput seed={valueOf(constraints, 'teacher', scopeId, null, 'max_in_a_row')} onCommit={(v) => commitValue('teacher', scopeId, null, 'max_in_a_row', v)} placeholder="No limit" />
         </div>
       </Section>

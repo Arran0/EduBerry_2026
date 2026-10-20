@@ -12,7 +12,8 @@ import type {
 import type { Homeroom } from '@/lib/homerooms'
 import type { UserProfile } from '@/lib/supabase'
 import DraftSlotModal from './draft/DraftSlotModal'
-import { TAP, FOCUS } from './ui'
+import useBodyScrollLock from '@/hooks/useBodyScrollLock'
+import { BTN_SM, SM_GHOST, SM_DARK, ICON_BTN, FOCUS } from './ui'
 
 interface Props {
   days: Weekday[]
@@ -120,9 +121,6 @@ export default function MasterTimetableEditor({
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCell, setOverCell] = useState<string | null>(null)
   const [open, setOpen] = useState<{ homeroom: Homeroom; day: Weekday; slot: PeriodSlot } | null>(null)
-  // Which row the pointer is on. In a grid 30 columns wide, following one
-  // class's week across the screen without it is genuinely hard.
-  const [hotRow, setHotRow] = useState<string | null>(null)
 
   // ── Density ────────────────────────────────────────────────
   // "Fit" keeps the entire week inside the viewport width; the +/− buttons
@@ -181,19 +179,19 @@ export default function MasterTimetableEditor({
 
   useEffect(() => {
     if (!fullscreen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false) }
+    const onKey = (e: KeyboardEvent) => {
+      // A period opened over the full-screen grid takes Escape first.
+      if (e.key !== 'Escape' || document.querySelector('.modal-portal')) return
+      setFullscreen(false)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [fullscreen])
 
   // Full screen locks the page behind it; without this the body scrolls under
-  // the overlay on a phone and the grid drifts off the top.
-  useEffect(() => {
-    if (!fullscreen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [fullscreen])
+  // the overlay on a phone and the grid drifts off the top. The shared lock
+  // is refcounted, so a popup opened over it cannot unlock the page early.
+  useBodyScrollLock(fullscreen)
 
   const nudgeZoom = (delta: number) => {
     setAutoFit(false)
@@ -251,15 +249,21 @@ export default function MasterTimetableEditor({
 
   const slotAt = useMemo(() => new Map(teachingSlots.map((s, i) => [s.id, i])), [teachingSlots])
 
+  // Every period a block occupies, so asking "is the next period the same
+  // double?" is a lookup. It used to scan every entry, once per lesson drawn —
+  // a whole-school week squared on every render.
+  const blockCells = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of entries) if (e.blockKey) set.add(`${e.blockKey}|${e.day}|${e.slotId}`)
+    return set
+  }, [entries])
+
   const blockNeighbour = (e: PlacedEntry, delta: -1 | 1): boolean => {
     if (!e.blockKey) return false
     const i = slotAt.get(e.slotId)
     if (i == null) return false
     const neighbour = teachingSlots[i + delta]
-    if (!neighbour) return false
-    return entries.some(
-      (o) => o.blockKey === e.blockKey && o.day === e.day && o.slotId === neighbour.id,
-    )
+    return !!neighbour && blockCells.has(`${e.blockKey}|${e.day}|${neighbour.id}`)
   }
 
   // ── Move ─────────────────────────────────────────────────────
@@ -281,7 +285,7 @@ export default function MasterTimetableEditor({
   const grid = (
     <div
       ref={wrapRef}
-      className={`overflow-auto border border-[#A1A1AA] bg-white ${
+      className={`overflow-auto overscroll-contain border border-[#DDD8CC] bg-white ${
         fullscreen ? 'flex-1 min-h-0' : 'max-h-[72vh] sm:max-h-[78vh]'
       }`}
     >
@@ -291,7 +295,7 @@ export default function MasterTimetableEditor({
             <th
               ref={labelRef}
               rowSpan={2}
-              className="sticky left-0 top-0 z-30 bg-[#27272A] text-[#F5F5F5] px-2 py-1 text-left font-bold uppercase tracking-widest whitespace-nowrap"
+              className="sticky left-0 top-0 z-30 bg-[#27272A] text-[#F5F5F5] px-2 py-1 text-left font-semibold whitespace-nowrap"
               style={{ fontSize: px(fontHead), boxShadow: STICKY_HEAD_EDGES }}
             >
               Class
@@ -315,7 +319,7 @@ export default function MasterTimetableEditor({
               teachingSlots.map((s, i) => (
                 <th
                   key={`${d}-${s.id}`}
-                  className="sticky z-20 bg-[#3F3F46] text-[#D4D4D8] px-0.5 py-0.5 text-center font-medium"
+                  className="sticky z-20 bg-[#3F3F46] text-slate-300 px-0.5 py-0.5 text-center font-medium"
                   style={{
                     top: px(dayRowH),
                     width: px(cellW),
@@ -333,23 +337,24 @@ export default function MasterTimetableEditor({
         </thead>
         <tbody>
           {homerooms.map((hr, rowIndex) => {
-            const hot = hotRow === hr.id
             // Alternating bands. Thirty columns is a long way for the eye to
-            // carry a row, and the stripe is what carries it.
+            // carry a row, and the stripe is what carries it. The row under
+            // the pointer lights up in CSS (group-hover), so following a class
+            // across the week costs no re-render of the whole grid.
             const band = rowIndex % 2 === 1
             return (
-              <tr key={hr.id} onMouseEnter={() => setHotRow(hr.id)} onMouseLeave={() => setHotRow(null)}>
+              <tr key={hr.id} className="group">
                 <td
-                  className={`sticky left-0 z-10 p-0 whitespace-nowrap leading-tight font-semibold text-[#18181B] tabular-nums ${
-                    hot ? 'bg-[#FEF9E7]' : band ? 'bg-[#F7F7F8]' : 'bg-white'
+                  className={`sticky left-0 z-10 p-0 whitespace-nowrap leading-tight font-semibold text-slate-900 tabular-nums group-hover:bg-[#FEF9E7] ${
+                    band ? 'bg-[#F8F6F1]' : 'bg-white'
                   }`}
                   style={{ fontSize: px(LABEL_FONT), boxShadow: STICKY_COL_EDGES }}
                 >
                   {onOpenClass ? (
                     <button
                       onClick={() => onOpenClass(hr.id)}
-                      title={`${hr.name} — open this class's timetable`}
-                      className={`w-full text-left px-2 py-0.5 hover:bg-[#EBEBEB] hover:text-[#18181B] underline-offset-2 hover:underline decoration-[#B8983C] ${TAP} ${FOCUS}`}
+                      title={`${hr.name}. Open this class's week.`}
+                      className={`w-full text-left px-2 py-0.5 hover:bg-[#EDE8DE] hover:text-slate-900 underline-offset-2 hover:underline decoration-[#B8983C] ${FOCUS}`}
                     >
                       {classLabel(hr)}
                     </button>
@@ -375,19 +380,15 @@ export default function MasterTimetableEditor({
                         onDragLeave={() => setOverCell((c) => (c === key ? null : c))}
                         onDrop={() => handleDrop(hr.id, day, slot.id)}
                         onClick={() => setOpen({ homeroom: hr, day, slot })}
-                        title={off && cellEntries.length === 0 ? `${hr.name} — time off` : undefined}
-                        className={`border-b border-[#E4E4E7] p-px align-top cursor-pointer ${
+                        title={off && cellEntries.length === 0 ? `${hr.name}: kept free` : undefined}
+                        className={`border-b border-[#EEEAE1] p-px align-top cursor-pointer ${
                           dayEdge ? 'border-l-2 border-l-[#A1A1AA]' : 'border-l border-l-[#EDEDEF]'
                         } ${
                           isOver
                             ? 'bg-indigo-100 ring-1 ring-inset ring-indigo-400'
                             : inConflict
                               ? 'bg-rose-50'
-                              : hot
-                                ? 'bg-[#FEFCF3]'
-                                : band
-                                  ? 'bg-[#FBFBFC]'
-                                  : ''
+                              : `group-hover:bg-[#FEFCF3] ${band ? 'bg-[#FCFBF8]' : ''}`
                         }`}
                         style={{
                           width: px(cellW),
@@ -440,13 +441,13 @@ export default function MasterTimetableEditor({
                                   marginRight: linkedRight ? -1 : undefined,
                                 }}
                               >
-                                <div className="font-bold text-[#18181B] truncate">
+                                <div className="font-bold text-slate-900 truncate">
                                   {linkedLeft
                                     ? '·'
                                     : (subj?.code || subj?.name || '—').slice(0, labelChars)}
                                 </div>
                                 {!dense && !linkedLeft && names.length > 0 && (
-                                  <div className="text-[#3F3F46] truncate" style={{ fontSize: px(fontSub) }}>
+                                  <div className="text-slate-700 truncate" style={{ fontSize: px(fontSub) }}>
                                     {names.length > 1 ? `${shortName(names[0])} +${names.length - 1}` : shortName(names[0])}
                                   </div>
                                 )}
@@ -462,7 +463,7 @@ export default function MasterTimetableEditor({
                                   )}
                                   {span > 1 && !linkedLeft && !tiny && (
                                     <span
-                                      className="font-bold text-[#52525B]"
+                                      className="font-bold text-slate-600"
                                       style={{ fontSize: px(Math.max(6, Math.round(7 * zoom))) }}
                                       title={`${span}-period block`}
                                     >
@@ -479,7 +480,7 @@ export default function MasterTimetableEditor({
                                   )}
                                   {entry.combinedKey && !tiny && <Layers size={Math.max(7, Math.round(9 * zoom))} className="text-indigo-600" />}
                                   {entry.isLocked && !linkedLeft && (
-                                    <Pin size={Math.max(7, Math.round(9 * zoom))} className="text-[#18181B]" />
+                                    <Pin size={Math.max(7, Math.round(9 * zoom))} className="text-slate-900" />
                                   )}
                                 </div>
                               </div>
@@ -499,46 +500,38 @@ export default function MasterTimetableEditor({
   )
 
   const toolbar = (
-    <div className="flex items-center gap-1.5 mb-1.5">
+    <div className="flex flex-wrap items-center gap-1.5 mb-2">
       <button
         onClick={() => { setAutoFit(true); recomputeFit() }}
         aria-pressed={autoFit}
-        className={`inline-flex items-center gap-1.5 px-2.5 min-h-[2.25rem] sm:min-h-0 sm:py-1 text-xs font-medium border ${TAP} ${FOCUS} ${
-          autoFit ? 'bg-[#27272A] text-white border-[#27272A]' : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
-        }`}
-        title="Shrink the grid to fit the pane"
+        className={`${BTN_SM} ${autoFit ? SM_DARK : SM_GHOST}`}
+        title="Shrink the grid to fit the screen"
       >
         <Scan size={13} /> Fit
       </button>
-      <div className="inline-flex border border-[#D4D4D8] bg-white">
-        <button
-          onClick={() => nudgeZoom(-0.1)}
-          aria-label="Zoom out"
-          className={`px-2 min-h-[2.25rem] sm:min-h-0 sm:py-1 text-[#52525B] hover:bg-[#F5F5F5] ${TAP} ${FOCUS}`}
-        >
+      <div className="inline-flex items-center rounded-full bg-white border border-[#E2DDD2]">
+        <button onClick={() => nudgeZoom(-0.1)} aria-label="Zoom out" title="Zoom out" className={`${ICON_BTN} !w-9 !h-9 sm:!w-7 sm:!h-7 text-slate-600`}>
           <ZoomOut size={13} />
         </button>
-        <span className="px-2 py-1 text-xs tabular-nums text-[#71717A] border-x border-[#D4D4D8] min-w-[3rem] flex items-center justify-center">
+        <span className="px-1 text-[12px] tabular-nums text-slate-500 min-w-[2.75rem] text-center">
           {Math.round(zoom * 100)}%
         </span>
-        <button
-          onClick={() => nudgeZoom(0.1)}
-          aria-label="Zoom in"
-          className={`px-2 min-h-[2.25rem] sm:min-h-0 sm:py-1 text-[#52525B] hover:bg-[#F5F5F5] ${TAP} ${FOCUS}`}
-        >
+        <button onClick={() => nudgeZoom(0.1)} aria-label="Zoom in" title="Zoom in" className={`${ICON_BTN} !w-9 !h-9 sm:!w-7 sm:!h-7 text-slate-600`}>
           <ZoomIn size={13} />
         </button>
       </div>
       <button
         onClick={() => setFullscreen((f) => !f)}
-        className={`inline-flex items-center gap-1.5 px-2.5 min-h-[2.25rem] sm:min-h-0 sm:py-1 text-xs font-medium bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5] ${TAP} ${FOCUS}`}
+        className={`${BTN_SM} ${SM_GHOST}`}
         title={fullscreen ? 'Leave full screen (Esc)' : 'Use the whole screen'}
+        aria-label={fullscreen ? 'Leave full screen' : 'Full screen'}
       >
         {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-        <span className="hidden sm:inline">{fullscreen ? 'Exit' : 'Full screen'}</span>
+        <span className="hidden sm:inline">{fullscreen ? 'Exit full screen' : 'Full screen'}</span>
       </button>
-      <span className="text-[11px] text-[#A1A1AA] tabular-nums ml-auto flex-shrink-0">
-        {homerooms.length} × {days.length * teachingSlots.length}
+      <span className="ml-auto flex items-center gap-3 text-[11.5px] text-slate-400">
+        <span className="hidden lg:inline">Drag a lesson to move it · tap to open · red is a clash</span>
+        <span className="tabular-nums">{homerooms.length} classes × {days.length * teachingSlots.length} periods</span>
       </span>
     </div>
   )
@@ -555,7 +548,7 @@ export default function MasterTimetableEditor({
 
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-50 bg-white p-2 sm:p-3 flex flex-col">
+      <div className="fixed inset-0 z-50 bg-[#F7F5F1] p-2 sm:p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col">
         {toolbar}
         {grid}
         {modal}

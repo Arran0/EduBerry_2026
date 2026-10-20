@@ -10,7 +10,7 @@ import type {
 } from '@/lib/timetable'
 import type { UserProfile } from '@/lib/supabase'
 import DraftSlotModal from './draft/DraftSlotModal'
-import { TAP, FOCUS } from './ui'
+import { TAP, FOCUS, DayTabs, useDay, Chip } from './ui'
 
 interface Props {
   days: Weekday[]
@@ -45,6 +45,7 @@ export default function EditableTimetableGrid({
   constraints = [], homerooms = [], slotClash, hasOverride, onMove,
 }: Props) {
   const [openCell, setOpenCell] = useState<{ day: Weekday; slot: PeriodSlot } | null>(null)
+  const [phoneDay, setPhoneDay] = useDay(days)
   const [dragCell, setDragCell] = useState<string | null>(null)
   const [overCell, setOverCell] = useState<string | null>(null)
   const draggable = typeof onMove === 'function'
@@ -97,15 +98,20 @@ export default function EditableTimetableGrid({
 
   const teachingOrder = useMemo(() => slots.filter((s) => !s.is_break).map((s) => s.id), [slots])
 
-  // Is the period above/below this one part of the same block?
+  // Is the period above/below this one part of the same block? A set of the
+  // periods each block occupies makes it a lookup rather than a scan of every
+  // entry per cell.
+  const blockCells = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of entries) if (e.homeroomId === homeroomId && e.blockKey) set.add(`${e.blockKey}|${e.day}|${e.slotId}`)
+    return set
+  }, [entries, homeroomId])
   const linkedTo = (entry: PlacedEntry, day: Weekday, delta: -1 | 1): boolean => {
     if (!entry.blockKey) return false
     const i = teachingOrder.indexOf(entry.slotId)
     const neighbour = teachingOrder[i + delta]
     if (i < 0 || !neighbour) return false
-    return entries.some(
-      (o) => o.blockKey === entry.blockKey && o.day === day && o.slotId === neighbour,
-    )
+    return blockCells.has(`${entry.blockKey}|${day}|${neighbour}`)
   }
 
   // Names of every teacher on a lesson — co-taught periods list them all.
@@ -115,153 +121,229 @@ export default function EditableTimetableGrid({
       .filter((n): n is string => !!n)
       .join(', ')
 
+  const timeOf = (slot: PeriodSlot) =>
+    slot.start_time && slot.end_time ? `${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}` : null
+
   return (
-    <div className="overflow-x-auto border border-[#A1A1AA] bg-white">
-      <table className="w-full border-collapse text-sm min-w-[26rem] sm:min-w-[40rem]">
-        <thead>
-          <tr className="bg-[#27272A]">
-            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#D4D4D8] w-14 sm:w-28 sticky left-0 bg-[#27272A] z-10">
-              Period
-            </th>
-            {days.map((d) => (
-              <th key={d} className="p-1 sm:p-2 text-center text-[10px] sm:text-[11px] font-semibold text-[#F5F5F5] border-l border-[#52525B]">
-                <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
-                <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {slots.map((slot) => (
-            <tr key={slot.id} className={slot.is_break ? 'bg-amber-50/40' : ''}>
-              <td className={`p-1 sm:p-2 align-top text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap border-t border-[#E4E4E7] sticky left-0 z-10 ${slot.is_break ? 'bg-amber-50/40' : 'bg-white'}`}>
-                <div className="font-semibold text-[#3F3F46]">{slot.label}</div>
-                {slot.start_time && slot.end_time && (
-                  <div className="tabular-nums text-[#A1A1AA]">{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}</div>
-                )}
-              </td>
-              {days.map((day) => {
-                if (slot.is_break) {
+    <div className="min-w-0">
+      {/* ── Phone: one day as a list ──────────────────────────
+          Dragging needs a mouse, so a phone moves a lesson from the slot box. */}
+      <div className="sm:hidden space-y-2">
+        <DayTabs days={days} value={phoneDay} onChange={setPhoneDay} />
+        <div className="border border-[#DDD8CC] bg-white divide-y divide-[#F0ECE3]">
+          {slots.map((slot) => {
+            const time = timeOf(slot)
+            if (slot.is_break) {
+              return (
+                <div key={slot.id} className="flex items-center gap-3 px-3 py-2 bg-[#FBF6E9]">
+                  <span className="w-[4.25rem] flex-shrink-0 text-[12px] text-amber-700 tabular-nums">{time ?? ''}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-amber-700">
+                    <Coffee size={13} /> {slot.label || 'Break'}
+                  </span>
+                </div>
+              )
+            }
+            const day = phoneDay
+            const cellK = `${day}__${slot.id}`
+            const entry = byCell.get(cellK)
+            const splits = splitCount.get(cellK) ?? 0
+            const off = isTimeOff(day, slot.id)
+            const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
+            const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
+            const room = entry?.roomId ? roomById.get(entry.roomId) : null
+            const names = entry ? teacherLine(entry) : ''
+            const span = entry?.blockKey ? blockSpan.get(entry.blockKey) ?? 1 : 1
+            const amended = hasOverride?.(homeroomId, day, slot.id) ?? false
+            return (
+              <button
+                key={slot.id}
+                onClick={() => setOpenCell({ day, slot })}
+                className={`relative w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors active:bg-[#FAF7F0] ${FOCUS} ${
+                  inConflict ? 'bg-rose-50' : ''}`}
+              >
+                <span className="w-[4.25rem] flex-shrink-0">
+                  <span className="block text-[13px] font-semibold text-slate-700 leading-snug break-words">{slot.label}</span>
+                  {time && <span className="block text-[11.5px] text-slate-400 tabular-nums">{time}</span>}
+                </span>
+                <span className="flex-1 min-w-0">
+                  {entry ? (
+                    <span className="relative block pl-3">
+                      <span aria-hidden className="absolute left-0 top-0.5 bottom-0.5 w-[3px] rounded-full" style={{ background: subj?.color ?? '#52525B' }} />
+                      <span className="block text-[14px] font-semibold text-slate-900 leading-snug break-words">{subj?.name ?? 'Subject'}</span>
+                      {(names || room) && (
+                        <span className="block text-[12.5px] text-slate-500 leading-snug break-words">
+                          {[names, room?.name].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                      {(span > 1 || entry.isLocked || entry.combinedKey || amended || off) && (
+                        <span className="flex flex-wrap gap-1 mt-1">
+                          {span > 1 && <Chip>{BLOCK_WORD[span] ?? `${span} in a row`}</Chip>}
+                          {entry.isLocked && <Chip tone="dark"><Pin size={10} /> Pinned</Chip>}
+                          {entry.combinedKey && <Chip tone="indigo"><Layers size={10} /> Combined</Chip>}
+                          {amended && <Chip tone="gold"><CalendarClock size={10} /> Date change</Chip>}
+                          {off && <Chip tone="bad"><Ban size={10} /> Kept free</Chip>}
+                        </span>
+                      )}
+                    </span>
+                  ) : splits > 0 ? (
+                    <span className="block text-[13px] font-semibold text-indigo-600 py-0.5">{splits} groups</span>
+                  ) : off ? (
+                    <span className="inline-flex items-center gap-1 text-[13px] text-rose-500 py-0.5"><Ban size={12} /> Kept free</span>
+                  ) : (
+                    <span className="block text-[13px] text-slate-300 py-0.5">Free</span>
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── sm up: the week ─────────────────────────────────── */}
+      <div className="hidden sm:block overflow-x-auto border border-[#DDD8CC] bg-white">
+        <table className="w-full border-collapse text-sm table-fixed">
+          <colgroup>
+            <col className="w-24 lg:w-28" />
+            {days.map((d) => <col key={d} />)}
+          </colgroup>
+          <thead>
+            <tr className="bg-[#27272A]">
+              <th className="p-2 text-left text-[12px] font-semibold text-slate-300">Period</th>
+              {days.map((d) => (
+                <th key={d} className="p-2 text-center text-[12px] font-semibold text-white border-l border-white/10">
+                  <span className="lg:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
+                  <span className="hidden lg:inline">{WEEKDAY_LABELS[d]}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((slot) => (
+              <tr key={slot.id} className={slot.is_break ? 'bg-[#FBF6E9]' : ''}>
+                <td className="p-2 align-top text-[11.5px] text-slate-500 border-t border-[#EEEAE1]">
+                  <div className="font-semibold text-slate-700 leading-snug break-words">{slot.label}</div>
+                  {timeOf(slot) && <div className="tabular-nums text-slate-400">{timeOf(slot)}</div>}
+                </td>
+                {days.map((day) => {
+                  if (slot.is_break) {
+                    return (
+                      <td key={day} className="p-1 border-t border-l border-[#EEEAE1]">
+                        <div className="h-12 flex items-center justify-center text-amber-500">
+                          <Coffee size={14} />
+                        </div>
+                      </td>
+                    )
+                  }
+                  const cellK = `${day}__${slot.id}`
+                  const entry = byCell.get(cellK)
+                  const splits = splitCount.get(cellK) ?? 0
+                  const off = isTimeOff(day, slot.id)
+                  const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
+                  const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
+                  const room = entry?.roomId ? roomById.get(entry.roomId) : null
+                  const names = entry ? teacherLine(entry) : ''
+                  const span = entry?.blockKey ? blockSpan.get(entry.blockKey) ?? 1 : 1
+                  const linkedAbove = entry ? linkedTo(entry, day, -1) : false
+                  const linkedBelow = entry ? linkedTo(entry, day, 1) : false
+                  const isOver = overCell === cellK
+                  const amended = hasOverride?.(homeroomId, day, slot.id) ?? false
                   return (
-                    <td key={day} className="p-0.5 sm:p-1 border-t border-l border-[#E4E4E7]">
-                      <div className="h-10 sm:h-14 bg-amber-50 flex items-center justify-center text-amber-500">
-                        <Coffee size={13} />
-                      </div>
+                    <td
+                      key={day}
+                      className={`p-1 border-t border-l border-[#EEEAE1] align-top ${isOver ? 'bg-indigo-50' : ''}`}
+                      onDragOver={draggable ? (ev) => { ev.preventDefault(); setOverCell(cellK) } : undefined}
+                      onDragLeave={draggable ? () => setOverCell((c) => (c === cellK ? null : c)) : undefined}
+                      onDrop={draggable ? () => {
+                        const from = dragCell
+                        setDragCell(null)
+                        setOverCell(null)
+                        const dragged = from ? byCell.get(from) : null
+                        if (dragged) onMove?.(dragged, day, slot.id)
+                      } : undefined}
+                    >
+                      <button
+                        draggable={draggable && !!entry}
+                        onDragStart={entry ? () => setDragCell(cellK) : undefined}
+                        onDragEnd={() => { setDragCell(null); setOverCell(null) }}
+                        onClick={() => setOpenCell({ day, slot })}
+                        title={
+                          entry
+                            ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${
+                                span > 1 ? ` · ${BLOCK_WORD[span] ?? `${span}-period`}` : ''
+                              }${off ? ' · kept free' : ''}`
+                            : off ? 'Kept free for this class' : 'Free period'
+                        }
+                        className={`relative w-full min-h-[3.5rem] rounded-[6px] px-2 py-1 text-left text-[12px] leading-tight ${FOCUS} ${
+                          dragCell === cellK ? 'opacity-40' : ''
+                        } ${
+                          inConflict
+                            ? 'ring-2 ring-inset ring-rose-400'
+                            : entry
+                              ? `hover:brightness-95 transition-[filter] duration-150 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`
+                              : off
+                                ? `border border-rose-200 text-rose-400 hover:border-rose-300 ${TAP}`
+                                : `border border-dashed border-[#DDD8CC] text-slate-300 hover:border-[#B8983C] hover:text-slate-500 ${TAP}`
+                        }`}
+                        style={
+                          entry
+                            ? {
+                                background: (subj?.color ?? '#52525B') + '2b',
+                                boxShadow: `inset 3px 0 0 ${subj?.color ?? '#52525B'}`,
+                                // A block is one lesson across several rows, so the
+                                // corners between its periods are squared off and it
+                                // reads as a single slab.
+                                borderTopLeftRadius: linkedAbove ? 0 : undefined,
+                                borderTopRightRadius: linkedAbove ? 0 : undefined,
+                                borderBottomLeftRadius: linkedBelow ? 0 : undefined,
+                                borderBottomRightRadius: linkedBelow ? 0 : undefined,
+                              }
+                            : off
+                              ? { background: TIME_OFF_FILL }
+                              : undefined
+                        }
+                      >
+                        {entry ? (
+                          <>
+                            {!linkedAbove && (
+                              <div className="font-semibold text-slate-900 break-words pr-4">{subj?.name ?? 'Subject'}</div>
+                            )}
+                            {!linkedAbove && names && <div className="text-slate-700 break-words">{names}</div>}
+                            {!linkedAbove && room && <div className="text-slate-500 break-words">{room.name}</div>}
+                            {span > 1 && !linkedAbove && (
+                              <div className="text-[11px] font-medium text-slate-600">
+                                {BLOCK_WORD[span] ?? `${span} in a row`}
+                              </div>
+                            )}
+                            {linkedAbove && (
+                              <span className="block text-center text-slate-400 leading-[3rem]">⌄</span>
+                            )}
+                            <span className="absolute top-1 right-1 flex items-center gap-px">
+                              {amended && <CalendarClock size={10} className="text-[#B8983C]" />}
+                              {entry.combinedKey && <Layers size={10} className="text-indigo-600" />}
+                              {entry.isLocked && !linkedAbove && <Pin size={10} className="text-slate-700" />}
+                            </span>
+                            {off && <Ban size={10} className="absolute bottom-1 right-1 text-rose-500" />}
+                          </>
+                        ) : splits > 0 ? (
+                          <span className="block text-center leading-[3rem] text-indigo-600 font-semibold">
+                            {splits} groups
+                          </span>
+                        ) : off ? (
+                          <span className="flex items-center justify-center gap-1 min-h-[3rem] text-rose-400">
+                            <Ban size={11} /> Off
+                          </span>
+                        ) : (
+                          <span className="block text-center leading-[3rem]">+</span>
+                        )}
+                      </button>
                     </td>
                   )
-                }
-                const cellK = `${day}__${slot.id}`
-                const entry = byCell.get(cellK)
-                const splits = splitCount.get(cellK) ?? 0
-                const off = isTimeOff(day, slot.id)
-                const inConflict = conflicts.has(gridKey(homeroomId, day, slot.id))
-                const subj = entry?.subjectId ? subjectById.get(entry.subjectId) : null
-                const room = entry?.roomId ? roomById.get(entry.roomId) : null
-                const names = entry ? teacherLine(entry) : ''
-                const span = entry?.blockKey ? blockSpan.get(entry.blockKey) ?? 1 : 1
-                const linkedAbove = entry ? linkedTo(entry, day, -1) : false
-                const linkedBelow = entry ? linkedTo(entry, day, 1) : false
-                const isOver = overCell === cellK
-                const amended = hasOverride?.(homeroomId, day, slot.id) ?? false
-                return (
-                  <td
-                    key={day}
-                    className={`p-0.5 sm:p-1 border-t border-l border-[#E4E4E7] ${isOver ? 'bg-indigo-50' : ''}`}
-                    onDragOver={draggable ? (ev) => { ev.preventDefault(); setOverCell(cellK) } : undefined}
-                    onDragLeave={draggable ? () => setOverCell((c) => (c === cellK ? null : c)) : undefined}
-                    onDrop={draggable ? () => {
-                      const from = dragCell
-                      setDragCell(null)
-                      setOverCell(null)
-                      const dragged = from ? byCell.get(from) : null
-                      if (dragged) onMove?.(dragged, day, slot.id)
-                    } : undefined}
-                  >
-                    <button
-                      draggable={draggable && !!entry}
-                      onDragStart={entry ? () => setDragCell(cellK) : undefined}
-                      onDragEnd={() => { setDragCell(null); setOverCell(null) }}
-                      onClick={() => setOpenCell({ day, slot })}
-                      title={
-                        entry
-                          ? `${subj?.name ?? 'Lesson'}${names ? ' · ' + names : ''}${room ? ' · ' + room.name : ''}${
-                              span > 1 ? ` · ${BLOCK_WORD[span] ?? `${span}-period`} block` : ''
-                            }${off ? ' · marked time off' : ''}`
-                          : off ? 'Time off — this class is kept free' : 'Free period'
-                      }
-                      className={`relative w-full h-11 sm:h-14 px-1.5 sm:px-2 py-0.5 sm:py-1 text-left text-[10px] sm:text-xs leading-tight ${FOCUS} ${
-                        dragCell === cellK ? 'opacity-40' : ''
-                      } ${
-                        inConflict
-                          ? 'ring-2 ring-inset ring-rose-400'
-                          : entry
-                            ? `hover:brightness-95 transition-[filter] duration-150 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`
-                            : off
-                              ? `border border-rose-200 text-rose-400 hover:border-rose-300 ${TAP}`
-                              : `border border-dashed border-[#D4D4D8] text-[#C4C4C8] hover:border-[#A1A1AA] hover:text-[#71717A] ${TAP}`
-                      }`}
-                      style={
-                        entry
-                          ? {
-                              background: (subj?.color ?? '#52525B') + '2b',
-                              borderLeft: `3px solid ${subj?.color ?? '#52525B'}`,
-                              // A block is one lesson across several rows, so the
-                              // edges between its periods are left open and it
-                              // reads as a single slab.
-                              borderTopColor: linkedAbove ? 'transparent' : undefined,
-                            }
-                          : off
-                            ? { background: TIME_OFF_FILL }
-                            : undefined
-                      }
-                    >
-                      {entry ? (
-                        <>
-                          {!linkedAbove && (
-                            <div className="font-bold text-[#18181B] truncate pr-4">{subj?.name ?? 'Subject'}</div>
-                          )}
-                          {!linkedAbove && names && <div className="text-[#3F3F46] truncate">{names}</div>}
-                          {!linkedAbove && room && <div className="text-[#71717A] truncate hidden sm:block">{room.name}</div>}
-                          {span > 1 && !linkedAbove && (
-                            <div className="text-[9px] uppercase tracking-wide font-medium text-[#52525B]">
-                              {BLOCK_WORD[span] ?? `${span} in a row`}
-                            </div>
-                          )}
-                          {linkedAbove && (
-                            <span className="block text-center text-[#A1A1AA] leading-[2.5rem] sm:leading-[3rem]">⌄</span>
-                          )}
-                          {linkedBelow && (
-                            <span
-                              className="absolute left-0 right-0 bottom-[-1px] h-px"
-                              style={{ background: (subj?.color ?? '#52525B') + '2b' }}
-                            />
-                          )}
-                          <span className="absolute top-0.5 right-0.5 flex items-center gap-px">
-                            {amended && <CalendarClock size={10} className="text-[#B8983C]" />}
-                            {entry.combinedKey && <Layers size={10} className="text-indigo-600" />}
-                            {entry.isLocked && !linkedAbove && <Pin size={10} className="text-[#3F3F46]" />}
-                          </span>
-                          {off && <Ban size={10} className="absolute bottom-0.5 right-0.5 text-rose-500" />}
-                        </>
-                      ) : splits > 0 ? (
-                        <span className="block text-center leading-[2.5rem] sm:leading-[3rem] text-indigo-600 font-semibold">
-                          {splits} groups
-                        </span>
-                      ) : off ? (
-                        <span className="flex items-center justify-center gap-1 h-full text-rose-400">
-                          <Ban size={11} /> <span className="hidden sm:inline">Off</span>
-                        </span>
-                      ) : (
-                        <span className="block text-center leading-[2.5rem] sm:leading-[3rem]">+</span>
-                      )}
-                    </button>
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {openCell && (
         <DraftSlotModal

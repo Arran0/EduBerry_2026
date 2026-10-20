@@ -3,9 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, Plus, Trash2, X, Users, UserCog, ListChecks, CalendarOff, Layers,
-  Upload, UserPlus, AlertTriangle, GraduationCap, Copy, ClipboardPaste, Pencil, Check,
+  Upload, UserPlus, GraduationCap, Copy, ClipboardPaste, Pencil, Check,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import {
   fetchSubjects, fetchRooms, fetchPeriodSlots, fetchRequirements, fetchConstraints, teacherIdsOf,
   createRequirement, deleteRequirement, createCombinedClass, fetchCombinedClasses, deleteCombinedClass,
@@ -25,7 +24,10 @@ import type { Classroom } from '@/lib/classrooms'
 import { fetchStaffProfiles } from '@/lib/admin'
 import type { UserProfile } from '@/lib/supabase'
 import useDebounce from '@/hooks/useDebounce'
-import { INPUT, BTN_PRIMARY, BTN_NEUTRAL, SECTION_LABEL, SegmentedNav, SmartSelect, Section, Field } from '../../ui'
+import {
+  INPUT, BTN_PRIMARY, BTN_NEUTRAL, BTN_QUIET, BTN_SM, SM_GHOST, SECTION_LABEL, SegmentedNav, SmartSelect,
+  Section, Field, Notice, Chip, Loading, ICON_BTN, ICON_BTN_DANGER, CHECK, TYPEAHEAD, askConfirm, choice,
+} from '../../ui'
 import type { SegItem, SmartOption } from '../../ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import NameLink from '../../NameLink'
@@ -47,7 +49,7 @@ type Panel = 'teacher' | 'groups' | 'requirements' | 'timeoff'
 const PANELS: SegItem<Panel>[] = [
   { key: 'teacher', label: 'Class teacher', icon: UserCog },
   { key: 'groups', label: 'Groups', icon: Users },
-  { key: 'requirements', label: 'Requirements', icon: ListChecks },
+  { key: 'requirements', label: 'Lessons', icon: ListChecks },
   { key: 'timeoff', label: 'Time off', icon: CalendarOff },
 ]
 
@@ -61,10 +63,9 @@ const isActiveHomeroom = (h: Homeroom) => !h.expiry_date || h.expiry_date >= new
  * toolbar's Homeroom button.
  */
 export default function HomeroomModal({ config }: { config: TimetableConfig | null }) {
+  const draft = useTimetableDraftOptional()
   const [homerooms, setHomerooms] = useState<Homeroom[]>([])
-  const [teachers, setTeachers] = useState<UserProfile[]>([])
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [rooms, setRooms] = useState<Room[]>([])
+  const [own, setOwn] = useState<{ teachers: UserProfile[]; subjects: Subject[]; rooms: Room[] } | null>(null)
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -74,20 +75,43 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   // switching to the class they are going to be pasted into.
   const [clipboard, setClipboard] = useState<{ fromHomeroomId: string; items: Requirement[] } | null>(null)
 
+  // Staff, subjects and rooms come from the draft when there is one — it has
+  // read them already, and refreshReference() keeps them current. Classes are
+  // copied once, because a new class teacher is patched in here.
+  const hasDraft = !!draft
   const loadRefs = useCallback(async () => {
+    if (hasDraft) {
+      const [cls] = await Promise.all([fetchAllClassrooms()])
+      setClassrooms(cls)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const [hr, profiles, subj, rms, cls] = await Promise.all([
       fetchAllHomerooms(), fetchStaffProfiles(), fetchSubjects(), fetchRooms(), fetchAllClassrooms(),
     ])
     setHomerooms(hr)
-    setTeachers(profiles)
-    setSubjects(subj)
-    setRooms(rms)
+    setOwn({ teachers: profiles, subjects: subj, rooms: rms })
     setClassrooms(cls)
     setLoading(false)
-  }, [])
+  }, [hasDraft])
 
   useEffect(() => { loadRefs() }, [loadRefs])
+
+  const draftHomerooms = draft?.homerooms
+  const draftLoading = draft?.loading ?? false
+  useEffect(() => {
+    if (draftHomerooms && !draftLoading) setHomerooms(draftHomerooms)
+  }, [draftHomerooms, draftLoading])
+
+  const teachers = useMemo(() => (draft ? draft.teachers : own?.teachers ?? []), [draft, own])
+  const subjects = useMemo(() => (draft ? draft.subjects : own?.subjects ?? []), [draft, own])
+  const rooms = useMemo(() => (draft ? draft.rooms : own?.rooms ?? []), [draft, own])
+  const refreshSubjects = useCallback(async () => {
+    if (draft) await draft.refreshReference()
+    else await loadRefs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDraft, loadRefs])
 
   const active = useMemo(() => homerooms.filter(isActiveHomeroom), [homerooms])
   const filtered = useMemo(() => {
@@ -104,9 +128,7 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
   const patchHomeroom = (id: string, patch: Partial<Homeroom>) =>
     setHomerooms((prev) => prev.map((h) => (h.id === id ? { ...h, ...patch } : h)))
 
-  if (loading) {
-    return <div className="flex justify-center py-16 text-[#A1A1AA]"><Loader2 className="animate-spin" size={22} /></div>
-  }
+  if (loading || draftLoading) return <Loading />
 
   return (
     <EntityShell
@@ -114,12 +136,12 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
         <EntityList
           query={query}
           onQuery={setQuery}
-          placeholder="Search homerooms…"
+          placeholder="Search classes…"
           count={filtered.length}
           total={active.length}
         >
           {filtered.length === 0 ? (
-            <p className="text-xs text-[#A1A1AA] p-2">No active homerooms.</p>
+            <p className="text-[12.5px] text-slate-400 p-3.5">No active classes.</p>
           ) : (
             filtered.map((h) => (
               <EntityRow
@@ -147,9 +169,9 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
             right={<PeriodGroupPicker homeroom={selected} />}
             below={<SegmentedNav items={PANELS} value={panel} onChange={setPanel} />}
           >
-            <NameLink kind="homeroom" id={selected.id} name={selected.name} className="font-semibold text-[#18181B]" />
+            <NameLink kind="homeroom" id={selected.id} name={selected.name} />
           </DetailHeader>
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="flex-1 sm:overflow-y-auto overscroll-contain p-3.5 sm:p-5">
               {panel === 'teacher' && (
                 <ClassTeacherPanel
                   homeroom={selected} teachers={teachers}
@@ -167,7 +189,7 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
                       rooms={rooms} homerooms={active}
                       clipboard={clipboard}
                       onCopy={(items, fromHomeroomId) => setClipboard({ fromHomeroomId, items })}
-                      onSubjectsChanged={loadRefs}
+                      onSubjectsChanged={refreshSubjects}
                     />
                   )
                   : <NeedConfig />
@@ -184,8 +206,8 @@ export default function HomeroomModal({ config }: { config: TimetableConfig | nu
 
 function NeedConfig() {
   return (
-    <p className="text-sm text-[#71717A] py-6 text-center">
-      Select or create a timetable configuration (Configuration button) to edit this.
+    <p className="text-[13px] text-slate-500 py-6 text-center">
+      Create a timetable in Configuration first.
     </p>
   )
 }
@@ -203,11 +225,11 @@ function PeriodGroupPicker({ homeroom }: { homeroom: Homeroom }) {
   const current = draft.slotGroupIds[homeroom.id] ?? ''
 
   return (
-    <label className="inline-flex items-center gap-1.5 ml-auto text-[11px] text-[#71717A]">
-      <Layers size={13} className="text-indigo-500" />
+    <label className="inline-flex flex-wrap items-center gap-1.5 text-[12px] text-slate-500 min-w-0">
+      <Layers size={13} className="text-indigo-500 flex-shrink-0" />
       Period group
       <select
-        className="border border-[#D4D4D8] bg-white text-[11px] px-1.5 py-0.5 focus:outline-none focus:border-[#27272A]"
+        className={`${INPUT} !w-auto !h-8 max-w-full !text-[12.5px] pr-7`}
         value={current}
         disabled={saving}
         onChange={async (e) => {
@@ -262,20 +284,22 @@ function ClassTeacherPanel({
   }
 
   return (
-    <Section title="Class teacher" hint="Type a staff name — suggestions appear 500ms after you stop typing." first>
+    <Section title="Class teacher" hint="Type a name to find a member of staff." first>
       {current ? (
-        <div className="flex items-center gap-3 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] mb-3">
-          <UserCog size={15} className="text-[#71717A] flex-shrink-0" />
+        <div className="fx-card flex items-center gap-3 pl-3.5 pr-1.5 py-2 mb-3">
+          <UserCog size={15} className="text-slate-400 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <NameLink kind="teacher" id={current.id} name={current.full_name} className="text-sm font-medium text-[#18181B]" />
-            <div className="text-[11px] text-[#71717A] truncate">{current.email}</div>
+            <div className="text-[13.5px] font-semibold text-slate-900 break-words">
+              <NameLink kind="teacher" id={current.id} name={current.full_name} />
+            </div>
+            <div className="text-[12px] text-slate-500 break-all">{current.email}</div>
           </div>
-          <button onClick={() => assign(null)} disabled={saving} className="text-[#A1A1AA] hover:text-rose-500 transition-colors" title="Remove class teacher">
+          <button onClick={() => assign(null)} disabled={saving} className={ICON_BTN_DANGER} aria-label="Remove class teacher" title="Remove class teacher">
             {saving ? <Loader2 className="animate-spin" size={15} /> : <X size={16} />}
           </button>
         </div>
       ) : (
-        <p className="text-xs text-[#A1A1AA] mb-3">No class teacher assigned yet.</p>
+        <p className="text-[12.5px] text-slate-400 mb-3">No class teacher yet.</p>
       )}
 
       <SmartTypeahead<UserProfile>
@@ -285,10 +309,12 @@ function ClassTeacherPanel({
         onSelect={(t) => assign(t.id)}
         getKey={(t) => t.id}
         placeholder="Search staff…"
+        className={TYPEAHEAD.field}
+        dropdownClassName={TYPEAHEAD.menu}
         renderSuggestion={(t, active) => (
-          <div className={`px-3 py-2 text-sm ${active ? 'bg-[#F5F5F5]' : 'bg-white'}`}>
-            <div className="font-medium text-[#18181B]">{t.full_name}</div>
-            <div className="text-[11px] text-[#71717A]">{t.email}</div>
+          <div className={TYPEAHEAD.row(active)}>
+            <div className="text-[13.5px] font-medium text-slate-900">{t.full_name}</div>
+            <div className="text-[11.5px] text-slate-500 break-all">{t.email}</div>
           </div>
         )}
       />
@@ -355,8 +381,8 @@ function GroupsPanel({
   return (
     <div>
       <Section
-        title="Add a group"
-        hint="Subject-based (Biology vs Computer) or custom. Then fill it by CSV, typeahead, or by pulling a subject classroom's students in bulk."
+        title="New group"
+        hint="Split the class for a subject (Biology and Computer, say) or any other reason. Then add students by name, from a list, or from a file."
         first
       >
         <div className="grid gap-3 sm:grid-cols-2 items-end">
@@ -366,15 +392,15 @@ function GroupsPanel({
           <Field label="Type">
             <select className={INPUT} value={kind} onChange={(e) => setKind(e.target.value as HomeroomGroupKind)}>
               <option value="custom">Custom</option>
-              <option value="subject">Subject-based</option>
+              <option value="subject">By subject</option>
             </select>
           </Field>
           {kind === 'subject' && (
-            <Field label="Subject">
+            <Field label="Subject" group>
               <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" allowClear />
             </Field>
           )}
-          <Field label="Colour">
+          <Field label="Colour" group>
             <ColorPicker colors={GROUP_COLORS} value={color} onChange={setColor} ariaLabel="Group colour" />
           </Field>
         </div>
@@ -386,11 +412,11 @@ function GroupsPanel({
 
       <Section title="Groups">
         {loading ? (
-          <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
+          <Loading className="py-8" />
         ) : groups.length === 0 ? (
-          <p className="text-xs text-[#A1A1AA] py-2">No groups yet for this class.</p>
+          <p className="text-[12.5px] text-slate-400 py-1">No groups yet.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {groups.map((g) => (
               <GroupCard key={g.id} group={g} homeroom={homeroom} roster={roster} classrooms={classrooms} onChanged={load} />
             ))}
@@ -487,18 +513,14 @@ function GroupCard({
   const onCsv = async (file: File) => {
     setBusy(true); setMsg('')
     try {
-      const buf = await file.arrayBuffer()
-      const wb = XLSX.read(buf, { type: 'array' })
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: '' })
-      const emails: string[] = []
-      for (const r of rows) {
-        for (const [k, v] of Object.entries(r)) {
-          if (/e-?mail/i.test(k) && String(v).trim()) emails.push(String(v).trim())
-        }
+      const emails = await readEmailColumn(file)
+      if (emails.length === 0) {
+        setMsg('No email column found in that file.')
+      } else {
+        const { added, failed } = await bulkAddGroupMembersByEmails(group.id, emails)
+        setMsg(`Added ${added}${failed.length ? `, ${failed.length} skipped` : ''}.`)
+        onChanged()
       }
-      const { added, failed } = await bulkAddGroupMembersByEmails(group.id, emails)
-      setMsg(`Added ${added} from CSV${failed.length ? `, ${failed.length} skipped` : ''}.`)
-      onChanged()
     } catch {
       setMsg('Could not read that file.')
     }
@@ -507,39 +529,51 @@ function GroupCard({
   }
 
   const modeTab = (m: typeof mode, label: string) => (
-    <button
-      onClick={() => { setMode(m); setMsg('') }}
-      className={`px-2.5 py-1 text-xs font-medium border ${mode === m ? 'bg-[#27272A] text-white border-[#27272A]' : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'}`}
-    >
+    <button onClick={() => { setMode(m); setMsg('') }} aria-pressed={mode === m} className={choice(mode === m)}>
       {label}
     </button>
   )
 
   return (
-    <div className="border border-[#E4E4E7] bg-white">
-      <div className="flex items-center gap-2.5 px-3 py-2 border-b border-[#E4E4E7] bg-[#FAFAF9]">
-        <span className="w-3 h-3 flex-shrink-0" style={{ background: group.color ?? '#94a3b8' }} />
-        <span className="font-semibold text-sm text-[#18181B] flex-1 truncate">{group.name}</span>
-        {group.kind === 'subject' && group.subject && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A]">{group.subject.name}</span>
-        )}
-        <span className="text-[11px] text-[#71717A] flex items-center gap-1"><Users size={12} /> {members.length}</span>
+    <div className="fx-card min-w-0">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.5 pr-1.5 py-1.5 border-b border-[#EEEAE1] bg-[#F7F5F0]">
+        <span className="w-3 h-3 rounded-[3px] flex-shrink-0" style={{ background: group.color ?? '#94a3b8' }} />
+        <span className="font-semibold text-[13.5px] text-slate-900 flex-1 min-w-[6rem] break-words">{group.name}</span>
+        {group.kind === 'subject' && group.subject && <Chip>{group.subject.name}</Chip>}
+        <span className="text-[12px] text-slate-500 inline-flex items-center gap-1 tabular-nums"><Users size={12} /> {members.length}</span>
         <button
-          onClick={async () => { if (confirm(`Delete group "${group.name}"?`)) { await deleteGroup(group.id); onChanged() } }}
-          className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0"
+          onClick={async () => {
+            const ok = await askConfirm({
+              title: `Delete ${group.name}?`,
+              body: 'The group and its list of students are deleted. Lessons set for the group are deleted with it.',
+              confirmLabel: 'Delete group',
+              tone: 'danger',
+            })
+            if (ok) { await deleteGroup(group.id); onChanged() }
+          }}
+          className={ICON_BTN_DANGER}
+          aria-label={`Delete ${group.name}`}
+          title="Delete group"
         >
           <Trash2 size={14} />
         </button>
       </div>
 
       {/* Members */}
-      <div className="p-3 space-y-px max-h-40 overflow-y-auto">
+      <div className="max-h-44 overflow-y-auto overscroll-contain divide-y divide-[#F0ECE3]">
         {members.length === 0 ? (
-          <p className="text-xs text-[#A1A1AA] py-1">No students yet.</p>
+          <p className="text-[12.5px] text-slate-400 px-3.5 py-2.5">No students yet.</p>
         ) : members.map((m) => (
-          <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
-            <NameLink kind="student" id={m.student_id} name={m.student?.full_name ?? m.student?.email ?? 'Student'} className="flex-1 min-w-0 truncate text-[#18181B]" />
-            <button onClick={async () => { await removeGroupMember(group.id, m.student_id); onChanged() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0">
+          <div key={m.id} className="flex items-center gap-2 pl-3.5 pr-1.5 py-1 text-[13.5px]">
+            <span className="flex-1 min-w-0 break-words text-slate-900">
+              <NameLink kind="student" id={m.student_id} name={m.student?.full_name ?? m.student?.email ?? 'Student'} />
+            </span>
+            <button
+              onClick={async () => { await removeGroupMember(group.id, m.student_id); onChanged() }}
+              className={ICON_BTN_DANGER}
+              aria-label="Remove from group"
+              title="Remove from group"
+            >
               <X size={14} />
             </button>
           </div>
@@ -547,11 +581,11 @@ function GroupCard({
       </div>
 
       {/* Add students */}
-      <div className="p-3 pt-0">
-        <div className="flex gap-1 mb-2">
-          {modeTab('type', 'Typeahead')}
-          {modeTab('bulk', 'Bulk select')}
-          {modeTab('csv', 'CSV')}
+      <div className="px-3.5 py-3 border-t border-[#EEEAE1]">
+        <div className="flex flex-wrap gap-1.5 mb-2.5">
+          {modeTab('type', 'By name')}
+          {modeTab('bulk', 'From a list')}
+          {modeTab('csv', 'From a file')}
         </div>
 
         {mode === 'type' && (
@@ -561,11 +595,13 @@ function GroupCard({
             suggestions={suggestions}
             onSelect={(m) => addOne(m.student_id)}
             getKey={(m) => m.student_id}
-            placeholder="Search this homeroom's students…"
+            placeholder="Search this class's students…"
+            className={TYPEAHEAD.field}
+            dropdownClassName={TYPEAHEAD.menu}
             renderSuggestion={(m, active) => (
-              <div className={`px-3 py-2 text-sm ${active ? 'bg-[#F5F5F5]' : 'bg-white'}`}>
-                <div className="font-medium text-[#18181B]">{m.student?.full_name ?? m.student?.email}</div>
-                {m.student?.email && <div className="text-[11px] text-[#71717A]">{m.student.email}</div>}
+              <div className={TYPEAHEAD.row(active)}>
+                <div className="text-[13.5px] font-medium text-slate-900">{m.student?.full_name ?? m.student?.email}</div>
+                {m.student?.email && <div className="text-[11.5px] text-slate-500 break-all">{m.student.email}</div>}
               </div>
             )}
           />
@@ -578,35 +614,35 @@ function GroupCard({
                 options={classroomOptions}
                 value={classroomId}
                 onChange={setClassroomId}
-                placeholder="Whole homeroom roster"
-                searchPlaceholder="Filter by classroom…"
+                placeholder="Everyone in this class"
+                searchPlaceholder="Filter by subject classroom…"
                 allowClear
               />
             </div>
             {loadingPool ? (
-              <div className="flex justify-center py-4 text-[#A1A1AA]"><Loader2 className="animate-spin" size={16} /></div>
+              <Loading className="py-4" />
             ) : shownPool.length === 0 ? (
-              <p className="text-xs text-[#A1A1AA] py-1">{classroomId ? 'No matching students in this homeroom.' : 'No students to add.'}</p>
+              <p className="text-[12.5px] text-slate-400 py-1">{classroomId ? 'No students of that classroom are in this class.' : 'Everyone is already in the group.'}</p>
             ) : (
               <>
                 <div className="flex items-center justify-between mb-1.5">
                   <button
                     onClick={() => setChecked(checked.size === shownPool.length ? new Set() : new Set(shownPool.map((s) => s.id)))}
-                    className="text-xs font-medium text-[#3F3F46] hover:text-[#18181B] underline underline-offset-2"
+                    className={`${BTN_SM} ${SM_GHOST}`}
                   >
                     {checked.size === shownPool.length ? 'Clear all' : 'Select all'}
                   </button>
-                  <span className="text-[11px] text-[#A1A1AA]">{checked.size} selected</span>
+                  <span className="text-[12px] text-slate-400 tabular-nums">{checked.size} selected</span>
                 </div>
-                <div className="max-h-96 overflow-y-auto border border-[#E4E4E7] divide-y divide-[#F1F1F1]">
+                <div className="fx-card max-h-80 overflow-y-auto overscroll-contain divide-y divide-[#F0ECE3]">
                   {shownPool.map((s) => (
-                    <label key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 text-sm hover:bg-[#F5F5F5] cursor-pointer">
-                      <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggleCheck(s.id)} className="accent-[#27272A]" />
-                      <span className="flex-1 min-w-0 truncate text-[#18181B]">{s.full_name ?? s.email}</span>
+                    <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 text-[13.5px] hover:bg-[#FAF8F3] cursor-pointer">
+                      <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggleCheck(s.id)} className={CHECK} />
+                      <span className="flex-1 min-w-0 break-words text-slate-900">{s.full_name ?? s.email}</span>
                     </label>
                   ))}
                 </div>
-                <button onClick={commitBulk} disabled={busy || checked.size === 0} className={`${BTN_PRIMARY} mt-2`}>
+                <button onClick={commitBulk} disabled={busy || checked.size === 0} className={`${BTN_PRIMARY} mt-2.5`}>
                   {busy ? <Loader2 className="animate-spin" size={14} /> : <UserPlus size={14} />}
                   Add {checked.size > 0 ? checked.size : ''} selected
                 </button>
@@ -622,18 +658,75 @@ function GroupCard({
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onCsv(f) }}
               className="hidden"
             />
-            <button onClick={() => fileRef.current?.click()} disabled={busy} className={`${BTN_PRIMARY}`}>
+            <button onClick={() => fileRef.current?.click()} disabled={busy} className={BTN_NEUTRAL}>
               {busy ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />}
-              Upload CSV of emails
+              Choose a file
             </button>
-            <p className="text-[11px] text-[#A1A1AA] mt-1.5">A column named “email”. Only students already in this homeroom are added.</p>
+            <p className="text-[12px] text-slate-400 mt-1.5 leading-snug">
+              A CSV or Excel sheet with a column called email. Only students already in this class are added.
+            </p>
           </div>
         )}
 
-        {msg && <p className="mt-1.5 text-xs text-emerald-600">{msg}</p>}
+        {msg && <p className="mt-2 text-[12.5px] text-emerald-700">{msg}</p>}
       </div>
     </div>
   )
+}
+
+/** A class roster is a few hundred rows; anything this big is not one. */
+const MAX_ROSTER_BYTES = 2 * 1024 * 1024
+
+/**
+ * Every value under a column whose heading mentions "email".
+ *
+ * A CSV is read here, in a few lines. The spreadsheet library is only loaded
+ * when an Excel file is actually chosen — it is the largest thing the
+ * timetable would otherwise ship, for a button most visits never press.
+ */
+async function readEmailColumn(file: File): Promise<string[]> {
+  if (file.size > MAX_ROSTER_BYTES) throw new Error('File too large')
+  let rows: unknown[][]
+  if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+    rows = parseCsv(await file.text())
+  } else {
+    const XLSX = await import('xlsx')
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+    rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
+  }
+  const [head = [], ...body] = rows
+  const cols = head.map((h, i) => (/e-?mail/i.test(String(h)) ? i : -1)).filter((i) => i >= 0)
+  const out: string[] = []
+  for (const r of body) {
+    for (const i of cols) {
+      const v = String(r[i] ?? '').trim()
+      if (v) out.push(v)
+    }
+  }
+  return out
+}
+
+/** RFC 4180 CSV: quoted fields, doubled quotes, CRLF or LF. */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch !== '"') cell += ch
+      else if (text[i + 1] === '"') { cell += '"'; i++ }
+      else quoted = false
+    } else if (ch === '"') quoted = true
+    else if (ch === ',') { row.push(cell); cell = '' }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cell); rows.push(row); row = []; cell = ''
+    } else cell += ch
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row) }
+  return rows
 }
 
 // ── Requirements + combined ──────────────────────────────────
@@ -712,29 +805,29 @@ function SlotMeter({ budget }: { budget: WeeklyBudget }) {
   const pct = budget.available === 0 ? 0 : Math.min(100, (budget.filled / budget.available) * 100)
   const tone = budget.over ? 'bg-rose-500' : pct >= 90 ? 'bg-amber-500' : 'bg-emerald-600'
   return (
-    <div className="w-40 sm:w-52">
+    <div className="w-full sm:w-56">
       <div className="flex items-baseline justify-between gap-2">
-        <span className={SECTION_LABEL}>Slots filled</span>
-        <span className={`text-sm font-semibold tabular-nums ${budget.over ? 'text-rose-600' : 'text-[#18181B]'}`}>
+        <span className={SECTION_LABEL}>Periods filled</span>
+        <span className={`text-sm font-semibold tabular-nums ${budget.over ? 'text-rose-600' : 'text-slate-900'}`}>
           {budget.filled}
-          <span className="text-[#A1A1AA] font-normal">/{budget.available}</span>
+          <span className="text-slate-400 font-normal">/{budget.available}</span>
         </span>
       </div>
-      <div className="h-1.5 bg-[#E4E4E7] mt-1.5" title={`${budget.filled} of ${budget.available} teachable periods claimed`}>
-        <div className={`h-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
+      <div className="h-1.5 rounded-full overflow-hidden bg-[#EFEBE3] mt-1.5" title={`${budget.filled} of ${budget.available} teachable periods taken`}>
+        <div className={`h-full rounded-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="text-[11px] text-[#71717A] mt-1 leading-snug">
-        {budget.wholeClass} whole-class
-        {budget.groupPeak > 0 && ` · ${budget.groupPeak} group`}
+      <p className="text-[11.5px] text-slate-500 mt-1 leading-snug">
+        {budget.wholeClass} whole class
+        {budget.groupPeak > 0 && ` · ${budget.groupPeak} in groups`}
         {budget.timeOff > 0 && <span className="text-rose-500"> · {budget.timeOff} off</span>}
-        {budget.over && <span className="text-rose-600 font-medium"> · over capacity</span>}
+        {budget.over && <span className="text-rose-600 font-medium"> · more than the week holds</span>}
       </p>
       {budget.perGroup.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {budget.perGroup.map((g) => (
-            <span key={g.id} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 text-white" style={{ background: g.color ?? '#6366f1' }}>
+            <Chip key={g.id} className="!text-white" style={{ background: g.color ?? '#6366f1' }}>
               {g.name} {g.periods}
-            </span>
+            </Chip>
           ))}
         </div>
       )}
@@ -794,13 +887,13 @@ function requirementProblem(d: ReqDraft, workingDays: number): string | null {
   const perDay = Math.max(1, parseInt(d.maxPerDay, 10) || 1)
   const block = Math.max(1, parseInt(d.blockSize, 10) || 1)
   if (block > perDay) {
-    return `A block of ${block} in a row needs max / day of at least ${block}, not ${perDay}.`
+    return `${block} periods in a row needs at least ${block} a day, not ${perDay}.`
   }
   if (block > week) {
-    return `A block of ${block} in a row needs at least ${block} periods a week, not ${week}.`
+    return `${block} periods in a row needs at least ${block} a week, not ${week}.`
   }
   if (week > perDay * days) {
-    return `${week} periods a week can't fit at ${perDay} a day across ${days} working day${days === 1 ? '' : 's'} (max ${perDay * days}).`
+    return `${week} periods a week cannot fit at ${perDay} a day over ${days} working day${days === 1 ? '' : 's'} (${perDay * days} at most).`
   }
   return null
 }
@@ -858,13 +951,13 @@ function SubjectField({
   return (
     <Field label="Subject" group>
       {composing ? (
-        <div className="border border-[#27272A] p-2 space-y-2">
+        <div className="fx-card p-2.5 space-y-2">
           <div className="relative">
             <input
               ref={nameRef}
               autoFocus
               className={INPUT}
-              placeholder="Subject name…"
+              placeholder="Subject name"
               value={name}
               onChange={(e) => {
                 setName(e.target.value)
@@ -875,18 +968,18 @@ function SubjectField({
               onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') { e.preventDefault(); create() }
-                if (e.key === 'Escape') reset()
+                if (e.key === 'Escape') { e.stopPropagation(); reset() }
               }}
               autoComplete="off"
             />
             {showSuggestions && (
-              <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-[#E4E4E7] shadow-md max-h-40 overflow-y-auto">
+              <div className="absolute z-20 top-full left-0 right-0 mt-1.5 rounded-[14px] bg-white border border-black/[.07] shadow-[0_24px_60px_-20px_rgba(15,23,42,.45)] max-h-44 overflow-y-auto py-1">
                 {suggestions.map((sug) => (
                   <button
                     key={sug}
                     type="button"
                     onMouseDown={() => { setName(sug); setShowSuggestions(false); nameRef.current?.focus() }}
-                    className="w-full text-left px-3 py-1.5 text-sm text-[#18181B] hover:bg-[#F5F5F5]"
+                    className="w-full text-left px-3.5 py-2 text-[13.5px] text-slate-900 hover:bg-[#FAF7F0]"
                   >
                     {sug}
                   </button>
@@ -897,9 +990,9 @@ function SubjectField({
 
           <ColorPicker colors={SUBJECT_COLORS} value={color} onChange={setColor} ariaLabel="Subject colour" />
 
-          <div className="flex items-stretch gap-1.5">
+          <div className="flex items-center gap-1.5">
             <input
-              className={`${INPUT} w-24 flex-none`}
+              className={`${INPUT} !w-24 flex-none`}
               placeholder="Code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -909,43 +1002,38 @@ function SubjectField({
               type="button"
               onClick={create}
               disabled={saving || !name.trim() || duplicate}
-              className={`${BTN_PRIMARY} flex-1 min-w-0 disabled:opacity-40`}
+              className={`${BTN_PRIMARY} flex-1 min-w-0`}
             >
               {saving ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-              Create &amp; use
+              Create and use
             </button>
-            <button
-              type="button"
-              onClick={reset}
-              className="text-sm text-[#71717A] hover:text-[#18181B] px-2 transition-colors"
-              title="Cancel"
-            >
+            <button type="button" onClick={reset} className={ICON_BTN} aria-label="Cancel" title="Cancel">
               <X size={15} />
             </button>
           </div>
           {duplicate && (
-            <p className="text-[11px] text-amber-700">
-              A subject called “{name.trim()}” already exists — pick it from the list instead.
+            <p className="text-[12px] text-amber-700">
+              {`“${name.trim()}” already exists. Pick it from the list instead.`}
             </p>
           )}
-          {error && <p className="text-[11px] text-rose-600">{error}</p>}
+          {error && <p className="text-[12px] text-rose-600">{error}</p>}
         </div>
       ) : (
-        <div className="flex items-stretch gap-1.5">
+        <div className="flex items-center gap-1.5">
           <div className="flex-1 min-w-0">
             <SmartSelect
               options={options}
               value={value}
               onChange={onChange}
-              placeholder="Select subject…"
+              placeholder="Choose a subject"
               searchPlaceholder="Search subjects…"
             />
           </div>
           <button
             type="button"
             onClick={() => setComposing(true)}
-            title="Create a new subject without leaving this form"
-            className="inline-flex items-center gap-1 px-2 text-xs font-medium text-[#52525B] bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-[#18181B] transition-colors flex-shrink-0"
+            title="Create a subject without leaving this form"
+            className={`${BTN_NEUTRAL} flex-shrink-0 !px-3`}
           >
             <Plus size={14} /> New
           </button>
@@ -972,41 +1060,41 @@ function RequirementFields({
   const set = <K extends keyof ReqDraft>(k: K, v: ReqDraft[K]) => onChange({ ...draft, [k]: v })
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <SubjectField
         subjects={subjects}
         value={draft.subjectId}
         onChange={(v) => set('subjectId', v)}
         onCreated={onSubjectCreated}
       />
-      <Field label="Teachers">
+      <Field label="Teachers" group>
         <MultiTeacherSelect
           teachers={teachers}
           value={draft.teacherIds}
           onChange={(v) => set('teacherIds', v)}
           placeholder="Add a teacher…"
-          emptyLabel="Unassigned — add one or more teachers."
+          emptyLabel="No teacher yet. Add one or more."
         />
       </Field>
       {showGroup && groups.length > 0 && (
-        <Field label="Group (split class)">
+        <Field label="Group">
           <select className={INPUT} value={draft.groupId} onChange={(e) => set('groupId', e.target.value)}>
             <option value="">Whole class</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </Field>
       )}
-      <Field label="Periods / week">
-        <input className={INPUT} type="number" min={1} value={draft.perWeek} onChange={(e) => set('perWeek', e.target.value)} />
+      <Field label="Periods a week">
+        <input className={INPUT} type="number" inputMode="numeric" min={1} value={draft.perWeek} onChange={(e) => set('perWeek', e.target.value)} />
       </Field>
-      <Field label="Max / day">
-        <input className={INPUT} type="number" min={1} value={draft.maxPerDay} onChange={(e) => set('maxPerDay', e.target.value)} />
+      <Field label="Most in a day">
+        <input className={INPUT} type="number" inputMode="numeric" min={1} value={draft.maxPerDay} onChange={(e) => set('maxPerDay', e.target.value)} />
       </Field>
-      <Field label="Block size">
+      <Field label="Length">
         <select className={INPUT} value={draft.blockSize} onChange={(e) => set('blockSize', e.target.value)}>
-          <option value="1">Single</option>
-          <option value="2">Double (2 in a row)</option>
-          <option value="3">Triple (3 in a row)</option>
+          <option value="1">Single period</option>
+          <option value="2">Double, 2 in a row</option>
+          <option value="3">Triple, 3 in a row</option>
         </select>
       </Field>
       <Field label="Room type" hint={roomTypeHint}>
@@ -1042,7 +1130,7 @@ function useTeacherOverload(
     return teacherIds
       .map((id) => ({ id, after: withExtraPeriods(draft.workloadOf(id), delta) }))
       .filter((x) => x.after && x.after.over > 0)
-      .map((x) => `${name(x.id)} would be ${x.after!.assigned}/${x.after!.capacity} — ${x.after!.over} over`)
+      .map((x) => `${name(x.id)} would have ${x.after!.assigned} of ${x.after!.capacity}, ${x.after!.over} too many`)
   }, [draft, teacherIds, perWeek, alreadyCounted, teachers])
 }
 
@@ -1205,8 +1293,8 @@ function RequirementsPanel({
       if (strandedMembers.length > 0) {
         setError(
           `${strandedMembers.map((m) => homeroomName(m.homeroomId)).join(', ')} ` +
-          `follow${strandedMembers.length === 1 ? 's' : ''} a different period group to ` +
-          `${homeroomName(homeroom.id)} (${bandName(myBand)}), so there is no period they all share. ` +
+          `follow${strandedMembers.length === 1 ? 's' : ''} a different period group from ` +
+          `${homeroomName(homeroom.id)} (${bandName(myBand)}), so they share no period. ` +
           'Move them to the same period group, or leave them out.',
         )
         setAdding(false)
@@ -1246,7 +1334,7 @@ function RequirementsPanel({
       })
       setAdding(false)
       if (created) { resetForm(); loadAll() }
-      else setError(requirementError() ?? 'Could not add this requirement.')
+      else setError(requirementError() ?? 'Could not add this lesson.')
     }
   }
 
@@ -1295,7 +1383,7 @@ function RequirementsPanel({
     if (!updated) { setEditError('Could not save this combined lesson.'); return }
     setEditingId(null)
     loadAll()
-    flash('Combined lesson updated — regenerate to apply it to the timetable.')
+    flash('Saved. Generate again to see it on the grid.')
   }
 
   const saveEdit = async (r: Requirement) => {
@@ -1317,10 +1405,10 @@ function RequirementsPanel({
       group_id: editDraft.groupId || null,
     })
     setSavingEdit(false)
-    if (!updated) { setEditError(requirementError() ?? 'Could not save this requirement.'); return }
+    if (!updated) { setEditError(requirementError() ?? 'Could not save this lesson.'); return }
     setEditingId(null)
     loadAll()
-    flash('Requirement updated — regenerate to apply it to the timetable.')
+    flash('Saved. Generate again to see it on the grid.')
   }
 
   // ── Copy / paste ─────────────────────────────────────────
@@ -1356,18 +1444,26 @@ function RequirementsPanel({
     [homeroom, week, slots, constraints, requirements, combined, groups, workingDays],
   )
 
+  const subjectsChanged = async () => {
+    await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
+  }
+
+  const blockChip = (block: number) =>
+    block > 1 ? (
+      <Chip tone="dark" title={`Taught as ${block} periods in a row`}>
+        {block === 2 ? 'Double' : block === 3 ? 'Triple' : `${block} in a row`}
+      </Chip>
+    ) : null
+
   return (
     <div>
-      <Section title="Add a requirement" hint="What this class studies, how often, and who teaches it." first>
+      <Section title="New lesson" hint="What this class studies, how often, and who teaches it." first>
         {groups.length > 0 && !isCombined && (
-          <div className="flex items-start gap-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 text-[12px] text-amber-800">
-            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-            <span>
-              This homeroom is split into groups. For split subjects, add one requirement <strong>per group</strong> with
-              matching periods/week so the parallel groups schedule into the same slots — each group can have its own set of
-              teachers. A whole-class requirement ignores the split.
-            </span>
-          </div>
+          <Notice tone="warn" className="mb-3">
+            This class is split into groups. For a split subject, add one lesson <strong>per group</strong> with
+            the same periods a week, so the groups are taught at the same time. Each group can have its own
+            teachers. A whole-class lesson ignores the split.
+          </Notice>
         )}
         <RequirementFields
           draft={form}
@@ -1376,146 +1472,148 @@ function RequirementsPanel({
           teachers={teachers}
           groups={groups}
           showGroup={!isCombined}
-          roomTypeHint={isCombined ? 'Used when no specific room is pinned below.' : undefined}
-          onSubjectCreated={async () => {
-            await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
-          }}
+          roomTypeHint={isCombined ? 'Used when no room is chosen below.' : undefined}
+          onSubjectCreated={subjectsChanged}
         />
 
         {/* Combined toggle */}
-        <label className="flex items-center gap-2 mt-3 text-sm text-[#3F3F46]">
-          <input type="checkbox" checked={isCombined} onChange={(e) => setIsCombined(e.target.checked)} className="accent-[#27272A]" />
-          <Layers size={14} className="text-indigo-500" />
-          Combined lesson — several homerooms attend together (one teacher, one room)
+        <label className="flex items-start gap-2.5 mt-3.5 text-[13.5px] text-slate-700 cursor-pointer">
+          <input type="checkbox" checked={isCombined} onChange={(e) => setIsCombined(e.target.checked)} className={`${CHECK} mt-0.5`} />
+          <span className="min-w-0">
+            <span className="inline-flex items-center gap-1.5 font-medium text-slate-900">
+              <Layers size={14} className="text-indigo-500" /> Combined lesson
+            </span>
+            <span className="block text-[12px] text-slate-500 leading-snug">
+              Several classes sit it together, with one teacher in one room.
+            </span>
+          </span>
         </label>
 
         {isCombined && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 border-l-2 border-indigo-200 pl-3">
-            <Field label="Combined name">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 border-l-[3px] border-indigo-200 pl-3">
+            <Field label="Name">
               <input className={INPUT} placeholder="e.g. Grade 10 Music" value={combinedName} onChange={(e) => setCombinedName(e.target.value)} />
             </Field>
-            <Field label="Room">
+            <Field label="Room" group>
               <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="Any room" searchPlaceholder="Search rooms…" allowClear />
             </Field>
             <div className="sm:col-span-2">
-              <Field label="Add classes (with this homeroom)">
+              <Field label="With these classes" group>
                 <SmartSelect
                   options={extraOptions}
                   value={pickExtra}
                   onChange={(id) => { addExtraMember(id); setPickExtra('') }}
-                  placeholder="Add another homeroom…"
+                  placeholder="Add a class"
                   searchPlaceholder="Search classes…"
                 />
               </Field>
-              <p className="text-[11px] text-[#A1A1AA] mt-1.5">
-                Each class attends as a whole unless you pick one of its groups. The lesson shows on every
-                class listed here{multiBand ? ', and they must all follow the same period group' : ''}.
+              <p className="text-[12px] text-slate-400 mt-1.5 leading-snug">
+                Each class attends as a whole unless you pick one of its groups.
+                {multiBand ? ' All of them must follow the same period group.' : ''}
               </p>
               <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800">
-                  {homeroom.name} (this)
+                <span className="inline-flex flex-wrap items-center gap-1.5 min-h-[30px] pl-2.5 pr-1 py-0.5 rounded-full bg-indigo-50 text-[12.5px] text-indigo-800">
+                  {homeroom.name} (this class)
                   {groups.length > 0 && (
                     <select
                       value={form.groupId}
                       onChange={(e) => setForm((f) => ({ ...f, groupId: e.target.value }))}
-                      className="bg-white/60 border border-indigo-200 text-[11px] px-1 py-0.5 focus:outline-none"
+                      className="h-8 sm:h-6 rounded-full bg-white border border-indigo-200 text-[12px] px-2 focus:outline-none max-w-full"
                     >
                       <option value="">Whole class</option>
                       {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                   )}
                 </span>
-                {extraMembers.map((m) => (
-                  <span
-                    key={m.homeroomId}
-                    className={`inline-flex items-center gap-1 text-xs pl-2 pr-1 py-1 border ${
-                      multiBand && bandOf(m.homeroomId) !== myBand
-                        ? 'bg-rose-50 border-rose-200 text-rose-800'
-                        : 'bg-[#F5F5F5] border-[#E4E4E7]'
-                    }`}
-                    title={multiBand && bandOf(m.homeroomId) !== myBand
-                      ? `${homeroomName(m.homeroomId)} follows ${bandName(bandOf(m.homeroomId))} — no period in common with this class`
-                      : undefined}
-                  >
-                    {homeroomName(m.homeroomId)}
-                    {(extraGroups[m.homeroomId]?.length ?? 0) > 0 && (
-                      <select
-                        value={m.groupId ?? ''}
-                        onChange={(e) => setExtraGroupId(m.homeroomId, e.target.value)}
-                        className="bg-white border border-[#E4E4E7] text-[11px] px-1 py-0.5 focus:outline-none"
+                {extraMembers.map((m) => {
+                  const stranded = multiBand && bandOf(m.homeroomId) !== myBand
+                  return (
+                    <span
+                      key={m.homeroomId}
+                      className={`inline-flex flex-wrap items-center gap-1.5 min-h-[30px] pl-2.5 pr-1 py-0.5 rounded-full text-[12.5px] ${
+                        stranded ? 'bg-rose-50 text-rose-800' : 'bg-[#F1EEE7] text-slate-800'
+                      }`}
+                      title={stranded
+                        ? `${homeroomName(m.homeroomId)} follows ${bandName(bandOf(m.homeroomId))}, so it has no period in common with this class`
+                        : undefined}
+                    >
+                      {homeroomName(m.homeroomId)}
+                      {(extraGroups[m.homeroomId]?.length ?? 0) > 0 && (
+                        <select
+                          value={m.groupId ?? ''}
+                          onChange={(e) => setExtraGroupId(m.homeroomId, e.target.value)}
+                          className="h-8 sm:h-6 rounded-full bg-white border border-[#DDD8CC] text-[12px] px-2 focus:outline-none max-w-full"
+                        >
+                          <option value="">Whole class</option>
+                          {extraGroups[m.homeroomId].map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                        </select>
+                      )}
+                      <button
+                        onClick={() => setExtraMembers((p) => p.filter((x) => x.homeroomId !== m.homeroomId))}
+                        className="w-6 h-6 rounded-full inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-white"
+                        aria-label={`Remove ${homeroomName(m.homeroomId)}`}
                       >
-                        <option value="">Whole class</option>
-                        {extraGroups[m.homeroomId].map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                      </select>
-                    )}
-                    <button onClick={() => setExtraMembers((p) => p.filter((x) => x.homeroomId !== m.homeroomId))} className="text-[#A1A1AA] hover:text-rose-500"><X size={12} /></button>
-                  </span>
-                ))}
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )
+                })}
               </div>
             </div>
           </div>
         )}
 
-        {/* Flag an impossible combination as it is typed, not on submit. */}
-        {liveProblem && (
-          <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-            <span>{liveProblem}</span>
-          </div>
-        )}
-        {/* Over-booking is arithmetic, not a solver outcome — say so before the
-            requirement is saved. It does not block saving: an admin may be
-            about to free the teacher's time off or split the subject. */}
+        {/* An impossible combination is flagged as it is typed, not on submit. */}
+        {liveProblem && <Notice tone="error" className="mt-3">{liveProblem}</Notice>}
+        {/* Over-booking is arithmetic, not a solver outcome, so it is said before
+            saving. It does not block saving: the admin may be about to free the
+            teacher's time off or share the subject. */}
         {addOverload.length > 0 && (
-          <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-            <div>
-              <p><strong>This would over-book a teacher.</strong> {addOverload.join('; ')}.</p>
-              <p className="text-rose-600/80 mt-0.5">
-                Those periods cannot be scheduled by any timetable — share the subject with another
-                teacher, or reduce the periods a week.
-              </p>
-            </div>
-          </div>
+          <Notice tone="error" className="mt-3">
+            <p><strong>This would give a teacher more periods than their week has.</strong> {addOverload.join('; ')}.</p>
+            <p className="opacity-80 mt-0.5">
+              No timetable can place those periods. Share the subject with another teacher, or lower the periods a week.
+            </p>
+          </Notice>
         )}
-        {error && error !== liveProblem && <p className="text-sm text-rose-600 mt-2">{error}</p>}
-        <button onClick={handleAdd} disabled={adding || liveProblem !== null} className={`${BTN_PRIMARY} mt-3`}>
+        {error && error !== liveProblem && <Notice tone="error" className="mt-3">{error}</Notice>}
+        <button onClick={handleAdd} disabled={adding || liveProblem !== null} className={`${BTN_PRIMARY} mt-3.5`}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-          {isCombined ? 'Add combined lesson' : 'Add requirement'}
+          {isCombined ? 'Add combined lesson' : 'Add lesson'}
         </button>
       </Section>
 
       <Section
-        title="This homeroom's schedule"
+        title={`Lessons for ${homeroom.name}`}
         hint={
           budget.total === 0
-            ? 'Add teaching period slots (Configuration) to see how much of the week is filled.'
-            : `${budget.free} of the week's ${budget.available} teachable periods still free${
-                budget.timeOff > 0 ? ` (${budget.total} in the week, ${budget.timeOff} marked time off)` : ''
-              }. Parallel group lessons share a period, so groups count once.`
+            ? 'Add the periods of the day in Configuration to see how full the week is.'
+            : `${budget.free} of ${budget.available} teachable periods are free${
+                budget.timeOff > 0 ? ` (${budget.total} in the week, ${budget.timeOff} kept free)` : ''
+              }. Groups taught side by side share a period, so they count once.`
         }
         right={<SlotMeter budget={budget} />}
       >
-        {/* Copy / paste — a year group is usually one class's list repeated. */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        {/* Copy and paste: a year group is usually one class's list repeated. */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
           <button
             onClick={() => {
               onCopy(requirements, homeroom.id)
-              flash(`Copied ${requirements.length} requirement${requirements.length === 1 ? '' : 's'} — open another class to paste.`)
+              flash(`Copied ${requirements.length} lesson${requirements.length === 1 ? '' : 's'}. Open another class to paste.`)
             }}
             disabled={requirements.length === 0}
-            className={`${BTN_NEUTRAL} py-1 text-xs disabled:opacity-40`}
-            title="Copy every requirement of this class"
+            className={`${BTN_SM} ${SM_GHOST}`}
+            title="Copy every lesson of this class"
           >
             <Copy size={13} /> Copy all
           </button>
           <button
             onClick={handlePaste}
             disabled={pasteCount === 0 || pasting}
-            className={`${BTN_NEUTRAL} py-1 text-xs disabled:opacity-40`}
+            className={`${BTN_SM} ${SM_GHOST}`}
             title={
               pasteCount > 0
-                ? `Paste ${pasteCount} requirement(s) copied from ${homeroomName(clipboard!.fromHomeroomId)}`
+                ? `Paste ${pasteCount} lesson${pasteCount === 1 ? '' : 's'} copied from ${homeroomName(clipboard!.fromHomeroomId)}`
                 : 'Nothing copied yet'
             }
           >
@@ -1523,32 +1621,33 @@ function RequirementsPanel({
             Paste{pasteCount > 0 ? ` (${pasteCount})` : ''}
           </button>
           {clipboard && clipboard.items.length > 0 && (
-            <span className="text-[11px] text-[#A1A1AA]">
-              clipboard: {clipboard.items.length} from {homeroomName(clipboard.fromHomeroomId)}
+            <span className="text-[12px] text-slate-400">
+              Copied: {clipboard.items.length} from {homeroomName(clipboard.fromHomeroomId)}
             </span>
           )}
-          {note && <span className="text-[11px] text-emerald-700">{note}</span>}
+          {note && <span className="text-[12px] text-emerald-700">{note}</span>}
         </div>
 
         {draftCtx && draftCtx.overloaded.length > 0 && (
           <OverloadedTeachersNotice
             overloaded={draftCtx.overloaded}
             teacherName={(id) => teacherName(id)}
-            className="mb-2"
+            className="mb-2.5"
           />
         )}
 
         {loading ? (
-          <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
+          <Loading className="py-8" />
         ) : requirements.length === 0 && combined.length === 0 ? (
-          <p className="text-xs text-[#A1A1AA] py-2">Nothing yet for {homeroom.name}.</p>
+          <p className="text-[12.5px] text-slate-400 py-1">No lessons yet.</p>
         ) : (
-          <div className="space-y-px">
+          <div className="fx-card">
             {requirements.map((r) => {
               const block = Math.max(1, r.min_block ?? 1)
               if (editingId === r.id && editingKind === 'requirement') {
                 return (
-                  <div key={r.id} className="px-3 py-3 bg-white border border-[#27272A]">
+                  <div key={r.id} className="relative px-3.5 py-3.5 bg-[#FAF8F3] border-b border-[#EEEAE1] last:border-b-0">
+                    <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#B8983C]" />
                     <RequirementFields
                       draft={editDraft}
                       onChange={setEditDraft}
@@ -1556,69 +1655,53 @@ function RequirementsPanel({
                       teachers={teachers}
                       groups={groups}
                       showGroup
-                      onSubjectCreated={async () => {
-                        await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
-                      }}
+                      onSubjectCreated={subjectsChanged}
                     />
                     {editOverload.length > 0 && (
-                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                        <span><strong>This would over-book a teacher.</strong> {editOverload.join('; ')}.</span>
-                      </div>
+                      <Notice tone="error" className="mt-2.5">
+                        <strong>This would give a teacher more periods than their week has.</strong> {editOverload.join('; ')}.
+                      </Notice>
                     )}
-                    {editError && (
-                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                        <span>{editError}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mt-3">
+                    {editError && <Notice tone="error" className="mt-2.5">{editError}</Notice>}
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
                       <button onClick={() => saveEdit(r)} disabled={savingEdit} className={BTN_PRIMARY}>
                         {savingEdit ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Save
                       </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <span className="text-[11px] text-[#A1A1AA] ml-auto">
-                        Changes apply on the next generate.
-                      </span>
+                      <button onClick={() => setEditingId(null)} className={BTN_QUIET}>Cancel</button>
+                      <span className="text-[12px] text-slate-400 sm:ml-auto">Applies on the next generate.</span>
                     </div>
                   </div>
                 )
               }
               return (
-                <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#F5F5F5] border border-[#E4E4E7] text-sm">
-                  <span className="w-2.5 h-2.5 flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
-                  <span className="font-medium text-[#18181B] flex-1 min-w-0 truncate">{subjectName(r.subject_id)}</span>
-                  {r.group && (
-                    <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 text-white" style={{ background: r.group.color ?? '#6366f1' }}>{r.group.name}</span>
-                  )}
-                  {block > 1 && (
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 bg-[#27272A] text-white"
-                      title={`Scheduled as ${block} consecutive periods`}
-                    >
-                      {block === 2 ? 'Double' : block === 3 ? 'Triple' : `${block} in a row`}
-                    </span>
-                  )}
-                  <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(r))}>
-                    {teacherLabel(teacherIdsOf(r))}
+                <div key={r.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.5 pr-1.5 py-1.5 border-b border-[#EEEAE1] last:border-b-0">
+                  <span className="w-2.5 h-2.5 rounded-[3px] flex-shrink-0" style={{ background: subjectColor(r.subject_id) }} />
+                  <span className="min-w-0 flex-1 basis-[10rem]">
+                    <span className="block text-[13.5px] font-medium text-slate-900 break-words">{subjectName(r.subject_id)}</span>
+                    <span className="block text-[12px] text-slate-500 break-words">{teacherLabel(teacherIdsOf(r))}</span>
                   </span>
-                  <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{r.periods_per_week}/wk</span>
-                  <button
-                    onClick={() => { onCopy([r], homeroom.id); flash(`Copied ${subjectName(r.subject_id)} — open another class to paste.`) }}
-                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
-                    title="Copy just this requirement"
-                  ><Copy size={14} /></button>
-                  <button
-                    onClick={() => startEdit(r)}
-                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
-                    title="Edit"
-                  ><Pencil size={14} /></button>
-                  <button onClick={async () => { await deleteRequirement(r.id); loadAll() }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                  {r.group && (
+                    <Chip className="!text-white" style={{ background: r.group.color ?? '#6366f1' }}>{r.group.name}</Chip>
+                  )}
+                  {blockChip(block)}
+                  <Chip>{r.periods_per_week} a week</Chip>
+                  <span className="flex items-center">
+                    <button
+                      onClick={() => { onCopy([r], homeroom.id); flash(`Copied ${subjectName(r.subject_id)}. Open another class to paste.`) }}
+                      className={ICON_BTN}
+                      aria-label={`Copy ${subjectName(r.subject_id)}`}
+                      title="Copy this lesson"
+                    ><Copy size={14} /></button>
+                    <button onClick={() => startEdit(r)} className={ICON_BTN} aria-label={`Edit ${subjectName(r.subject_id)}`} title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={async () => { await deleteRequirement(r.id); loadAll() }}
+                      className={ICON_BTN_DANGER}
+                      aria-label={`Delete ${subjectName(r.subject_id)}`}
+                      title="Delete"
+                    ><Trash2 size={15} /></button>
+                  </span>
                 </div>
               )
             })}
@@ -1626,18 +1709,21 @@ function RequirementsPanel({
               const block = Math.max(1, c.min_block ?? 1)
               if (editingId === c.id && editingKind === 'combined') {
                 return (
-                  <div key={c.id} className="px-3 py-3 bg-white border border-indigo-400">
-                    <div className="flex items-center gap-1.5 mb-3 text-sm font-medium text-indigo-800">
-                      <Layers size={15} className="text-indigo-500" /> Combined lesson
-                      <span className="text-[11px] font-normal text-[#A1A1AA] ml-auto">
-                        {(c.members ?? []).length} classes — add or remove them by recreating the lesson
+                  <div key={c.id} className="relative px-3.5 py-3.5 bg-[#F6F6FD] border-b border-[#EEEAE1] last:border-b-0">
+                    <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px] bg-indigo-400" />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-3">
+                      <span className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-indigo-800">
+                        <Layers size={15} className="text-indigo-500" /> Combined lesson
+                      </span>
+                      <span className="text-[12px] text-slate-400 sm:ml-auto">
+                        {(c.members ?? []).length} classes. To change them, delete it and add it again.
                       </span>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 mb-3">
                       <Field label="Name">
                         <input className={INPUT} value={editName} onChange={(e) => setEditName(e.target.value)} />
                       </Field>
-                      <Field label="Room" hint="Leave empty to let the room type above decide.">
+                      <Field label="Room" hint="Leave empty to let the room type decide." group>
                         <SmartSelect options={roomOptions} value={editRoomId} onChange={setEditRoomId} placeholder="Any room" searchPlaceholder="Search rooms…" allowClear />
                       </Field>
                     </div>
@@ -1648,59 +1734,52 @@ function RequirementsPanel({
                       teachers={teachers}
                       groups={groups}
                       showGroup={false}
-                      roomTypeHint="Used when no specific room is set."
-                      onSubjectCreated={async () => {
-                        await Promise.all([onSubjectsChanged(), draftCtx?.refreshReference() ?? Promise.resolve()])
-                      }}
+                      roomTypeHint="Used when no room is chosen."
+                      onSubjectCreated={subjectsChanged}
                     />
-                    {editError && (
-                      <div className="flex items-start gap-2 mt-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                        <span>{editError}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mt-3">
+                    {editError && <Notice tone="error" className="mt-2.5">{editError}</Notice>}
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
                       <button onClick={() => saveEditCombined(c)} disabled={savingEdit} className={BTN_PRIMARY}>
                         {savingEdit ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Save
                       </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-sm text-[#71717A] hover:text-[#18181B] px-3 py-2 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <span className="text-[11px] text-[#A1A1AA] ml-auto">
-                        Changes apply on the next generate.
-                      </span>
+                      <button onClick={() => setEditingId(null)} className={BTN_QUIET}>Cancel</button>
+                      <span className="text-[12px] text-slate-400 sm:ml-auto">Applies on the next generate.</span>
                     </div>
                   </div>
                 )
               }
               return (
-                <div key={c.id} className="flex items-center gap-2.5 px-3 py-2 bg-indigo-50/50 border border-indigo-100 text-sm">
+                <div key={c.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.5 pr-1.5 py-1.5 bg-[#F8F8FE] border-b border-[#EEEAE1] last:border-b-0">
                   <Layers size={15} className="text-indigo-500 flex-shrink-0" />
-                  <span className="font-medium text-[#18181B] flex-shrink-0">{c.name}</span>
-                  <span className="text-[#A1A1AA] flex-1 min-w-0 truncate">
-                    {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
-                  </span>
-                  {block > 1 && (
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 bg-[#27272A] text-white"
-                      title={`Scheduled as ${block} consecutive periods`}
-                    >
-                      {block === 2 ? 'Double' : block === 3 ? 'Triple' : `${block} in a row`}
+                  <span className="min-w-0 flex-1 basis-[10rem]">
+                    <span className="block text-[13.5px] font-medium text-slate-900 break-words">{c.name}</span>
+                    <span className="block text-[12px] text-slate-500 break-words">
+                      {(c.members ?? []).map((m) => homeroomName(m.homeroom_id) + (m.group ? ` (${m.group.name})` : '')).join(', ')}
+                      {' · '}
+                      {teacherLabel(teacherIdsOf(c))}
                     </span>
-                  )}
-                  <span className="text-[#71717A] hidden sm:inline truncate max-w-[10rem]" title={teacherLabel(teacherIdsOf(c))}>
-                    {teacherLabel(teacherIdsOf(c))}
                   </span>
-                  <span className="text-[11px] px-1.5 py-0.5 bg-white border border-[#E4E4E7] text-[#71717A] flex-shrink-0">{c.periods_per_week}/wk</span>
-                  <button
-                    onClick={() => startEditCombined(c)}
-                    className="text-[#D4D4D8] hover:text-[#52525B] transition-colors flex-shrink-0"
-                    title="Edit"
-                  ><Pencil size={14} /></button>
-                  <button onClick={async () => { if (confirm(`Delete combined lesson "${c.name}"?`)) { await deleteCombinedClass(c.id); loadAll() } }} className="text-[#D4D4D8] hover:text-rose-500 transition-colors flex-shrink-0" title="Delete"><Trash2 size={15} /></button>
+                  {blockChip(block)}
+                  <Chip>{c.periods_per_week} a week</Chip>
+                  <span className="flex items-center">
+                    <button onClick={() => startEditCombined(c)} className={ICON_BTN} aria-label={`Edit ${c.name}`} title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const ok = await askConfirm({
+                          title: `Delete ${c.name}?`,
+                          body: 'The combined lesson is removed from every class that shares it.',
+                          confirmLabel: 'Delete lesson',
+                          tone: 'danger',
+                        })
+                        if (ok) { await deleteCombinedClass(c.id); loadAll() }
+                      }}
+                      className={ICON_BTN_DANGER}
+                      aria-label={`Delete ${c.name}`}
+                      title="Delete"
+                    ><Trash2 size={15} /></button>
+                  </span>
                 </div>
               )
             })}
@@ -1710,6 +1789,7 @@ function RequirementsPanel({
     </div>
   )
 }
+
 
 // ── Time off ─────────────────────────────────────────────────
 
@@ -1737,15 +1817,15 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
   }, [draft?.liveConflicts, homeroom.id])
 
   if (!draft) {
-    return <p className="text-sm text-[#71717A] py-6 text-center">Select a timetable configuration first.</p>
+    return <p className="text-[13px] text-slate-500 py-6 text-center">Create a timetable in Configuration first.</p>
   }
   if (draft.loading) {
-    return <div className="flex justify-center py-8 text-[#A1A1AA]"><Loader2 className="animate-spin" size={20} /></div>
+    return <Loading className="py-8" />
   }
 
   const week = draft.weekFor(homeroom.id)
   if (week.slots.length === 0) {
-    return <p className="text-sm text-[#71717A] py-6 text-center">Add teaching period slots first (Configuration).</p>
+    return <p className="text-[13px] text-slate-500 py-6 text-center">Add the periods of the day in Configuration first.</p>
   }
 
   const hasOverride = (hr: string, day: Weekday, slotId: string) =>
@@ -1757,8 +1837,8 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
           switch between here — which band it is gets named instead. */}
       <Section
         title="Time off"
-        hint={`Tap a free period to keep this class out of it. Click a lesson to open it.${
-          draft.weeks.length > 1 ? ` This class follows the ${week.name}.` : ''
+        hint={`Tap a free period to keep this class out of it. Tap a lesson to open it.${
+          draft.weeks.length > 1 ? ` This class follows ${week.name}.` : ''
         }`}
         first
       >
@@ -1780,10 +1860,10 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
       </Section>
 
       <Section
-        title="Pin class teacher"
+        title="Class teacher periods"
         hint={homeroom.class_teacher_id
-          ? 'Tap a period to require this homeroom’s class teacher to be with them then.'
-          : 'Assign a class teacher (Class teacher tab) to pin them to periods.'}
+          ? 'Tap a period to have the class teacher teach this class then.'
+          : 'Set a class teacher first, on the Class teacher tab.'}
       >
         {homeroom.class_teacher_id ? (
           <DraftWeekGrid
@@ -1801,7 +1881,7 @@ function TimeOffPanel({ homeroom }: { homeroom: Homeroom }) {
             onMove={draft.moveEntry}
           />
         ) : (
-          <p className="text-xs text-[#A1A1AA]">No class teacher assigned yet.</p>
+          <p className="text-[12.5px] text-slate-400">No class teacher yet.</p>
         )}
       </Section>
     </div>

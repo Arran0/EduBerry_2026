@@ -2,19 +2,18 @@
 
 import React from 'react'
 import { Search, X } from 'lucide-react'
-import { TAP, FOCUS, SECTION_LABEL } from '../ui'
+import { FOCUS } from '../ui'
 
 // ============================================================
-// The left column of the Homeroom / Teacher / Subject hubs.
+// The left column of the Classes / Teachers / Subjects editors.
 //
-// All three are the same thing — a searchable list beside a detail pane — and
-// all three had their own copy of it, which is why they had drifted: three
-// search boxes with three different paddings, rows too short to hit on a
-// phone, no count, no way to clear the query, and a selected row that was a
-// solid black block with no relation to the gold the rest of the workspace
-// accents with.
+// All three are the same thing — a searchable list beside a detail pane — so
+// they share one implementation, and a change to the pattern is a change to
+// the pattern.
 //
-// One implementation, so a change to the pattern is a change to the pattern.
+// Inside the popup's solid sheet: the list sits on a warm well with a hairline
+// against the detail pane; the selected row is lifted to white with the gold
+// bar the rest of the workspace accents with. Names wrap rather than clip.
 // ============================================================
 
 export function EntityList({
@@ -28,41 +27,41 @@ export function EntityList({
   /** Rows before the query filtered them, when that differs. */
   total?: number
   children: React.ReactNode
-  /** A control under the search box — "Manage rooms", say. */
+  /** A control under the search box — "Rooms", say. */
   actions?: React.ReactNode
   listClassName?: string
 }) {
   const filtering = total != null && total !== count
 
   return (
-    <div className="border-b sm:border-b-0 sm:border-r border-[#E4E4E7] bg-[#FAFAF9] flex flex-col min-h-0">
-      <div className="p-2 border-b border-[#E4E4E7] space-y-1.5 sticky top-0 bg-[#FAFAF9] z-10">
-        <div className={`flex items-center gap-2 border border-[#D4D4D8] bg-white px-2.5 ${FOCUS} focus-within:border-[#27272A]`}>
-          <Search size={13} className="text-[#A1A1AA] flex-shrink-0" aria-hidden />
+    <div className="border-b sm:border-b-0 sm:border-r border-[#EEEAE1] bg-[#FAF8F3] flex flex-col min-h-0 min-w-0">
+      <div className="p-2.5 border-b border-[#EEEAE1] space-y-2 sticky top-0 bg-[#FAF8F3] z-10">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden />
           <input
             value={query}
             onChange={(e) => onQuery(e.target.value)}
             placeholder={placeholder}
             aria-label={placeholder}
-            className="flex-1 min-w-0 bg-transparent text-sm py-2 sm:py-1.5 focus:outline-none"
+            className={`w-full h-10 sm:h-9 rounded-[10px] bg-white border border-[#DDD8CC] pl-8 ${query ? 'pr-8' : 'pr-3'} text-[13.5px] text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition`}
           />
           {query && (
             <button
               onClick={() => onQuery('')}
               aria-label="Clear search"
-              className={`text-[#A1A1AA] hover:text-[#18181B] flex-shrink-0 ${TAP}`}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full inline-flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition"
             >
               <X size={13} />
             </button>
           )}
         </div>
         {actions}
-        <p className={`${SECTION_LABEL} px-0.5 tabular-nums`}>
+        <p className="text-[11.5px] font-medium text-slate-400 px-0.5 tabular-nums">
           {filtering ? `${count} of ${total}` : count}
           {count === 1 ? ' result' : ' results'}
         </p>
       </div>
-      <div className={`flex-1 overflow-y-auto max-h-56 sm:max-h-none p-1 space-y-px ${listClassName}`}>
+      <div className={`flex-1 overflow-y-auto overscroll-contain max-h-60 sm:max-h-none ${listClassName}`}>
         {children}
       </div>
     </div>
@@ -86,26 +85,24 @@ export function EntityRow({
     <button
       onClick={onClick}
       aria-current={selected ? 'true' : undefined}
-      className={`relative w-full text-left pl-3 pr-2.5 py-2 min-h-[2.75rem] sm:min-h-0 text-sm ${TAP} ${FOCUS} ${
-        selected ? 'bg-[#27272A] text-white' : 'text-[#3F3F46] hover:bg-[#EBEBEB]'
+      className={`relative w-full text-left pl-3.5 pr-3 py-2.5 sm:py-2 border-b border-[#EEEAE1]/70 transition-colors ${FOCUS} ${
+        selected ? 'bg-white text-slate-900' : 'text-slate-700 hover:bg-white/70'
       }`}
     >
-      {/* The gold bar is what ties the selection to the rest of the workspace;
-          a black block on its own read as a different design. */}
       {selected && <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#B8983C]" />}
-      <span className="flex items-center gap-2">
+      <span className="flex items-start gap-2">
         {swatch !== undefined && (
           <span
-            className="w-2.5 h-2.5 flex-shrink-0"
+            className="w-2.5 h-2.5 rounded-[3px] flex-shrink-0 mt-[5px]"
             style={{ background: swatch || '#94a3b8' }}
             aria-hidden
           />
         )}
-        <span className="font-medium truncate flex-1 min-w-0">{title}</span>
-        {trailing}
+        <span className={`text-[13.5px] leading-snug break-words flex-1 min-w-0 ${selected ? 'font-semibold' : 'font-medium'}`}>{title}</span>
+        {trailing && <span className="flex-shrink-0 mt-px">{trailing}</span>}
       </span>
       {subtitle && (
-        <span className={`block text-[11px] truncate mt-px ${selected ? 'text-white/60' : 'text-[#A1A1AA]'}`}>
+        <span className="block text-[11.5px] leading-snug break-words mt-0.5 text-slate-400">
           {subtitle}
         </span>
       )}
@@ -113,7 +110,7 @@ export function EntityRow({
   )
 }
 
-/** The detail pane's heading — name, chips, and whatever the hub hangs on it. */
+/** The detail pane's heading — name, chips, and whatever the editor hangs on it. */
 export function DetailHeader({
   icon: Icon, children, meta, right, below,
 }: {
@@ -122,18 +119,22 @@ export function DetailHeader({
   /** A quiet second line: an email, a subject code. */
   meta?: React.ReactNode
   right?: React.ReactNode
-  /** The tab strip, when the hub has one. */
+  /** The tab strip, when the editor has one. */
   below?: React.ReactNode
 }) {
   return (
-    <div className="px-3 sm:px-4 pt-3 pb-2 border-b border-[#E4E4E7]">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Icon size={16} className="text-[#71717A] flex-shrink-0" aria-hidden />
-        <span className="font-semibold text-[#18181B] min-w-0">{children}</span>
-        {meta && <span className="text-xs text-[#A1A1AA] truncate">{meta}</span>}
-        {right && <span className="ml-auto flex items-center gap-2">{right}</span>}
+    <div className="px-3.5 sm:px-5 pt-3.5 pb-3 border-b border-[#EEEAE1]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex items-start gap-2 min-w-0 flex-1 basis-[200px]">
+          <Icon size={16} className="text-slate-400 flex-shrink-0 mt-[3px]" aria-hidden />
+          <div className="min-w-0">
+            <div className="font-display text-[15.5px] font-bold text-slate-900 leading-snug break-words">{children}</div>
+            {meta && <div className="text-[12px] text-slate-400 break-words">{meta}</div>}
+          </div>
+        </div>
+        {right && <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">{right}</div>}
       </div>
-      {below && <div className="mt-2">{below}</div>}
+      {below && <div className="mt-3">{below}</div>}
     </div>
   )
 }
@@ -141,18 +142,18 @@ export function DetailHeader({
 /** Nothing selected yet. */
 export function EmptyDetail({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex-1 flex items-center justify-center text-sm text-[#A1A1AA] p-6">
+    <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400 p-8 text-center">
       {children}
     </div>
   )
 }
 
 /**
- * The two-column shell every hub sits in: the list stacked above the detail on
- * a phone, side by side from `sm` up.
+ * The two-column shell every editor sits in: the list stacked above the
+ * detail on a phone, side by side from sm up.
  */
 export function EntityShell({
-  list, children, listWidth = '16rem',
+  list, children, listWidth = '17rem',
 }: {
   list: React.ReactNode
   children: React.ReactNode
@@ -160,8 +161,8 @@ export function EntityShell({
 }) {
   return (
     <div
-      className="flex flex-col sm:grid sm:h-full border border-[#E4E4E7]"
-      style={{ ['--list-w' as string]: listWidth, gridTemplateColumns: `var(--list-w) 1fr` }}
+      className="flex flex-col sm:grid sm:h-full min-h-0 sm:[grid-template-columns:var(--list-w)_minmax(0,1fr)]"
+      style={{ ['--list-w' as string]: listWidth }}
     >
       {list}
       <div className="min-w-0 min-h-0 flex flex-col">{children}</div>

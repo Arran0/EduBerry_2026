@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Ban, Check, AlertTriangle } from 'lucide-react'
+import { Ban, Check } from 'lucide-react'
 import { WEEKDAY_LABELS } from '@/lib/timetable'
 import type { PeriodSlot, TimetableConstraint, ConstraintScope, ConstraintType, Weekday } from '@/lib/timetable'
-import { INPUT, Field } from '../ui'
+import { INPUT, Field, Notice } from '../ui'
 
 // Shared constraint UI atoms used by the Constraints tab and the Homeroom /
 // Teacher / Subject entity modals, so every time-off grid and min/max input
@@ -38,20 +38,20 @@ export function TimeOffGrid({
   }
 
   return (
-    <div className="overflow-x-auto border border-[#D4D4D8]">
-      <table className="w-full border-collapse text-sm min-w-[22rem] sm:min-w-[34rem] table-fixed">
+    <div className="fx-card overflow-hidden">
+      <table className="w-full border-collapse text-sm table-fixed">
         <colgroup>
-          <col className="w-16 sm:w-28" />
+          <col className="w-[4.25rem] sm:w-28" />
           {days.map((d) => <col key={d} />)}
         </colgroup>
         <thead>
-          <tr className="bg-[#FAFAF9]">
-            <th className="p-1 sm:p-2 text-left text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-[#525252] sticky left-0 bg-[#FAFAF9] z-10">
+          <tr className="bg-[#F7F5F0]">
+            <th className="p-1.5 sm:p-2 text-left text-[11px] sm:text-[12px] font-semibold text-slate-600 leading-tight">
               Period
-              <span className="block font-normal normal-case tracking-normal text-[9px] text-[#A1A1AA]">tap = whole week</span>
+              <span className="block font-normal text-[10.5px] text-slate-400">tap: all week</span>
             </th>
             {days.map((d) => (
-              <th key={d} className="p-1.5 sm:p-3 text-center text-[10px] sm:text-[11px] font-semibold text-[#52525B] border-l border-[#E4E4E7]">
+              <th key={d} className="p-1.5 sm:p-2.5 text-center text-[11px] sm:text-[12px] font-semibold text-slate-600 border-l border-[#EEEAE1]">
                 <span className="hidden sm:inline">{WEEKDAY_LABELS[d]}</span>
                 <span className="sm:hidden">{WEEKDAY_LABELS[d].slice(0, 3)}</span>
               </th>
@@ -61,27 +61,27 @@ export function TimeOffGrid({
         <tbody>
           {slots.map((s) => (
             <tr key={s.id}>
-              <td className="p-0 text-[10px] sm:text-[11px] text-[#71717A] whitespace-nowrap sticky left-0 bg-white z-10 border-t border-[#E4E4E7]">
+              <td className="p-0 text-[11px] text-slate-500 bg-white border-t border-[#EEEAE1]">
                 <button
                   onClick={() => toggleWeek(s.id)}
                   title={days.every((d) => isOn(d, s.id))
                     ? `Clear ${label.toLowerCase()} for this period all week`
                     : `Mark ${label.toLowerCase()} for this period all week`}
-                  className={`w-full text-left p-1 sm:p-2 transition-colors hover:bg-[#F5F5F5] ${
+                  className={`w-full text-left p-1.5 sm:p-2 transition-colors hover:bg-[#F4F1EA] ${
                     days.length > 0 && days.every((d) => isOn(d, s.id)) ? (onColor === 'rose' ? 'bg-rose-50' : 'bg-indigo-50') : ''
                   }`}
                 >
-                  <div className="font-medium text-[#52525B] truncate">{s.label}</div>
-                  {s.start_time && <div className="tabular-nums text-[#A1A1AA] hidden sm:block">{s.start_time.slice(0, 5)}</div>}
+                  <div className="font-medium text-slate-700 leading-tight break-words">{s.label}</div>
+                  {s.start_time && <div className="tabular-nums text-slate-400 hidden sm:block">{s.start_time.slice(0, 5)}</div>}
                 </button>
               </td>
               {days.map((d) => {
                 const active = isOn(d, s.id)
                 return (
-                  <td key={d} className="p-1 sm:p-1.5 border-t border-l border-[#E4E4E7]">
+                  <td key={d} className="p-1 sm:p-1.5 border-t border-l border-[#EEEAE1]">
                     <button
                       onClick={() => onToggle(d, s.id)}
-                      className={`w-full h-8 sm:h-11 text-[10px] sm:text-xs font-medium transition-colors flex items-center justify-center gap-1 sm:gap-1.5 ${
+                      className={`w-full h-9 sm:h-11 rounded-md text-[11px] sm:text-xs font-medium transition-colors flex items-center justify-center gap-1 sm:gap-1.5 ${
                         active ? on : 'bg-emerald-50 text-emerald-600/70 hover:bg-emerald-100'
                       }`}
                     >
@@ -112,8 +112,9 @@ export function ValueInput({
   useEffect(() => { setVal(seed > 0 ? String(seed) : '') }, [seed])
   return (
     <input
-      className={`${INPUT} ${invalid ? 'border-rose-400 focus:border-rose-500 bg-rose-50/40' : ''}`}
+      className={`${INPUT} tabular-nums ${invalid ? '!border-rose-400 focus:!border-rose-500 !bg-rose-50/40' : ''}`}
       type="number"
+      inputMode="numeric"
       min={0}
       placeholder={placeholder}
       value={val}
@@ -129,10 +130,10 @@ const LIMIT_TYPES = ['min_per_day', 'max_per_day', 'min_per_week', 'max_per_week
 type LimitType = (typeof LIMIT_TYPES)[number]
 
 const LIMIT_LABELS: Record<LimitType, string> = {
-  min_per_day: 'Min / day',
-  max_per_day: 'Max / day',
-  min_per_week: 'Min / week',
-  max_per_week: 'Max / week',
+  min_per_day: 'Fewest a day',
+  max_per_day: 'Most a day',
+  min_per_week: 'Fewest a week',
+  max_per_week: 'Most a week',
 }
 
 /**
@@ -154,19 +155,19 @@ function limitConflicts(
 
   if (minD > 0 && maxD > 0 && minD > maxD) {
     fields.add('min_per_day'); fields.add('max_per_day')
-    messages.push(`Min / day (${minD}) is above max / day (${maxD}).`)
+    messages.push(`Fewest a day (${minD}) is more than most a day (${maxD}).`)
   }
   if (minW > 0 && maxW > 0 && minW > maxW) {
     fields.add('min_per_week'); fields.add('max_per_week')
-    messages.push(`Min / week (${minW}) is above max / week (${maxW}).`)
+    messages.push(`Fewest a week (${minW}) is more than most a week (${maxW}).`)
   }
   if (minW > 0 && maxD > 0 && minW > maxD * days) {
     fields.add('min_per_week'); fields.add('max_per_day')
-    messages.push(`Min / week (${minW}) can never be reached at ${maxD} a day across ${days} working day${days === 1 ? '' : 's'} (max ${maxD * days}).`)
+    messages.push(`Fewest a week (${minW}) cannot be reached at ${maxD} a day over ${days} working day${days === 1 ? '' : 's'} (${maxD * days} at most).`)
   }
   if (minD > 0 && maxW > 0 && minD * days > maxW) {
     fields.add('min_per_day'); fields.add('max_per_week')
-    messages.push(`Min / day (${minD}) over ${days} working day${days === 1 ? '' : 's'} needs ${minD * days}, above max / week (${maxW}).`)
+    messages.push(`Fewest a day (${minD}) over ${days} working day${days === 1 ? '' : 's'} needs ${minD * days}, more than most a week (${maxW}).`)
   }
   return { fields, messages }
 }
@@ -208,7 +209,7 @@ export function LoadLimitFields({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {LIMIT_TYPES.map((type) => (
           <Field key={type} label={LIMIT_LABELS[type]}>
             <ValueInput
@@ -221,13 +222,10 @@ export function LoadLimitFields({
         ))}
       </div>
       {problems.length > 0 && (
-        <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-          <div>
-            {problems.map((m) => <p key={m}>{m}</p>)}
-            <p className="text-rose-600/80 mt-0.5">Not saved — leave a field blank for “no limit”.</p>
-          </div>
-        </div>
+        <Notice tone="error" className="mt-2">
+          {problems.map((m) => <p key={m}>{m}</p>)}
+          <p className="opacity-80 mt-0.5">Not saved. Leave a box empty for no limit.</p>
+        </Notice>
       )}
     </>
   )

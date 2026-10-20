@@ -1,9 +1,8 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useMemo, useState } from 'react'
 import {
-  X, Pin, PinOff, Layers, Users, DoorOpen, Clock, GraduationCap, AlertTriangle,
+  Pin, PinOff, Layers, Users, DoorOpen, GraduationCap,
   Trash2, Pencil, Ban, CalendarClock, Check, Repeat, Undo2,
 } from 'lucide-react'
 import { WEEKDAY_LABELS, teacherIdsOf } from '@/lib/timetable'
@@ -11,10 +10,14 @@ import type { PlacedEntry, PeriodSlot, Subject, Room, Weekday } from '@/lib/time
 import type { EntryOverride, OverrideKind, OverrideSpan } from '@/lib/timetable/overrides'
 import { describeSpan, nextDateOn, formatDateLabel, todayISO } from '@/lib/timetable/overrides'
 import type { UserProfile } from '@/lib/supabase'
-import { SmartSelect, BTN_SM, SECTION_LABEL, INPUT, TAP, FOCUS } from './ui'
+import ModalShell from '@/components/ui/ModalShell'
+import { SALARY_ICON } from '@/components/salary/ui'
+import {
+  SmartSelect, BTN_SM, BTN_PRIMARY, BTN_QUIET, SM_GHOST, SM_DARK, SM_DANGER, SECTION_LABEL, INPUT,
+  ICON_BTN_DANGER, Notice, Chip, FOCUS, TAP,
+} from './ui'
 import type { SmartOption } from './ui'
 import MultiTeacherSelect from './MultiTeacherSelect'
-import useBodyScrollLock from '@/hooks/useBodyScrollLock'
 
 // ============================================================
 // One period of one class — the single box every grid opens.
@@ -112,21 +115,6 @@ export default function SlotDetailsModal({
   type Panel = { mode: 'edit' | 'replace'; entry: PlacedEntry | null } | null
   const [panel, setPanel] = useState<Panel>(null)
 
-  useBodyScrollLock(true)
-
-  // Esc closes. Registered in the capture phase so this box — which can be
-  // opened from inside the workspace modal — gets the key before the modal
-  // underneath does and closes itself rather than its host.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      onClose()
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
-
   const subjectOptions: SmartOption[] = useMemo(
     () => subjects.map((s) => ({
       value: s.id, label: s.name, color: s.color ?? undefined, sublabel: s.code ?? undefined,
@@ -142,169 +130,132 @@ export default function SlotDetailsModal({
     ? `${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`
     : null
 
-  if (typeof document === 'undefined') return null
-
-  // Through a portal: the grids that open this can themselves live inside the
-  // workspace modal, whose panel is both `overflow-hidden` and transformed by
-  // its entry animation — a `fixed` child of that is clipped and positioned
-  // against the panel rather than the viewport.
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[1300] flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
-      onClick={onClose}
-      role="presentation"
+  // The shared glass sheet: it portals to <body>, stacks above the editor it
+  // was opened from, and only the topmost sheet answers Escape.
+  return (
+    <ModalShell
+      onClose={onClose}
+      size="lg"
+      sharp
+      glass
+      title={homeroomName}
+      subtitle={`${WEEKDAY_LABELS[day]} · ${slot.label ?? 'Period'}${timeLabel ? ` · ${timeLabel}` : ''}`}
+      icon={<GraduationCap size={17} />}
+      iconClassName={SALARY_ICON}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${homeroomName}, ${WEEKDAY_LABELS[day]}, ${slot.label ?? 'period'}`}
-        className="bg-white border-t sm:border border-[#D4D4D8] shadow-xl w-full sm:max-w-lg max-h-[92vh] sm:max-h-[86vh] overflow-y-auto overscroll-contain"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Where in the week this cell sits. */}
-        <div className="flex items-start justify-between gap-3 px-4 sm:px-5 pt-3.5 pb-3 border-b border-[#E4E4E7] sticky top-0 bg-white z-10">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-[#18181B]">
-              <GraduationCap size={15} className="text-[#71717A] flex-shrink-0" />
-              <span className="truncate">{homeroomName}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-0.5">
-              <Clock size={12} />
-              {WEEKDAY_LABELS[day]} · {slot.label ?? 'Period'}
-              {timeLabel && <span className="tabular-nums">· {timeLabel}</span>}
-            </div>
+      <div className="space-y-3.5">
+        {conflicts.length > 0 && (
+          <Notice tone="error">
+            <ul className="space-y-0.5">
+              {conflicts.map((c, i) => <li key={i}>{c}</li>)}
+            </ul>
+          </Notice>
+        )}
+
+        {/* What is scheduled here */}
+        {entries.length === 0 ? (
+          <p className="text-[13.5px] text-slate-500">
+            {timeOff ? 'Kept free. This class is never scheduled in this period.' : 'This period is free.'}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {entries.map((entry) => (
+              <LessonCard
+                key={entryKey(entry)}
+                entry={entry}
+                subject={entry.subjectId ? subjectById.get(entry.subjectId) : undefined}
+                room={entry.roomId ? roomById.get(entry.roomId) : undefined}
+                teacherName={(id) => teacherById.get(id)?.full_name ?? 'Teacher'}
+                groupName={groupName}
+                span={blockSpan?.(entry) ?? 1}
+                combined={entry.combinedKey ? combinedInfo?.(entry.combinedKey) ?? null : null}
+                onTogglePin={() => onTogglePin(entry)}
+                onEdit={() => setPanel({ mode: 'edit', entry })}
+                onReplace={onSaveOverride ? () => setPanel({ mode: 'replace', entry }) : undefined}
+                onRemove={() => onClear(entry)}
+              />
+            ))}
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className={`-mr-1 p-1.5 text-[#A1A1AA] hover:text-[#18181B] flex-shrink-0 ${TAP} ${FOCUS}`}
-          >
-            <X size={18} />
-          </button>
+        )}
+
+        {/* This period, whatever sits in it. Keeping a class out of it is a
+            property of the class's week, not of the lesson. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {onToggleTimeOff ? (
+            <button
+              onClick={() => onToggleTimeOff()}
+              aria-pressed={timeOff}
+              className={`${BTN_SM} !whitespace-normal !h-auto min-h-[2.25rem] sm:min-h-[1.75rem] py-1 text-left leading-tight ${
+                timeOff ? 'text-white bg-rose-600 hover:bg-rose-700' : `${SM_GHOST} hover:!text-rose-700`
+              }`}
+              title={timeOff
+                ? `Let lessons back into this period for ${homeroomName}`
+                : `Keep ${homeroomName} out of this period. Generate never schedules it.`}
+            >
+              {/* Named, not just "Keep free": the same box opens from a
+                  teacher's calendar, where the corner toggle blocks the
+                  TEACHER. One word for two scopes is how they got confused. */}
+              {timeOff ? <Check size={13} className="flex-shrink-0" /> : <Ban size={13} className="flex-shrink-0" />}
+              {timeOff ? `Allow ${homeroomName} again` : `Keep ${homeroomName} free`}
+            </button>
+          ) : timeOff ? (
+            <Chip tone="bad"><Ban size={11} /> Kept free for this class</Chip>
+          ) : null}
+          {/* An empty period still takes a date change: that is how a cover
+              lesson or a one-off exam gets into a free slot. */}
+          {entries.length === 0 && onSaveOverride && panel === null && (
+            <button
+              onClick={() => setPanel({ mode: 'replace', entry: null })}
+              className={`${BTN_SM} ${SM_GHOST}`}
+              title="Put a lesson in this period for one date, or from a date onwards"
+            >
+              <CalendarClock size={13} /> Add a lesson on a date
+            </button>
+          )}
+          {entries.length > 0 && editableEntries.length === 0 && (
+            <span className="text-[12px] text-slate-400">
+              Combined lessons are edited in Classes.
+            </span>
+          )}
         </div>
 
-        <div className="p-4 sm:p-5 space-y-3.5">
-          {conflicts.length > 0 && (
-            <div className="px-3 py-2 bg-rose-50 border border-rose-200 text-[12px] text-rose-800 space-y-1">
-              {conflicts.map((c, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
-                  <span>{c}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Date changes already in place on this cell. */}
+        {overrides.length > 0 && (
+          <OverrideList
+            overrides={overrides}
+            subjectName={(id) => (id ? subjectById.get(id)?.name ?? 'Lesson' : 'Lesson')}
+            teacherName={(id) => teacherById.get(id)?.full_name ?? 'Teacher'}
+            groupName={groupName}
+            onDelete={onDeleteOverride}
+          />
+        )}
 
-          {/* What is scheduled here */}
-          {entries.length === 0 ? (
-            <p className="text-sm text-[#A1A1AA]">
-              {timeOff ? 'Kept free — this class is banned from this period.' : 'This period is free.'}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {entries.map((entry) => (
-                <LessonCard
-                  key={entryKey(entry)}
-                  entry={entry}
-                  subject={entry.subjectId ? subjectById.get(entry.subjectId) : undefined}
-                  room={entry.roomId ? roomById.get(entry.roomId) : undefined}
-                  teacherName={(id) => teacherById.get(id)?.full_name ?? 'Teacher'}
-                  groupName={groupName}
-                  span={blockSpan?.(entry) ?? 1}
-                  combined={entry.combinedKey ? combinedInfo?.(entry.combinedKey) ?? null : null}
-                  onTogglePin={() => onTogglePin(entry)}
-                  onEdit={() => setPanel({ mode: 'edit', entry })}
-                  onReplace={onSaveOverride ? () => setPanel({ mode: 'replace', entry }) : undefined}
-                  onRemove={() => onClear(entry)}
-                />
-              ))}
-            </div>
-          )}
+        {panel?.mode === 'edit' && (
+          <LessonForm
+            entry={panel.entry}
+            groupName={groupName}
+            subjectOptions={subjectOptions}
+            roomOptions={roomOptions}
+            teachers={teachers}
+            onCancel={() => setPanel(null)}
+            onSubmit={(subjectId, teacherIds, roomId) =>
+              onSave(panel.entry?.groupId ?? null, subjectId, teacherIds, roomId)}
+          />
+        )}
 
-          {/* This period, regardless of what sits in it. Ban lives here rather
-              than on the lesson: it is a property of the class's week. */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {onToggleTimeOff ? (
-              <button
-                onClick={() => onToggleTimeOff()}
-                aria-pressed={timeOff}
-                className={`${BTN_SM} border ${
-                  timeOff
-                    ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'
-                    : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5] hover:text-rose-700'
-                }`}
-                title={timeOff
-                  ? `Let lessons back into this period for ${homeroomName}`
-                  : `Keep ${homeroomName} out of this period — the generator never schedules it`}
-              >
-                {/* Named, not just "Ban this period": the same box opens from a
-                    teacher's calendar, where the corner toggle bans the
-                    TEACHER. One word for two scopes is how they got confused. */}
-                {timeOff ? <Check size={12} /> : <Ban size={12} />}
-                {timeOff ? `Allow ${homeroomName} again` : `Ban for ${homeroomName}`}
-              </button>
-            ) : timeOff ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-rose-700 px-2 py-1 bg-rose-50 border border-rose-200">
-                <Ban size={12} /> Banned for this class
-              </span>
-            ) : null}
-            {/* An empty period still has a date change available: that is how
-                a cover lesson or a one-off exam gets into a free slot. */}
-            {entries.length === 0 && onSaveOverride && panel === null && (
-              <button
-                onClick={() => setPanel({ mode: 'replace', entry: null })}
-                className={`${BTN_SM} bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]`}
-                title="Put a lesson in this period for one date, or from a date onwards"
-              >
-                <CalendarClock size={12} /> Put a lesson here on a date
-              </button>
-            )}
-            {entries.length > 0 && editableEntries.length === 0 && (
-              <span className="text-[11px] text-[#A1A1AA]">
-                Combined lessons are edited on the combined class.
-              </span>
-            )}
-          </div>
-
-          {/* Overrides already in place on this cell. */}
-          {overrides.length > 0 && (
-            <OverrideList
-              overrides={overrides}
-              subjectName={(id) => (id ? subjectById.get(id)?.name ?? 'Lesson' : 'Lesson')}
-              teacherName={(id) => teacherById.get(id)?.full_name ?? 'Teacher'}
-              groupName={groupName}
-              onDelete={onDeleteOverride}
-            />
-          )}
-
-          {panel?.mode === 'edit' && (
-            <LessonForm
-              entry={panel.entry}
-              groupName={groupName}
-              subjectOptions={subjectOptions}
-              roomOptions={roomOptions}
-              teachers={teachers}
-              onCancel={() => setPanel(null)}
-              onSubmit={(subjectId, teacherIds, roomId) =>
-                onSave(panel.entry?.groupId ?? null, subjectId, teacherIds, roomId)}
-            />
-          )}
-
-          {panel?.mode === 'replace' && onSaveOverride && (
-            <ReplaceForm
-              entry={panel.entry}
-              day={day}
-              subjectOptions={subjectOptions}
-              roomOptions={roomOptions}
-              teachers={teachers}
-              onCancel={() => setPanel(null)}
-              onSubmit={(draft) => onSaveOverride(draft)}
-            />
-          )}
-        </div>
+        {panel?.mode === 'replace' && onSaveOverride && (
+          <ReplaceForm
+            entry={panel.entry}
+            day={day}
+            subjectOptions={subjectOptions}
+            roomOptions={roomOptions}
+            teachers={teachers}
+            onCancel={() => setPanel(null)}
+            onSubmit={(draft) => onSaveOverride(draft)}
+          />
+        )}
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
   )
 }
 
@@ -330,41 +281,37 @@ function LessonCard({
   const accent = subject?.color ?? '#52525B'
 
   return (
-    <div
-      className="border border-[#E4E4E7] bg-[#FAFAF9] p-3"
-      style={{ borderLeft: `3px solid ${accent}` }}
-    >
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="font-semibold text-sm text-[#18181B] flex-1 min-w-0 truncate">
+    <div className="fx-card relative pl-4 pr-3 py-3">
+      <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: accent }} />
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[14px] font-semibold text-slate-900 flex-1 min-w-[8rem] break-words">
           {subject?.name ?? 'Lesson'}
         </span>
-        {span > 1 && <Tag tone="zinc" icon={Repeat}>{blockWord(span)}</Tag>}
-        {entry.groupId && (
-          <Tag tone="indigo" icon={Users}>{groupName?.(entry.groupId) ?? 'Group'}</Tag>
-        )}
-        {entry.combinedKey && <Tag tone="indigo" icon={Layers}>Combined</Tag>}
-        {entry.isLocked && <Tag tone="dark" icon={Pin}>Pinned</Tag>}
+        {span > 1 && <Chip><Repeat size={10} /> {blockWord(span)}</Chip>}
+        {entry.groupId && <Chip tone="indigo"><Users size={10} /> {groupName?.(entry.groupId) ?? 'Group'}</Chip>}
+        {entry.combinedKey && <Chip tone="indigo"><Layers size={10} /> Combined</Chip>}
+        {entry.isLocked && <Chip tone="dark"><Pin size={10} /> Pinned</Chip>}
       </div>
 
-      <dl className="mt-2 space-y-1 text-[12px] text-[#52525B]">
+      <dl className="mt-2 space-y-1 text-[12.5px] text-slate-600">
         <Line icon={Users}>
           {ids.length === 0 ? (
-            <span className="text-[#A1A1AA] italic">No teacher assigned</span>
+            <span className="text-slate-400">No teacher yet</span>
           ) : (
             ids.map((id, i) => (
               <span key={id}>
                 {i > 0 && ', '}
                 {teacherName(id)}
-                {i === 0 && ids.length > 1 && <span className="text-[#A1A1AA]"> (primary)</span>}
+                {i === 0 && ids.length > 1 && <span className="text-slate-400"> (main)</span>}
               </span>
             ))
           )}
         </Line>
-        <Line icon={DoorOpen}>{room?.name ?? <span className="text-[#A1A1AA]">No room</span>}</Line>
+        <Line icon={DoorOpen}>{room?.name ?? <span className="text-slate-400">No room</span>}</Line>
         {combined && (
           <Line icon={Layers}>
             <span>
-              <span className="text-[#71717A]">
+              <span className="text-slate-500">
                 {combined.members.length} classes together
                 {combined.name ? ` · ${combined.name}` : ''}
                 {': '}
@@ -377,52 +324,45 @@ function LessonCard({
         )}
       </dl>
 
-      <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
         <button
           onClick={onTogglePin}
           aria-pressed={entry.isLocked}
-          className={`${BTN_SM} border ${
-            entry.isLocked
-              ? 'bg-[#27272A] text-white border-[#27272A] hover:bg-[#18181B]'
-              : 'bg-white text-[#52525B] border-[#D4D4D8] hover:bg-[#F5F5F5]'
-          }`}
+          className={`${BTN_SM} ${entry.isLocked ? SM_DARK : SM_GHOST}`}
           title={entry.isLocked
-            ? 'Unpin — the generator may move it'
-            : 'Pin here — regenerating builds the week around it'}
+            ? 'Unpin. Generate may move it.'
+            : 'Pin here. Generate builds the week around it.'}
         >
-          {entry.isLocked ? <PinOff size={12} /> : <Pin size={12} />}
+          {entry.isLocked ? <PinOff size={13} /> : <Pin size={13} />}
           {entry.isLocked ? 'Unpin' : 'Pin here'}
         </button>
         {onReplace && (
           <button
             onClick={onReplace}
-            className={`${BTN_SM} bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]`}
+            className={`${BTN_SM} ${SM_GHOST}`}
             title="Change this period for one date, or from a date onwards, without touching the weekly timetable"
           >
-            <CalendarClock size={12} /> Replace on a date
+            <CalendarClock size={13} /> Change on a date
           </button>
         )}
         {!entry.combinedKey && (
           <>
             <button
               onClick={onEdit}
-              className={`${BTN_SM} bg-white border border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]`}
+              className={`${BTN_SM} ${SM_GHOST}`}
               title="Change the lesson in the weekly timetable, every week"
             >
-              <Pencil size={12} /> Edit
+              <Pencil size={13} /> Edit
             </button>
-            <button
-              onClick={onRemove}
-              className={`${BTN_SM} text-rose-600 hover:bg-rose-50 ml-auto`}
-            >
-              <Trash2 size={12} /> Remove
+            <button onClick={onRemove} className={`${BTN_SM} ${SM_DANGER} ml-auto`}>
+              <Trash2 size={13} /> Remove
             </button>
           </>
         )}
       </div>
       {entry.combinedKey && (
-        <p className="text-[11px] text-[#A1A1AA] mt-2">
-          Pinning or moving it carries every class above with it.
+        <p className="text-[12px] text-slate-400 mt-2">
+          Pinning or moving it moves it for every class above.
         </p>
       )}
     </div>
@@ -432,27 +372,9 @@ function LessonCard({
 function Line({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-1.5">
-      <Icon size={12} className="flex-shrink-0 mt-0.5 text-[#A1A1AA]" aria-hidden />
-      <span className="min-w-0">{children}</span>
+      <Icon size={13} className="flex-shrink-0 mt-0.5 text-slate-400" aria-hidden />
+      <span className="min-w-0 break-words">{children}</span>
     </div>
-  )
-}
-
-const TAG_TONE = {
-  zinc: 'bg-[#F5F5F5] border-[#D4D4D8] text-[#52525B]',
-  indigo: 'bg-indigo-50 border-indigo-200 text-indigo-700',
-  dark: 'bg-[#27272A] border-[#27272A] text-white',
-  amber: 'bg-amber-50 border-amber-200 text-amber-800',
-} as const
-
-function Tag({
-  tone, icon: Icon, children,
-}: { tone: keyof typeof TAG_TONE; icon?: React.ElementType; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 border flex-shrink-0 ${TAG_TONE[tone]}`}>
-      {Icon && <Icon size={10} aria-hidden />}
-      {children}
-    </span>
   )
 }
 
@@ -475,21 +397,21 @@ function LessonForm({
 
   return (
     <form
-      className="border-t border-[#E4E4E7] pt-3.5 space-y-3"
+      className="border-t border-[#EEEAE1] pt-3.5 space-y-3"
       onSubmit={(e) => { e.preventDefault(); if (subjectId) onSubmit(subjectId, teacherIds, roomId || null) }}
     >
-      <p className={SECTION_LABEL}>
-        Edit lesson — every week
-        {entry?.groupId && ` · ${groupName?.(entry.groupId) ?? 'Group'}`}
+      <p className="text-[14px] font-semibold text-slate-900">
+        Edit the weekly lesson
+        {entry?.groupId && <span className="font-normal text-slate-500"> · {groupName?.(entry.groupId) ?? 'Group'}</span>}
       </p>
       <Labelled label="Subject">
-        <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
+        <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Choose a subject" searchPlaceholder="Search subjects…" />
       </Labelled>
       <Labelled label="Teachers">
         <MultiTeacherSelect teachers={teachers} value={teacherIds} onChange={setTeacherIds} compact />
       </Labelled>
       <Labelled label="Room">
-        <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="None" searchPlaceholder="Search rooms…" allowClear />
+        <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="No room" searchPlaceholder="Search rooms…" allowClear />
       </Labelled>
       <FormActions onCancel={onCancel} disabled={!subjectId} submitLabel="Save" />
     </form>
@@ -529,7 +451,7 @@ function ReplaceForm({
 
   return (
     <form
-      className="border-t border-[#E4E4E7] pt-3.5 space-y-3"
+      className="border-t border-[#EEEAE1] pt-3.5 space-y-3"
       onSubmit={(e) => {
         e.preventDefault()
         if (!ready) return
@@ -540,7 +462,10 @@ function ReplaceForm({
         })
       }}
     >
-      <p className={SECTION_LABEL}>Replace on a date — the weekly timetable stays as it is</p>
+      <div>
+        <p className="text-[14px] font-semibold text-slate-900">Change on a date</p>
+        <p className="text-[12px] text-slate-500">The weekly timetable stays as it is.</p>
+      </div>
 
       <Labelled label="Date">
         <input
@@ -552,13 +477,10 @@ function ReplaceForm({
         />
       </Labelled>
       {wrongWeekday && (
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1.5">
-          <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-          <span>
-            {formatDateLabel(date)} is not a {WEEKDAY_LABELS[day]}, and this period only runs on{' '}
-            {WEEKDAY_LABELS[day]}s. Pick a {WEEKDAY_LABELS[day]}.
-          </span>
-        </p>
+        <Notice tone="warn">
+          {formatDateLabel(date)} is not a {WEEKDAY_LABELS[day]}. This period only runs on{' '}
+          {WEEKDAY_LABELS[day]}s.
+        </Notice>
       )}
 
       <Labelled label="How long">
@@ -567,7 +489,7 @@ function ReplaceForm({
           onChange={setSpan}
           options={[
             { value: 'date' as const, label: 'That date only', hint: formatDateLabel(date) },
-            { value: 'onwards' as const, label: 'That date onwards', hint: 'every following week' },
+            { value: 'onwards' as const, label: 'From that date on', hint: 'Every week after it' },
           ]}
         />
       </Labelled>
@@ -577,8 +499,8 @@ function ReplaceForm({
           value={kind}
           onChange={setKind}
           options={[
-            { value: 'replace' as const, label: 'A different lesson', hint: 'subject, teachers, room' },
-            { value: 'cancel' as const, label: 'No lesson', hint: 'the period goes free' },
+            { value: 'replace' as const, label: 'A different lesson', hint: 'Subject, teachers, room' },
+            { value: 'cancel' as const, label: 'No lesson', hint: 'The period is free' },
           ]}
         />
       </Labelled>
@@ -586,22 +508,23 @@ function ReplaceForm({
       {kind === 'replace' && (
         <>
           <Labelled label="Subject">
-            <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Select subject…" searchPlaceholder="Search subjects…" />
+            <SmartSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Choose a subject" searchPlaceholder="Search subjects…" />
           </Labelled>
           <Labelled label="Teachers">
             <MultiTeacherSelect teachers={teachers} value={teacherIds} onChange={setTeacherIds} compact />
           </Labelled>
           <Labelled label="Room">
-            <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="None" searchPlaceholder="Search rooms…" allowClear />
+            <SmartSelect options={roomOptions} value={roomId} onChange={setRoomId} placeholder="No room" searchPlaceholder="Search rooms…" allowClear />
           </Labelled>
         </>
       )}
 
-      <Labelled label="Note (optional)">
+      <Labelled label="Note">
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="e.g. covering for sick leave"
+          placeholder="Optional, e.g. cover for sick leave"
+          maxLength={200}
           className={INPUT}
         />
       </Labelled>
@@ -623,43 +546,43 @@ function OverrideList({
 }) {
   const today = todayISO()
   return (
-    <div className="border border-[#E4E4E7]">
-      <p className={`${SECTION_LABEL} px-3 py-1.5 bg-[#FAFAF9] border-b border-[#E4E4E7]`}>
+    <div className="fx-card">
+      <p className={`${SECTION_LABEL} px-3.5 py-2 bg-[#F7F5F0] border-b border-[#EEEAE1]`}>
         Date changes
       </p>
-      <ul className="divide-y divide-[#F0F0F0]">
+      <ul className="divide-y divide-[#F0ECE3]">
         {overrides.map((o) => {
           const live = o.effective_from <= today && (o.effective_to === null || o.effective_to >= today)
           const names = teacherIdsOf(o).map(teacherName)
           return (
-            <li key={o.id} className="flex items-start gap-2 px-3 py-2 text-[12px]">
+            <li key={o.id} className="flex items-start gap-2 pl-3.5 pr-1.5 py-2 text-[12.5px]">
               <CalendarClock
                 size={13}
-                className={`flex-shrink-0 mt-0.5 ${live ? 'text-[#B8983C]' : 'text-[#D4D4D8]'}`}
+                className={`flex-shrink-0 mt-0.5 ${live ? 'text-[#B8983C]' : 'text-slate-300'}`}
                 aria-hidden
               />
-              <div className="min-w-0 flex-1">
-                <p className="text-[#18181B]">
+              <div className="min-w-0 flex-1 break-words">
+                <p className="text-slate-900">
                   {o.kind === 'cancel'
                     ? 'No lesson'
                     : subjectName(o.subject_id)}
                   {o.group_id && (
-                    <span className="text-[#A1A1AA]"> · {groupName?.(o.group_id) ?? 'Group'}</span>
+                    <span className="text-slate-400"> · {groupName?.(o.group_id) ?? 'Group'}</span>
                   )}
-                  {names.length > 0 && <span className="text-[#71717A]"> · {names.join(', ')}</span>}
+                  {names.length > 0 && <span className="text-slate-500"> · {names.join(', ')}</span>}
                 </p>
-                <p className="text-[11px] text-[#A1A1AA]">
+                <p className="text-[12px] text-slate-400">
                   {describeSpan(o)}
-                  {!live && ' · not in force today'}
+                  {!live && ' · not today'}
                   {o.note && ` · ${o.note}`}
                 </p>
               </div>
               {onDelete && (
                 <button
                   onClick={() => onDelete(o.id)}
-                  aria-label="Lift this date change"
-                  title="Lift it — the ordinary weekly lesson comes back"
-                  className={`p-1 text-[#A1A1AA] hover:text-rose-600 flex-shrink-0 ${TAP} ${FOCUS}`}
+                  aria-label="Undo this date change"
+                  title="Undo it. The usual weekly lesson comes back."
+                  className={ICON_BTN_DANGER}
                 >
                   <Undo2 size={13} />
                 </button>
@@ -700,15 +623,15 @@ function Choice<T extends string>({
             type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`text-left px-2.5 py-2 border ${TAP} ${FOCUS} ${
+            className={`text-left px-3 py-2 rounded-[12px] ${TAP} ${FOCUS} ${
               active
-                ? 'bg-[#27272A] border-[#27272A] text-white'
-                : 'bg-white border-[#D4D4D8] text-[#52525B] hover:bg-[#F5F5F5]'
+                ? 'bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16)]'
+                : 'bg-white border border-[#E2DDD2] text-slate-700 hover:border-[#CFC8B8]'
             }`}
           >
-            <span className="block text-[12px] font-medium">{o.label}</span>
+            <span className="block text-[12.5px] font-semibold leading-snug">{o.label}</span>
             {o.hint && (
-              <span className={`block text-[10px] ${active ? 'text-white/60' : 'text-[#A1A1AA]'}`}>
+              <span className={`block text-[11.5px] leading-snug ${active ? 'text-white/60' : 'text-slate-400'}`}>
                 {o.hint}
               </span>
             )}
@@ -723,16 +646,11 @@ function FormActions({
   onCancel, disabled, submitLabel,
 }: { onCancel: () => void; disabled: boolean; submitLabel: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <button type="button" onClick={onCancel} className={`${BTN_SM} text-[#71717A] hover:text-[#18181B]`}>
+    <div className="flex items-center justify-end gap-2 pt-1">
+      <button type="button" onClick={onCancel} className={BTN_QUIET}>
         Cancel
       </button>
-      <div className="flex-1" />
-      <button
-        type="submit"
-        disabled={disabled}
-        className={`${BTN_SM} px-4 bg-[#27272A] text-[#F5F5F5] hover:bg-[#18181B]`}
-      >
+      <button type="submit" disabled={disabled} className={`${BTN_PRIMARY} min-w-[6rem]`}>
         {submitLabel}
       </button>
     </div>

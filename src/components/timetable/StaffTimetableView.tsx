@@ -1,12 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { CalendarRange, Loader2, Download } from 'lucide-react'
+import { CalendarRange, Download } from 'lucide-react'
 import { fetchTimetableForStaff } from '@/lib/timetable'
 import type { TimetableViewData } from '@/lib/timetable'
-import { exportTimetableToExcel } from '@/lib/timetable/export'
 import { fetchAllHomerooms } from '@/lib/homerooms'
-import { BTN_NEUTRAL } from './ui'
+import { BTN_NEUTRAL, Loading } from './ui'
 import TimetableGrid from './TimetableGrid'
 import DateChangesNotice from './DateChangesNotice'
 
@@ -28,11 +27,7 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
   }, [load])
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16 text-[#A1A1AA]">
-        <Loader2 className="animate-spin" size={22} />
-      </div>
-    )
+    return <Loading />
   }
 
   if (views.length === 0) {
@@ -40,19 +35,22 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 sm:space-y-10">
       {views.map(({ config, slots, timetable, entries, overrides }) => (
-        <div key={config.id} className="space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div>
-              <p className="text-sm text-[#71717A]">
-                <span className="font-medium text-[#18181B]">{config.name}</span>
-                {config.academic_year ? ` · ${config.academic_year}` : ''} · {entries.length} periods / week
+        <section key={config.id} className="space-y-3">
+          <div className="flex items-end justify-between gap-x-3 gap-y-2 flex-wrap">
+            <div className="min-w-0 flex-1 basis-[200px]">
+              <h2 className="font-display text-[17px] sm:text-[19px] font-bold text-slate-900 leading-snug headline break-words">
+                {config.name}
+              </h2>
+              <p className="text-[12.5px] text-slate-500 break-words">
+                {[config.academic_year, `${entries.length} periods a week`, timetable.name].filter(Boolean).join(' · ')}
               </p>
-              {timetable.name && <p className="text-xs text-[#A1A1AA]">{timetable.name}</p>}
             </div>
             <button
-              onClick={() =>
+              onClick={async () => {
+                // Loaded on demand: most visits never export.
+                const { exportTimetableToExcel } = await import('@/lib/timetable/export')
                 exportTimetableToExcel({
                   fileName: `teaching-timetable-${config.name.toLowerCase().replace(/\s+/g, '-')}.xlsx`,
                   sheetName: config.name,
@@ -61,7 +59,7 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
                   entries,
                   secondary: (e) => homeroomNames.get(e.homeroom_id) ?? 'Class',
                 })
-              }
+              }}
               className={BTN_NEUTRAL}
             >
               <Download size={14} /> Export
@@ -75,7 +73,7 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
             overrides={overrides}
           />
           <DateChangesNotice overrides={overrides} slots={slots} />
-        </div>
+        </section>
       ))}
     </div>
   )
@@ -83,13 +81,13 @@ export default function StaffTimetableView({ staffId }: { staffId: string }) {
 
 function EmptyState() {
   return (
-    <div className="bg-white border border-[#D4D4D8] p-10 text-center">
-      <div className="w-14 h-14 mx-auto bg-[#27272A] flex items-center justify-center mb-4">
-        <CalendarRange className="w-7 h-7 text-[#B8983C]" strokeWidth={1.5} />
-      </div>
-      <h2 className="font-display text-lg font-semibold text-[#18181B]">No teaching schedule yet</h2>
-      <p className="text-[#71717A] text-sm mt-1">
-        Once the timetable is published, the periods you teach will appear here as your weekly schedule.
+    <div className="fx-card fx-bleed px-6 py-12 text-center">
+      <span className="icon-chip w-12 h-12 mx-auto mb-3" style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
+        <CalendarRange className="relative z-10 w-6 h-6 text-white" strokeWidth={1.75} />
+      </span>
+      <h2 className="font-display text-[17px] font-bold text-slate-900">No teaching schedule yet</h2>
+      <p className="text-slate-500 text-[13px] mt-1 max-w-sm mx-auto leading-relaxed">
+        The periods you teach appear here once the timetable is published.
       </p>
     </div>
   )
