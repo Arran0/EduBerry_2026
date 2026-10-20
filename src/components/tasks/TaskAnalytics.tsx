@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { BarChart3, AlertTriangle, Star, ListChecks, Hourglass, CircleDot } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 import { fetchAnalyticsData, TaskAnalyticsSummary, TaskStatus } from '@/lib/tasks'
 import { UserProfile } from '@/lib/supabase'
 import TeamMemberSelector from './TeamMemberSelector'
@@ -75,54 +75,31 @@ function StatusBar({ counts, total, height = 10 }: { counts: Record<TaskStatus, 
   )
 }
 
-function Kpi({ icon: Icon, label, value, sub, tone }: { icon: typeof Star; label: string; value: React.ReactNode; sub?: React.ReactNode; tone: string }) {
-  return (
-    <div className="tk-card !rounded-[16px] p-3 min-w-0">
-      <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-500">
-        <span className={`inline-flex w-6 h-6 rounded-[8px] items-center justify-center ${tone}`}><Icon size={13} /></span>
-        <span className="min-w-0 break-words">{label}</span>
-      </div>
-      <p className="mt-1.5 font-display text-[1.5rem] font-bold leading-none text-slate-800 tabular-nums">{value}</p>
-      {sub && <p className="mt-1 text-[11.5px] text-slate-500 leading-snug break-words">{sub}</p>}
-    </div>
-  )
-}
-
 export default function TaskAnalytics({ userId, viewingUserId, teamMembers, currentUserId, currentUserName, onViewingUserChange }: TaskAnalyticsProps) {
   const [period, setPeriod] = useState<Period>('month')
   const [data, setData] = useState<Partial<Record<Period, TaskAnalyticsSummary>>>({})
   const targetUserId = viewingUserId || userId
 
-  // All three periods load together, once per person, so switching between
-  // them is instant and the comparison table needs nothing further.
+  // A different person starts with nothing loaded.
+  useEffect(() => { setData({}) }, [targetUserId])
+
+  // Each period is fetched the first time it's shown and kept, so switching
+  // back to one already seen is instant.
   useEffect(() => {
+    if (data[period]) return
     let cancelled = false
-    setData({})
-    for (const p of PERIODS) {
-      fetchAnalyticsData(targetUserId, p).then(summary => {
-        if (!cancelled) setData(prev => ({ ...prev, [p]: summary }))
-      })
-    }
+    fetchAnalyticsData(targetUserId, period).then(summary => {
+      if (!cancelled) setData(prev => ({ ...prev, [period]: summary }))
+    })
     return () => { cancelled = true }
-  }, [targetUserId])
+  }, [targetUserId, period, data])
 
   const summary = data[period]
   const loading = !summary
   const counts = summary?.counts ?? { not_done: 0, partial: 0, done: 0, checked: 0, dismissed: 0 }
   const total = summary?.total ?? 0
-  const open = counts.not_done + counts.partial
   const pct = summary?.completionRate ?? 0
   const share = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
-
-  // Plain statements read off the figures, worst first.
-  const notes: { tone: string; text: string }[] = []
-  if (summary) {
-    if (summary.overdue > 0) notes.push({ tone: 'bg-red-400', text: `${summary.overdue} task${summary.overdue !== 1 ? 's are' : ' is'} past due and not finished.` })
-    if (counts.done > 0) notes.push({ tone: 'bg-yellow-400', text: `${counts.done} done and waiting to be verified.` })
-    if (counts.partial > 0) notes.push({ tone: 'bg-orange-400', text: `${counts.partial} started but not finished.` })
-    if (counts.not_done > 0) notes.push({ tone: 'bg-slate-300', text: `${counts.not_done} not started yet.` })
-    if (notes.length === 0 && total > 0) notes.push({ tone: 'bg-emerald-400', text: 'Everything in this period is complete.' })
-  }
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -157,11 +134,17 @@ export default function TaskAnalytics({ userId, viewingUserId, teamMembers, curr
             <p className="text-[13.5px] text-slate-700 mt-0.5 leading-snug">
               {loading ? 'Loading…' : total === 0 ? 'No tasks in this period.' : <><span className="font-bold text-slate-800 tabular-nums">{counts.checked}</span> of <span className="font-bold text-slate-800 tabular-nums">{total}</span> tasks completed</>}
             </p>
+            {summary && total > 0 && (
+              <p className="mt-1.5 flex flex-wrap lg:justify-center gap-x-3 gap-y-0.5 text-[12px] text-slate-500">
+                <span><span className={`font-bold tabular-nums ${summary.overdue > 0 ? 'text-red-500' : 'text-slate-700'}`}>{summary.overdue}</span> overdue</span>
+                <span><span className="font-bold tabular-nums text-amber-600">{summary.bonusPoints}</span> bonus points</span>
+              </p>
+            )}
           </div>
         </section>
 
         {/* Breakdown */}
-        <section className="tk-card lg:col-span-5 overflow-hidden">
+        <section className="tk-card lg:col-span-8 overflow-hidden">
           <div className="tk-card-head px-4 py-2.5 flex items-center justify-between gap-2">
             <h3 className="text-[13.5px] font-semibold text-slate-800">By status</h3>
             <span className="text-[12px] text-slate-500 tabular-nums">{total} total</span>
@@ -184,85 +167,6 @@ export default function TaskAnalytics({ userId, viewingUserId, teamMembers, curr
           </div>
         </section>
 
-        {/* Figures */}
-        <div className="lg:col-span-3 grid grid-cols-2 gap-3 sm:gap-4 lg:gap-3 content-start">
-          <Kpi icon={ListChecks} label="Open" value={loading ? '–' : open} sub="Not done or partial" tone="bg-orange-50 text-orange-600" />
-          <Kpi icon={AlertTriangle} label="Overdue" value={loading ? '–' : summary.overdue} sub="Past their due date" tone="bg-red-50 text-red-500" />
-          <Kpi icon={Star} label="Bonus points" value={loading ? '–' : summary.bonusPoints} sub="From completed tasks" tone="bg-amber-50 text-amber-600" />
-          <Kpi icon={Hourglass} label="Checking" value={loading ? '–' : counts.done} sub="Waiting to be verified" tone="bg-yellow-50 text-yellow-600" />
-        </div>
-
-        {/* Needs attention */}
-        <section className="tk-card lg:col-span-4 overflow-hidden">
-          <div className="tk-card-head px-4 py-2.5">
-            <h3 className="text-[13.5px] font-semibold text-slate-800 flex items-center gap-1.5"><CircleDot size={14} className="text-amber-600" /> Needs attention</h3>
-          </div>
-          <ul className="px-4 py-3 space-y-2">
-            {loading ? (
-              <li className="text-[12.5px] text-slate-400">Loading…</li>
-            ) : notes.length === 0 ? (
-              <li className="text-[12.5px] text-slate-500">No tasks in this period.</li>
-            ) : notes.map(n => (
-              <li key={n.text} className="flex items-start gap-2 text-[13px] text-slate-700 leading-snug">
-                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.tone}`} />
-                <span className="min-w-0">{n.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Compare periods */}
-        <section className="tk-card lg:col-span-8 overflow-hidden">
-          <div className="tk-card-head px-4 py-2.5 flex items-center justify-between gap-2">
-            <h3 className="text-[13.5px] font-semibold text-slate-800">Compare periods</h3>
-            <span className="text-[11.5px] text-slate-500">Tap a row to view it</span>
-          </div>
-          <div>
-            <table className="w-full text-[12.5px]">
-              <thead>
-                <tr className="text-[11px] font-semibold text-amber-900/60">
-                  <th className="text-left pl-3 sm:pl-4 pr-1 py-2">Period</th>
-                  <th className="text-right px-2 py-2">Tasks</th>
-                  <th className="text-right px-2 py-2">Done</th>
-                  <th className="text-right px-2 py-2">Overdue</th>
-                  <th className="text-right px-2 py-2">Bonus</th>
-                  <th className="hidden sm:table-cell text-left px-4 py-2 w-[34%]">Status mix</th>
-                </tr>
-              </thead>
-              <tbody>
-                {PERIODS.map(p => {
-                  const d = data[p]
-                  const on = p === period
-                  return (
-                    <tr
-                      key={p}
-                      onClick={() => setPeriod(p)}
-                      className={`border-t border-amber-900/[0.06] cursor-pointer transition-colors ${on ? 'bg-amber-50/80' : 'hover:bg-amber-50/40'}`}
-                    >
-                      <td className="pl-3 sm:pl-4 pr-1 py-2.5">
-                        <span className={`font-semibold ${on ? 'text-amber-800' : 'text-slate-700'}`}>{PERIOD_LABEL[p]}</span>
-                      </td>
-                      <td className="text-right px-2 py-2.5 font-bold text-slate-800 tabular-nums">{d ? d.total : '–'}</td>
-                      <td className="text-right px-2 py-2.5 tabular-nums text-emerald-600 font-semibold">{d ? `${d.completionRate}%` : '–'}</td>
-                      <td className={`text-right px-2 py-2.5 tabular-nums font-semibold ${d && d.overdue > 0 ? 'text-red-500' : 'text-slate-400'}`}>{d ? d.overdue : '–'}</td>
-                      <td className="text-right px-2 py-2.5 tabular-nums text-amber-600 font-semibold">{d ? d.bonusPoints : '–'}</td>
-                      <td className="hidden sm:table-cell px-4 py-2.5">
-                        {d ? <StatusBar counts={d.counts} total={d.total} height={8} /> : <div className="h-2 rounded-full bg-amber-900/[0.06] animate-pulse" />}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 px-4 py-2 border-t border-amber-900/[0.06]">
-            {STATUSES.map(s => (
-              <span key={s} className="inline-flex items-center gap-1.5 text-[11.5px] text-slate-500">
-                <span className="w-2 h-2 rounded-full" style={{ background: COLORS[s] }} /> {LABELS[s]}
-              </span>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   )
