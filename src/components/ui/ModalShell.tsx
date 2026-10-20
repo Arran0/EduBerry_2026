@@ -103,7 +103,7 @@ interface ModalShellProps {
 }
 
 /** Page themes whose popups default to the glass sheet. */
-const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave', 'fees', 'salary', 'timetable', 'academics', 'classrooms'])
+const GLASS_THEMES = new Set(['staff-attendance', 'staff-leave', 'student-attendance', 'student-leave', 'fees', 'salary', 'timetable', 'tasks', 'academics', 'classrooms'])
 
 export default function ModalShell({
   onClose,
