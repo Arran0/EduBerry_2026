@@ -14,7 +14,7 @@ import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { TASK_SLOTS, TaskSlot, formatSlotTime } from '@/lib/taskSlots'
 import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
-import { Btn, IconBtn, IconChip, Stepper, StatusMark, shortDate } from './ui'
+import { Btn, IconBtn, IconChip, StatusMark, shortDate } from './ui'
 
 // Every popup loads the first time it opens, not with the page. The loaders
 // are kept so a hover on the button that opens one can start the download.
@@ -335,19 +335,6 @@ export default function WeeklyCalendar({
   const getTasksForDay = (d: string) => tasksByDay.get(d) ?? EMPTY_TASKS
   const getSubtasksForDay = (d: string) => subtasksByDay.get(d) ?? EMPTY_SUBTASKS
 
-  // The week at a glance, for the toolbar.
-  const weekSummary = useMemo(() => {
-    const items: { status: TaskStatus; require_check?: boolean | null }[] = []
-    for (const d of weekDays) {
-      for (const t of tasksByDay.get(d.full) ?? []) if (t.status !== 'dismissed') items.push(t)
-      for (const s of subtasksByDay.get(d.full) ?? []) if (s.status !== 'dismissed') items.push(s)
-    }
-    const total = items.length
-    const done = items.filter(isDone).length
-    const checking = items.filter(i => i.status === 'done' && i.require_check).length
-    return { total, done, checking, open: total - done - checking, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
-  }, [weekDays, tasksByDay, subtasksByDay])
-
   const overdueUndatedSubtasks = useMemo(() => subtasks.filter(s => {
     if (s.status === 'dismissed' || isDone(s)) return false
     return !s.due_date || s.due_date < todayStr
@@ -440,61 +427,84 @@ export default function WeeklyCalendar({
     <SubtaskGridChip key={sub.id} subtask={sub} onStatusTap={handleSubtaskStatusTap} onOpen={() => setOpenSubtask(sub)} />
   )
 
+  const picker = teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange ? (
+    <TeamMemberSelector
+      members={teamMembers}
+      selectedUserId={viewingUserId || currentUserId}
+      currentUserId={currentUserId}
+      currentUserName={currentUserName || ''}
+      onSelect={onViewingUserChange}
+    />
+  ) : null
+
   return (
     <div className="space-y-3 sm:space-y-4">
-      <section className="tk-card overflow-hidden">
-        {/* ── Toolbar: title, week, the week at a glance, actions ───────────── */}
-        <div className="tk-card-head flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 py-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
+      {/* ── Header, on the page: title and actions, then the week ───────────── */}
+      <div className="space-y-1.5">
+        {/* Each row is positioned, so on a phone the menus hang from the row. */}
+        <div className="relative flex items-center gap-1.5 sm:gap-2">
+          <h2 className="font-display text-[17px] sm:text-xl font-bold text-slate-800 flex items-center gap-2.5 mr-auto flex-shrink-0 whitespace-nowrap">
             <IconChip icon={CalendarDays} />
-            <h2 className="font-display text-[15px] sm:text-[17px] font-bold text-slate-800 leading-tight whitespace-nowrap">Weekly calendar</h2>
-          </div>
-          <Stepper
-            label={weekLabel}
-            onPrev={() => shiftWeek(-1)}
-            onNext={() => shiftWeek(1)}
-            prevLabel="Previous week"
-            nextLabel="Next week"
-            onLabel={isThisWeek ? undefined : goToThisWeek}
-            labelTitle="Back to this week"
-          />
-          {!isThisWeek && <Btn onClick={goToThisWeek}>This week</Btn>}
-
-          {!loading && (
-            <WeekGlance summary={weekSummary} />
-          )}
-
-          <div className="flex items-center gap-1.5 ml-auto">
-            {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
-              <TeamMemberSelector
-                members={teamMembers}
-                selectedUserId={viewingUserId || currentUserId}
-                currentUserId={currentUserId}
-                currentUserName={currentUserName || ''}
-                onSelect={onViewingUserChange}
-              />
-            )}
-            <div className="sm:relative">
-              <IconBtn label="What the colours mean" aria-pressed={showGuide} onClick={() => setShowGuide(v => !v)}>
-                <HelpCircle size={15} />
-              </IconBtn>
-              {showGuide && <Legend onClose={() => setShowGuide(false)} />}
-            </div>
-            <IconBtn label="Planner: import or draft a week of tasks" onClick={() => setShowPlanner(true)}>
-              <FileSpreadsheet size={15} />
+            Calendar
+          </h2>
+          {picker && <div className="hidden sm:block">{picker}</div>}
+          <div className="sm:relative">
+            <IconBtn label="What the colours mean" aria-pressed={showGuide} onClick={() => setShowGuide(v => !v)} className="max-[359px]:!w-8 max-[359px]:!h-8">
+              <HelpCircle size={15} />
             </IconBtn>
-            <Btn
-              tone="primary"
-              onClick={() => openNewTask(todayStr)}
-              onPointerEnter={() => { loadNewTaskForm() }}
-              onFocus={() => { loadNewTaskForm() }}
-            >
-              <Plus size={15} />
-              <span className="hidden min-[420px]:inline">New task</span>
-            </Btn>
+            {showGuide && <Legend onClose={() => setShowGuide(false)} />}
           </div>
+          <IconBtn label="Planner: import or draft a week of tasks" onClick={() => setShowPlanner(true)} className="max-[359px]:!w-8 max-[359px]:!h-8">
+            <FileSpreadsheet size={15} />
+          </IconBtn>
+          <Btn
+            tone="primary"
+            onClick={() => openNewTask(todayStr)}
+            onPointerEnter={() => { loadNewTaskForm() }}
+            onFocus={() => { loadNewTaskForm() }}
+          >
+            <Plus size={15} />
+            {/* The narrowest phones get the short label so the title keeps its room. */}
+            <span className="min-[360px]:hidden">New</span>
+            <span className="hidden min-[360px]:inline">New task</span>
+          </Btn>
         </div>
 
+        <div className="relative flex items-center gap-2">
+          {picker && <div className="sm:hidden">{picker}</div>}
+          {/* The week switch: the whole row, straight on the page. */}
+          <div className="flex-1 min-w-0 flex items-center gap-1 border-y border-amber-900/[0.08] py-1">
+            <button
+              type="button"
+              onClick={() => shiftWeek(-1)}
+              aria-label="Previous week"
+              className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex-1 min-w-0 text-center leading-tight">
+              <p className="font-display text-[15px] sm:text-[16px] font-bold text-slate-800 tabular-nums">{weekLabel}</p>
+              {isThisWeek ? (
+                <p className="text-[11.5px] font-medium text-amber-700/80">This week</p>
+              ) : (
+                <button type="button" onClick={goToThisWeek} className="text-[11.5px] font-semibold text-orange-600 hover:text-orange-700 underline-offset-2 hover:underline">
+                  Back to this week
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => shiftWeek(1)}
+              aria-label="Next week"
+              className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <section className="tk-card overflow-hidden">
         {/* ── Period × day grid, from the active Timetable's periods ─────────── */}
         {loading ? (
           <CalendarSkeleton />
@@ -675,31 +685,6 @@ function cellBg(day: string, today: string, expanded: string): string {
   if (day === today) return 'bg-orange-50/40'
   if (day === expanded) return 'bg-amber-50/40'
   return 'bg-white'
-}
-
-// ─── The week at a glance ─────────────────────────────────────────────────────
-
-function WeekGlance({ summary }: { summary: { total: number; done: number; checking: number; open: number; pct: number } }) {
-  const figure = (value: number, label: string, tone: string) => (
-    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
-      <span className={`text-[14px] font-bold tabular-nums ${tone}`}>{value}</span>
-      <span className="text-[11.5px] text-slate-500">{label}</span>
-    </span>
-  )
-  return (
-    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-3 py-1.5 rounded-full bg-white/70 border border-amber-900/[0.08] min-w-0">
-      {figure(summary.total, summary.total === 1 ? 'task' : 'tasks', 'text-slate-800')}
-      {figure(summary.done, 'done', 'text-emerald-600')}
-      {summary.checking > 0 && figure(summary.checking, 'checking', 'text-yellow-600')}
-      {figure(summary.open, 'open', 'text-orange-600')}
-      <span className="hidden sm:inline-flex items-center gap-1.5" title={`${summary.pct}% of this week's tasks are complete`}>
-        <span className="w-16 sm:w-20 h-1.5 rounded-full bg-amber-900/[0.08] overflow-hidden">
-          <span className="block h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-500 transition-[width] duration-500" style={{ width: `${summary.pct}%` }} />
-        </span>
-        <span className="text-[11.5px] font-semibold text-slate-600 tabular-nums">{summary.pct}%</span>
-      </span>
-    </div>
-  )
 }
 
 // ─── Status legend ────────────────────────────────────────────────────────────
