@@ -68,7 +68,11 @@ export async function POST(request: NextRequest) {
       .eq('upi_reference', ev.reference)
       .maybeSingle()
     feeId = fee?.id ?? null
-    if (fee && !payment) {
+    // A row created here has no pending payment behind it, so the UTR is the
+    // only thing that stops a replayed callback crediting the same money again,
+    // and the amount is the only record of how much arrived. Without both,
+    // leave it for the counter to reconcile rather than guess.
+    if (fee && !payment && ev.utr && typeof ev.amount === 'number' && ev.amount > 0) {
       const { data: inserted } = await admin
         .from('school_fee_payments')
         .insert({
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
           method: 'upi_qr',
           provider: 'smart_collect',
           provider_ref: ev.reference,
-          amount: ev.amount ?? fee.amount,
+          amount: ev.amount,
           status: 'pending',
         })
         .select('id, fee_id')

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifyPayoutCallback } from '@/lib/payoutWebhook'
+import { applyPayoutCallback } from '@/lib/payoutClaim'
 
 // Bank payout callback for DRIVER payroll. Reconciles a driver_payroll_records
 // row by the `reference` we sent the bank (the record id), flipping
@@ -38,28 +39,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true })
   }
 
-  const { data: record } = await admin
-    .from('driver_payroll_records')
-    .select('id, status')
-    .eq('id', reference)
-    .maybeSingle()
-  if (!record) {
+  const result = await applyPayoutCallback(admin, 'driver_payroll_records', { reference, outcome, payoutId })
+  if (result === 'unknown') {
     // 200 so the bank doesn't retry forever for a reference we don't track —
     // staff salary callbacks land here too and are correctly ignored.
     return NextResponse.json({ ok: true, ignored: 'unknown reference' })
   }
-
-  if (outcome === 'processed') {
-    await admin.from('driver_payroll_records').update({
-      payout_status: 'processed',
-      status: 'paid',
-      payout_reference: payoutId ?? record.id,
-    }).eq('id', record.id)
-  } else {
-    // A late or replayed failure never undoes a transfer the bank already
-    // settled: only a record not yet paid can be marked failed.
-    await admin.from('driver_payroll_records').update({ payout_status: 'failed' }).eq('id', record.id)
-      .neq('status', 'paid')
+  if (result === 'stale') {
+    // A failure for an attempt that is no longer in flight (replayed or late).
+    return NextResponse.json({ ok: true, ignored: 'stale failure' })
   }
 
   return NextResponse.json({ ok: true })

@@ -53,3 +53,62 @@ export async function reconcile(
     }
   }
 }
+
+export interface PayoutRecordState {
+  status: string | null
+  payout_status: string | null
+  payout_reference: string | null
+}
+
+/**
+ * Whether a bank "failed" callback applies to the attempt now in flight.
+ *
+ * Bank callbacks carry no timestamp or nonce, so a captured one can be
+ * replayed. A replayed *failure* is the dangerous kind: once a failed transfer
+ * has been retried, the old callback would mark the live retry failed too,
+ * making it eligible for a third send while the second may still land — the
+ * person is paid twice. So a failure only counts when a send is actually
+ * outstanding and, when both sides carry the bank's payout id, it names that
+ * attempt. A late success is always recorded: that money moved.
+ */
+export function failureApplies(record: PayoutRecordState, callbackPayoutId?: string | null): boolean {
+  if (record.status === 'paid') return false
+  if (record.payout_status !== 'initiated') return false
+  if (record.payout_reference && callbackPayoutId && record.payout_reference !== callbackPayoutId) return false
+  return true
+}
+
+/** Apply a verified bank payout callback to one staff or driver record. */
+export async function applyPayoutCallback(
+  admin: SupabaseClient,
+  table: 'salary_records' | 'driver_payroll_records',
+  event: { reference: string; outcome: 'processed' | 'failed'; payoutId?: string },
+): Promise<'unknown' | 'paid' | 'failed' | 'stale'> {
+  const { data: record } = await admin
+    .from(table)
+    .select('id, status, payout_status, payout_reference')
+    .eq('id', event.reference)
+    .maybeSingle()
+  if (!record) return 'unknown'
+
+  if (event.outcome === 'processed') {
+    await admin.from(table).update({
+      payout_status: 'processed',
+      status: 'paid',
+      payout_reference: event.payoutId ?? record.id,
+    }).eq('id', record.id)
+    return 'paid'
+  }
+
+  if (!failureApplies(record as PayoutRecordState, event.payoutId)) {
+    console.warn(`payout webhook (${table}): ignored stale failure for ${record.id}`)
+    return 'stale'
+  }
+  // Conditional on the state just checked, so a success that lands between the
+  // read and this write is never overwritten.
+  await admin.from(table).update({ payout_status: 'failed' })
+    .eq('id', record.id)
+    .eq('payout_status', 'initiated')
+    .neq('status', 'paid')
+  return 'failed'
+}
