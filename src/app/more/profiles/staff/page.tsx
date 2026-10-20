@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { MIN_PASSWORD_LENGTH, generateTempPassword } from '@/lib/passwords'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
@@ -190,7 +191,9 @@ export default function StaffProfileManagerPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState(false)
   const [createAutoConfirm, setCreateAutoConfirm] = useState(false)
-  const [createAutoConfirmPassword, setCreateAutoConfirmPassword] = useState('mps2627')
+  const [createAutoConfirmPassword, setCreateAutoConfirmPassword] = useState(generateTempPassword)
+  // Fresh random password each time the form opens — never a shared default.
+  useEffect(() => { if (showCreateModal) setCreateAutoConfirmPassword(generateTempPassword()) }, [showCreateModal])
   const [createdAutoConfirm, setCreatedAutoConfirm] = useState(false)
   const [createdEmail, setCreatedEmail] = useState('')
 
@@ -404,7 +407,7 @@ export default function StaffProfileManagerPage() {
     setCreateSuccess(false)
     if (!createForm.email || !createForm.full_name) { setCreateError('Email and full name are required'); return }
     if (!createForm.email.includes('@')) { setCreateError('Please enter a valid email address'); return }
-    if (createAutoConfirm && createAutoConfirmPassword.length < 6) { setCreateError('Password must be at least 6 characters'); return }
+    if (createAutoConfirm && createAutoConfirmPassword.length < MIN_PASSWORD_LENGTH) { setCreateError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`); return }
     setCreating(true)
     const input: NewUserInput = {
       email: createForm.email.trim(),
@@ -446,7 +449,7 @@ export default function StaffProfileManagerPage() {
   }
 
   const handleSetPassword = async () => {
-    if (!setPwTarget || setPwValue.length < 6) return
+    if (!setPwTarget || setPwValue.length < MIN_PASSWORD_LENGTH) return
     setSetPwLoading(true)
     setSetPwMsg(null)
     const result = await setUserPassword(setPwTarget.id, setPwValue)
@@ -874,8 +877,8 @@ export default function StaffProfileManagerPage() {
                             {createAutoConfirm ? (
                               <div className="pl-7">
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1">Default password</label>
-                                <input type="text" value={createAutoConfirmPassword} onChange={e => setCreateAutoConfirmPassword(e.target.value)} disabled={creating} placeholder="mps2627" className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#27272A] transition-colors rounded-lg" />
-                                <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum 6 characters.</p>
+                                <input type="text" value={createAutoConfirmPassword} onChange={e => setCreateAutoConfirmPassword(e.target.value)} disabled={creating} className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-[#27272A] transition-colors rounded-lg" />
+                                <p className="text-[11px] text-[#A1A1AA] mt-1">Minimum {MIN_PASSWORD_LENGTH} characters.</p>
                               </div>
                             ) : (
                               <p className="pl-7 text-xs text-[#71717A]">A password setup email will be sent to the staff member&rsquo;s address.</p>
@@ -995,7 +998,7 @@ export default function StaffProfileManagerPage() {
                   </button>
                   <button
                     onClick={handleSetPassword}
-                    disabled={setPwLoading || setPwValue.length < 6}
+                    disabled={setPwLoading || setPwValue.length < MIN_PASSWORD_LENGTH}
                     className="flex-1 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : 'Set Password'}

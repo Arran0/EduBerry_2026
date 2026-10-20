@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -258,8 +259,8 @@ export default function HomeroomsPage() {
 
   const handleCreateSmartboard = async () => {
     if (!expandedId || !user) return
-    if (!sbEmail.trim() || !sbName.trim() || sbPassword.length < 6) {
-      setSbError('Email, name, and a password of at least 6 characters are required')
+    if (!sbEmail.trim() || !sbName.trim() || sbPassword.length < MIN_PASSWORD_LENGTH) {
+      setSbError(`Email, name, and a password of at least ${MIN_PASSWORD_LENGTH} characters are required`)
       return
     }
     setSbCreating(true); setSbError('')

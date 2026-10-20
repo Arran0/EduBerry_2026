@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { getPayoutProvider, PayoutRequest, PayoutCredentials } from '@/lib/payoutProvider'
 import { normalizePayoutConfig, type PayoutConfig } from '@/lib/bankConfig'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
@@ -162,6 +163,20 @@ export async function POST(request: NextRequest) {
   }
   const claimed = new Set((claimedRows ?? []).map(r => r.id as string))
   const toSend = requests.filter(r => claimed.has(r.reference))
+
+  // Logged at the point of no return — before the bank call, so a request that
+  // then fails at the bank still shows who started it.
+  if (toSend.length > 0) {
+    await logAdminAction(admin, request, {
+      actorId: user.id, action: 'payout.driver.initiate', targetId: cycle_id,
+      details: {
+        period,
+        count: toSend.length,
+        total: toSend.reduce((s, r) => s + r.amount, 0),
+        records: toSend.map(r => r.reference),
+      },
+    })
+  }
   if (toSend.length === 0) {
     return NextResponse.json({ success: false, error: 'These records are already being sent to the bank.' }, { status: 409 })
   }

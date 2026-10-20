@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
 
 // This route requires SUPABASE_SERVICE_ROLE_KEY in environment variables
 // Get it from: Supabase Dashboard → Project Settings → API → service_role secret
@@ -52,8 +54,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'email, full_name, and role are required' }, { status: 400 })
   }
 
-  if (autoConfirm && (!password || password.length < 6)) {
-    return NextResponse.json({ success: false, error: 'A password of at least 6 characters is required for auto-confirm' }, { status: 400 })
+  if (autoConfirm && (!password || password.length < MIN_PASSWORD_LENGTH)) {
+    return NextResponse.json({ success: false, error: `A password of at least ${MIN_PASSWORD_LENGTH} characters is required for auto-confirm` }, { status: 400 })
   }
 
   try {
@@ -146,14 +148,24 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
+      // handle_new_user() only ever creates a 'student' row (sign-up metadata
+      // is caller-controlled), so the real role exists only if this write lands.
       console.error('Profile upsert failed:', profileError)
-      // Not a fatal error — profile trigger may handle it
+      return NextResponse.json(
+        { success: false, error: `Account created but profile not saved: ${profileError.message}` },
+        { status: 500 },
+      )
     }
 
     // Auto-manage homeroom when a student with grade+section is created
     if (role === 'student' && grade && section) {
       await syncStudentHomeroom(adminClient, newUserId, parseInt(grade), section)
     }
+
+    await logAdminAction(adminClient, request, {
+      actorId: callerUser.id, action: 'user.create', targetId: newUserId,
+      details: { email: email.toLowerCase().trim(), role, autoConfirm: !!autoConfirm },
+    })
 
     return NextResponse.json({ success: true, userId: newUserId, inviteLink, autoConfirm: !!autoConfirm })
   } catch (err) {

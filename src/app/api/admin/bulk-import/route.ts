@@ -1,7 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { syncStudentHomeroom, createHomeroomSyncCache } from '@/lib/homeroomAutoManage'
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
 
 interface BulkUserInput {
   email: string
@@ -53,9 +55,6 @@ interface BulkUserInput {
 
 const STAFF_ROLES = ['teacher', 'coordinator', 'principal', 'admin', 'driver']
 
-// Default password used when the admin chooses to auto-confirm new accounts
-// (skips the invite email and lets members sign in immediately).
-const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 
 function buildStudentDetail(studentId: string, user: BulkUserInput) {
   const detail = {
@@ -247,10 +246,15 @@ export async function POST(request: NextRequest) {
   // When autoConfirm is set, new members are created with a password and a
   // pre-confirmed email (no invite email). Otherwise we fall back to invites.
   const autoConfirm = body.autoConfirm === true
-  const password =
-    typeof body.password === 'string' && body.password.length > 0
-      ? body.password
-      : DEFAULT_AUTOCONFIRM_PASSWORD
+  // No built-in fallback: a shared default password was the same for every
+  // school and every import. The modal generates a random one per import.
+  const password = typeof body.password === 'string' ? body.password : ''
+  if (autoConfirm && password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json(
+      { success: false, error: `A password of at least ${MIN_PASSWORD_LENGTH} characters is required for auto-confirm` },
+      { status: 400 },
+    )
+  }
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
@@ -424,6 +428,11 @@ export async function POST(request: NextRequest) {
   for (const f of detailFailures) {
     errors.push({ email: '(details)', error: f })
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: 'user.bulk_import',
+    details: { created, updated, errors: errors.length, autoConfirm },
+  })
 
   return NextResponse.json({ success: true, created, updated, errors, autoConfirm })
 }

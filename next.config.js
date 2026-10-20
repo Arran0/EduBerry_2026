@@ -25,6 +25,18 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // HTTPS only from here on, for a year.
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          // The directives that cannot break a page: no plugins, no <base>
+          // hijack, forms only post back here, framing as X-Frame-Options.
+          // script-src is deliberately absent — App Router's inline bootstrap
+          // scripts need a per-request nonce (middleware) before it can be set.
+          {
+            key: 'Content-Security-Policy',
+            value: "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+          },
+          // Camera for QR scanning, GPS for check-in / bus tracking; no mic.
+          { key: 'Permissions-Policy', value: 'camera=(self), geolocation=(self), microphone=(), payment=(self "https://checkout.razorpay.com"), usb=()' },
         ],
       },
       {

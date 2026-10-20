@@ -2,6 +2,25 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { adminClient, callerUserId } from '@/lib/serverAuth'
 
+// The server later POSTs to this URL (web-push), so it must be a real browser
+// push service rather than any address a caller chooses.
+const PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/,                 // Chrome, Edge (Chromium), Opera, Samsung
+  /^updates\.push\.services\.mozilla\.com$/, // Firefox
+  /^web\.push\.apple\.com$/,               // Safari / iOS PWAs
+  /\.push\.apple\.com$/,
+  /\.notify\.windows\.com$/,               // legacy Edge / WNS
+]
+
+function isPushServiceUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && PUSH_HOSTS.some(re => re.test(url.hostname))
+  } catch {
+    return false
+  }
+}
+
 /** Enrol one browser/device for Web Push against the calling user. */
 export async function POST(request: NextRequest) {
   const client = adminClient()
@@ -20,7 +39,7 @@ export async function POST(request: NextRequest) {
   const p256dh    = subscription?.keys?.p256dh
   const auth      = subscription?.keys?.auth
 
-  if (!endpoint || !p256dh || !auth) {
+  if (typeof endpoint !== 'string' || !isPushServiceUrl(endpoint) || !p256dh || !auth) {
     return NextResponse.json({ success: false, error: 'Invalid subscription' }, { status: 400 })
   }
 
@@ -38,7 +57,8 @@ export async function POST(request: NextRequest) {
     }, { onConflict: 'endpoint' })
 
   if (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('push subscribe failed:', error)
+    return NextResponse.json({ success: false, error: 'Could not save subscription' }, { status: 500 })
   }
 
   return NextResponse.json({ success: true })

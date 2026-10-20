@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
 
 // Provisions (or links) a smart board login account for a homeroom.
 // A smart board is an auto-confirmed account with role 'smartboard' that lives
@@ -54,9 +56,9 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
-  if (password.length < 6) {
+  if (password.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json(
-      { success: false, error: 'Password must be at least 6 characters' },
+      { success: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
       { status: 400 }
     )
   }
@@ -113,7 +115,13 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
+      // handle_new_user() creates the row as 'student'; without this write the
+      // board would sign in as a student.
       console.error('Smart board profile upsert failed:', profileError)
+      return NextResponse.json(
+        { success: false, error: `Account created but profile not saved: ${profileError.message}` },
+        { status: 500 },
+      )
     }
 
     // Link the board to its homeroom.
@@ -126,6 +134,10 @@ export async function POST(request: NextRequest) {
       console.error('Smart board homeroom link failed:', linkError)
       return NextResponse.json({ success: false, error: 'Account created but failed to link homeroom' }, { status: 500 })
     }
+
+    await logAdminAction(adminClient, request, {
+      actorId: callerUser.id, action: 'smartboard.create', targetId: newUserId, details: { homeroomId },
+    })
 
     return NextResponse.json({ success: true, userId: newUserId })
   } catch (err) {
@@ -197,6 +209,10 @@ export async function DELETE(request: NextRequest) {
     console.error('Failed to delete smart board auth user:', delError)
     // Profile may be cleaned up by cascade; report best-effort success.
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: 'smartboard.delete', targetId: smartboardId, details: { homeroomId },
+  })
 
   return NextResponse.json({ success: true })
 }

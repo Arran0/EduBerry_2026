@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { settleSchoolFee } from './settleWebhook'
+import { settleBusFee, settleSchoolFee } from './settleWebhook'
 
 /**
  * The underpayment hole, pinned.
@@ -13,12 +13,12 @@ import { settleSchoolFee } from './settleWebhook'
  */
 
 /** A Supabase client stub covering just the two reads and the one write. */
-function fakeAdmin(billed: number, verifiedAmounts: number[]) {
+function fakeAdmin(billed: number, verifiedAmounts: number[], feeTable = 'school_fees') {
   const updates: { status: string }[] = []
 
   const client = {
     from(table: string) {
-      if (table === 'school_fees') {
+      if (table === feeTable) {
         return {
           select: () => ({
             eq: () => ({ maybeSingle: async () => ({ data: { amount: billed } }) }),
@@ -28,7 +28,7 @@ function fakeAdmin(billed: number, verifiedAmounts: number[]) {
           }),
         }
       }
-      // school_fee_payments
+      // school_fee_payments / bus_payments
       return {
         select: () => ({
           eq: () => ({
@@ -68,5 +68,19 @@ describe('settleSchoolFee', () => {
   it('counts a string amount, which is how NUMERIC arrives', async () => {
     const { client } = fakeAdmin(100, ['100' as unknown as number])
     expect(await settleSchoolFee(client, 'fee-1')).toBe('paid')
+  })
+})
+
+describe('settleBusFee', () => {
+  it('leaves a short payment partial rather than paid', async () => {
+    const { client, updates } = fakeAdmin(12_000, [1], 'bus_fees')
+    expect(await settleBusFee(client, 'fee-1')).toBe('partial')
+    expect(updates).toEqual([{ status: 'partial' }])
+  })
+
+  it('marks it paid once the verified payments cover the fee', async () => {
+    const { client, updates } = fakeAdmin(12_000, [4_000, 8_000], 'bus_fees')
+    expect(await settleBusFee(client, 'fee-1')).toBe('paid')
+    expect(updates).toEqual([{ status: 'paid' }])
   })
 })

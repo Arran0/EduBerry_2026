@@ -25,9 +25,30 @@ export async function settleSchoolFee(
   admin: SupabaseClient,
   feeId: string,
 ): Promise<'paid' | 'partial' | 'unpaid'> {
+  return settleFee(admin, 'school_fees', 'school_fee_payments', feeId)
+}
+
+/**
+ * The same rule for bus fees. The bus UPI webhook had the identical hole —
+ * `bus_fees.status = 'paid'` on any arrival — and `recordBusOfflinePayment`
+ * already settled from the verified total, exactly as on the school side.
+ */
+export async function settleBusFee(
+  admin: SupabaseClient,
+  feeId: string,
+): Promise<'paid' | 'partial' | 'unpaid'> {
+  return settleFee(admin, 'bus_fees', 'bus_payments', feeId)
+}
+
+async function settleFee(
+  admin: SupabaseClient,
+  feeTable: 'school_fees' | 'bus_fees',
+  paymentTable: 'school_fee_payments' | 'bus_payments',
+  feeId: string,
+): Promise<'paid' | 'partial' | 'unpaid'> {
   const [{ data: fee }, { data: pays }] = await Promise.all([
-    admin.from('school_fees').select('amount').eq('id', feeId).maybeSingle(),
-    admin.from('school_fee_payments').select('amount').eq('fee_id', feeId).eq('status', 'verified'),
+    admin.from(feeTable).select('amount').eq('id', feeId).maybeSingle(),
+    admin.from(paymentTable).select('amount').eq('fee_id', feeId).eq('status', 'verified'),
   ])
 
   const billed = Number(fee?.amount) || 0
@@ -37,6 +58,6 @@ export async function settleSchoolFee(
   // anything else needs the money to cover it.
   const status = paid <= 0 ? 'unpaid' : paid >= billed ? 'paid' : 'partial'
 
-  await admin.from('school_fees').update({ status }).eq('id', feeId)
+  await admin.from(feeTable).update({ status }).eq('id', feeId)
   return status
 }

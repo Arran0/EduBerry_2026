@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -60,6 +61,10 @@ export async function POST(request: NextRequest) {
       console.error('Auth ban update failed:', banError.message)
     }
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: ban ? 'user.ban' : 'user.unban', targetId: userId,
+  })
 
   return NextResponse.json({ success: true })
 }

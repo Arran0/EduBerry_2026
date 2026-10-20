@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { deleteUserAccountServerSide } from '@/lib/adminAccountDeletion'
 
 export async function DELETE(request: NextRequest) {
@@ -50,6 +51,8 @@ export async function DELETE(request: NextRequest) {
   if (!result.success) {
     return NextResponse.json({ success: false, error: result.error }, { status: 500 })
   }
+
+  await logAdminAction(adminClient, request, { actorId: callerUser.id, action: 'user.delete', targetId: userId })
 
   return NextResponse.json({ success: true })
 }

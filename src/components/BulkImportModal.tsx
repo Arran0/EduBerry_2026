@@ -7,13 +7,13 @@ import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, RefreshCw, Downl
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import type { UserRole } from '@/lib/supabase'
+import { MIN_PASSWORD_LENGTH, generateTempPassword } from '@/lib/passwords'
 import { parseGradeInput, gradeShortLabel } from '@/lib/grades'
 
 const ALL_VALID_ROLES: UserRole[] = ['student', 'teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
 const STUDENT_ROLES: UserRole[] = ['student']
 const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin', 'driver', 'smartboard']
 const VALID_SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
-const DEFAULT_AUTOCONFIRM_PASSWORD = 'mps2627'
 
 interface ParsedRow {
   email: string
@@ -194,7 +194,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
   } | null>(null)
   const [parseError, setParseError] = useState('')
   const [autoConfirm, setAutoConfirm] = useState(false)
-  const [password, setPassword] = useState(DEFAULT_AUTOCONFIRM_PASSWORD)
+  const [password, setPassword] = useState(generateTempPassword)
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -254,7 +254,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
         bank_account_no: r.bank_account_no, bank_name: r.bank_name, ifsc_code: r.ifsc_code,
       })),
       autoConfirm,
-      password: autoConfirm ? (password || DEFAULT_AUTOCONFIRM_PASSWORD) : undefined,
+      password: autoConfirm ? password : undefined,
     })
 
     const send = (token: string) =>
@@ -424,7 +424,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                 {result.autoConfirm && result.created > 0 && (
                   <p className="text-xs text-[#71717A]">
                     New members can sign in with password{' '}
-                    <span className="font-mono font-semibold text-[#18181B]">{password || DEFAULT_AUTOCONFIRM_PASSWORD}</span>
+                    <span className="font-mono font-semibold text-[#18181B]">{password}</span>
                   </p>
                 )}
                 {result.errors.length > 0 && (
@@ -502,11 +502,10 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                         type="text"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        placeholder={DEFAULT_AUTOCONFIRM_PASSWORD}
                         className="w-full max-w-xs border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-1.5 text-sm font-mono focus:border-[#27272A] outline-none transition-colors rounded-lg"
                       />
                       <p className="text-[11px] text-[#A1A1AA] mt-1">
-                        Applied to every new account. Must meet your Supabase minimum password length.
+                        Randomly generated for this import and applied to every new account in it. Minimum {MIN_PASSWORD_LENGTH} characters.
                       </p>
                     </div>
                   )}

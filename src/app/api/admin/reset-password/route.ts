@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
+import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
 
 export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,8 +47,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'userId and password are required' }, { status: 400 })
   }
 
-  if (password.length < 6) {
-    return NextResponse.json({ success: false, error: 'Password must be at least 6 characters' }, { status: 400 })
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ success: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 })
   }
 
   try {
@@ -55,6 +57,8 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 })
     }
+
+    await logAdminAction(adminClient, request, { actorId: callerUser.id, action: 'user.password_reset', targetId: userId })
 
     return NextResponse.json({ success: true })
   } catch (err) {

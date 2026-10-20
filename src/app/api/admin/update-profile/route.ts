@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
 
 export async function PATCH(request: NextRequest) {
@@ -92,6 +93,11 @@ export async function PATCH(request: NextRequest) {
       await syncStudentHomeroom(adminClient, userId, newGrade, newSection, oldGrade, oldSection)
     }
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: 'user.update_profile', targetId: userId,
+    details: { before: oldProfile ?? null, changes: updates },
+  })
 
   return NextResponse.json({ success: true })
 }

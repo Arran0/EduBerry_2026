@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { clearFeeCaches } from '@/lib/fees/cache'
-import { supabase, AUTH_STORAGE_KEY, UserProfile, UserRole } from '@/lib/supabase'
+import { supabase, AUTH_STORAGE_KEY, UserProfile } from '@/lib/supabase'
 import { recordAppOpen } from '@/lib/gamification'
 
 interface AuthContextType {
@@ -24,7 +24,6 @@ interface AuthContextType {
    */
   dataRefreshKey: number
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: Error | null }>
   /**
    * Ends the session.  Defaults to scope 'local' — only this browser is signed
    * out, so the same user stays signed in on their other devices.  Pass
@@ -405,47 +404,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
-    try {
-      // Normalized to lowercase so this always matches how every other
-      // account-creation path (admin create/invite, bulk import) stores and
-      // looks up emails — a mixed-case profile row makes case-sensitive
-      // email lookups (e.g. bulk import's create-vs-update check) miss it.
-      const normalizedEmail = email.toLowerCase().trim()
-      const { data, error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-          },
-        },
-      })
-
-      if (error) return { error }
-
-      // Create profile entry
-      if (data.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: data.user.id,
-          email: normalizedEmail,
-          full_name: fullName,
-          role: role,
-        })
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError)
-          return { error: profileError as unknown as Error }
-        }
-      }
-
-      return { error: null }
-    } catch (error) {
-      return { error: error as Error }
-    }
-  }
-
   const signOut = async (options?: { scope?: 'local' | 'global' }) => {
     // Mark as deliberate BEFORE calling signOut() so the SIGNED_OUT event
     // fired by onAuthStateChange is not mistaken for a token expiry.
@@ -503,7 +461,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionExpired,
         dataRefreshKey,
         signIn,
-        signUp,
         signOut,
         refreshProfile,
       }}

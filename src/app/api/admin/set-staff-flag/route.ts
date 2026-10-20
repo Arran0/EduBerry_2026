@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 
 // profiles only has a self-only UPDATE RLS policy, so admin-driven changes to
 // another staff member's flags must go through the service role here — a
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: 'user.set_flag', targetId: userId, details: { field, value },
+  })
 
   return NextResponse.json({ success: true })
 }

@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifyCollectCallback } from '@/lib/collectSetup'
+import { settleBusFee } from '@/lib/fees/settleWebhook'
 
 // Incoming-UPI webhook from your bank / PSP (Smart Collect). On a successful
 // payment it matches the settlement to a fee — by the per-fee virtual VPA
@@ -85,6 +86,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: 'no matching fee' })
   }
 
+  // Credit what actually arrived, not what was expected — the payer chooses a
+  // UPI push payment's amount (same rule as the school-fee webhook).
   await admin
     .from('bus_payments')
     .update({
@@ -92,12 +95,14 @@ export async function POST(request: NextRequest) {
       utr: ev.utr,
       collect_vpa: ev.vpa,
       verified_at: new Date().toISOString(),
+      ...(ev.amount === null || ev.amount === undefined ? {} : { amount: ev.amount }),
     })
     .eq('id', payment.id)
 
-  await admin.from('bus_fees').update({ status: 'paid' }).eq('id', feeId)
+  // 'paid' only once the verified payments cover the fee. See settleWebhook.ts.
+  const status = await settleBusFee(admin, feeId)
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, status })
 }
 
 async function findPendingPayment(

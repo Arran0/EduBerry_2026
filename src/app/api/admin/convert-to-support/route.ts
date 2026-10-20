@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { logAdminAction } from '@/lib/adminAudit'
 import { deleteUserAccountServerSide } from '@/lib/adminAccountDeletion'
 
 /**
@@ -106,6 +107,11 @@ export async function POST(request: NextRequest) {
     await adminClient.from('support_staff').delete().eq('id', inserted.id)
     return NextResponse.json({ success: false, error: deletion.error || 'Failed to remove the account' }, { status: 500 })
   }
+
+  await logAdminAction(adminClient, request, {
+    actorId: callerUser.id, action: 'user.convert_to_support', targetId: userId,
+    details: { supportStaffId: inserted.id },
+  })
 
   return NextResponse.json({ success: true, supportStaffId: inserted.id })
 }
