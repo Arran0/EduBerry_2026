@@ -1,261 +1,577 @@
 'use client'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The Task Manager.
-//
-// Laid out like the transport, fee, salary and timetable workspaces: the
-// banner, one capsule switch overlapping its foot, and the four places under
-// it — the week, my analytics, the team's, and projects. The tab lives in the
-// URL so a link or a bookmark lands on the right one.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
-import dynamic from 'next/dynamic'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { CalendarDays, BarChart3, Users, FolderKanban, ClipboardList, Home } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import PageBanner from '@/components/PageBanner'
-import { GlassSegments } from '@/components/transport/glass'
 import { useAuth } from '@/contexts/AuthContext'
 import { canViewTeamAnalytics, UserProfile } from '@/lib/supabase'
 import { fetchTeamMembers } from '@/lib/tasks'
 import { useTaskNotifications } from '@/hooks/useTaskNotifications'
-import { fetchActiveProjectCount } from '@/lib/projects'
-import { TASK_BANNER_DEFAULT } from '@/lib/pageConfig'
-import { getShowTaskCalendarOnHome, setShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
-import { prefetchTeamAnalytics } from '@/lib/teamAnalyticsCache'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  CalendarDays,
+  BarChart3,
+  Users,
+  FolderKanban,
+  ClipboardList,
+  Pencil,
+  Home,
+  Check,
+  X,
+  Image as ImageIcon,
+} from 'lucide-react'
+import dynamic from 'next/dynamic'
 import WeeklyCalendar from '@/components/tasks/WeeklyCalendar'
-import { Loading, SHELL } from '@/components/tasks/ui'
+import VerificationAlerts from '@/components/tasks/VerificationAlerts'
+// Only the Weekly tab renders on load, so every other tab's component is split
+// out of the initial bundle. The Team tab's prefetch helper is imported eagerly
+// from its own module (see teamAnalyticsCache) so hovering the tab can warm the
+// cache without pulling the component's code in first.
+const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'))
+const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'))
+const TeamAnalytics = dynamic(() => import('@/components/tasks/TeamAnalytics'))
+import { prefetchTeamAnalytics } from '@/lib/teamAnalyticsCache'
+import { fetchActiveProjectCount } from '@/lib/projects'
+import {
+  AnnouncementBannerConfig,
+  TASK_BANNER_DEFAULT,
+  BANNER_PRESETS,
+  fetchTaskBannerConfig,
+  saveTaskBannerConfig,
+  uploadSiteAsset,
+} from '@/lib/pageConfig'
+import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
+import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
+import { getShowTaskCalendarOnHome, setShowTaskCalendarOnHome } from '@/lib/homeTaskCalendarVisibility'
 
-// Only the week renders on load, so every other tab is split out of the first
-// bundle. The Team tab's prefetch helper comes from its own module so the
-// switch can warm the cache without pulling the component's code in first.
-const VerificationAlerts = dynamic(() => import('@/components/tasks/VerificationAlerts'))
-const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'), { loading: () => <Loading /> })
-const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'), { loading: () => <Loading /> })
-const TeamAnalytics = dynamic(() => import('@/components/tasks/TeamAnalytics'), { loading: () => <Loading /> })
+// ── Tab definitions ───────────────────────────────────────────────────────────
 
 type TabId = 'weekly' | 'analytics' | 'team' | 'projects'
-const TAB_IDS: TabId[] = ['weekly', 'analytics', 'team', 'projects']
 
-/** Solid white on the banner: a translucent control over a photo cannot be read. */
-const BANNER_BTN =
-  'inline-flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-full text-[12px] font-semibold ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]'
+interface Tab { id: TabId; label: string }
 
-export default function TasksPage() {
-  return (
-    <ProtectedLayout staffOnly>
-      {/* useSearchParams needs a Suspense boundary to stay out of the
-          static-render bailout. */}
-      <Suspense fallback={<Loading />}>
-        <TasksPageContent />
-      </Suspense>
-    </ProtectedLayout>
-  )
+const TAB_META: Record<TabId, { icon: React.ReactNode; color: string; bg: string }> = {
+  weekly:    { icon: <CalendarDays size={15} />, color: 'text-amber-600',  bg: 'bg-amber-50'   },
+  analytics: { icon: <BarChart3 size={15} />,    color: 'text-blue-600',   bg: 'bg-blue-50'    },
+  team:      { icon: <Users size={15} />,        color: 'text-green-600',  bg: 'bg-green-50'   },
+  projects:  { icon: <FolderKanban size={15} />, color: 'text-purple-600', bg: 'bg-purple-50'  },
 }
+
+const tabs: Tab[] = [
+  { id: 'weekly',    label: 'Weekly'    },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'team',      label: 'Team'      },
+  { id: 'projects',  label: 'Projects'  },
+]
+
+// ── Main content (needs Suspense for useSearchParams) ─────────────────────────
 
 function TasksPageContent() {
   const { user, profile } = useAuth()
-  const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [teamMembers, setTeamMembers] = useState<UserProfile[]>([])
-  const [viewingUserId, setViewingUserId] = useState('')
+  const [activeTab,          setActiveTab]          = useState<TabId>('weekly')
+  const [teamMembers,        setTeamMembers]        = useState<UserProfile[]>([])
+  const [viewingUserId,      setViewingUserId]      = useState<string>('')
   const [activeProjectCount, setActiveProjectCount] = useState(0)
-  const [bannerEditing, setBannerEditing] = useState(false)
-  // Jumping to an assignee's calendar at a task, from "Waiting for you to verify".
+  // Drives jumping to an assignee's calendar and pointing at a specific task
+  // from the "Awaiting Your Verification" buttons above the weekly calendar.
   const [focusRequest, setFocusRequest] = useState<{ date: string | null; taskId: string; nonce: number } | null>(null)
   const [verificationRefresh, setVerificationRefresh] = useState(0)
   const calendarWrapRef = useRef<HTMLDivElement>(null)
 
-  const role = profile?.role
-  const showTeamAnalytics = role ? canViewTeamAnalytics(role) : false
-  const canAssignToOthers = role ? ['coordinator', 'principal', 'admin'].includes(role) : false
-  const canCheck = canAssignToOthers
-  const isAdmin = role === 'admin'
+  // Banner config state
+  const [bannerCfg,     setBannerCfg]     = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
+  const [pendingCfg,    setPendingCfg]    = useState<AnnouncementBannerConfig>(TASK_BANNER_DEFAULT)
+  const [editingBanner, setEditingBanner] = useState(false)
+  const [savingBanner,  setSavingBanner]  = useState(false)
+  const [uploadingImg,  setUploadingImg]  = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const [bannerLum, setBannerLum] = useState(0)
+  const [bannerLoaded, setBannerLoaded] = useState(false)
 
-  const tabParam = searchParams.get('tab') as TabId | null
-  const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) && !(tabParam === 'team' && !showTeamAnalytics)
-    ? tabParam
-    : 'weekly'
-
-  const goTab = useCallback((next: TabId) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (next === 'weekly') params.delete('tab')
-    else params.set('tab', next)
-    if (next !== 'weekly') setFocusRequest(null)
-    const qs = params.toString()
-    router.replace(qs ? `/tasks?${qs}` : '/tasks', { scroll: false })
-  }, [router, searchParams])
+  const showTeamAnalytics  = profile ? canViewTeamAnalytics(profile.role) : false
+  const canAssignToOthers  = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
+  const canCheck           = profile ? ['coordinator', 'principal', 'admin'].includes(profile.role) : false
+  const isAdmin            = profile?.role === 'admin'
 
   const { markAllRead } = useTaskNotifications(user?.id ?? null)
   useEffect(() => { markAllRead() }, [markAllRead])
 
-  // Admin only: the home page's task calendar card is hidden by default; this
-  // opts back in (mirrors the Classrooms-on-home toggle).
-  const [showOnHome, setShowOnHome] = useState(false)
-  useEffect(() => { if (user) setShowOnHome(getShowTaskCalendarOnHome(user.id)) }, [user])
+  // Admin-only: the home-page task calendar card is hidden by default; this
+  // lets them opt back in from here (mirrors the Classrooms-on-home toggle).
+  const [showOnHome, setShowOnHomeState] = useState(false)
+  useEffect(() => {
+    if (user) setShowOnHomeState(getShowTaskCalendarOnHome(user.id))
+  }, [user])
   const toggleShowOnHome = () => {
     if (!user) return
     const next = !showOnHome
-    setShowOnHome(next)
+    setShowOnHomeState(next)
     setShowTaskCalendarOnHome(user.id, next)
   }
 
-  // The team list and the project badge don't depend on each other, so they
-  // load side by side.
+  const visibleTabs = tabs.filter(tab => !(tab.id === 'team' && !showTeamAnalytics))
+
+  // ── Load team members ──
+
+  const loadTeamMembers = useCallback(async () => {
+    if (!user || !profile) return
+    if (!canAssignToOthers && profile.role !== 'teacher') return
+    const members = await fetchTeamMembers(user.id, profile.role)
+    setTeamMembers(members)
+  }, [user, profile, canAssignToOthers])
+
+  useEffect(() => { loadTeamMembers() }, [loadTeamMembers])
+
+  // ── Load active project count for badge ──
+
+  // Both this count and the Projects tab's Active/Closed split derive from
+  // getProjectStatus in lib/projects, so the badge can't disagree with the list
+  // it sits above.
   useEffect(() => {
-    if (!user || !role) return
-    let cancelled = false
-    if (canAssignToOthers || role === 'teacher') {
-      fetchTeamMembers(user.id, role).then(m => { if (!cancelled) setTeamMembers(m) })
-    }
-    // The badge and the Projects tab's Active/Closed split both derive from
-    // getProjectStatus, so the badge can't disagree with the list under it.
-    fetchActiveProjectCount(user.id, role).then(n => { if (!cancelled) setActiveProjectCount(n) })
-    return () => { cancelled = true }
-  }, [user, role, canAssignToOthers])
+    if (!user || !profile) return
+    fetchActiveProjectCount(user.id, profile.role).then(setActiveProjectCount)
+  }, [user, profile])
+
+  // ── Load banner config ──
+
+  useEffect(() => {
+    fetchTaskBannerConfig().then(cfg => {
+      setBannerCfg(cfg)
+      setPendingCfg(cfg)
+      if (cfg.imageUrl) {
+        const img = new window.Image()
+        img.onload = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.onerror = () => { window.scrollTo(0, 0); setBannerLoaded(true) }
+        img.src = cfg.imageUrl
+      } else {
+        window.scrollTo(0, 0)
+        setBannerLoaded(true)
+      }
+    })
+  }, [])
+
+  // ── URL params ──
 
   const urlUserId = searchParams.get('user')
-  const urlDate = searchParams.get('date')
+  const urlDate   = searchParams.get('date')
+
   useEffect(() => {
     if (!user) return
-    setViewingUserId(urlUserId && canAssignToOthers && urlUserId !== user.id ? urlUserId : user.id)
+    setViewingUserId(
+      urlUserId && canAssignToOthers && urlUserId !== user.id ? urlUserId : user.id
+    )
   }, [user, urlUserId, canAssignToOthers])
 
-  // A stable array: WeeklyCalendar and ProjectsList key effects off it.
-  const allAssignees = useMemo<UserProfile[]>(() => (profile ? [profile, ...teamMembers] : []), [profile, teamMembers])
+  // Drop a pending verification jump once the user leaves the weekly tab so it
+  // doesn't replay when they come back.
+  useEffect(() => {
+    if (activeTab !== 'weekly') setFocusRequest(null)
+  }, [activeTab])
 
-  const tabs = useMemo(() => [
-    { key: 'weekly' as const, label: 'Week', icon: CalendarDays },
-    { key: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
-    ...(showTeamAnalytics ? [{ key: 'team' as const, label: 'Team', icon: Users }] : []),
-    { key: 'projects' as const, label: 'Projects', icon: FolderKanban, count: activeProjectCount > 0 ? activeProjectCount : null },
-  ], [showTeamAnalytics, activeProjectCount])
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && ['weekly', 'analytics', 'team', 'projects'].includes(tabParam)) {
+      setActiveTab(
+        tabParam === 'team' && !showTeamAnalytics ? 'weekly' : (tabParam as TabId)
+      )
+    }
+  }, [searchParams, showTeamAnalytics])
+
+  // Banner luminance. Derived banner values + this effect must run on every
+  // render, so they live above the early return below — otherwise hook order
+  // changes once auth resolves (null → user) and React throws (#310).
+  const activeCfg = editingBanner ? pendingCfg : bannerCfg
+  const _imgUrl   = activeCfg.imageUrl  ?? ''
+  const _gradFrom = activeCfg.gradFrom
+  const _gradTo   = activeCfg.gradTo
+  useEffect(() => {
+    if (_imgUrl) {
+      sampleImageLuminance(_imgUrl, 0.6).then(setBannerLum)
+    } else {
+      setBannerLum((hexToLuminance(_gradFrom) + hexToLuminance(_gradTo)) / 2)
+    }
+  }, [_imgUrl, _gradFrom, _gradTo])
+
+  // Stable identity matters: this array is a prop of both WeeklyCalendar and
+  // ProjectsList, and a fresh array on every render of this page would
+  // re-trigger their effects. Sits above the early return for the same
+  // hook-order reason as the banner values above.
+  const allAssignees = useMemo<UserProfile[]>(
+    () => (profile ? [profile, ...teamMembers] : []),
+    [profile, teamMembers],
+  )
 
   if (!user || !profile) return null
 
+  // Jump to the assignee's calendar, pointing at the task awaiting verification.
   const handleNavigateToVerification = (assigneeId: string, dueDate: string | null, taskId: string) => {
-    goTab('weekly')
+    setActiveTab('weekly')
     setViewingUserId(assigneeId)
     setFocusRequest({ date: dueDate, taskId, nonce: Date.now() })
-    setTimeout(() => calendarWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+    // Scroll the calendar into view after a short delay to let React re-render first.
+    // The div carries scroll-mt-20 to clear the sticky tab bar.
+    setTimeout(() => {
+      calendarWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
   }
 
+  // Browsing another calendar manually should drop any pending verification jump
+  // so it doesn't re-fire on the next remount.
   const handleViewingUserChange = (uid: string) => {
     setFocusRequest(null)
     setViewingUserId(uid)
   }
 
-  const viewingOther = viewingUserId && viewingUserId !== user.id ? viewingUserId : undefined
-  const teamForPicker = canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined
+  // ── Banner editor handlers ──
+
+  const openEditor  = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(true) }
+  const cancelEdit  = () => { setPendingCfg({ ...bannerCfg }); setEditingBanner(false) }
+  const saveEdit    = async () => {
+    setSavingBanner(true)
+    await saveTaskBannerConfig(pendingCfg)
+    setBannerCfg({ ...pendingCfg })
+    setSavingBanner(false)
+    setEditingBanner(false)
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingImg(true)
+    const url = await uploadSiteAsset(file, 'task_banner')
+    if (url) setPendingCfg(prev => ({ ...prev, imageUrl: url }))
+    setUploadingImg(false)
+    if (imageInputRef.current) imageInputRef.current.value = ''
+  }
+
+  // ── Banner styles ──
+
+  const bannerOnDark = isDarkLum(bannerLum)
+
+  const bannerBg: React.CSSProperties = activeCfg.imageUrl
+    ? { backgroundImage: `url(${activeCfg.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : { backgroundImage: `${BANNER_TEXTURE_URI}, linear-gradient(140deg, ${activeCfg.gradFrom} 0%, ${activeCfg.gradTo} 100%)`, backgroundSize: '180px, auto', backgroundBlendMode: 'soft-light' }
+
+  // ── Render ──
 
   return (
-    <div data-page-theme="tasks" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
-      <PageBanner
-        settingKey="task_banner"
-        defaultBanner={TASK_BANNER_DEFAULT}
-        icon={<ClipboardList size={26} className="text-white" />}
-        backgroundIcon={<ClipboardList size={150} className="text-white" />}
-        title="Task Manager"
-        subtitle="Your week, your team's progress and shared projects"
-        isAdmin={isAdmin}
-        maxWidth="max-w-7xl 2xl:max-w-[1600px]"
-        onEditingChange={setBannerEditing}
-        actions={isAdmin ? (
-          <button
-            onClick={toggleShowOnHome}
-            aria-pressed={showOnHome}
-            title={showOnHome ? 'The task calendar shows on the home page' : 'The task calendar is hidden from the home page'}
-            className={`${BANNER_BTN} ${showOnHome ? 'bg-[#27272A] text-white hover:bg-[#3D3B40]' : 'bg-white text-slate-900 hover:bg-slate-50'}`}
-          >
-            <Home size={13} className={showOnHome ? 'text-[#E9DDBB]' : 'text-[#B45309]'} />
-            <span className="hidden sm:inline">{showOnHome ? 'On home page' : 'Show on home page'}</span>
-          </button>
-        ) : undefined}
-      />
+    <ProtectedLayout staffOnly>
+      <div data-page-theme="tasks">
 
-      <div className={`${SHELL} px-4 sm:px-6 lg:px-8 pb-14`}>
-        {/* Everything but the banner fades while the banner is being edited. */}
-        <div
-          aria-hidden={bannerEditing}
-          style={{
-            opacity: bannerEditing ? 0.35 : 1,
-            pointerEvents: bannerEditing ? 'none' : 'auto',
-            userSelect: bannerEditing ? 'none' : 'auto',
-            transition: 'opacity 0.25s ease',
-          }}
-        >
-          {/* The switch overlaps the banner. Solid, not glass: through a
-              translucent control the banner photo shows as noise. */}
-          <div
-            className="relative z-10 -mt-6 sm:-mt-7 mb-4 sm:mb-5 flex justify-center sm:justify-start"
-            onPointerEnter={showTeamAnalytics ? () => prefetchTeamAnalytics(user.id, profile.role) : undefined}
-          >
-            <GlassSegments
-              layoutId="tasks-hub-tab"
-              items={tabs}
-              value={activeTab}
-              onChange={goTab}
-              stretch
-              className="!bg-white ring-1 ring-black/[.06] shadow-[0_14px_30px_-12px_rgba(15,23,42,.55)]"
-            />
+        {/* ── Full-bleed banner ── */}
+        <AnimatePresence>
+          {bannerLoaded && (
+            <motion.div
+              key="banner"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              transition={{ type: 'spring', stiffness: 45, damping: 14 }}
+              className="overflow-hidden"
+            >
+              <div className="relative overflow-hidden sheen sheen-animate" style={bannerBg}>
+          {/* Radial sheen */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_65%)] pointer-events-none" />
+          {/* Decorative background icon */}
+          <div className="absolute -bottom-6 -right-6 opacity-[0.06] pointer-events-none select-none">
+            <ClipboardList size={180} className={bannerOnDark ? 'text-white' : 'text-slate-900'} />
           </div>
+          {/* Bottom blur merge */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+            style={{
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.07))',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+            }}
+          />
 
-          {activeTab === 'weekly' && (
-            <div className="space-y-4 sm:space-y-5">
-              {canCheck && (
-                <VerificationAlerts
-                  userId={user.id}
-                  refreshKey={verificationRefresh}
-                  onNavigate={handleNavigateToVerification}
-                />
-              )}
-              <div ref={calendarWrapRef} className="scroll-mt-4">
-                <WeeklyCalendar
-                  key={viewingUserId}
-                  userId={user.id}
-                  profile={profile}
-                  canCheck={canCheck}
-                  canAssignToOthers={canAssignToOthers}
-                  availableAssignees={allAssignees}
-                  viewingUserId={viewingOther}
-                  initialDate={focusRequest?.date || urlDate || undefined}
-                  focusTaskId={focusRequest?.taskId}
-                  focusNonce={focusRequest?.nonce}
-                  teamMembers={teamForPicker}
-                  currentUserId={user.id}
-                  currentUserName={profile.full_name}
-                  onViewingUserChange={handleViewingUserChange}
-                  onTaskActivity={() => setVerificationRefresh(v => v + 1)}
-                />
-              </div>
+          {/* Admin controls: home-page visibility toggle + edit pencil */}
+          {isAdmin && !editingBanner && (
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+              <button
+                onClick={toggleShowOnHome}
+                className={`p-2 backdrop-blur-sm rounded-lg border transition-colors ${
+                  showOnHome ? 'bg-sky-500/80 border-sky-300/40 text-white' : 'bg-black/30 border-white/20 text-white hover:bg-black/50'
+                }`}
+                title={showOnHome ? 'Shown on home page — click to hide' : 'Hidden on home page — click to show'}
+              >
+                <Home size={14} />
+              </button>
+              <button
+                onClick={openEditor}
+                className="p-2 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 text-white transition-colors"
+                title="Customise banner"
+              >
+                <Pencil size={14} />
+              </button>
             </div>
           )}
-          {activeTab === 'analytics' && (
-            <TaskAnalytics
-              userId={user.id}
-              viewingUserId={viewingOther}
-              teamMembers={teamForPicker}
-              currentUserId={user.id}
-              currentUserName={profile.full_name}
-              onViewingUserChange={setViewingUserId}
-            />
+
+          {/* Header row */}
+          {/* Padding, chip size and type scale are kept in lockstep with the
+              Academics banner (src/app/academics/page.tsx) so both pages open
+              to the same banner height. */}
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+              className="flex items-center gap-3"
+            >
+              <div
+                className={`icon-chip w-[50px] h-[50px] flex-shrink-0 transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 border border-white/25' : 'bg-white/75 border border-white/60'}`}
+              >
+                <ClipboardList size={26} className={`relative z-10 transition-colors duration-300 ${bannerOnDark ? 'text-white drop-shadow-sm' : 'text-slate-700'}`} />
+              </div>
+              <div className="min-w-0">
+                <p
+                  className={`eyebrow mb-1.5 ${bannerOnDark ? 'text-white/75' : 'text-slate-500'}`}
+                  style={bannerOnDark ? { textShadow: '0 1px 3px rgba(0,0,0,0.45)' } : undefined}
+                >
+                  Plan, Track, Verify Your Team
+                </p>
+                <h1
+                  className={`font-display text-[2rem] sm:text-[2.6rem] font-bold leading-[1.04] headline transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                  style={bannerOnDark ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
+                >
+                  Task Manager
+                </h1>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* ── Inline banner editor ── */}
+          <AnimatePresence>
+            {editingBanner && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden border-t border-white/20 bg-black/30 backdrop-blur-md"
+              >
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                  <p className="text-white/70 text-[11px] font-semibold uppercase tracking-widest mb-3">
+                    Banner Style
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {BANNER_PRESETS.map(p => {
+                      const active = !pendingCfg.imageUrl &&
+                        pendingCfg.gradFrom === p.from && pendingCfg.gradTo === p.to
+                      return (
+                        <button
+                          key={p.label}
+                          title={p.label}
+                          onClick={() => setPendingCfg({ gradFrom: p.from, gradTo: p.to, imageUrl: '' })}
+                          className={`w-8 h-8 rounded-full border-2 transition-all duration-150 flex-shrink-0 ${
+                            active ? 'border-white scale-110 shadow-lg' : 'border-white/30 hover:border-white/70 hover:scale-105'
+                          }`}
+                          style={{ backgroundImage: swatchBackground(p.from, p.to), backgroundSize: '60px, auto', backgroundBlendMode: 'soft-light' }}
+                        />
+                      )
+                    })}
+
+                    {/* Task-specific amber preset (default) */}
+                    {(() => {
+                      const active = !pendingCfg.imageUrl &&
+                        pendingCfg.gradFrom === TASK_BANNER_DEFAULT.gradFrom &&
+                        pendingCfg.gradTo   === TASK_BANNER_DEFAULT.gradTo
+                      return (
+                        <button
+                          title="Amber (default)"
+                          onClick={() => setPendingCfg({ ...TASK_BANNER_DEFAULT, imageUrl: '' })}
+                          className={`w-8 h-8 rounded-full border-2 transition-all duration-150 flex-shrink-0 ${
+                            active ? 'border-white scale-110 shadow-lg' : 'border-white/30 hover:border-white/70 hover:scale-105'
+                          }`}
+                          style={{ backgroundImage: swatchBackground(TASK_BANNER_DEFAULT.gradFrom, TASK_BANNER_DEFAULT.gradTo), backgroundSize: '60px, auto', backgroundBlendMode: 'soft-light' }}
+                        />
+                      )
+                    })()}
+
+                    <div className="w-px h-6 bg-white/25 mx-1" />
+
+                    <label
+                      className={`flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-full border border-white/25 cursor-pointer transition-colors flex-shrink-0 ${uploadingImg ? 'opacity-60 pointer-events-none' : ''}`}
+                    >
+                      <ImageIcon size={13} />
+                      {uploadingImg ? 'Uploading…' : 'Image'}
+                      <input ref={imageInputRef} type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
+                    </label>
+
+                    {pendingCfg.imageUrl && (
+                      <button
+                        onClick={() => setPendingCfg(prev => ({ ...prev, imageUrl: '' }))}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium rounded-full border border-white/15 transition-colors flex-shrink-0"
+                      >
+                        <X size={11} /> Remove image
+                      </button>
+                    )}
+
+                    <div className="flex-1" />
+
+                    <button onClick={cancelEdit} className="px-3 py-1.5 text-white/70 hover:text-white text-xs font-semibold rounded-full border border-white/20 hover:bg-white/10 transition-colors flex-shrink-0">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      disabled={savingBanner}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 text-xs font-bold rounded-full hover:bg-slate-50 transition-colors disabled:opacity-60 flex-shrink-0 shadow-md"
+                    >
+                      <Check size={12} />
+                      {savingBanner ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+              </div>
+            </motion.div>
           )}
-          {activeTab === 'team' && showTeamAnalytics && (
-            <TeamAnalytics userId={user.id} userRole={profile.role} isTeacher={profile.role === 'teacher'} />
-          )}
-          {activeTab === 'projects' && (
-            <ProjectsList
-              userId={user.id}
-              userRole={profile.role}
-              canEdit={canAssignToOthers}
-              canCheck={canCheck}
-              availableAssignees={allAssignees}
-            />
-          )}
+        </AnimatePresence>
+
+        {/* Everything below the banner dims while the banner is being edited */}
+        <div style={{ opacity: editingBanner ? 0.35 : 1, filter: editingBanner ? 'blur(1.5px)' : 'none', pointerEvents: editingBanner ? 'none' : 'auto', userSelect: editingBanner ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        {/* ── Full-width tab strip — attached to banner ── */}
+        <div className="sticky top-0 z-10 bg-white/75 backdrop-blur-xl border-b border-slate-200/70 shadow-[0_1px_0_rgba(255,255,255,0.7),0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+          <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+            <div className="flex items-stretch gap-0.5 sm:gap-1">
+              {visibleTabs.map(tab => {
+                const isActive = activeTab === tab.id
+                const meta = TAB_META[tab.id]
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    onMouseEnter={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
+                    onFocus={tab.id === 'team' && showTeamAnalytics
+                      ? () => prefetchTeamAnalytics(user.id, profile.role)
+                      : undefined}
+                    className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1 sm:px-6 py-2.5 sm:py-4 text-[11px] sm:text-sm font-semibold transition-colors duration-200 ${
+                      isActive ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 ${
+                        isActive
+                          ? `${meta.bg} ${meta.color} shadow-sm scale-100`
+                          : 'text-slate-400 group-hover:text-slate-600 group-hover:bg-slate-50 scale-95'
+                      }`}
+                    >
+                      {meta.icon}
+                    </span>
+                    <span className="relative z-10 leading-none">{tab.label}</span>
+                    {tab.id === 'projects' && activeProjectCount > 0 && (
+                      <span className="absolute top-1.5 right-1/2 translate-x-4 sm:static sm:translate-x-0 z-10 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-red-500 text-white rounded-full leading-none shadow-sm ring-2 ring-white">
+                        {activeProjectCount > 9 ? '9+' : activeProjectCount}
+                      </span>
+                    )}
+                    {isActive && (
+                      <motion.span
+                        layoutId="tasks-active-tab"
+                        className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                        style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #f59e0b), var(--page-gradient-to, #f97316))' }}
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
+
+        {/* Tab content */}
+        <motion.div
+          key={`${activeTab}-${viewingUserId}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {activeTab === 'weekly' && (
+              <>
+                {canCheck && (
+                  <VerificationAlerts
+                    userId={user.id}
+                    refreshKey={verificationRefresh}
+                    onNavigate={handleNavigateToVerification}
+                  />
+                )}
+                <div ref={calendarWrapRef} className="scroll-mt-20">
+                  <WeeklyCalendar
+                    userId={user.id}
+                    profile={profile}
+                    canCheck={canCheck}
+                    canAssignToOthers={canAssignToOthers}
+                    availableAssignees={allAssignees}
+                    viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
+                    initialDate={focusRequest?.date || urlDate || undefined}
+                    focusTaskId={focusRequest?.taskId}
+                    focusNonce={focusRequest?.nonce}
+                    teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                    currentUserId={user.id}
+                    currentUserName={profile.full_name}
+                    onViewingUserChange={handleViewingUserChange}
+                    onTaskActivity={() => setVerificationRefresh(v => v + 1)}
+                  />
+                </div>
+              </>
+            )}
+            {activeTab === 'analytics' && (
+              <TaskAnalytics
+                userId={user.id}
+                viewingUserId={viewingUserId !== user.id ? viewingUserId : undefined}
+                teamMembers={canAssignToOthers && teamMembers.length > 0 ? teamMembers : undefined}
+                currentUserId={user.id}
+                currentUserName={profile.full_name}
+                onViewingUserChange={setViewingUserId}
+                onNewTask={() => setActiveTab('weekly')}
+              />
+            )}
+            {activeTab === 'team' && showTeamAnalytics && (
+              <TeamAnalytics
+                userId={user.id}
+                userRole={profile.role}
+                isTeacher={profile.role === 'teacher'}
+              />
+            )}
+            {activeTab === 'projects' && (
+              <ProjectsList
+                userId={user.id}
+                userRole={profile.role}
+                canEdit={canAssignToOthers}
+                canCheck={canCheck}
+                availableAssignees={allAssignees}
+              />
+            )}
+          </div>
+        </motion.div>
+        </div>
+
       </div>
-    </div>
+    </ProtectedLayout>
+  )
+}
+
+// ── Export (Suspense boundary for useSearchParams) ────────────────────────────
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <ProtectedLayout staffOnly>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="spinner" />
+        </div>
+      </ProtectedLayout>
+    }>
+      <TasksPageContent />
+    </Suspense>
   )
 }

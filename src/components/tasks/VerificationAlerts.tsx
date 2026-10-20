@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ShieldCheck, ChevronRight, ChevronDown } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { fetchTasksAwaitingVerification, TaskAwaitingVerification } from '@/lib/tasks'
@@ -14,14 +15,15 @@ interface VerificationAlertsProps {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** "12 Oct", and whether that date has passed. */
+/** Format a YYYY-MM-DD date into a short label, flagging past-due dates. */
 function formatDue(dateStr: string | null): { label: string; overdue: boolean } {
   if (!dateStr) return { label: 'No date', overdue: false }
   const [y, m, d] = dateStr.split('-').map(Number)
   if (!y || !m || !d) return { label: 'No date', overdue: false }
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return { label: `${d} ${MONTHS[m - 1]}`, overdue: new Date(y, m - 1, d) < today }
+  const dt = new Date(y, m - 1, d)
+  return { label: `${MONTHS[m - 1]} ${d}`, overdue: dt < today }
 }
 
 interface AssigneeGroup {
@@ -32,9 +34,11 @@ interface AssigneeGroup {
 }
 
 /**
- * Above the week, for coordinators, principals and admins: tasks they set
- * that need a check, which the assignee has now marked done. Grouped by
- * person; each row opens that person's calendar at the task.
+ * Shown above the weekly calendar for coordinators/principals/admin. Surfaces
+ * tasks they assigned (with verification required) that the assignee has now
+ * marked as "Checking" — so the assigner is no longer unaware. Tasks are grouped
+ * per assignee so the list stays tidy even with many of them; each row links
+ * straight to that assignee's calendar, pointing at the exact task.
  */
 export default function VerificationAlerts({ userId, refreshKey, onNavigate }: VerificationAlertsProps) {
   const [items, setItems] = useState<TaskAwaitingVerification[]>([])
@@ -42,7 +46,8 @@ export default function VerificationAlerts({ userId, refreshKey, onNavigate }: V
   const [collapsed, setCollapsed] = useState(false)
 
   const load = useCallback(async () => {
-    setItems(await fetchTasksAwaitingVerification(userId))
+    const data = await fetchTasksAwaitingVerification(userId)
+    setItems(data)
     setLoaded(true)
   }, [userId])
 
@@ -64,49 +69,70 @@ export default function VerificationAlerts({ userId, refreshKey, onNavigate }: V
   if (!loaded || items.length === 0) return null
 
   return (
-    <section className="fx-card fx-bleed border-l-[3px] !border-l-[#B8983C] overflow-hidden">
+    <div className="glass rounded-2xl border border-amber-200 bg-amber-50/60 mb-4 overflow-hidden">
       <button
         type="button"
         onClick={() => setCollapsed(v => !v)}
-        aria-expanded={!collapsed}
-        className="w-full flex items-center gap-2 px-3.5 min-h-[44px] text-left hover:bg-[#FAF7F0] transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-50 transition-colors"
       >
-        <ShieldCheck size={15} className="text-[#8B6F47] flex-shrink-0" />
-        <h3 className="text-[13.5px] font-semibold text-slate-900 leading-snug flex-1 min-w-0">
-          Waiting for you to check <span className="ml-1 text-[12.5px] font-bold text-[#8B6F47] tabular-nums">{items.length}</span>
+        <ShieldCheck size={15} className="text-amber-600 flex-shrink-0" />
+        <h3 className="text-sm font-semibold text-slate-700 flex-1">
+          Awaiting Your Verification
+          <span className="ml-1.5 text-xs font-normal text-amber-600">({items.length})</span>
         </h3>
-        <ChevronDown size={15} className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${collapsed ? '' : 'rotate-180'}`} />
+        <ChevronDown
+          size={16}
+          className={`text-amber-500 transition-transform duration-200 flex-shrink-0 ${collapsed ? '-rotate-90' : ''}`}
+        />
       </button>
 
-      {!collapsed && (
-        <div className="border-t border-[#EEEAE1] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 max-h-[22rem] overflow-y-auto overscroll-contain">
-          {groups.map(group => (
-            <div key={group.assigneeId} className="bg-white min-w-0 border-b md:border-r border-[#EEEAE1]">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-[#FAF8F3]">
-                <Avatar avatarUrl={group.avatarUrl} name={group.name} size={22} userId={group.assigneeId} />
-                <span className="text-[12.5px] font-semibold text-slate-800 flex-1 min-w-0 break-words">{group.name}</span>
-                <span className="text-[11px] font-bold text-[#7A5D12] bg-[#FBF1D6] rounded-full px-1.5 h-[18px] leading-[18px] tabular-nums flex-shrink-0">{group.tasks.length}</span>
-              </div>
-              {group.tasks.map(task => {
-                const due = formatDue(task.dueDate)
-                return (
-                  <button
-                    key={task.taskId}
-                    onClick={() => onNavigate(task.assigneeId, task.dueDate, task.taskId)}
-                    className="group w-full flex items-center gap-2 px-3 py-1.5 border-t border-[#F3F0E8] hover:bg-[#FAF7F0] transition-colors text-left"
-                    title={`Open ${group.name}'s calendar at this task`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
-                    <span className="text-[12.5px] text-slate-800 flex-1 min-w-0 leading-snug break-words">{task.title}</span>
-                    <span className={`text-[11px] tabular-nums flex-shrink-0 ${due.overdue ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>{due.label}</span>
-                    <ChevronRight size={13} className="text-slate-300 group-hover:text-[#8B6F47] flex-shrink-0" />
-                  </button>
-                )
-              })}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[360px] overflow-y-auto">
+              {groups.map(group => (
+                <div key={group.assigneeId} className="rounded-xl border border-amber-200/70 bg-white overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/70 border-b border-amber-100">
+                    <Avatar avatarUrl={group.avatarUrl} name={group.name} size={24} userId={group.assigneeId} />
+                    <span className="text-xs font-semibold text-slate-700 truncate flex-1">{group.name}</span>
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 leading-none flex-shrink-0">
+                      {group.tasks.length}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {group.tasks.map(task => {
+                      const due = formatDue(task.dueDate)
+                      return (
+                        <button
+                          key={task.taskId}
+                          onClick={() => onNavigate(task.assigneeId, task.dueDate, task.taskId)}
+                          className="group w-full flex items-center gap-2 px-3 py-2 hover:bg-amber-50/60 transition-colors text-left"
+                          title={`Open ${group.name}'s calendar at this task`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
+                          <span className="text-xs text-slate-700 truncate flex-1 group-hover:text-slate-900">
+                            {task.title}
+                          </span>
+                          <span className={`text-[10px] flex-shrink-0 ${due.overdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                            {due.label}
+                          </span>
+                          <ChevronRight size={13} className="text-slate-300 group-hover:text-amber-500 flex-shrink-0" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-    </section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }

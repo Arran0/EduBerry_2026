@@ -5,10 +5,9 @@
 // fetchTeacherPeriodSlots in taskPeriods.ts) — not a manual input.
 'use client'
 
-import type { WorkBook } from 'xlsx'
+import * as XLSX from 'xlsx'
 import { TaskSlot } from './taskSlots'
 import { createTask, NewTaskInput, Task } from './tasks'
-import { supabase } from './supabase'
 
 export type PlannerMode = 'week' | 'month'
 
@@ -86,19 +85,12 @@ export function periodColumnLabels(slots: TaskSlot[]): string[] {
 
 // ── Template / export ───────────────────────────────────────────────────────
 
-// The spreadsheet library is ~400 kB, and most visits to the Task Manager never
-// touch a spreadsheet: it loads the first time someone downloads or uploads one.
-const loadXLSX = () => import('xlsx')
-
-/** Larger than any planner a month of periods could fill. */
-export const PLANNER_MAX_BYTES = 2 * 1024 * 1024
-
 interface PlannerSheetOptions {
   periodLabels: string[]
   rows: PlannerRow[]
 }
 
-function buildPlannerWorkbook(XLSX: typeof import('xlsx'), { periodLabels, rows }: PlannerSheetOptions): WorkBook {
+function buildPlannerWorkbook({ periodLabels, rows }: PlannerSheetOptions): XLSX.WorkBook {
   const totalCols = 2 + periodLabels.length
 
   const aoa: string[][] = []
@@ -120,26 +112,24 @@ function buildPlannerWorkbook(XLSX: typeof import('xlsx'), { periodLabels, rows 
   return wb
 }
 
-export async function downloadPlannerTemplate(opts: {
+export function downloadPlannerTemplate(opts: {
   mode: PlannerMode
   anchor: string
   periodSlots: TaskSlot[]
   fileName?: string
-}): Promise<void> {
+}): void {
   const { mode, anchor, periodSlots, fileName } = opts
-  const XLSX = await loadXLSX()
   const rows = emptyPlannerRows(mode, anchor, periodSlots.length)
-  const wb = buildPlannerWorkbook(XLSX, { periodLabels: periodColumnLabels(periodSlots), rows })
+  const wb = buildPlannerWorkbook({ periodLabels: periodColumnLabels(periodSlots), rows })
   XLSX.writeFile(wb, fileName || `planner-template-${mode}.xlsx`)
 }
 
-export async function downloadPlannerRows(opts: {
+export function downloadPlannerRows(opts: {
   periodLabels: string[]
   rows: PlannerRow[]
   fileName?: string
-}): Promise<void> {
-  const XLSX = await loadXLSX()
-  const wb = buildPlannerWorkbook(XLSX, opts)
+}): void {
+  const wb = buildPlannerWorkbook(opts)
   XLSX.writeFile(wb, opts.fileName || 'planner.xlsx')
 }
 
@@ -170,20 +160,8 @@ function parseDateCell(v: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-/** Reads an uploaded planner file. Size-capped before the parser ever sees it. */
-export async function readPlannerFile(file: File): Promise<ParsedPlanner | { error: string }> {
-  if (file.size > PLANNER_MAX_BYTES) return { error: 'That file is larger than 2 MB. A planner is a few kilobytes; check you picked the right file.' }
-  try {
-    const [XLSX, buf] = await Promise.all([loadXLSX(), file.arrayBuffer()])
-    const workbook = XLSX.read(new Uint8Array(buf), { type: 'array', cellDates: true })
-    return parsePlannerWorkbook(XLSX, workbook)
-  } catch {
-    return { error: 'The file could not be read. Upload an .xlsx file, ideally one made from the template.' }
-  }
-}
-
 /** Parses an uploaded planner workbook. Tolerant of the exact header row position. */
-export function parsePlannerWorkbook(XLSX: typeof import('xlsx'), workbook: WorkBook): ParsedPlanner | { error: string } {
+export function parsePlannerWorkbook(workbook: XLSX.WorkBook): ParsedPlanner | { error: string } {
   const sheetName = workbook.SheetNames[0]
   const sheet = workbook.Sheets[sheetName]
   if (!sheet) return { error: 'The file has no sheets.' }
@@ -261,16 +239,6 @@ export function buildTaskInputsFromPlanner(opts: {
   return inputs
 }
 
-/** Rows per insert: a month of eight periods is ~250 tasks, so one or two. */
-const IMPORT_CHUNK = 200
-
-/**
- * Creates the planner's tasks in batches: one insert for a chunk of tasks and
- * one for their assignees, rather than three round trips per task. Planner
- * rows are plain — one assignee, no checklist — so the rows of a chunk that
- * share an assignee are interchangeable and need no pairing by position.
- * Anything richer goes through createTask one at a time.
- */
 export async function importPlannerTasks(
   inputs: NewTaskInput[],
   createdBy: string,
@@ -278,64 +246,11 @@ export async function importPlannerTasks(
 ): Promise<{ created: Task[]; failed: number }> {
   const created: Task[] = []
   let failed = 0
-  let done = 0
-  const total = inputs.length
-
-  const plain = inputs.filter(i => i.assignee_ids.length === 1 && !i.checklist_items?.length)
-  const rich = inputs.filter(i => !plain.includes(i))
-
-  const byAssignee = new Map<string, NewTaskInput[]>()
-  for (const input of plain) {
-    const id = input.assignee_ids[0]
-    const list = byAssignee.get(id)
-    if (list) list.push(input)
-    else byAssignee.set(id, [input])
-  }
-
-  for (const [assigneeId, list] of byAssignee) {
-    for (let at = 0; at < list.length; at += IMPORT_CHUNK) {
-      const chunk = list.slice(at, at + IMPORT_CHUNK)
-      const { data: tasks, error } = await supabase
-        .from('tasks')
-        // The same row createTask writes for a plain task.
-        .insert(chunk.map(i => ({
-          title: i.title,
-          description: null,
-          due_date: i.due_date || null,
-          timing: i.timing || null,
-          end_time: i.end_time || null,
-          require_check: false,
-          tag: null,
-          bonus_points: 0,
-          recurrence: 'none',
-          created_by: createdBy,
-        })))
-        .select()
-      if (error || !tasks) {
-        failed += chunk.length
-      } else {
-        const { error: aErr } = await supabase
-          .from('task_assignees')
-          .insert(tasks.map(t => ({ task_id: t.id, user_id: assigneeId })))
-        if (aErr) {
-          // A task nobody is assigned to shows up on no calendar — take the
-          // chunk back out rather than leave it invisible.
-          await supabase.from('tasks').delete().in('id', tasks.map(t => t.id))
-          failed += chunk.length
-        } else {
-          created.push(...(tasks as Task[]))
-        }
-      }
-      done += chunk.length
-      onProgress?.(done, total)
-    }
-  }
-
-  for (const input of rich) {
-    const task = await createTask(input, createdBy)
+  for (let i = 0; i < inputs.length; i++) {
+    const task = await createTask(inputs[i], createdBy)
     if (task) created.push(task)
     else failed++
-    onProgress?.(++done, total)
+    onProgress?.(i + 1, inputs.length)
   }
   return { created, failed }
 }

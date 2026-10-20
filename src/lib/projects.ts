@@ -1,7 +1,6 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { TaskStatus, TaskTag } from './tasks'
 import { compressImageIfNeeded } from './imageCompression'
-import { attachmentProblem, isImageAttachment } from './attachmentPolicy'
 
 // ============================================
 // Types
@@ -563,10 +562,9 @@ export async function uploadSubtaskAttachment(
   subtaskId: string,
   userId: string
 ): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  if (attachmentProblem(file)) return null
-  const isImage = isImageAttachment(file.name)
+  const isImage = file.type.startsWith('image/')
   const compressed = isImage ? await compressImageIfNeeded(file) : file
-  const ext = (compressed.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const ext = compressed.name.split('.').pop() || 'bin'
   const path = `${userId}/${subtaskId}/${Date.now()}.${ext}`
   const { error } = await supabase.storage
     .from('subtask-attachments')

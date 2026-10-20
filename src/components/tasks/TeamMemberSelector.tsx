@@ -1,10 +1,8 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { UserProfile } from '@/lib/supabase'
-import { ChevronDown, Eye, User } from 'lucide-react'
-import Avatar from '@/components/Avatar'
-import { SearchField } from './ui'
+import { ChevronDown, Eye, User, Search, X } from 'lucide-react'
 
 interface TeamMemberSelectorProps {
   members: UserProfile[]
@@ -12,105 +10,140 @@ interface TeamMemberSelectorProps {
   currentUserId: string
   currentUserName: string
   onSelect: (userId: string) => void
-  /** Label on the closed button when viewing your own (defaults to "You"). */
+  /** Label shown on the collapsed button when viewing self (defaults to "You"). */
   selfLabel?: string
 }
 
-/**
- * Whose tasks are on screen. The capsule turns dark while someone else's are,
- * so it is always clear the calendar is not your own.
- */
 export default function TeamMemberSelector({
-  members, selectedUserId, currentUserId, currentUserName, onSelect, selfLabel,
+  members,
+  selectedUserId,
+  currentUserId,
+  currentUserName,
+  onSelect,
+  selfLabel,
 }: TeamMemberSelectorProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const isViewingSelf = selectedUserId === currentUserId
-  const selected = members.find(m => m.id === selectedUserId)
-  const label = isViewingSelf ? (selfLabel || 'You') : (selected?.full_name || 'Unknown')
+  const selectedMember = members.find(m => m.id === selectedUserId)
+  const displayName = isViewingSelf
+    ? (currentUserName || 'You')
+    : (selectedMember?.full_name || 'Unknown')
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? members.filter(m => m.full_name?.toLowerCase().includes(q)) : members
-  }, [members, query])
+  const filtered = query.trim()
+    ? members.filter(m => m.full_name?.toLowerCase().includes(query.toLowerCase()))
+    : members
 
   useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery('')
+      }
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setQuery('') } }
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50)
   }, [open])
 
-  const pick = (id: string) => { onSelect(id); setOpen(false); setQuery('') }
+  function handleSelect(userId: string) {
+    onSelect(userId)
+    setOpen(false)
+    setQuery('')
+  }
 
   return (
-    // Positioned only from sm up: on a phone the menu hangs from the whole
-    // toolbar instead of this button, so it can't run off either edge.
-    <div ref={ref} className="sm:relative min-w-0">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={isViewingSelf ? 'Showing your tasks' : `Showing ${label}'s tasks`}
-        className={`inline-flex items-center gap-1.5 min-h-9 py-1 min-w-0 max-w-[11rem] sm:max-w-[15rem] px-3 rounded-full text-[12.5px] font-semibold text-left leading-tight transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+        className={`flex items-center gap-1 sm:gap-2 pl-2 pr-1.5 sm:pl-4 sm:pr-3 py-1.5 rounded-full sm:rounded-xl border transition-all shadow-sm text-xs sm:text-sm font-medium focus:outline-none ${
           isViewingSelf
-            ? 'text-slate-700 bg-white border border-[#E2DDD2] shadow-[0_1px_2px_rgba(15,23,42,.05)] hover:border-[#CFC8B8]'
-            : 'text-white bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)]'}`}
+            ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+            : 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600'
+        }`}
       >
-        {isViewingSelf ? <User size={14} className="flex-shrink-0 text-slate-500" /> : <Eye size={14} className="flex-shrink-0 text-[#E9DDBB]" />}
-        <span className="min-w-0 break-words">{label}</span>
-        <ChevronDown size={13} className={`flex-shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {isViewingSelf ? <User size={13} className="flex-shrink-0 opacity-60" /> : <Eye size={13} className="flex-shrink-0 opacity-80" />}
+        <span className="font-semibold truncate max-w-[64px] sm:max-w-[130px]">
+          {isViewingSelf ? (selfLabel || 'You') : displayName}
+        </span>
+        <ChevronDown size={11} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute right-2 sm:right-0 top-full z-40 mt-1.5 w-[min(17rem,calc(100vw-1rem))] flex flex-col max-h-[60vh] rounded-[14px] bg-white border border-black/[.07] shadow-[0_24px_60px_-20px_rgba(15,23,42,.45),0_2px_8px_rgba(15,23,42,.08)] overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
-            <SearchField value={query} onChange={setQuery} placeholder="Search by name" />
+        <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 w-56">
+          {/* Search box */}
+          <div className="px-2 pt-2 pb-1">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-200 focus-within:border-indigo-300 transition-colors">
+              <Search size={12} className="text-slate-400 flex-shrink-0" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search by name..."
+                className="flex-1 text-xs bg-transparent focus:outline-none text-slate-700 placeholder-slate-400 min-w-0"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} className="text-slate-300 hover:text-slate-500">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="overflow-y-auto overscroll-contain py-1" role="listbox">
+
+          <div className="py-1 max-h-56 overflow-y-auto">
+            {/* My Tasks option — hidden when searching */}
             {!query && (
-              <Option selected={isViewingSelf} onClick={() => pick(currentUserId)}>
-                <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><User size={12} className="text-slate-500" /></span>
-                <span className="flex-1 min-w-0 break-words">{currentUserName || 'You'} <span className="text-slate-400 font-normal">(you)</span></span>
-              </Option>
+              <button
+                type="button"
+                onClick={() => handleSelect(currentUserId)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
+                  isViewingSelf ? 'text-indigo-600 font-semibold' : 'text-slate-700'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <User size={11} className="text-slate-500" />
+                </span>
+                <span className="truncate">{currentUserName || 'You'}</span>
+                {isViewingSelf && (
+                  <span className="ml-auto text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-medium">You</span>
+                )}
+              </button>
             )}
-            {!query && members.length > 0 && <div className="mx-3 my-1 border-t border-slate-100" />}
+
+            {!query && members.length > 0 && (
+              <div className="mx-3 my-1 border-t border-slate-100" />
+            )}
+
             {filtered.length === 0 && query ? (
-              <p className="px-3.5 py-3 text-[12.5px] text-slate-500">No one matches that name.</p>
-            ) : filtered.map(m => (
-              <Option key={m.id} selected={selectedUserId === m.id} onClick={() => pick(m.id)}>
-                <Avatar avatarUrl={m.avatar_url} name={m.full_name} size={24} />
-                <span className="flex-1 min-w-0 break-words">{m.full_name}</span>
-              </Option>
-            ))}
+              <p className="px-3 py-3 text-xs text-slate-400 text-center">No match for &quot;{query}&quot;</p>
+            ) : (
+              filtered.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleSelect(m.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
+                    selectedUserId === m.id ? 'text-indigo-600 font-semibold' : 'text-slate-700'
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-indigo-600">
+                    {(m.full_name || '?').charAt(0).toUpperCase()}
+                  </span>
+                  <span className="truncate">{m.full_name}</span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       )}
     </div>
-  )
-}
-
-function Option({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={selected}
-      onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3.5 py-1.5 text-left text-[13.5px] leading-snug transition-colors hover:bg-[#FAF7F0] focus-visible:bg-[#FAF7F0] focus-visible:outline-none ${
-        selected ? 'font-semibold text-slate-900 bg-[#FBF6E9]' : 'text-slate-800'}`}
-    >
-      {children}
-    </button>
   )
 }

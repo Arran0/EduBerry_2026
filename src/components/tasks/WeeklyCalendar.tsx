@@ -1,33 +1,43 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import dynamic from 'next/dynamic'
-import { AnimatePresence } from 'framer-motion'
-import {
-  Plus, AlertTriangle, FolderKanban, Star, HelpCircle, FileSpreadsheet, Maximize2, ChevronDown, Loader2,
-} from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, FolderKanban, Calendar, Clock, Star, X, Circle, CircleDot, CheckCircle2, CheckSquare, Square, MessageSquare, Send, ShieldCheck, Repeat, Trash2, Paperclip, Link2, Image as ImageIcon, FileText, ExternalLink, Ban, MinusCircle, RotateCcw, HelpCircle, FileSpreadsheet, Lock, Maximize2 } from 'lucide-react'
+import NewTaskForm from './NewTaskForm'
 import TeamMemberSelector from './TeamMemberSelector'
+import SubtaskCard from './SubtaskCard'
+import { fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, fetchTaskDetails, createTask, TaskDetails, Task, TaskWithDetails, TaskStatus, RECURRENCE_LABELS, getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask, updateTaskStatus, submitTaskWork, needsSubmissionFirst, toggleChecklistItem, addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime, TaskChecklistItem, TaskComment } from '@/lib/tasks'
 import {
-  fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, createTask, Task, TaskWithDetails, TaskStatus,
-  getNextStatus, canVerifyTask, updateTaskStatus, needsSubmissionFirst, isTaskCompleted,
-} from '@/lib/tasks'
-import { fetchSubtasksForCalendar, Subtask, SubtaskWithProject, updateSubtaskStatus } from '@/lib/projects'
+  fetchSubtasksForCalendar,
+  Subtask,
+  SubtaskWithProject,
+  updateSubtaskStatus,
+} from '@/lib/projects'
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { useMediaQuerySync } from '@/hooks/useMediaQuery'
+import Avatar from '@/components/Avatar'
 import { TASK_SLOTS, TaskSlot, formatSlotTime } from '@/lib/taskSlots'
 import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
-import { TaskDeck, Stepper, StatusMark, Btn, SX, Panel } from './ui'
+import PlannerModal from './PlannerModal'
 
-// Every popup loads the first time it is opened, not with the page. The
-// loaders are kept so a hover on the button that opens one can start the
-// download early.
-const loadNewTaskForm = () => import('./NewTaskForm')
-const loadTaskDetail = () => import('./TaskDetailSheet')
-const NewTaskForm = dynamic(loadNewTaskForm)
-const TaskDetailSheet = dynamic(loadTaskDetail)
-const SubtaskCard = dynamic(() => import('./SubtaskCard'))
-const PlannerModal = dynamic(() => import('./PlannerModal'))
+function canDeleteTaskFn(task: TaskWithDetails, userId: string, userRole: string): boolean {
+  if (userRole === 'admin') return true
+  const isAssignee = task.assignees.some(a => a.user_id === userId)
+  const creatorRole = task.creator?.role
+  if (userRole === 'principal') {
+    if (isAssignee && creatorRole === 'admin') return false
+    return true
+  }
+  if (userRole === 'coordinator') {
+    if (isAssignee && (creatorRole === 'principal' || creatorRole === 'admin')) return false
+    return true
+  }
+  if (userRole === 'teacher') {
+    return task.created_by === userId
+  }
+  return false
+}
 
 interface WeeklyCalendarProps {
   userId: string
@@ -37,7 +47,7 @@ interface WeeklyCalendarProps {
   availableAssignees: UserProfile[]
   viewingUserId?: string
   initialDate?: string
-  /** When set, the calendar jumps to the task's week and opens it. */
+  /** When set, the calendar jumps to the task's week and opens its detail modal. */
   focusTaskId?: string
   /** Bumped each time a focus is requested so repeat clicks re-trigger the jump. */
   focusNonce?: number
@@ -49,50 +59,62 @@ interface WeeklyCalendarProps {
   onTaskActivity?: () => void
 }
 
+
 function getWeekStart(date: Date): Date {
   const d = new Date(date)
   const day = d.getDay()
-  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1))
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
   d.setHours(0, 0, 0, 0)
   return d
 }
 
 function formatDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const yy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
 }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-function getDayLabel(date: Date) {
-  return { day: DAYS[date.getDay()], date: date.getDate(), month: MONTHS[date.getMonth()], full: formatDate(date) }
+function getDayLabel(date: Date): { day: string; date: number; month: string; full: string } {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return {
+    day: days[date.getDay()],
+    date: date.getDate(),
+    month: months[date.getMonth()],
+    full: formatDate(date),
+  }
 }
 
-function monthKeyLabel(key: string): string {
-  if (key === 'undated') return 'No date'
-  const [y, m] = key.split('-').map(Number)
-  return `${MONTHS[m - 1]} ${y}`
-}
-
-function shortDate(iso: string): string {
-  const [, m, d] = iso.split('-').map(Number)
-  return `${d} ${MONTHS[m - 1]}`
-}
-
-/** Chip fill by status — the same colours the status legend shows. */
+// Chip border/bg colours mapped to task status (similar to SchoolWorkManager)
 const CHIP_STYLE: Record<TaskStatus, string> = {
-  not_done: 'border-[#E2DDD2] bg-white hover:border-[#CFC8B8]',
-  partial: 'border-orange-300 bg-orange-50 hover:border-orange-400',
-  done: 'border-yellow-300 bg-yellow-50 hover:border-yellow-400',
-  checked: 'border-emerald-200 bg-emerald-50 hover:border-emerald-300',
+  not_done: 'border-slate-200 bg-white hover:border-slate-300',
+  partial:  'border-orange-400 bg-orange-100 hover:border-orange-500',
+  done:     'border-yellow-300 bg-yellow-50 hover:border-yellow-400',
+  checked:  'border-green-200 bg-green-50 hover:border-green-300',
   dismissed: 'border-slate-200 bg-slate-100 hover:border-slate-300',
 }
 
 export default function WeeklyCalendar({
-  userId, profile, canCheck, canAssignToOthers, availableAssignees, viewingUserId, initialDate,
-  focusTaskId, focusNonce, teamMembers, currentUserId, currentUserName, onViewingUserChange, onTaskActivity,
+  userId,
+  profile,
+  canCheck,
+  canAssignToOthers,
+  availableAssignees,
+  viewingUserId,
+  initialDate,
+  focusTaskId,
+  focusNonce,
+  teamMembers,
+  currentUserId,
+  currentUserName,
+  onViewingUserChange,
+  onTaskActivity,
 }: WeeklyCalendarProps) {
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(initialDate ? new Date(initialDate) : new Date()))
+  const [weekStart, setWeekStart] = useState(() =>
+    initialDate ? getWeekStart(new Date(initialDate)) : getWeekStart(new Date())
+  )
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [subtasks, setSubtasks] = useState<SubtaskWithProject[]>([])
   const [overdueUndated, setOverdueUndated] = useState<TaskWithDetails[]>([])
@@ -100,90 +122,108 @@ export default function WeeklyCalendar({
   const [loading, setLoading] = useState(true)
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskDate, setNewTaskDate] = useState('')
-  const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
   const [showPlanner, setShowPlanner] = useState(false)
-  const [showLegend, setShowLegend] = useState(false)
 
-  // Captured once on mount so the red unread badges reflect the state from
-  // before this visit's markAllRead() cleared the count.
+  // Capture the readAt timestamp once on mount so red badges reflect the state
+  // from before the current visit's markAllRead() clears the count.
   const [readAt] = useState(() => {
     if (typeof window === 'undefined') return new Date(0).toISOString()
-    try {
-      return localStorage.getItem(`tasks_notifications_read_at_${userId}`) ?? new Date(0).toISOString()
-    } catch {
-      return new Date(0).toISOString()
-    }
+    return localStorage.getItem(`tasks_notifications_read_at_${userId}`) ?? new Date(0).toISOString()
   })
-
-  // The focal day: the wide column on a desktop grid, the listed day on a
-  // phone. Today by default.
+  // The column that renders wide (≈3× the others). Defaults to today so it's the
+  // focal column on open; clicking any day header moves the expansion there.
   const [expandedDay, setExpandedDay] = useState<string>(() => initialDate || formatDate(new Date()))
-  // The cell being typed into, if any.
+  // The grid cell currently in inline-compose mode (typing a task name directly
+  // in the box). Null when no cell is being composed.
   const [composeCell, setComposeCell] = useState<{ date: string; slot: number | null } | null>(null)
 
-  const [openTask, setOpenTask] = useState<TaskWithDetails | null>(null)
+  // Modal state
+  const [openTask, setOpenTask]       = useState<TaskWithDetails | null>(null)
   const [openSubtask, setOpenSubtask] = useState<SubtaskWithProject | null>(null)
-
-  const [overdueOpen, setOverdueOpen] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [overdueCollapsed, setOverdueCollapsed] = useState(true)
   const [overdueMonthIdx, setOverdueMonthIdx] = useState(0)
   const [overdueLoaded, setOverdueLoaded] = useState(false)
   const [overdueLoading, setOverdueLoading] = useState(false)
-  const [bonusOpen, setBonusOpen] = useState(false)
+  const [bonusCollapsed, setBonusCollapsed] = useState(true)
   const [bonusMonthIdx, setBonusMonthIdx] = useState(0)
   const [bonusLoaded, setBonusLoaded] = useState(false)
   const [bonusLoading, setBonusLoading] = useState(false)
 
-  // A task to open once it has loaded (the "Waiting for you to verify" jump).
+  // Task to auto-open once it has loaded (driven by focusTaskId from the parent's
+  // "Awaiting Your Verification" buttons). Initialised here so a fresh mount —
+  // which happens when switching to another assignee's calendar — focuses too.
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(focusTaskId ?? null)
-  // The chip that flashes so the person sees where the task sits first.
+  // Briefly highlighted task chip (amber ring) so the user sees WHERE the task
+  // lives in the grid before the detail modal opens.
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
 
-  // Real school periods from the active Timetable, seeded with the generic set
-  // so the grid isn't empty while they load.
-  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
+  // Seeds the full New Task form when opened from a specific grid cell.
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskSlot, setNewTaskSlot] = useState<[number, number] | null>(null)
 
-  // The grid needs ~640px; below the tablet hinge a day is shown as a list.
-  const wide = useMediaQuerySync('(min-width: 768px)')
+  // Real school periods from the active Timetable — count, labels and timings
+  // all come from there. Seeded with the generic fallback so the grid isn't
+  // empty while this resolves.
+  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
 
   const { user } = useAuth()
   const targetUserId = viewingUserId || userId
   const todayStr = formatDate(new Date())
+  // canEdit for subtasks uses simpler role-based check
   const canEditSubtasks = ['coordinator', 'principal', 'admin'].includes(profile.role)
 
   const initialLoadDone = useRef(false)
+  // Maps real task id → stable render key so AnimatePresence never sees a key
+  // change when an optimistic id is swapped for the real DB id after createTask.
+  const taskRenderKeys = useRef(new Map<string, string>())
+  // Refs so refreshTasks can check loaded state without capturing stale closure values
   const overdueLoadedRef = useRef(false)
   const bonusLoadedRef = useRef(false)
-
-  // The grid scrolls sideways only between the tablet hinge and the width the
-  // seven columns need; there, keep the focal column in view.
+  // Horizontal-scroll container + the expanded (wide) column, so phones open with
+  // the focal column — today by default — already in view (this matters most on
+  // Fri/Sat/Sun, which sit past the first four columns visible without scrolling).
   const gridScrollRef = useRef<HTMLDivElement>(null)
-  const expandedColRef = useCallback((node: HTMLButtonElement | null) => {
-    if (!node) return
+  // A callback ref rather than a plain effect: the grid lives behind
+  // AnimatePresence mode="wait", which defers mounting it until the loading
+  // skeleton's exit animation finishes. An effect keyed off `loading` fires as
+  // soon as that state flips — before the grid (and its ref) exist in the DOM —
+  // so it would silently no-op. A callback ref instead runs exactly when the
+  // expanded column's button is actually committed, whether that's on first
+  // mount, after switching which day is expanded, or after a week navigation.
+  const scrollExpandedIntoView = useCallback((colEl: HTMLButtonElement) => {
     requestAnimationFrame(() => {
       const container = gridScrollRef.current
-      if (!container || !node.isConnected || container.scrollWidth <= container.clientWidth) return
-      const target = node.offsetLeft - (container.clientWidth - node.offsetWidth) / 2
+      if (!container || !colEl.isConnected) return
+      if (container.scrollWidth <= container.clientWidth) return // fully visible
+      const target = colEl.offsetLeft - (container.clientWidth - colEl.offsetWidth) / 2
       container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
     })
   }, [])
+  const expandedColRef = useCallback((node: HTMLButtonElement | null) => {
+    if (node) scrollExpandedIntoView(node)
+  }, [scrollExpandedIntoView])
 
   const loadTasks = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true)
     const calendarData = await fetchCalendarData(targetUserId, weekStart)
+    taskRenderKeys.current.clear()
     setTasks(calendarData.week)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
 
-  // Subtasks are fetched for the whole person, not the visible week, so the
-  // week arrows don't refetch them.
+  // Subtasks are fetched for the whole user, not the visible week, so this is
+  // deliberately keyed on targetUserId alone — bundling it into loadTasks meant
+  // every click of the week arrows refetched the user's entire subtask list to
+  // redisplay data already in state.
   const loadSubtasks = useCallback(async () => {
     setSubtasks(await fetchSubtasksForCalendar(targetUserId))
   }, [targetUserId])
 
-  // Silent background refresh after an optimistic change. Overdue and bonus
-  // refresh only once they have been opened.
+  // Silent background refresh — never clears taskRenderKeys or sets loading state.
+  // Use this after optimistic inserts so existing items don't blink.
+  // Overdue and bonus are only refreshed if the user has already expanded them.
   const refreshTasks = useCallback(async () => {
     const [calendarData, subtaskData] = await Promise.all([
       fetchCalendarData(targetUserId, weekStart),
@@ -191,36 +231,44 @@ export default function WeeklyCalendar({
     ])
     setTasks(calendarData.week)
     setSubtasks(subtaskData)
-    if (overdueLoadedRef.current) fetchOverdueTasks(targetUserId).then(setOverdueUndated)
-    if (bonusLoadedRef.current) fetchBonusTasksForCalendar(targetUserId).then(setBonusTasksList)
+    if (overdueLoadedRef.current) {
+      fetchOverdueTasks(targetUserId).then(setOverdueUndated)
+    }
+    if (bonusLoadedRef.current) {
+      fetchBonusTasksForCalendar(targetUserId).then(setBonusTasksList)
+    }
   }, [targetUserId, weekStart])
 
-  // The new task shows at once; the refresh brings in its details.
+  // Optimistic handler for the NewTaskForm — task appears instantly, syncs silently.
   const handleNewTaskCreated = useCallback((task: Task) => {
-    setTasks(prev => [...prev, { ...task, assignees: [], checklist: [], comments: [] }])
+    const newTask: TaskWithDetails = { ...task, assignees: [], checklist: [], comments: [] }
+    setTasks(prev => [...prev, newTask])
     refreshTasks()
   }, [refreshTasks])
 
+  // Lazy-load handlers: fetch overdue/bonus only when the section is first expanded.
   const loadOverdueTasks = useCallback(async () => {
     if (overdueLoadedRef.current) return
-    overdueLoadedRef.current = true
     setOverdueLoading(true)
-    setOverdueUndated(await fetchOverdueTasks(targetUserId))
+    const data = await fetchOverdueTasks(targetUserId)
+    setOverdueUndated(data)
     setOverdueLoaded(true)
+    overdueLoadedRef.current = true
     setOverdueLoading(false)
   }, [targetUserId])
 
   const loadBonusTasks = useCallback(async () => {
     if (bonusLoadedRef.current) return
-    bonusLoadedRef.current = true
     setBonusLoading(true)
-    setBonusTasksList(await fetchBonusTasksForCalendar(targetUserId))
+    const data = await fetchBonusTasksForCalendar(targetUserId)
+    setBonusTasksList(data)
     setBonusLoaded(true)
+    bonusLoadedRef.current = true
     setBonusLoading(false)
   }, [targetUserId])
 
-  // A different person's calendar starts with their overdue and bonus lists
-  // unloaded, so nothing from the last person shows before the next fetch.
+  // Reset lazy-loaded sections when the viewed user changes so stale data
+  // from a previous user isn't shown before the next lazy fetch.
   useEffect(() => {
     setOverdueUndated([])
     setOverdueLoaded(false)
@@ -237,28 +285,27 @@ export default function WeeklyCalendar({
 
   useEffect(() => { loadSubtasks() }, [loadSubtasks])
 
-  // The periods come from the school's timetable, not the viewed person.
+  // The grid's period rows come from the school's active Timetable, not the
+  // viewed user specifically — fetch once.
   useEffect(() => {
     let cancelled = false
-    fetchActiveTimetablePeriodSlots()
-      .then(slots => { if (!cancelled) setPeriodSlots(slots) })
-      .catch(() => { if (!cancelled) setPeriodSlots(TASK_SLOTS) })
+    fetchActiveTimetablePeriodSlots().then(slots => {
+      if (!cancelled) setPeriodSlots(slots)
+    }).catch(() => {
+      if (!cancelled) setPeriodSlots(TASK_SLOTS)
+    })
     return () => { cancelled = true }
   }, [])
 
-  // Once the week is on screen, fetch the task popup's code in the background
-  // so the first tap on a chip opens it without a wait.
-  useEffect(() => {
-    if (loading) return
-    const t = setTimeout(() => { loadTaskDetail() }, 1200)
-    return () => clearTimeout(t)
-  }, [loading])
-
-  // Re-trigger a focus jump for the same calendar (a fresh mount is covered by
-  // the pendingFocusId initialiser). Skips the first run.
+  // Re-trigger a focus jump when the parent requests one for the same calendar
+  // (a fresh mount is handled by the pendingFocusId initialiser). Skip the very
+  // first run so it doesn't double-fire on mount.
   const focusInitialised = useRef(false)
   useEffect(() => {
-    if (!focusInitialised.current) { focusInitialised.current = true; return }
+    if (!focusInitialised.current) {
+      focusInitialised.current = true
+      return
+    }
     if (focusTaskId) {
       if (initialDate) setWeekStart(getWeekStart(new Date(initialDate)))
       setPendingFocusId(focusTaskId)
@@ -266,7 +313,10 @@ export default function WeeklyCalendar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusNonce])
 
-  // When the focused task arrives: flash its chip, then open it.
+  // Once the focused task is present in any loaded set:
+  // 1. Highlight its chip in the grid with an amber ring so the user sees WHERE it is.
+  // 2. After a short beat, open the detail modal smoothly.
+  // 3. Clear the highlight after the ring animation finishes.
   useEffect(() => {
     if (!pendingFocusId) return
     const target =
@@ -274,39 +324,52 @@ export default function WeeklyCalendar({
       overdueUndated.find(t => t.id === pendingFocusId) ||
       bonusTasksList.find(t => t.id === pendingFocusId)
     if (!target) return
+
     setPendingFocusId(null)
     if (target.due_date) setExpandedDay(target.due_date)
+
+    // Flash the chip so it's visible in the grid before the modal takes over.
     setHighlightedTaskId(target.id)
-    const openTimer = setTimeout(() => setOpenTask(target), 550)
-    const clearTimer = setTimeout(() => setHighlightedTaskId(null), 2200)
+    const openTimer    = setTimeout(() => setOpenTask(target), 550)
+    const clearTimer   = setTimeout(() => setHighlightedTaskId(null), 2200)
     return () => { clearTimeout(openTimer); clearTimeout(clearTimer) }
   }, [tasks, overdueUndated, bonusTasksList, pendingFocusId])
 
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart)
     d.setDate(d.getDate() + i)
     return getDayLabel(d)
-  }), [weekStart])
+  })
 
-  // Exactly one focal day per week: after a week change, today if it's in
-  // view, otherwise Monday.
+  // Keep exactly one column expanded per week: when the current week doesn't
+  // contain the expanded day (e.g. after navigating weeks), fall back to today
+  // if it's in view, otherwise the first day of the week.
   useEffect(() => {
     if (weekDays.some(d => d.full === expandedDay)) return
-    setExpandedDay(weekDays.some(d => d.full === todayStr) ? todayStr : weekDays[0].full)
+    const todayInWeek = weekDays.some(d => d.full === todayStr)
+    setExpandedDay(todayInWeek ? todayStr : weekDays[0].full)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart])
 
-  const shiftWeek = (dir: number) => {
-    const next = new Date(weekStart)
-    next.setDate(next.getDate() + dir * 7)
-    setWeekStart(next)
-    setComposeCell(null)
+  const goToPrevWeek = () => {
+    const prev = new Date(weekStart)
+    prev.setDate(prev.getDate() - 7)
+    setWeekStart(prev)
   }
-  const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
-  const isThisWeek = weekDays.some(d => d.full === todayStr)
 
-  // Bucketed once per data change: the grid asks for a day's items about
-  // sixty times a render.
+  const goToNextWeek = () => {
+    const next = new Date(weekStart)
+    next.setDate(next.getDate() + 7)
+    setWeekStart(next)
+  }
+
+  const goToThisWeek = () => setWeekStart(getWeekStart(new Date()))
+
+  // Bucket by due date once per data change. The grid asks for a day's items
+  // about sixty times per render (once per day column, then again per period
+  // row × day), and re-filtering + re-sorting the whole task list on each of
+  // those calls made every keystroke in the inline composer walk the week's
+  // tasks sixty times over.
   const tasksByDay = useMemo(() => {
     const map = new Map<string, TaskWithDetails[]>()
     for (const task of tasks) {
@@ -315,7 +378,7 @@ export default function WeeklyCalendar({
       if (bucket) bucket.push(task)
       else map.set(task.due_date, [task])
     }
-    // Timed tasks first in clock order, untimed after in creation order.
+    // Timed tasks first in clock order, undated ones after in creation order.
     for (const bucket of map.values()) {
       bucket.sort((a, b) => {
         if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
@@ -338,23 +401,24 @@ export default function WeeklyCalendar({
     return map
   }, [subtasks])
 
-  const periodStarts = useMemo(() => new Set(periodSlots.map(p => p.start)), [periodSlots])
+  const EMPTY_TASKS: TaskWithDetails[] = useMemo(() => [], [])
+  const EMPTY_SUBTASKS: SubtaskWithProject[] = useMemo(() => [], [])
+  const getTasksForDay    = (dateStr: string) => tasksByDay.get(dateStr) ?? EMPTY_TASKS
+  const getSubtasksForDay = (dateStr: string) => subtasksByDay.get(dateStr) ?? EMPTY_SUBTASKS
 
-  const EMPTY_TASKS = useMemo<TaskWithDetails[]>(() => [], [])
-  const EMPTY_SUBTASKS = useMemo<SubtaskWithProject[]>(() => [], [])
-  const getTasksForDay = (d: string) => tasksByDay.get(d) ?? EMPTY_TASKS
-  const getSubtasksForDay = (d: string) => subtasksByDay.get(d) ?? EMPTY_SUBTASKS
-
+  // Subtasks that are undated or overdue (and not completed)
   const overdueUndatedSubtasks = useMemo(() => subtasks.filter(s => {
-    if (s.status === 'dismissed') return false
-    if (s.status === 'checked' || (!s.require_check && s.status === 'done')) return false
-    return !s.due_date || s.due_date < todayStr
+    if (s.status === 'dismissed') return false   // dismissed = deleted
+    const isCompleted = s.status === 'checked' || (!s.require_check && s.status === 'done')
+    if (isCompleted) return false
+    if (!s.due_date) return true
+    return s.due_date < todayStr
   }), [subtasks, todayStr])
 
   const handleTaskStatusChange = (taskId: string, newStatus: TaskStatus) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
     setOverdueUndated(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
-    setBonusTasksList(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
+    // Sync open task if visible
     setOpenTask(prev => prev?.id === taskId ? { ...prev, status: newStatus } : prev)
     onTaskActivity?.()
   }
@@ -362,7 +426,6 @@ export default function WeeklyCalendar({
   const handleTaskDeleted = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId))
     setOverdueUndated(prev => prev.filter(t => t.id !== taskId))
-    setBonusTasksList(prev => prev.filter(t => t.id !== taskId))
     setOpenTask(null)
     onTaskActivity?.()
   }
@@ -371,34 +434,40 @@ export default function WeeklyCalendar({
     const s = subtask as SubtaskWithProject
     const next = getNextStatus(s.status, canVerifyTask(s, user?.id, canCheck), true)
     if (next === s.status) return
+
     const apply = (status: TaskStatus) => {
       setSubtasks(prev => prev.map(sub => sub.id === s.id ? { ...sub, status } : sub))
       setOpenSubtask(prev => prev?.id === s.id ? { ...prev, status } : prev)
     }
-    // In a sequential project the server may refuse an out-of-order change,
-    // so the chip waits for it. Everywhere else it changes on tap and rolls
-    // back if the write fails.
+
+    // In a sequential project the server legitimately refuses an out-of-order
+    // change, so painting `next` first would flash a state the user isn't
+    // allowed to reach. Everywhere else the only failure is a real error, so
+    // the chip updates on tap and rolls back if the write doesn't land.
     if (s.project_sequential) {
       const result = await updateSubtaskStatus(s.id, next, s.project_id, true)
       if (result.success) apply(next)
       return
     }
+
     const previous = s.status
     apply(next)
     const result = await updateSubtaskStatus(s.id, next, s.project_id, false)
     if (!result.success) apply(previous)
   }
 
-  const openNewTask = (date: string, title = '', slot: [number, number] | null = null) => {
+
+  const handleQuickExpand = (title: string, date: string, slotIndex: number | null) => {
     setComposeCell(null)
     setNewTaskDate(date)
     setNewTaskTitle(title)
-    setNewTaskSlot(slot)
+    setNewTaskSlot(slotIndex !== null ? [slotIndex, slotIndex] : null)
     setShowNewTask(true)
   }
 
-  // Quick add: the typed title, the cell's date and its period. The composer
-  // stays open so several can be added in a row.
+  // Inline quick-add: create a task straight from the grid cell using just the
+  // typed title, the cell's date and (if any) its period slot. The task appears
+  // optimistically; the composer stays open so several can be added in a row.
   const handleInlineCreate = useCallback(async (title: string, date: string, slotIndex: number | null) => {
     const t = title.trim()
     if (!t) return
@@ -413,174 +482,309 @@ export default function WeeklyCalendar({
     if (created) handleNewTaskCreated(created)
   }, [periodSlots, targetUserId, userId, handleNewTaskCreated])
 
-  const weekLabel = weekDays[0].month === weekDays[6].month
-    ? `${weekDays[0].date} – ${weekDays[6].date} ${weekDays[6].month}`
-    : `${weekDays[0].date} ${weekDays[0].month} – ${weekDays[6].date} ${weekDays[6].month}`
+  const weekLabel = `${weekDays[0].month} ${weekDays[0].date} – ${weekDays[6].month} ${weekDays[6].date}`
 
-  const chip = (task: TaskWithDetails, extra?: { showDate?: boolean; roomy?: boolean }) => (
-    <TaskGridChip
-      key={task.id}
-      task={task}
-      canCheck={canCheck}
-      onStatusChange={handleTaskStatusChange}
-      onOpen={() => setOpenTask(task)}
-      showDate={extra?.showDate}
-      roomy={extra?.roomy}
-      currentUserId={userId}
-      readAt={readAt}
-      highlighted={task.id === highlightedTaskId}
-    />
-  )
-  const subChip = (sub: SubtaskWithProject, roomy?: boolean) => (
-    <SubtaskGridChip key={sub.id} subtask={sub} roomy={roomy} onStatusTap={handleSubtaskStatusTap} onOpen={() => setOpenSubtask(sub)} />
-  )
-
-  // ── Toolbar ────────────────────────────────────────────────────────────────
-  const toolbar = (
-    <div className="flex flex-wrap items-center gap-1.5 w-full">
-      <Stepper
-        label={weekLabel}
-        onPrev={() => shiftWeek(-1)}
-        onNext={() => shiftWeek(1)}
-        prevLabel="Previous week"
-        nextLabel="Next week"
-        onLabelClick={isThisWeek ? undefined : goToThisWeek}
-        labelTitle="Back to this week"
-      />
-      {!isThisWeek && (
-        <Btn tone="ghost" onClick={goToThisWeek} className="!h-9">This week</Btn>
-      )}
-      <div className="flex items-center gap-1.5 ml-auto min-w-0">
-        {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
-          <TeamMemberSelector
-            members={teamMembers}
-            selectedUserId={viewingUserId || currentUserId}
-            currentUserId={currentUserId}
-            currentUserName={currentUserName || ''}
-            onSelect={onViewingUserChange}
-          />
-        )}
-        {/* As with the person picker, the legend hangs from the toolbar on a phone. */}
-        <div className="sm:relative">
-          <button
-            type="button"
-            onClick={() => setShowLegend(v => !v)}
-            className={`${SX.icon} !w-9 !h-9 bg-white border border-[#E2DDD2]`}
-            aria-label="What the colours mean"
-            aria-expanded={showLegend}
-          >
-            <HelpCircle size={15} />
-          </button>
-          {showLegend && <Legend onClose={() => setShowLegend(false)} />}
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowPlanner(true)}
-          className={`${SX.icon} !w-9 !h-9 bg-white border border-[#E2DDD2]`}
-          aria-label="Planner: import or draft a week of tasks"
-          title="Planner: import or draft a week of tasks"
-        >
-          <FileSpreadsheet size={15} />
-        </button>
-        <Btn
-          tone="dark"
-          onClick={() => openNewTask(wide ? todayStr : expandedDay)}
-          onPointerEnter={() => { loadNewTaskForm() }}
-          onFocus={() => { loadNewTaskForm() }}
-          className="!h-9"
-        >
-          <Plus size={15} />
-          <span className="hidden min-[400px]:inline">New task</span>
-        </Btn>
-      </div>
-    </div>
-  )
+  // The expanded column is ≈3× the others. Narrow columns are sized to the task
+  // chips themselves; the wide one gets enough room to read a full chip.
+  const gridTemplateColumns = `36px ` + weekDays
+    .map(d => d.full === expandedDay ? 'minmax(176px, 3fr)' : 'minmax(76px, 1fr)')
+    .join(' ')
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <TaskDeck actions={toolbar} bodyClassName="space-y-2.5">
-        {loading ? (
-          <CalendarSkeleton wide={wide} />
-        ) : wide ? (
-          // ── Period × day grid ──────────────────────────────────────────────
-          <div ref={gridScrollRef} className="fx-card overflow-x-auto">
-            <div
-              className="grid min-w-[640px]"
-              style={{
-                gridTemplateColumns: '40px ' + weekDays.map(d => d.full === expandedDay ? 'minmax(170px, 2.6fr)' : 'minmax(74px, 1fr)').join(' '),
-                transition: 'grid-template-columns 350ms cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <h2 className="font-display text-sm sm:text-xl font-bold text-slate-800 truncate">Weekly Calendar</h2>
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowGuide(v => !v)}
+              className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
+              title="Status legend"
+              aria-label="Status legend"
             >
-              <div className="sticky left-0 z-10 bg-[#F7F5F0] border-b border-r border-[#EEEAE1]" />
+              <HelpCircle size={16} />
+            </button>
+            <AnimatePresence>
+              {showGuide && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowGuide(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute left-0 top-full mt-1.5 z-30 w-56 rounded-xl border border-slate-200 bg-white shadow-xl p-3"
+                  >
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Legend</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {[
+                        { label: 'Not Done',  dot: 'bg-slate-400' },
+                        { label: 'Partial',   dot: 'bg-orange-600' },
+                        { label: 'Checking',  dot: 'bg-yellow-400' },
+                        { label: 'Completed', dot: 'bg-green-500' },
+                        { label: 'Dismissed', dot: 'bg-slate-300' },
+                      ].map(s => (
+                        <div key={s.label} className="flex items-center gap-1.5">
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.dot}`} />
+                          <span className="text-xs text-slate-600">{s.label}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
+                          <Star size={7} className="text-white" fill="white" />
+                        </span>
+                        <span className="text-xs text-slate-600">Bonus</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-3 rounded-sm bg-purple-400 flex-shrink-0" />
+                        <span className="text-xs text-slate-600">Project</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2.5 leading-snug">Tap a chip&apos;s dot to advance its status. Verifiers can dismiss tasks awaiting verification.</p>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange && (
+            <TeamMemberSelector
+              members={teamMembers}
+              selectedUserId={viewingUserId || currentUserId}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName || ''}
+              onSelect={onViewingUserChange}
+            />
+          )}
+          <button
+            onClick={() => setShowPlanner(true)}
+            className="flex items-center justify-center w-7 h-7 sm:w-9 sm:h-9 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-emerald-600 flex-shrink-0 active:scale-95 transition-all"
+            title="Import or draft a planner"
+            aria-label="Planner"
+          >
+            <FileSpreadsheet size={15} />
+          </button>
+          <button
+            onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
+            className="btn-primary hidden sm:flex items-center gap-2 text-sm !py-1.5"
+          >
+            <Plus size={16} /> New Task
+          </button>
+          <button
+            onClick={() => { setNewTaskDate(todayStr); setShowNewTask(true) }}
+            className="sm:hidden flex items-center justify-center w-7 h-7 rounded-full text-white shadow-lg flex-shrink-0 active:scale-95 transition-transform"
+            style={{ background: 'linear-gradient(135deg, var(--page-gradient-from, #3B82F6), var(--page-gradient-to, #2563EB))' }}
+            title="New Task"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Week Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={goToPrevWeek}
+          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          aria-label="Previous week"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <button onClick={goToThisWeek} className="text-sm font-semibold text-slate-700 hover:text-cyan-600 transition-colors">
+          {weekLabel}
+        </button>
+        <button
+          onClick={goToNextWeek}
+          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          aria-label="Next week"
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+
+      <AnimatePresence mode="wait">
+      {loading ? (
+        <motion.div
+          key="cal-loading"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="space-y-4"
+        >
+          {/* Skeleton grid — same structure as the real grid, real day headers already known */}
+          <div className="overflow-x-auto bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm">
+            <div className="flex min-w-[700px]">
+              {weekDays.map((day, i) => {
+                const isToday = day.full === todayStr
+                const isLast  = i === 6
+                const chipCount = [2, 1, 2, 3, 1, 2, 1][i]
+                return (
+                  <div
+                    key={day.full}
+                    className={`min-w-0 flex flex-col flex-1 ${!isLast ? 'border-r border-slate-100' : ''}`}
+                  >
+                    <div className={`px-1.5 py-2 text-center border-b border-slate-100 ${isToday ? 'bg-cyan-100' : 'bg-slate-50'}`}>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-cyan-600' : 'text-slate-400'}`}>
+                        {day.day}
+                      </p>
+                      <p className={`text-base font-bold leading-tight ${isToday ? 'text-cyan-700' : 'text-slate-700'}`}>
+                        {day.date}
+                      </p>
+                    </div>
+                    <div className={`p-1 space-y-1 flex-1 min-h-[96px] ${isToday ? 'bg-cyan-50/40' : 'bg-white'}`}>
+                      {Array.from({ length: chipCount }).map((_, j) => (
+                        <div
+                          key={j}
+                          className="w-full h-8 rounded-lg bg-slate-100 animate-pulse"
+                          style={{ animationDelay: `${(i * 3 + j) * 60}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div
+          key="cal-content"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="space-y-4"
+        >
+          {/* ── Period × Day Grid — mirrors the active Timetable's period structure ── */}
+          <div ref={gridScrollRef} className="overflow-x-auto bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm">
+            <div
+              className="grid"
+              style={{ gridTemplateColumns, minWidth: '640px', transition: 'grid-template-columns 350ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+            >
+              {/* Corner cell */}
+              <div className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-100" />
+
+              {/* Day headers */}
               {weekDays.map((day, i) => {
                 const isToday = day.full === todayStr
                 const isExpanded = expandedDay === day.full
+                const isLast = i === 6
                 return (
                   <button
                     key={day.full}
                     ref={isExpanded ? expandedColRef : undefined}
                     onClick={() => { setExpandedDay(day.full); setComposeCell(null) }}
-                    aria-pressed={isExpanded}
-                    className={`px-1 py-1.5 text-center border-b border-[#EEEAE1] ${i < 6 ? 'border-r' : ''} transition-colors ${
-                      isExpanded ? 'bg-[#27272A] text-white' : isToday ? 'bg-amber-100/70 text-amber-900' : 'bg-[#F7F5F0] text-slate-600 hover:bg-[#EFEBE2]'}`}
-                    title={isExpanded ? undefined : 'Widen this day'}
+                    className={`px-1 py-2 text-center border-b transition-colors ${!isLast ? 'border-r' : ''} border-slate-100 ${
+                      isExpanded ? 'bg-mps-blue-100' : isToday ? 'bg-cyan-100' : 'bg-slate-50 hover:bg-slate-100'
+                    }`}
+                    title={isExpanded ? undefined : 'Expand this day'}
                   >
-                    <span className={`block text-[11px] font-semibold leading-tight ${isExpanded ? 'text-white/70' : isToday ? 'text-amber-700' : 'text-slate-500'}`}>
-                      {isToday ? 'Today' : day.day}
-                    </span>
-                    <span className="block text-[14px] font-bold leading-tight tabular-nums">
+                    <p className={`text-[10px] font-semibold uppercase tracking-wide ${
+                      isExpanded ? 'text-mps-blue-600' : isToday ? 'text-cyan-600' : 'text-slate-400'
+                    }`}>
+                      {day.day}
+                    </p>
+                    <p className={`text-sm font-bold leading-tight ${
+                      isExpanded ? 'text-mps-blue-700' : isToday ? 'text-cyan-700' : 'text-slate-700'
+                    }`}>
                       {day.date}{isExpanded ? ` ${day.month}` : ''}
-                    </span>
+                    </p>
                   </button>
                 )
               })}
 
-              {/* Tasks with no period, and project subtasks */}
-              <div className="sticky left-0 z-10 flex items-center justify-center bg-[#F7F5F0] border-r border-b border-[#EEEAE1] text-[10.5px] font-semibold text-slate-400" title="No period">
-                Any
+              {/* Unscheduled row — legacy tasks with no slot, plus subtasks */}
+              <div className="sticky left-0 z-10 flex items-center justify-center bg-slate-50 border-r border-b border-slate-100 text-[9px] font-bold text-slate-400">
+                —
               </div>
               {weekDays.map((day, i) => {
-                const cellBg = day.full === todayStr ? 'bg-amber-50/50' : day.full === expandedDay ? 'bg-[#FBF8F1]' : 'bg-white'
-                const unscheduled = getTasksForDay(day.full).filter(t => !t.timing || !periodStarts.has(t.timing))
+                const isToday = day.full === todayStr
+                const isExpanded = day.full === expandedDay
+                const isLast = i === 6
+                const cellBg = isToday ? 'bg-cyan-50/40' : isExpanded ? 'bg-mps-blue-50/30' : 'bg-white'
+                const unscheduled = getTasksForDay(day.full).filter(t => !periodSlots.some(p => p.start === t.timing))
                 const daySubs = getSubtasksForDay(day.full)
+                if (unscheduled.length === 0 && daySubs.length === 0) {
+                  return (
+                    <div key={day.full} className={`border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${cellBg}`} />
+                  )
+                }
                 return (
-                  <div key={day.full} className={`p-1 space-y-1 border-b border-[#EEEAE1] ${i < 6 ? 'border-r' : ''} ${cellBg} min-w-0`}>
-                    {unscheduled.map(t => chip(t))}
-                    {daySubs.map(s => subChip(s))}
+                  <div key={day.full} className={`p-1 space-y-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 ${cellBg}`}>
+                    {unscheduled.map(task => (
+                      <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
+                        <TaskGridChip
+                          task={task}
+                          canCheck={canCheck}
+                          onStatusChange={handleTaskStatusChange}
+                          onOpen={() => setOpenTask(task)}
+                          currentUserId={userId}
+                          readAt={readAt}
+                          highlighted={task.id === highlightedTaskId}
+                        />
+                      </div>
+                    ))}
+                    {daySubs.map(sub => (
+                      <div key={sub.id}>
+                        <SubtaskGridChip
+                          subtask={sub}
+                          canCheck={canCheck}
+                          onStatusTap={handleSubtaskStatusTap}
+                          onOpen={() => setOpenSubtask(sub)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 )
               })}
 
+              {/* Period rows — count and timings from the active Timetable, breaks excluded */}
               {periodSlots.map((period, pIdx) => (
                 <React.Fragment key={pIdx}>
-                  <div
-                    className="sticky left-0 z-10 flex flex-col items-center justify-center bg-[#F7F5F0] border-r border-b border-[#EEEAE1] leading-none"
-                    title={`${period.label}, ${formatSlotTime(period.start)} – ${formatSlotTime(period.end)}`}
-                  >
-                    <span className="text-[12px] font-bold text-slate-500 tabular-nums">{pIdx + 1}</span>
+                  <div className="sticky left-0 z-10 flex items-center justify-center bg-slate-50 border-r border-b border-slate-100 text-xs font-bold text-slate-400" title={`${period.label} · ${formatSlotTime(period.start)}–${formatSlotTime(period.end)}`}>
+                    {pIdx + 1}
                   </div>
                   {weekDays.map((day, i) => {
+                    const isToday = day.full === todayStr
+                    const isExpanded = day.full === expandedDay
+                    const isLast = i === 6
                     const cellTasks = getTasksForDay(day.full).filter(t => t.timing === period.start)
                     const isComposing = composeCell?.date === day.full && composeCell?.slot === pIdx
-                    const cellBg = day.full === todayStr ? 'bg-amber-50/50' : day.full === expandedDay ? 'bg-[#FBF8F1]' : 'bg-white'
+                    const cellBg = isToday ? 'bg-cyan-50/40' : isExpanded ? 'bg-mps-blue-50/30' : 'bg-white'
                     return (
-                      <div key={day.full} className={`group/cell p-1 border-b border-[#EEEAE1] ${i < 6 ? 'border-r' : ''} min-h-[34px] min-w-0 flex flex-col gap-1 ${cellBg}`}>
-                        {cellTasks.map(t => chip(t))}
+                      <div
+                        key={day.full}
+                        className={`p-1 border-b ${!isLast ? 'border-r' : ''} border-slate-100 min-h-[34px] flex flex-col gap-1 ${cellBg}`}
+                      >
+                        {cellTasks.map(task => (
+                          <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
+                            <TaskGridChip
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              currentUserId={userId}
+                              readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
+                            />
+                          </div>
+                        ))}
                         {isComposing ? (
                           <InlineTaskComposer
                             onCreate={title => handleInlineCreate(title, day.full, pIdx)}
-                            onExpand={title => openNewTask(day.full, title, [pIdx, pIdx])}
+                            onExpand={title => handleQuickExpand(title, day.full, pIdx)}
                             onCancel={() => setComposeCell(null)}
                           />
                         ) : cellTasks.length === 0 ? (
                           <button
                             onClick={() => setComposeCell({ date: day.full, slot: pIdx })}
-                            // Quiet until the cell is hovered — but only where
-                            // there is a hover: a touch tablet always shows it.
-                            className="flex-1 min-h-[26px] flex items-center justify-center rounded-[8px] border border-dashed border-[#E7E2D6] text-slate-300 [@media(hover:hover)]:border-transparent [@media(hover:hover)]:text-transparent group-hover/cell:!border-[#DDD8CC] group-hover/cell:!text-slate-400 hover:!border-[#B8983C] hover:!text-[#8B6F47] focus-visible:!border-[#B8983C] focus-visible:!text-[#8B6F47] focus-visible:outline-none transition-colors"
-                            aria-label={`Add a task: ${day.day} ${day.date}, period ${pIdx + 1}`}
+                            className="flex-1 min-h-[26px] flex items-center justify-center rounded-lg border border-dashed border-slate-200 text-slate-300 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/40 transition-all"
+                            title={`Add task — Period ${pIdx + 1}`}
                           >
-                            <Plus size={12} />
+                            <Plus size={11} />
                           </button>
                         ) : null}
                       </div>
@@ -590,464 +794,320 @@ export default function WeeklyCalendar({
               ))}
             </div>
           </div>
-        ) : (
-          // ── Phone: one day at a time ───────────────────────────────────────
-          <>
-            <DaySwitch
-              days={weekDays}
-              value={expandedDay}
-              today={todayStr}
-              countFor={d => getTasksForDay(d).length + getSubtasksForDay(d).length}
-              onChange={d => { setExpandedDay(d); setComposeCell(null) }}
-            />
-            <DayList
-              periods={periodSlots}
-              tasks={getTasksForDay(expandedDay)}
-              subtasks={getSubtasksForDay(expandedDay)}
-              periodStarts={periodStarts}
-              composeSlot={composeCell?.date === expandedDay ? composeCell.slot : undefined}
-              renderChip={t => chip(t, { roomy: true })}
-              renderSubChip={s => subChip(s, true)}
-              onCompose={slot => setComposeCell({ date: expandedDay, slot })}
-              onCancelCompose={() => setComposeCell(null)}
-              onCreate={(title, slot) => handleInlineCreate(title, expandedDay, slot)}
-              onExpand={(title, slot) => openNewTask(expandedDay, title, slot === null ? null : [slot, slot])}
-            />
-          </>
-        )}
-      </TaskDeck>
 
-      {/* ── Overdue and bonus: side by side where there is room ─────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 items-start">
-        <OverdueSection
-          open={overdueOpen}
-          onToggle={() => { if (!overdueOpen) loadOverdueTasks(); setOverdueOpen(v => !v) }}
-          loading={overdueLoading}
-          loaded={overdueLoaded}
-          tasks={overdueUndated}
-          subtasks={overdueUndatedSubtasks}
-          monthIdx={overdueMonthIdx}
-          setMonthIdx={setOverdueMonthIdx}
-          renderChip={t => chip(t, { showDate: true, roomy: true })}
-          renderSubChip={s => subChip(s, true)}
-        />
-        <BonusSection
-          open={bonusOpen}
-          onToggle={() => { if (!bonusOpen) loadBonusTasks(); setBonusOpen(v => !v) }}
-          loading={bonusLoading}
-          loaded={bonusLoaded}
-          tasks={bonusTasksList}
-          monthIdx={bonusMonthIdx}
-          setMonthIdx={setBonusMonthIdx}
-          renderChip={t => chip(t, { showDate: true, roomy: true })}
-        />
-      </div>
+          {/* ── Overdue & Bonus — minimal text-button toggles. Always present so an
+               empty list reads as an explicit zero state instead of vanishing. ── */}
+          <div className="pt-1 space-y-2">
 
-      <AnimatePresence>
-        {openTask && (
-          <TaskDetailSheet
-            key={openTask.id}
-            task={openTask}
-            canCheck={canCheck}
-            userId={user?.id || userId}
-            userRole={profile.role}
-            onClose={() => setOpenTask(null)}
-            onStatusChange={handleTaskStatusChange}
-            onTaskDeleted={handleTaskDeleted}
-            onTaskUpdated={refreshTasks}
-          />
-        )}
-      </AnimatePresence>
+          {/* ── Overdue & Undated ─────────────────────────────────────────────── */}
+          {(() => {
+            // Group overdue items by month so only one month renders at a time.
+            const monthMap: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
+            const bucket = (key: string) => (monthMap[key] ??= { tasks: [], subtasks: [] })
+            for (const task of overdueUndated) {
+              bucket(task.due_date ? task.due_date.slice(0, 7) : 'undated').tasks.push(task)
+            }
+            for (const sub of overdueUndatedSubtasks) {
+              bucket(sub.due_date ? sub.due_date.slice(0, 7) : 'undated').subtasks.push(sub)
+            }
+            const datedMonths = Object.keys(monthMap).filter(k => k !== 'undated').sort().reverse()
+            const months = [...datedMonths, ...(monthMap['undated'] ? ['undated'] : [])]
+            const safeIdx = months.length > 0 ? Math.min(Math.max(overdueMonthIdx, 0), months.length - 1) : -1
+            const activeKey = safeIdx >= 0 ? months[safeIdx] : undefined
+            const active = activeKey ? (monthMap[activeKey] || { tasks: [], subtasks: [] }) : { tasks: [], subtasks: [] }
+            const activeCount = active.tasks.length + active.subtasks.length
+            const totalOverdue = overdueUndated.length + overdueUndatedSubtasks.length
+            const activeLabel = !activeKey || activeKey === 'undated'
+              ? 'Undated'
+              : (() => {
+                  const [y, m] = activeKey.split('-')
+                  return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                })()
+            const handleOverdueToggle = () => {
+              setOverdueCollapsed(prev => {
+                if (prev) loadOverdueTasks()
+                return !prev
+              })
+            }
+            return (
+              <div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOverdueToggle}
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                  >
+                    <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
+                    Overdue
+                    {overdueLoaded && (
+                      <span className={`font-bold ${totalOverdue > 0 ? 'text-red-500' : 'text-slate-400'}`}>· {totalOverdue}</span>
+                    )}
+                    <ChevronRight
+                      size={14}
+                      className={`text-slate-400 transition-transform duration-200 ${overdueCollapsed ? '' : 'rotate-90'}`}
+                    />
+                  </button>
+                  {!overdueCollapsed && overdueLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-red-50 border border-red-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-red-700 min-w-[64px] text-center">{activeLabel}</span>
+                      <button type="button" onClick={() => setOverdueMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-red-400 hover:text-red-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {!overdueCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      {overdueLoading ? (
+                        <div className="flex items-center justify-center py-5">
+                          <div className="h-4 w-4 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
+                        </div>
+                      ) : totalOverdue === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No overdue tasks — you&apos;re all caught up.</p>
+                      ) : (
+                        <div className="pl-5 pt-2 space-y-1.5">
+                          {active.tasks.map(task => (
+                            <TaskGridChip
+                              key={task.id}
+                              task={task}
+                              canCheck={canCheck}
+                              onStatusChange={handleTaskStatusChange}
+                              onOpen={() => setOpenTask(task)}
+                              showDate
+                              currentUserId={userId}
+                              readAt={readAt}
+                              highlighted={task.id === highlightedTaskId}
+                            />
+                          ))}
+                          {active.subtasks.map(subtask => (
+                            <SubtaskGridChip
+                              key={subtask.id}
+                              subtask={subtask}
+                              onStatusTap={handleSubtaskStatusTap}
+                              onOpen={() => setOpenSubtask(subtask)}
+                            />
+                          ))}
+                          {activeCount === 0 && (
+                            <p className="text-xs text-slate-400 py-1">Nothing overdue in {activeLabel}.</p>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )
+          })()}
 
-      <AnimatePresence>
-        {openSubtask && (
-          <SubtaskCard
-            key={openSubtask.id}
-            subtask={openSubtask}
-            canCheck={canCheck}
-            canEdit={canEditSubtasks}
-            onClose={() => setOpenSubtask(null)}
-            onStatusTap={handleSubtaskStatusTap}
-            onSubtaskUpdated={refreshTasks}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showNewTask && (
-          <NewTaskForm
-            onClose={() => setShowNewTask(false)}
-            onTaskCreated={handleNewTaskCreated}
-            currentUserId={userId}
-            defaultAssigneeId={targetUserId}
-            defaultDate={newTaskDate}
-            defaultTitle={newTaskTitle}
-            defaultSlotRange={newTaskSlot}
-            availableAssignees={availableAssignees}
-            canAssignToOthers={canAssignToOthers}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showPlanner && (
-          <PlannerModal
-            onClose={() => setShowPlanner(false)}
-            currentUserId={userId}
-            defaultAssigneeId={targetUserId}
-            availableAssignees={availableAssignees}
-            canAssignToOthers={canAssignToOthers}
-            onImported={loadTasks}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// ─── Status legend ────────────────────────────────────────────────────────────
-
-function Legend({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null)
-  // Closes on Escape or a press anywhere else, the way the menus do. The
-  // button that opened it toggles it itself, so presses there are left alone.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node
-      if (ref.current?.contains(t) || ref.current?.parentElement?.contains(t)) return
-      onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    document.addEventListener('pointerdown', onDown)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.removeEventListener('pointerdown', onDown)
-    }
-  }, [onClose])
-  const rows: { mark: React.ReactNode; label: string }[] = [
-    { mark: <StatusMark status="not_done" requireCheck={false} />, label: 'Not done' },
-    { mark: <StatusMark status="partial" requireCheck={false} />, label: 'Partial' },
-    { mark: <StatusMark status="done" requireCheck />, label: 'Checking' },
-    { mark: <StatusMark status="checked" requireCheck />, label: 'Completed' },
-    { mark: <StatusMark status="dismissed" requireCheck />, label: 'Dismissed' },
-    { mark: <BonusMedal inline />, label: 'Bonus task' },
-    { mark: <span className="w-[3px] h-3.5 rounded-full bg-violet-400" />, label: 'Project subtask' },
-    { mark: <span className="w-[3px] h-3.5 rounded-full bg-rose-500" />, label: 'New comment' },
-  ]
-  return (
-    <>
-      <div ref={ref} className="absolute right-2 sm:right-0 top-full mt-1.5 z-30 w-[min(15rem,calc(100vw-1rem))] rounded-[14px] bg-white border border-black/[.07] shadow-[0_24px_60px_-20px_rgba(15,23,42,.45),0_2px_8px_rgba(15,23,42,.08)] p-3">
-        <div className="space-y-1.5">
-          {rows.map(r => (
-            <div key={r.label} className="flex items-center gap-2.5 text-[12.5px] text-slate-700">
-              <span className="w-4 flex justify-center flex-shrink-0">{r.mark}</span>
-              {r.label}
-            </div>
-          ))}
-        </div>
-        <p className="text-[11.5px] text-slate-500 mt-2.5 leading-snug">Checking means done and waiting to be verified. Tap a task&apos;s circle to move it on; tap its name to open it.</p>
-      </div>
-    </>
-  )
-}
-
-function BonusMedal({ inline = false }: { inline?: boolean }) {
-  return (
-    <span
-      className={`${inline ? '' : 'absolute -top-1.5 -left-1.5 z-10 ring-2 ring-white'} w-[15px] h-[15px] rounded-full flex items-center justify-center shadow-sm flex-shrink-0`}
-      style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}
-      title="Bonus task"
-    >
-      <Star size={8} className="text-white" fill="white" />
-    </span>
-  )
-}
-
-// ─── Loading skeleton ─────────────────────────────────────────────────────────
-
-function CalendarSkeleton({ wide }: { wide: boolean }) {
-  if (!wide) {
-    return (
-      <div className="space-y-2.5 animate-pulse">
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: 7 }, (_, i) => <div key={i} className="h-[52px] rounded-[12px] bg-white/70" />)}
-        </div>
-        <div className="fx-card divide-y divide-[#EEEAE1]">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-3">
-              <div className="w-8 h-6 bg-slate-100 rounded" />
-              <div className="h-7 flex-1 bg-slate-100 rounded-[8px]" style={{ maxWidth: `${40 + (i * 23) % 50}%` }} />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="fx-card animate-pulse">
-      <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))]">
-        {Array.from({ length: 8 * 6 }, (_, i) => (
-          <div key={i} className={`h-10 border-b border-r border-[#EEEAE1] ${i < 8 ? 'bg-[#F7F5F0]' : ''}`}>
-            {i >= 8 && i % 8 !== 0 && (i * 7) % 3 === 0 && <div className="m-1 h-7 rounded-[8px] bg-slate-100" />}
+          {/* ── Bonus Tasks ───────────────────────────────────────────────────── */}
+          {(() => {
+            const monthMap: Record<string, TaskWithDetails[]> = {}
+            for (const task of bonusTasksList) {
+              const key = task.due_date ? task.due_date.slice(0, 7) : 'undated'
+              if (!monthMap[key]) monthMap[key] = []
+              monthMap[key].push(task)
+            }
+            const months = Object.keys(monthMap).sort().reverse()
+            const safeIdx = months.length > 0 ? Math.min(Math.max(bonusMonthIdx, 0), months.length - 1) : -1
+            const activeMonthKey = safeIdx >= 0 ? months[safeIdx] : undefined
+            const activeMonthTasks = activeMonthKey ? (monthMap[activeMonthKey] || []) : []
+            // Only count points that are actually earned (verified complete) —
+            // a bonus task still "Checking" hasn't been signed off yet.
+            const activeMonthTotal = activeMonthTasks.reduce((sum, t) => sum + (isTaskCompleted(t) ? (t.bonus_points || 0) : 0), 0)
+            const activeMonthLabel = !activeMonthKey || activeMonthKey === 'undated'
+              ? 'Undated'
+              : (() => {
+                  const [y, m] = activeMonthKey.split('-')
+                  return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                })()
+            const handleBonusToggle = () => {
+              setBonusCollapsed(prev => {
+                if (prev) loadBonusTasks()
+                return !prev
+              })
+            }
+            return (
+              <div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBonusToggle}
+                    className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                  >
+                    <Star size={14} className="text-amber-500 flex-shrink-0" />
+                    Bonus Tasks
+                    {bonusLoaded && (
+                      <span className={`font-bold ${bonusTasksList.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>· {bonusTasksList.length}</span>
+                    )}
+                    <ChevronRight
+                      size={14}
+                      className={`text-slate-400 transition-transform duration-200 ${bonusCollapsed ? '' : 'rotate-90'}`}
+                    />
+                  </button>
+                  {!bonusCollapsed && bonusLoaded && months.length > 1 && (
+                    <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 rounded-lg px-1.5 py-0.5">
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.min(i + 1, months.length - 1))} disabled={safeIdx >= months.length - 1} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Older month">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-amber-700 min-w-[64px] text-center">{activeMonthLabel}</span>
+                      <button type="button" onClick={() => setBonusMonthIdx(i => Math.max(i - 1, 0))} disabled={safeIdx <= 0} className="p-0.5 text-amber-400 hover:text-amber-600 disabled:opacity-30 transition-colors" title="Newer month">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {!bonusCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      {bonusLoading ? (
+                        <div className="flex items-center justify-center py-5">
+                          <div className="h-4 w-4 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin" />
+                        </div>
+                      ) : bonusTasksList.length === 0 ? (
+                        <p className="text-xs text-slate-400 pl-5 py-2">No bonus tasks yet.</p>
+                      ) : (
+                        <div className="pl-5 pt-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-slate-500">{activeMonthTasks.length} task{activeMonthTasks.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs font-semibold text-amber-600 flex items-center gap-1">
+                              <Star size={10} /> {activeMonthTotal} BP earned
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {activeMonthTasks.map(task => (
+                              <TaskGridChip
+                                key={task.id}
+                                task={task}
+                                canCheck={canCheck}
+                                onStatusChange={handleTaskStatusChange}
+                                onOpen={() => setOpenTask(task)}
+                                showDate
+                                currentUserId={userId}
+                                readAt={readAt}
+                                highlighted={task.id === highlightedTaskId}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )
+          })()}
           </div>
-        ))}
-      </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      {/* ── Task Detail Modal ────────────────────────────────────────────────── */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {openTask && (
+            <TaskCalendarModal
+              task={openTask}
+              canCheck={canCheck}
+              userId={user?.id || userId}
+              userRole={profile.role}
+              onClose={() => setOpenTask(null)}
+              onStatusChange={handleTaskStatusChange}
+              onTaskDeleted={handleTaskDeleted}
+              onTaskUpdated={loadTasks}
+              availableAssignees={availableAssignees}
+            />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* ── Subtask Detail Modal ─────────────────────────────────────────────── */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {openSubtask && (
+            <SubtaskCard
+              subtask={openSubtask}
+              canCheck={canCheck}
+              canEdit={canEditSubtasks}
+              onClose={() => setOpenSubtask(null)}
+              onStatusTap={handleSubtaskStatusTap}
+              onSubtaskUpdated={loadTasks}
+            />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      <NewTaskForm
+        isOpen={showNewTask}
+        onClose={() => { setShowNewTask(false); setNewTaskTitle(''); setNewTaskSlot(null) }}
+        onTaskCreated={handleNewTaskCreated}
+        currentUserId={userId}
+        defaultAssigneeId={targetUserId}
+        defaultDate={newTaskDate}
+        defaultTitle={newTaskTitle}
+        defaultSlotRange={newTaskSlot}
+        availableAssignees={availableAssignees}
+        canAssignToOthers={canAssignToOthers}
+      />
+
+      <PlannerModal
+        isOpen={showPlanner}
+        onClose={() => setShowPlanner(false)}
+        currentUserId={userId}
+        defaultAssigneeId={targetUserId}
+        availableAssignees={availableAssignees}
+        canAssignToOthers={canAssignToOthers}
+        onImported={loadTasks}
+      />
     </div>
   )
 }
 
-// ─── Phone: day switch and day list ───────────────────────────────────────────
-
-function DaySwitch({ days, value, today, countFor, onChange }: {
-  days: { day: string; date: number; month: string; full: string }[]
-  value: string
-  today: string
-  countFor: (d: string) => number
-  onChange: (d: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-7 gap-1" role="tablist" aria-label="Day">
-      {days.map(d => {
-        const on = d.full === value
-        const isToday = d.full === today
-        const n = countFor(d.full)
-        return (
-          <button
-            key={d.full}
-            role="tab"
-            aria-selected={on}
-            onClick={() => onChange(d.full)}
-            className={`relative min-w-0 flex flex-col items-center justify-center h-[52px] rounded-[12px] transition active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
-              on
-                ? 'bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)]'
-                : 'bg-white/80 text-slate-700 border border-white'}`}
-          >
-            <span className={`text-[10.5px] font-semibold leading-none ${on ? 'text-white/70' : isToday ? 'text-amber-700' : 'text-slate-500'}`}>{d.day}</span>
-            <span className="text-[15px] font-bold leading-tight tabular-nums mt-0.5">{d.date}</span>
-            <span className={`absolute bottom-1 h-1 rounded-full ${n > 0 ? (on ? 'bg-[#E9DDBB]' : 'bg-[#B8983C]') : 'bg-transparent'}`} style={{ width: n > 0 ? Math.min(4 + n * 3, 18) : 0 }} />
-          </button>
-        )
-      })}
-    </div>
-  )
+// Status icons matching SchoolWorkManager style
+const TASK_STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
+  not_done: <Circle       size={14} className="text-slate-400" />,
+  partial:  <CircleDot    size={14} className="text-orange-600" />,
+  done:     <CheckCircle2 size={14} className="text-yellow-500" />,
+  checked:  <CheckCircle2 size={14} className="text-green-500" />,
+  dismissed: <MinusCircle size={14} className="text-slate-400" />,
 }
 
-function DayList({
-  periods, tasks, subtasks, periodStarts, composeSlot, renderChip, renderSubChip, onCompose, onCancelCompose, onCreate, onExpand,
+// ─── Inline Task Composer ─────────────────────────────────────────────────────
+// Lets the user type a task name straight into a grid cell. Enter creates it and
+// keeps the box open for the next one; the expand button hands off to the full
+// New Task card seeded with whatever's been typed so far.
+
+function InlineTaskComposer({
+  onCreate,
+  onExpand,
+  onCancel,
 }: {
-  periods: TaskSlot[]
-  tasks: TaskWithDetails[]
-  subtasks: SubtaskWithProject[]
-  periodStarts: Set<string>
-  /** undefined: nothing being typed; null: the "any time" row; n: period n. */
-  composeSlot: number | null | undefined
-  renderChip: (t: TaskWithDetails) => React.ReactNode
-  renderSubChip: (s: SubtaskWithProject) => React.ReactNode
-  onCompose: (slot: number | null) => void
-  onCancelCompose: () => void
-  onCreate: (title: string, slot: number | null) => void
-  onExpand: (title: string, slot: number | null) => void
-}) {
-  const unscheduled = tasks.filter(t => !t.timing || !periodStarts.has(t.timing))
-  const row = (key: string, label: React.ReactNode, time: React.ReactNode, slot: number | null, items: React.ReactNode[]) => (
-    <div key={key} className="flex items-stretch gap-2.5 px-2.5 py-1.5 min-h-[44px]">
-      <div className="w-11 flex-shrink-0 flex flex-col justify-center leading-tight">
-        <span className="text-[12.5px] font-bold text-slate-700 tabular-nums">{label}</span>
-        {time && <span className="text-[10.5px] text-slate-400 tabular-nums">{time}</span>}
-      </div>
-      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
-        {items}
-        {composeSlot === slot ? (
-          <InlineTaskComposer
-            onCreate={title => onCreate(title, slot)}
-            onExpand={title => onExpand(title, slot)}
-            onCancel={onCancelCompose}
-          />
-        ) : items.length === 0 ? (
-          <button
-            onClick={() => onCompose(slot)}
-            className="h-8 w-full flex items-center gap-1.5 px-2.5 rounded-[9px] border border-dashed border-[#DDD8CC] text-[12px] text-slate-400 active:bg-[#FAF7F0] transition-colors"
-          >
-            <Plus size={12} /> Add
-          </button>
-        ) : null}
-      </div>
-    </div>
-  )
-  return (
-    <div className="fx-card divide-y divide-[#EEEAE1]">
-      {(unscheduled.length > 0 || subtasks.length > 0 || composeSlot === null) &&
-        row('any', 'Any', 'time', null, [...unscheduled.map(renderChip), ...subtasks.map(renderSubChip)])}
-      {periods.map((p, i) =>
-        row(String(i), `P${i + 1}`, formatSlotTime(p.start), i, tasks.filter(t => t.timing === p.start).map(renderChip)),
-      )}
-    </div>
-  )
-}
-
-// ─── Overdue and bonus sections ───────────────────────────────────────────────
-
-function SectionToggle({ icon, title, count, countTone, open, onToggle, right }: {
-  icon: React.ReactNode
-  title: string
-  count: number | null
-  countTone: string
-  open: boolean
-  onToggle: () => void
-  right?: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2 min-h-[44px] py-1.5">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex items-center gap-2 min-w-0 flex-1 basis-[150px] h-9 px-1.5 rounded-full text-left hover:bg-[#FAF7F0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 transition-colors"
-      >
-        {icon}
-        <span className="text-[13.5px] font-semibold text-slate-900 leading-snug">{title}</span>
-        {count != null && <span className={`text-[12.5px] font-bold tabular-nums ${countTone}`}>{count}</span>}
-        <ChevronDown size={15} className={`ml-auto text-slate-400 transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {right}
-    </div>
-  )
-}
-
-function MonthPager({ months, idx, setIdx }: { months: string[]; idx: number; setIdx: (fn: (i: number) => number) => void }) {
-  if (months.length < 2) return null
-  return (
-    <Stepper
-      label={monthKeyLabel(months[idx])}
-      onPrev={() => setIdx(i => Math.min(i + 1, months.length - 1))}
-      onNext={() => setIdx(i => Math.max(i - 1, 0))}
-      prevLabel="Older month"
-      nextLabel="Newer month"
-      canNext={idx > 0}
-      className="!bg-[#F4F1EA] !shadow-none"
-    />
-  )
-}
-
-function OverdueSection({ open, onToggle, loading, loaded, tasks, subtasks, monthIdx, setMonthIdx, renderChip, renderSubChip }: {
-  open: boolean
-  onToggle: () => void
-  loading: boolean
-  loaded: boolean
-  tasks: TaskWithDetails[]
-  subtasks: SubtaskWithProject[]
-  monthIdx: number
-  setMonthIdx: (fn: (i: number) => number) => void
-  renderChip: (t: TaskWithDetails) => React.ReactNode
-  renderSubChip: (s: SubtaskWithProject) => React.ReactNode
-}) {
-  // One month at a time, newest first, then the undated ones.
-  const { months, byMonth } = useMemo(() => {
-    const map: Record<string, { tasks: TaskWithDetails[]; subtasks: SubtaskWithProject[] }> = {}
-    const bucket = (k: string) => (map[k] ??= { tasks: [], subtasks: [] })
-    for (const t of tasks) bucket(t.due_date ? t.due_date.slice(0, 7) : 'undated').tasks.push(t)
-    for (const s of subtasks) bucket(s.due_date ? s.due_date.slice(0, 7) : 'undated').subtasks.push(s)
-    const dated = Object.keys(map).filter(k => k !== 'undated').sort().reverse()
-    return { months: [...dated, ...(map.undated ? ['undated'] : [])], byMonth: map }
-  }, [tasks, subtasks])
-  const idx = months.length > 0 ? Math.min(Math.max(monthIdx, 0), months.length - 1) : -1
-  const active = idx >= 0 ? byMonth[months[idx]] : { tasks: [], subtasks: [] }
-  const total = tasks.length + subtasks.length
-
-  return (
-    <Panel className="min-w-0">
-      <SectionToggle
-        icon={<AlertTriangle size={15} className="text-rose-500 flex-shrink-0" />}
-        title="Overdue"
-        count={loaded ? total : null}
-        countTone={total > 0 ? 'text-rose-600' : 'text-slate-400'}
-        open={open}
-        onToggle={onToggle}
-        right={open && loaded ? <MonthPager months={months} idx={idx} setIdx={setMonthIdx} /> : undefined}
-      />
-      {open && (
-        <div className="border-t border-[#EEEAE1] px-2.5 py-2.5">
-          {loading ? (
-            <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
-          ) : total === 0 ? (
-            <p className="text-[12.5px] text-slate-500 py-1">Nothing overdue.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {active.tasks.map(renderChip)}
-              {active.subtasks.map(renderSubChip)}
-            </div>
-          )}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function BonusSection({ open, onToggle, loading, loaded, tasks, monthIdx, setMonthIdx, renderChip }: {
-  open: boolean
-  onToggle: () => void
-  loading: boolean
-  loaded: boolean
-  tasks: TaskWithDetails[]
-  monthIdx: number
-  setMonthIdx: (fn: (i: number) => number) => void
-  renderChip: (t: TaskWithDetails) => React.ReactNode
-}) {
-  const { months, byMonth } = useMemo(() => {
-    const map: Record<string, TaskWithDetails[]> = {}
-    for (const t of tasks) (map[t.due_date ? t.due_date.slice(0, 7) : 'undated'] ??= []).push(t)
-    return { months: Object.keys(map).sort().reverse(), byMonth: map }
-  }, [tasks])
-  const idx = months.length > 0 ? Math.min(Math.max(monthIdx, 0), months.length - 1) : -1
-  const list = idx >= 0 ? byMonth[months[idx]] : []
-  // Only points that have been signed off count as earned.
-  const earned = list.reduce((sum, t) => sum + (isTaskCompleted(t) ? (t.bonus_points || 0) : 0), 0)
-
-  return (
-    <Panel className="min-w-0">
-      <SectionToggle
-        icon={<Star size={15} className="text-amber-500 flex-shrink-0" />}
-        title="Bonus tasks"
-        count={loaded ? tasks.length : null}
-        countTone={tasks.length > 0 ? 'text-amber-600' : 'text-slate-400'}
-        open={open}
-        onToggle={onToggle}
-        right={open && loaded ? <MonthPager months={months} idx={idx} setIdx={setMonthIdx} /> : undefined}
-      />
-      {open && (
-        <div className="border-t border-[#EEEAE1] px-2.5 py-2.5">
-          {loading ? (
-            <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-slate-400" /></div>
-          ) : tasks.length === 0 ? (
-            <p className="text-[12.5px] text-slate-500 py-1">No bonus tasks yet.</p>
-          ) : (
-            <>
-              <p className="flex flex-wrap items-center justify-between gap-x-3 text-[12px] text-slate-500 mb-2">
-                <span>{list.length} task{list.length !== 1 ? 's' : ''}</span>
-                <span className="font-semibold text-amber-700">{earned} points earned</span>
-              </p>
-              <div className="space-y-1.5">{list.map(renderChip)}</div>
-            </>
-          )}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-// ─── Inline composer ──────────────────────────────────────────────────────────
-// Type a task name straight into a cell. Enter adds it and keeps the box open
-// for the next; the expand button opens the full form with what's typed.
-
-function InlineTaskComposer({ onCreate, onExpand, onCancel }: {
   onCreate: (title: string) => void
   onExpand: (title: string) => void
   onCancel: () => void
 }) {
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => { inputRef.current?.focus() }, [])
+
   const submit = () => {
     const t = value.trim()
     if (!t) return
@@ -1055,8 +1115,9 @@ function InlineTaskComposer({ onCreate, onExpand, onCancel }: {
     setValue('')
     inputRef.current?.focus()
   }
+
   return (
-    <div className="flex items-center gap-1 rounded-[9px] border border-[#B8983C] bg-white px-1.5 h-8 shadow-[0_0_0_3px_rgba(184,152,60,.15)] min-w-0">
+    <div className="flex items-center gap-1 rounded-lg border border-blue-300 bg-white p-1 shadow-sm">
       <input
         ref={inputRef}
         value={value}
@@ -1066,18 +1127,17 @@ function InlineTaskComposer({ onCreate, onExpand, onCancel }: {
           else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
         }}
         onBlur={() => { if (!value.trim()) onCancel() }}
-        placeholder="Task name, then Enter"
-        enterKeyHint="done"
-        className="min-w-0 flex-1 bg-transparent text-[12px] text-slate-800 placeholder-slate-400 focus:outline-none"
+        placeholder="Task name…"
+        className="min-w-0 flex-1 bg-transparent px-0.5 text-[11px] text-slate-700 placeholder-slate-400 focus:outline-none"
       />
       <button
         type="button"
-        // Keep the input focused so its blur doesn't cancel before this fires.
+        // Keep the input focused so its blur handler doesn't cancel before this fires.
         onMouseDown={e => e.preventDefault()}
         onClick={() => onExpand(value)}
-        className="flex-shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-[#8B6F47] hover:bg-[#FAF7F0] transition-colors"
-        aria-label="Open the full task form"
-        title="More options"
+        className="flex-shrink-0 p-0.5 text-slate-400 hover:text-blue-500 transition-colors"
+        title="Open full task form"
+        aria-label="Open full task form"
       >
         <Maximize2 size={11} />
       </button>
@@ -1085,16 +1145,23 @@ function InlineTaskComposer({ onCreate, onExpand, onCancel }: {
   )
 }
 
-// ─── Chips ────────────────────────────────────────────────────────────────────
+// ─── Task Grid Chip ────────────────────────────────────────────────────────────
 
-function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, roomy, currentUserId, readAt, highlighted }: {
+function TaskGridChip({
+  task,
+  canCheck,
+  onStatusChange,
+  onOpen,
+  showDate,
+  currentUserId,
+  readAt,
+  highlighted,
+}: {
   task: TaskWithDetails
   canCheck: boolean
   onStatusChange: (id: string, status: TaskStatus) => void
   onOpen: () => void
   showDate?: boolean
-  /** Phone lists and the overdue panel: taller, and the name wraps. */
-  roomy?: boolean
   currentUserId?: string
   readAt?: string
   highlighted?: boolean
@@ -1104,86 +1171,698 @@ function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, roomy,
   const handleIconClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentUserId) return
-    // Only a verifier can re-open a verified task.
+    // A verified ('checked') task can only be re-opened by a verifier.
     if (task.status === 'checked' && !isVerifier) return
     const next = getNextStatus(task.status, isVerifier, task.require_check ?? true)
     if (next === task.status) return
-    // A task that needs a submission opens instead, where there's room to write it.
+    // A task requiring submission can't skip straight to done without one —
+    // open the detail view instead, where there's room to write it.
     if (needsSubmissionFirst(task, next)) { onOpen(); return }
     const ok = await updateTaskStatus(task.id, next, currentUserId)
     if (ok) onStatusChange(task.id, next)
   }
 
   const hasComments = task.comments.length > 0
-  const hasUnread = hasComments && task.comments.some(c => c.user_id !== currentUserId && (readAt ? c.created_at > readAt : true))
+  const hasUnread = hasComments && task.comments.some(c =>
+    c.user_id !== currentUserId &&
+    (readAt ? c.created_at > readAt : true)
+  )
   const isBonus = task.tag === 'bonus' || task.bonus_points > 0
   const isDismissed = task.status === 'dismissed'
+
+  // done + no require_check = fully completed → green
   const doneNoCheck = task.status === 'done' && !task.require_check
   const isCompleted = task.status === 'checked' || doneNoCheck
-  const chipClass = doneNoCheck ? CHIP_STYLE.checked : CHIP_STYLE[task.status]
-  const accent = hasUnread ? 'border-l-[3px] border-l-rose-500' : hasComments ? 'border-l-[3px] border-l-sky-400' : ''
-  const ring = highlighted ? 'ring-2 ring-amber-400 ring-offset-1 animate-pulse' : ''
+  const chipClass = doneNoCheck
+    ? 'border-green-200 bg-green-50 hover:border-green-300'
+    : CHIP_STYLE[task.status]
+  const statusIcon = doneNoCheck
+    ? <CheckCircle2 size={14} className="text-green-500" />
+    : TASK_STATUS_ICON[task.status]
+
+  const leftBorderClass = hasUnread
+    ? 'border-l-[3px] border-l-red-500'
+    : hasComments
+      ? 'border-l-[3px] border-l-blue-400'
+      : ''
+
+  // Highlighted: pulsing amber ring (focus jump). Bonus is no longer a ring —
+  // it now reads as a gold "medal" star pinned to the top-left corner.
+  const ringClass = highlighted
+    ? 'ring-2 ring-amber-400 ring-offset-1 shadow-md shadow-amber-200 animate-pulse'
+    : ''
 
   return (
-    <div className={`relative w-full min-w-0 rounded-[9px] border transition-colors ${roomy ? 'text-[13px]' : 'text-[11.5px]'} ${chipClass} ${accent} ${ring} ${isDismissed ? 'opacity-60' : ''}`}>
-      {isBonus && !isDismissed && <BonusMedal />}
-      <div className={`flex items-start gap-1 ${roomy ? 'p-1.5 pl-1' : 'p-1'}`}>
+    <div
+      className={`w-full text-[11px] p-1.5 rounded-lg border transition-all relative ${chipClass} ${leftBorderClass} ${ringClass} ${isDismissed ? 'opacity-60' : ''}`}
+    >
+      {/* Bonus medal — gold star pinned top-left (clears the comment badge on the right) */}
+      {isBonus && !isDismissed && (
+        <span
+          className="absolute -top-1.5 -left-1.5 z-10 w-[15px] h-[15px] rounded-full flex items-center justify-center shadow-sm ring-2 ring-white"
+          style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}
+          title="Bonus task"
+        >
+          <Star size={8} className="text-white" fill="white" />
+        </span>
+      )}
+      <div className="flex items-start gap-1">
         <button
           onClick={handleIconClick}
-          className={`flex-shrink-0 inline-flex items-center justify-center rounded-full hover:bg-black/[.05] active:scale-90 transition ${roomy ? 'w-7 h-7 -my-0.5' : 'w-5 h-5'}`}
-          aria-label="Move to the next status"
+          className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+          title="Tap to cycle status"
         >
-          <StatusMark status={task.status} requireCheck={!!task.require_check} size={roomy ? 16 : 14} />
+          {statusIcon}
         </button>
-        <button onClick={onOpen} className={`min-w-0 flex-1 text-left ${roomy ? 'py-0.5' : 'py-px'}`}>
-          <span className={`block font-medium leading-snug break-words [overflow-wrap:anywhere] hyphens-auto ${isCompleted || isDismissed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+        <button
+          onClick={onOpen}
+          className="min-w-0 flex-1 text-left"
+          title="Tap to see details"
+        >
+          <p className={`font-medium leading-tight truncate ${
+            isCompleted || isDismissed ? 'line-through text-slate-400' : 'text-slate-700'
+          }`}>
             {task.title}
-          </span>
-          {showDate && task.due_date && (
-            <span className="block text-[11px] text-rose-600 font-medium leading-tight">{shortDate(task.due_date)}</span>
+          </p>
+          {(showDate && task.due_date) && (
+            <p className="text-[9px] text-red-400 font-medium">{task.due_date}</p>
           )}
         </button>
       </div>
+      {/* Comment count badge — top-right corner */}
       {hasComments && (
-        <span className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full px-1 min-w-[15px] h-[15px] shadow-sm text-white text-[9.5px] font-bold leading-none ${hasUnread ? 'bg-rose-500' : 'bg-sky-500'}`}>
-          {task.comments.length}
+        <span className={`absolute -top-1.5 -right-1.5 flex items-center gap-0.5 rounded-full px-1 min-w-[14px] h-[14px] justify-center shadow-sm ${hasUnread ? 'bg-red-500' : 'bg-blue-500'} text-white`}>
+          <span className="text-[9px] font-bold leading-none">{task.comments.length}</span>
         </span>
       )}
     </div>
   )
 }
 
-function SubtaskGridChip({ subtask, roomy, onStatusTap, onOpen }: {
+// ─── Subtask Grid Chip ────────────────────────────────────────────────────────
+
+function SubtaskGridChip({
+  subtask,
+  onStatusTap,
+  onOpen,
+}: {
   subtask: SubtaskWithProject
-  roomy?: boolean
+  canCheck?: boolean
   onStatusTap: (s: SubtaskWithProject) => void
   onOpen: () => void
 }) {
-  const doneNoCheck = subtask.status === 'done' && !subtask.require_check
-  const dismissed = subtask.status === 'dismissed'
-  const isBonus = subtask.tag === 'bonus' || (subtask.bonus_points ?? 0) > 0
-  const struck = subtask.status === 'checked' || doneNoCheck || dismissed
+  const handleIconClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onStatusTap(subtask)
+  }
+
+  const subDoneNoCheck = subtask.status === 'done' && !subtask.require_check
+  const subDismissed = subtask.status === 'dismissed'
+  const subChipClass = subDoneNoCheck
+    ? 'border-green-200 bg-green-50 hover:border-green-300'
+    : CHIP_STYLE[subtask.status]
+  const subIcon = subDoneNoCheck
+    ? <CheckCircle2 size={14} className="text-green-500" />
+    : TASK_STATUS_ICON[subtask.status]
+  const subIsBonus = subtask.tag === 'bonus' || (subtask.bonus_points ?? 0) > 0
+
   return (
-    <div className={`relative w-full min-w-0 rounded-[9px] border border-l-[3px] border-l-violet-400 transition-colors ${roomy ? 'text-[13px]' : 'text-[11.5px]'} ${doneNoCheck ? CHIP_STYLE.checked : CHIP_STYLE[subtask.status]} ${dismissed ? 'opacity-60' : ''}`}>
-      {isBonus && !dismissed && <BonusMedal />}
-      <div className={`flex items-start gap-1 ${roomy ? 'p-1.5 pl-1' : 'p-1'}`}>
-        <button
-          onClick={e => { e.stopPropagation(); onStatusTap(subtask) }}
-          className={`flex-shrink-0 inline-flex items-center justify-center rounded-full hover:bg-black/[.05] active:scale-90 transition ${roomy ? 'w-7 h-7 -my-0.5' : 'w-5 h-5'}`}
-          aria-label="Move to the next status"
+    <div
+      className={`relative w-full text-[11px] p-1.5 pl-2 rounded-lg border border-l-[3px] border-l-purple-400 transition-all ${subChipClass} ${subDismissed ? 'opacity-60' : ''}`}
+    >
+      {/* Bonus medal — gold star pinned top-left */}
+      {subIsBonus && !subDismissed && (
+        <span
+          className="absolute -top-1.5 -left-1.5 z-10 w-[15px] h-[15px] rounded-full flex items-center justify-center shadow-sm ring-2 ring-white"
+          style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}
+          title="Bonus subtask"
         >
-          <StatusMark status={subtask.status} requireCheck={!!subtask.require_check} size={roomy ? 16 : 14} />
+          <Star size={8} className="text-white" fill="white" />
+        </span>
+      )}
+      <div className="flex items-start gap-1">
+        <button
+          onClick={handleIconClick}
+          className="flex-shrink-0 mt-0.5 hover:scale-125 transition-transform"
+          title="Tap to cycle status"
+        >
+          {subIcon}
         </button>
-        <button onClick={onOpen} className={`min-w-0 flex-1 text-left ${roomy ? 'py-0.5' : 'py-px'}`}>
-          <span className={`block font-medium leading-snug break-words [overflow-wrap:anywhere] hyphens-auto ${struck ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+        <button
+          onClick={onOpen}
+          className="min-w-0 flex-1 text-left"
+          title="Tap to see details"
+        >
+          <p className={`font-medium leading-tight truncate ${
+            (subtask.status === 'checked' || subDoneNoCheck || subDismissed) ? 'line-through text-slate-400' : 'text-slate-700'
+          }`}>
             {subtask.title}
-          </span>
-          <span className="flex items-center gap-1 mt-0.5 min-w-0 text-[10.5px] text-violet-700 leading-tight">
-            <FolderKanban size={10} className="flex-shrink-0" />
-            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{subtask.project_title}</span>
-          </span>
+          </p>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="inline-flex items-center gap-0.5 px-1 rounded text-[9px] font-bold leading-tight bg-purple-100 text-purple-600">
+              <FolderKanban size={8} /> Project
+            </span>
+            <span className="text-slate-400 truncate text-[10px]">
+              {subtask.project_title}
+            </span>
+          </div>
         </button>
       </div>
     </div>
   )
 }
+
+
+// ─── Task Calendar Modal ──────────────────────────────────────────────────────
+
+function TaskCalendarModal({
+  task,
+  canCheck,
+  userId,
+  userRole,
+  onClose,
+  onStatusChange,
+  onTaskDeleted,
+  onTaskUpdated,
+  availableAssignees: _availableAssignees = [],
+}: {
+  task: TaskWithDetails
+  canCheck: boolean
+  userId: string
+  userRole: string
+  onClose: () => void
+  onStatusChange: (id: string, status: TaskStatus) => void
+  onTaskDeleted: (id: string) => void
+  onTaskUpdated: () => void
+  availableAssignees?: UserProfile[]
+}) {
+  const requireCheck = task.require_check ?? false
+
+  // The calendar list is loaded lightweight, so the task's heavy relations
+  // (assignees, checklist, full comments, creator) are fetched on open. Until
+  // they arrive, edit/delete stay hidden (canEdit=false) so we never show an
+  // action the user might not be permitted to take.
+  const [details, setDetails] = useState<TaskDetails | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(true)
+  const assignees = details?.assignees ?? []
+  const creator = details?.creator
+  const completer = details?.completer
+  const locked = isTaskCompleted(task)
+  const canDelete = details && !locked
+    ? canDeleteTaskFn({ ...task, assignees, creator }, userId, userRole)
+    : false
+
+  // Live checklist / comments interaction
+  const [newCheckItem, setNewCheckItem]   = useState('')
+  const [newComment, setNewComment]       = useState('')
+  const [submitting, setSubmitting]       = useState(false)
+  const [localChecklist, setLocalChecklist] = useState<TaskChecklistItem[]>([])
+  const [localComments, setLocalComments]   = useState<TaskComment[]>([])
+
+  // Comment attachment
+  const [commentAttachMode, setCommentAttachMode] = useState<'none' | 'link' | 'file'>('none')
+  const [commentLinkUrl, setCommentLinkUrl]       = useState('')
+  const [commentLinkName, setCommentLinkName]     = useState('')
+  const [commentFile, setCommentFile]             = useState<File | null>(null)
+  const [uploadingAttach, setUploadingAttach]     = useState(false)
+  const commentFileRef = useRef<HTMLInputElement>(null)
+
+  // Submission capture — only relevant while requires_submission is set and
+  // no note has been saved yet. Submitting also completes the task.
+  const [submissionDraft, setSubmissionDraft] = useState('')
+  const [submittingWork, setSubmittingWork] = useState(false)
+  const needsSubmission = task.requires_submission && !task.submission_note
+
+  const handleSubmitWork = async () => {
+    if (!submissionDraft.trim()) return
+    setSubmittingWork(true)
+    const ok = await submitTaskWork(task.id, submissionDraft.trim())
+    if (ok) {
+      await updateTaskStatus(task.id, 'done', userId)
+      onTaskUpdated()
+    }
+    setSubmittingWork(false)
+  }
+
+  // Load the heavy relations once the modal opens.
+  useEffect(() => {
+    let cancelled = false
+    setDetailsLoading(true)
+    fetchTaskDetails(task.id, task.created_by, task.completed_by).then(d => {
+      if (cancelled) return
+      setDetails(d)
+      setLocalChecklist(d.checklist)
+      setLocalComments(d.comments)
+      setDetailsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [task.id, task.created_by, task.completed_by])
+
+  // Verifiers (supervisors who can check, or the task's creator) may dismiss a
+  // task that requires verification, and are the only ones who can re-open a
+  // verified ('checked') task.
+  const isVerifier = canVerifyTask(task, userId, canCheck)
+
+  const handleStatusClick = async () => {
+    if (task.status === 'checked' && !isVerifier) return
+    const next = getNextStatus(task.status, isVerifier, requireCheck)
+    if (next === task.status) return
+    // A task requiring submission can't skip straight to done without one —
+    // the submission box below is the way forward instead.
+    if (needsSubmissionFirst(task, next)) return
+    const ok = await updateTaskStatus(task.id, next, userId)
+    if (ok) onStatusChange(task.id, next)
+  }
+
+  const canDismiss = requireCheck && isVerifier
+  const handleDismissToggle = async () => {
+    const next: TaskStatus = task.status === 'dismissed' ? 'not_done' : 'dismissed'
+    const ok = await updateTaskStatus(task.id, next, userId)
+    if (ok) onStatusChange(task.id, next)
+  }
+
+  const handleToggleChecklist = async (itemId: string, current: boolean) => {
+    await toggleChecklistItem(itemId, !current)
+    setLocalChecklist(prev => prev.map(c => c.id === itemId ? { ...c, is_completed: !current } : c))
+    onTaskUpdated()
+  }
+
+  const handleAddCheckItem = async () => {
+    if (!newCheckItem.trim()) return
+    const item = await addChecklistItem(task.id, newCheckItem.trim(), localChecklist.length)
+    if (item) {
+      setLocalChecklist(prev => [...prev, item])
+      setNewCheckItem('')
+      onTaskUpdated()
+    }
+  }
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() && commentAttachMode === 'none') return
+    if (commentAttachMode === 'link' && !commentLinkUrl.trim()) return
+    if (commentAttachMode === 'file' && !commentFile) return
+    setSubmitting(true)
+    let attachment: { url: string; name: string; type: 'image' | 'document' | 'link' } | undefined
+    if (commentAttachMode === 'file' && commentFile) {
+      setUploadingAttach(true)
+      const uploaded = await uploadTaskAttachment(commentFile, task.id, userId)
+      setUploadingAttach(false)
+      if (uploaded) attachment = uploaded
+    } else if (commentAttachMode === 'link' && commentLinkUrl.trim()) {
+      attachment = { url: commentLinkUrl.trim(), name: commentLinkName.trim() || commentLinkUrl.trim(), type: 'link' }
+    }
+    const comment = await addComment(task.id, userId, newComment.trim(), attachment)
+    if (comment) {
+      setLocalComments(prev => [...prev, comment])
+      setNewComment('')
+      setCommentAttachMode('none')
+      setCommentLinkUrl('')
+      setCommentLinkName('')
+      setCommentFile(null)
+      onTaskUpdated()
+    }
+    setSubmitting(false)
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this task?')) return
+    const ok = await deleteTask(task.id)
+    if (ok) {
+      onClose()
+      onTaskDeleted(task.id)
+    }
+  }
+
+  const statusLabel = getDynamicStatusLabel(task.status, requireCheck)
+  const statusColorClass = getDynamicStatusColors(task.status, requireCheck)
+  const dotColorClass = getDynamicDotColor(task.status, requireCheck)
+
+  const completedChecklist = localChecklist.filter(c => c.is_completed).length
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.93, opacity: 0, y: 16 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 8 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 p-5 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleStatusClick}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm transition-all active:scale-95 hover:shadow-lg ${statusColorClass}`}
+              title="Tap to change status"
+            >
+              <div className={`w-3.5 h-3.5 rounded-full ${dotColorClass} animate-pulse`} />
+              {statusLabel}
+              <ChevronRight size={14} className="opacity-50" />
+            </button>
+            {task.bonus_points > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
+                {task.bonus_points} BP
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {canDismiss && (
+              <button
+                onClick={handleDismissToggle}
+                className={`p-2 rounded-lg transition-colors ${
+                  task.status === 'dismissed'
+                    ? 'text-mps-blue-500 hover:text-mps-blue-700 hover:bg-mps-blue-50'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                }`}
+                title={task.status === 'dismissed' ? 'Restore task' : 'Dismiss — exclude from stats'}
+              >
+                {task.status === 'dismissed' ? <RotateCcw size={16} /> : <Ban size={16} />}
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete task"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+            {locked && (
+              <span className="p-2 text-slate-300" title="Completed tasks can't be deleted">
+                <Lock size={16} />
+              </span>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">{task.title}</h2>
+            {task.description && (
+              <p className="text-slate-600 mt-2 text-sm leading-relaxed">{task.description}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {task.due_date && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Calendar size={14} /> {task.due_date}
+              </div>
+            )}
+            {task.timing && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                <Clock size={14} /> {task.timing}{task.end_time ? ` – ${task.end_time}` : ''}
+              </div>
+            )}
+            {task.bonus_points > 0 && (
+              <div className="flex items-center gap-1.5 text-sm bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg">
+                <Star size={14} /> {task.bonus_points} BP
+              </div>
+            )}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <div className="flex items-center gap-1.5 text-sm text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg">
+                <Repeat size={14} /> {RECURRENCE_LABELS[task.recurrence]}
+              </div>
+            )}
+            {requireCheck && (
+              <div className="flex items-center gap-1.5 text-sm text-mps-blue-600 bg-mps-blue-50 px-3 py-1.5 rounded-lg font-medium">
+                <ShieldCheck size={14} /> Needs Verification
+              </div>
+            )}
+            {task.requires_submission && (
+              <div className="flex items-center gap-1.5 text-sm text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg font-medium">
+                <Send size={14} /> Needs Submission
+              </div>
+            )}
+          </div>
+
+          {/* Submission — capture (missing) or display (saved) */}
+          {task.requires_submission && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <Send size={14} /> Submission
+              </h4>
+              {task.submission_note ? (
+                <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3 whitespace-pre-wrap">{task.submission_note}</p>
+              ) : needsSubmission ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={submissionDraft}
+                    onChange={e => setSubmissionDraft(e.target.value)}
+                    placeholder="Describe or paste your work here…"
+                    rows={3}
+                    className="w-full border border-indigo-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 resize-none bg-indigo-50/40"
+                  />
+                  <button
+                    onClick={handleSubmitWork}
+                    disabled={submittingWork || !submissionDraft.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    <Send size={14} />
+                    {submittingWork ? 'Submitting…' : 'Submit & Complete'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {assignees.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700 mb-1.5">Assignees</h4>
+              <div className="flex flex-wrap gap-2">
+                {assignees.map(a => (
+                  <span key={a.id} className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2 py-1 rounded-full font-medium">
+                    <Avatar
+                      avatarUrl={a.user?.avatar_url}
+                      name={a.user?.full_name}
+                      size={18}
+                      userId={a.user_id}
+                    />
+                    {a.user?.full_name ?? a.user_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Audit trail: who created it and, once completed, who verified it */}
+          {(creator || completer) && (
+            <div className="space-y-1">
+              {creator && (
+                <p className="text-xs text-slate-400">
+                  Created by <span className="font-medium text-slate-500">{creator.full_name}</span> · {formatDateTime(task.created_at)}
+                </p>
+              )}
+              {locked && completer && task.completed_at && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 size={11} /> Completed by <span className="font-medium">{completer.full_name}</span> · {formatDateTime(task.completed_at)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Checklist */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+              <CheckSquare size={14} />
+              Checklist
+              {localChecklist.length > 0 && (
+                <span className="text-xs font-normal text-slate-500">({completedChecklist}/{localChecklist.length})</span>
+              )}
+            </h4>
+            <div className="space-y-1.5">
+              {localChecklist.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => handleToggleChecklist(item.id, item.is_completed)}
+                  className="flex items-center gap-2 w-full text-left p-2 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  {item.is_completed ? (
+                    <CheckSquare size={16} className="text-mps-green-600 flex-shrink-0" />
+                  ) : (
+                    <Square size={16} className="text-slate-400 flex-shrink-0" />
+                  )}
+                  <span className={`text-sm ${item.is_completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                    {item.text}
+                  </span>
+                </button>
+              ))}
+              {detailsLoading ? (
+                <p className="text-xs text-slate-400 italic">Loading…</p>
+              ) : localChecklist.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No checklist items yet</p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="text"
+                value={newCheckItem}
+                onChange={e => setNewCheckItem(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddCheckItem()}
+                placeholder="Add checklist item..."
+                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
+              />
+              <button onClick={handleAddCheckItem} className="text-mps-blue-600 hover:text-mps-blue-700 p-1.5">
+                <CheckSquare size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Comments */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+              <MessageSquare size={14} />
+              Comments ({localComments.length})
+            </h4>
+              <div className="space-y-3 max-h-40 overflow-y-auto">
+                {localComments.map(comment => (
+                  <div key={comment.id} className="bg-slate-50 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Avatar avatarUrl={comment.user?.avatar_url} name={comment.user?.full_name} size={22} userId={comment.user?.id} />
+                      <span className="text-xs font-medium text-slate-700">{comment.user?.full_name || 'Unknown'}</span>
+                      <span className="text-xs text-slate-400">{new Date(comment.created_at).toLocaleDateString()}</span>
+                    </div>
+                    {comment.content && (
+                      <p className="text-sm text-slate-600 pl-8">{comment.content}</p>
+                    )}
+                    {comment.attachment_url && (
+                      <div className="pl-8 mt-1.5">
+                        {comment.attachment_type === 'image' ? (
+                          <a href={comment.attachment_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={comment.attachment_url}
+                              alt={comment.attachment_name || 'Image'}
+                              className="max-h-36 rounded-lg border border-slate-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          </a>
+                        ) : comment.attachment_type === 'link' ? (
+                          <a
+                            href={comment.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-mps-blue-600 hover:text-mps-blue-700 bg-mps-blue-50 px-3 py-1.5 rounded-lg border border-mps-blue-100"
+                          >
+                            <ExternalLink size={11} />
+                            {comment.attachment_name || comment.attachment_url}
+                          </a>
+                        ) : (
+                          <a
+                            href={comment.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200"
+                          >
+                            <FileText size={11} />
+                            {comment.attachment_name || 'Document'}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {detailsLoading ? (
+                  <p className="text-sm text-slate-400 text-center py-2">Loading…</p>
+                ) : localComments.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-2">No comments yet</p>
+                ) : null}
+              </div>
+
+              {/* Attachment preview */}
+              {commentAttachMode === 'link' && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="url"
+                    value={commentLinkUrl}
+                    onChange={e => setCommentLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-400"
+                  />
+                  <input
+                    type="text"
+                    value={commentLinkName}
+                    onChange={e => setCommentLinkName(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="w-28 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-mps-blue-400"
+                  />
+                </div>
+              )}
+              {commentAttachMode === 'file' && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => commentFileRef.current?.click()}
+                    className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-mps-blue-400 hover:text-mps-blue-600 transition-colors"
+                  >
+                    {commentFile
+                      ? <><ImageIcon size={12} className="flex-shrink-0" />{commentFile.name}</>
+                      : <><Paperclip size={12} className="flex-shrink-0" />Choose image or document</>
+                    }
+                  </button>
+                  <input
+                    ref={commentFileRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                    onChange={e => setCommentFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCommentAttachMode(m => m === 'link' ? 'none' : 'link')}
+                    className={`p-1.5 rounded-lg transition-colors ${commentAttachMode === 'link' ? 'bg-mps-blue-100 text-mps-blue-600' : 'text-slate-400 hover:text-mps-blue-500 hover:bg-slate-100'}`}
+                    title="Attach link"
+                  >
+                    <Link2 size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCommentAttachMode(m => m === 'file' ? 'none' : 'file')}
+                    className={`p-1.5 rounded-lg transition-colors ${commentAttachMode === 'file' ? 'bg-mps-blue-100 text-mps-blue-600' : 'text-slate-400 hover:text-mps-blue-500 hover:bg-slate-100'}`}
+                    title="Attach file or image"
+                  >
+                    <Paperclip size={13} />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !submitting && !uploadingAttach && handleAddComment()}
+                  placeholder="Write a comment..."
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
+                />
+                <button
+                  onClick={handleAddComment}
+                  disabled={submitting || uploadingAttach || (!newComment.trim() && commentAttachMode === 'none') || (commentAttachMode === 'link' && !commentLinkUrl.trim()) || (commentAttachMode === 'file' && !commentFile)}
+                  className="p-2 bg-mps-blue-500 text-white rounded-lg hover:bg-mps-blue-600 disabled:opacity-50 transition-colors"
+                >
+                  {uploadingAttach ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Send size={14} />}
+                </button>
+              </div>
+            </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// ─── Subtask Detail Modal ─────────────────────────────────────────────────────
+

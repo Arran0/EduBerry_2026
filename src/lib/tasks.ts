@@ -1,6 +1,5 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
-import { attachmentProblem, isImageAttachment, normalizeLinkUrl } from './attachmentPolicy'
 
 // ============================================
 // Types
@@ -109,7 +108,7 @@ const ASSIGNEE_PROFILE_COLUMNS = 'id, full_name, avatar_url, role'
 // ============================================
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  not_done: 'Not done',
+  not_done: 'Not Done',
   partial: 'Partial',
   done: 'Done',
   checked: 'Checked',
@@ -165,7 +164,7 @@ export function getDynamicDotColor(status: TaskStatus, requireCheck: boolean): s
 }
 
 export const RECURRENCE_LABELS: Record<TaskRecurrence, string> = {
-  none: 'Does not repeat',
+  none: 'No Repeat',
   daily: 'Daily',
   weekly: 'Weekly',
   monthly: 'Monthly',
@@ -873,13 +872,6 @@ export async function addComment(
   content: string,
   attachment?: { url: string; name: string; type: 'image' | 'document' | 'link' }
 ): Promise<TaskComment | null> {
-  // A link attachment is rendered as an href for everyone on the task, so
-  // only a web link is ever stored as one.
-  if (attachment?.type === 'link') {
-    const url = normalizeLinkUrl(attachment.url)
-    if (!url) return null
-    attachment = { ...attachment, url }
-  }
   const { data, error } = await supabase
     .from('task_comments')
     .insert({
@@ -897,15 +889,13 @@ export async function addComment(
 }
 
 export async function uploadTaskAttachment(file: File, taskId: string, userId: string): Promise<{ url: string; name: string; type: 'image' | 'document' } | null> {
-  if (attachmentProblem(file)) return null
-  const isImage = isImageAttachment(file.name)
+  const isImage = file.type.startsWith('image/')
   const compressed = isImage ? await compressImageIfNeeded(file) : file
   const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`
-  // Never upsert: a path collision must not overwrite someone else's file.
   const { data, error } = await supabase.storage
     .from('classroom-files')
-    .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
+    .upload(path, compressed, { upsert: true, cacheControl: '31536000' })
   if (error) {
     console.error('Task attachment upload failed:', error)
     return null

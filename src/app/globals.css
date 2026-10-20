@@ -92,16 +92,7 @@ body:has([data-page-theme="announcements"]) { overflow-x: hidden; }
   --page-gradient-from: #f59e0b;
   --page-gradient-to: #f97316;
 }
-/* The admin workspaces' warm stone, with the task app's amber pooled where
-   the glass sits so the decks have colour to bend. Fixed, so it stays put as
-   the page scrolls under the glass. */
-body:has([data-page-theme="tasks"]) {
-  background:
-    radial-gradient(52rem 30rem at 4% 0%, rgba(234, 160, 60, 0.22), transparent 62%),
-    radial-gradient(44rem 28rem at 100% 12%, rgba(203, 171, 85, 0.20), transparent 64%),
-    #EDE9E3;
-  background-attachment: fixed;
-}
+body:has([data-page-theme="tasks"]) { background: linear-gradient(135deg, #fffbeb, #fef3c7, #fff7ed); }
 
 [data-page-theme="exam"] {
   --page-primary: #27272A;
