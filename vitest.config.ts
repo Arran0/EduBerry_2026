@@ -13,6 +13,12 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  // tsconfig.json says jsx: "preserve" because Next.js compiles JSX itself.
+  // Vite 8's transformer honours that and leaves JSX in place, so the component
+  // tests need it compiled here.
+  oxc: {
+    jsx: { runtime: 'automatic' },
+  },
   test: {
     // Node by default — the payroll engine needs no DOM. The handful of
     // component tests (*.test.tsx) opt into jsdom with a
