@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Bus, HardHat } from 'lucide-react'
+import { Bus, HardHat, Landmark } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
-  Sheet, SheetHead, SheetRow, SheetSkeleton, SectionBar, Note, Column,
+  Sheet, SheetHead, SheetRow, SheetSkeleton, Note, Column, Deck, Notice, Fact, SX,
 } from '@/components/salary/ui'
 import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolbar'
 import SaveBar from '@/components/salary/SaveBar'
@@ -24,11 +24,11 @@ import {
  * generated and the grid silently collapses to one stacked column.
  */
 const COLS = [
-  'minmax(150px,1.5fr)',  // person
-  'minmax(128px,1.3fr)',  // account holder
-  'minmax(104px,1fr)',    // bank
-  'minmax(126px,1.2fr)',  // account number
-  'minmax(92px,0.85fr)',  // IFSC
+  'minmax(170px,1.5fr)',  // person
+  'minmax(140px,1.3fr)',  // account holder
+  'minmax(116px,1fr)',    // bank
+  'minmax(140px,1.2fr)',  // account number
+  'minmax(108px,0.85fr)', // IFSC
 ].join(' ')
 
 const COLUMNS: Column[] = [
@@ -39,7 +39,7 @@ const COLUMNS: Column[] = [
   { label: 'IFSC' },
 ]
 
-const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
+const CELL = SX.cell
 
 type Kind = 'staff' | 'driver' | 'support'
 type Account = StaffBankAccount | DriverBankAccount | SupportStaffBankAccount
@@ -189,20 +189,19 @@ export default function BankAccountsSection() {
   const onFile = entries.filter(e => e.existing).length
 
   return (
-    <>
-      <SectionBar
-        title="Bank accounts"
-        hint={loading
-          ? 'Admin-managed · staff, drivers & support staff'
-          : `${onFile} of ${entries.length} on file · admin-managed`}
-      />
+    <Deck title="Bank accounts" icon={Landmark}>
+      <p className="px-1 pb-2 text-[12px] text-slate-500 leading-snug">
+        {loading
+          ? 'Where each salary is paid. Only admins can change these.'
+          : `${onFile} of ${entries.length} on file · only admins can change these`}
+      </p>
 
       {!loading && entries.length > 0 && (
         <RosterToolbar
           search={search} onSearchChange={setSearch}
           kind={kindFilter} onKindChange={setKindFilter} kindCounts={kindCounts}
           toggles={[
-            { key: 'missing', label: 'Missing bank details', selected: missingOnly, onClick: () => setMissingOnly(v => !v) },
+            { key: 'missing', label: 'No bank details', selected: missingOnly, onClick: () => setMissingOnly(v => !v) },
           ]}
           sortOptions={[{ key: 'name', label: 'Name' }, { key: 'status', label: 'On file' }]}
           sort={sort} onSortChange={setSort} desc={desc} onDescChange={setDesc}
@@ -212,21 +211,19 @@ export default function BankAccountsSection() {
       )}
 
       {incomplete > 0 && (
-        <p className="text-[10.5px] text-[#7A6220] mb-2">
-          {incomplete} row{incomplete === 1 ? '' : 's'} still need a holder, account number and IFSC before they can save.
-        </p>
+        <Notice tone="warn" className="mb-2.5">
+          {incomplete} {incomplete === 1 ? 'row needs' : 'rows need'} a holder, account number and IFSC before {incomplete === 1 ? 'it saves' : 'they save'}.
+        </Notice>
       )}
 
-      <Sheet minWidth={700}>
-        {/* The header scrolls sideways with the rows it labels, so it stays on
-            phones too — five unlabelled bank fields are read by guesswork. */}
-        <SheetHead cols={COLS} columns={COLUMNS} />
+      <Sheet minWidth={780}>
+        <SheetHead cols={COLS} columns={COLUMNS} className="hidden lg:flex" />
         {loading ? (
           <SheetSkeleton />
         ) : entries.length === 0 ? (
           <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
-          <Note>No one matches the current search and filters.</Note>
+          <Note>No one matches the search and filters.</Note>
         ) : visible.map(e => (
           <BankRow
             key={e.key}
@@ -237,7 +234,7 @@ export default function BankAccountsSection() {
           />
         ))}
       </Sheet>
-    </>
+    </Deck>
   )
 }
 
@@ -251,23 +248,49 @@ function BankRow({ entry, draft, dirty, onChange }: {
   // The edge bar doubles as the unsaved marker, so a pending row is obvious
   // without a per-row control taking up a column.
   const accent = dirty ? '#8A6D1F' : existing ? '#B8983C' : 'transparent'
+  const role = kind === 'support' ? ((person as SupportStaff).designation || 'Support staff') : getDisplayRole(person as UserProfile)
+
+  const who = (size: number) => (
+    <div className="flex items-center gap-2 min-w-0">
+      <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={size} userId={kind === 'support' ? undefined : person.id} />
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="font-semibold text-slate-900 text-[13px] break-words">{person.full_name}</p>
+        <p className="text-[11.5px] text-slate-500 break-words flex items-center gap-1">
+          {kind === 'driver' && <Bus size={11} className="flex-shrink-0" />}
+          {kind === 'support' && <HardHat size={11} className="flex-shrink-0" />}
+          {role}
+        </p>
+      </div>
+    </div>
+  )
+
+  const holder = <input value={draft.holder} onChange={e => onChange({ holder: e.target.value })} placeholder="Name on the account" aria-label="Account holder" className={CELL} />
+  const bankName = <input value={draft.bankName} onChange={e => onChange({ bankName: e.target.value })} placeholder="Bank" aria-label="Bank" className={CELL} />
+  const account = <input value={draft.account} inputMode="numeric" onChange={e => onChange({ account: e.target.value })} placeholder="Account number" aria-label="Account number" className={`${CELL} tabular-nums`} />
+  const ifsc = <input value={draft.ifsc} onChange={e => onChange({ ifsc: e.target.value })} placeholder="IFSC" aria-label="IFSC" className={`${CELL} uppercase`} />
+
   return (
-    <SheetRow cols={COLS} accent={accent}>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={kind === 'support' ? undefined : person.id} />
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
-          <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
-            {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
-            {kind === 'support' && <HardHat size={8} className="flex-shrink-0" />}
-            {kind === 'support' ? ((person as SupportStaff).designation || 'Support Staff') : getDisplayRole(person as UserProfile)}
-          </p>
+    <>
+      {/* Phone and tablet: one card per person, every field labelled. */}
+      <div className="lg:hidden relative px-3.5 py-3 border-b border-[#F0ECE3] last:border-b-0">
+        <span className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: accent }} />
+        {who(30)}
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-x-3 gap-y-2.5 mt-3">
+          <Fact label="Account holder">{holder}</Fact>
+          <Fact label="Bank">{bankName}</Fact>
+          <Fact label="Account number">{account}</Fact>
+          <Fact label="IFSC">{ifsc}</Fact>
         </div>
       </div>
-      <input value={draft.holder} onChange={e => onChange({ holder: e.target.value })} placeholder="Account holder" className={CELL} />
-      <input value={draft.bankName} onChange={e => onChange({ bankName: e.target.value })} placeholder="Bank" className={CELL} />
-      <input value={draft.account} onChange={e => onChange({ account: e.target.value })} placeholder="Account no." className={`${CELL} tabular-nums`} />
-      <input value={draft.ifsc} onChange={e => onChange({ ifsc: e.target.value })} placeholder="IFSC" className={`${CELL} uppercase`} />
-    </SheetRow>
+
+      {/* Desktop: the sheet. The edge bar doubles as the unsaved marker. */}
+      <SheetRow cols={COLS} accent={accent} className="hidden lg:flex">
+        {who(24)}
+        {holder}
+        {bankName}
+        {account}
+        {ifsc}
+      </SheetRow>
+    </>
   )
 }

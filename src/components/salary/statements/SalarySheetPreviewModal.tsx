@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react'
 import { Download, FileSpreadsheet, Loader2, Search, X } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
+import { Btn, SALARY_ICON, SX } from '@/components/salary/ui'
 import SmartTypeahead from '@/components/SmartTypeahead'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SalaryCycle, formatPeriod } from '@/lib/salary'
@@ -107,35 +108,30 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
     setBusy(false)
   }
 
-  const chip = (active: boolean) => `text-[11px] font-semibold px-2.5 py-1.5 border transition-colors ${
-    active
-      ? 'bg-[#27272A] border-[#27272A] text-white'
-      : 'bg-white border-[#E4E4E7] text-[#71717A] hover:border-[#A1A1AA] hover:text-[#27272A]'
-  }`
+  const chip = SX.choice
 
   return (
     <ModalShell
       onClose={onClose}
       size="2xl"
       sharp
-      title="Salary Sheet"
+      title="Salary sheet"
       subtitle={`${period} · ${filtered.length} of ${rows.length} record${rows.length === 1 ? '' : 's'}`}
       icon={<FileSpreadsheet size={16} />}
-      iconClassName="bg-[#27272A] text-white"
+      iconClassName={SALARY_ICON}
       footer={
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-[#71717A]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[12px] text-slate-500 tabular-nums">
             {filtered.length} record{filtered.length === 1 ? '' : 's'} · {formatINR(totalNet)} net
           </p>
-          <button onClick={handleDownload} disabled={busy || filtered.length === 0}
-            className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
-            {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-            {busy ? 'Building…' : 'Download'}
-          </button>
+          <Btn tone="dark" onClick={handleDownload} disabled={busy || filtered.length === 0}>
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            {busy ? 'Building…' : 'Download Excel'}
+          </Btn>
         </div>
       }
     >
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-1.5">Categories</p>
+      <p className={`${SX.heading} mb-1.5`}>Who to include</p>
       <div className="flex flex-wrap gap-1.5 mb-3">
         {CATEGORY_ORDER.filter(cat => categoryCounts[cat] > 0).map(cat => (
           <button key={cat} onClick={() => toggleCategory(cat)} className={chip(categories.has(cat))}>
@@ -146,7 +142,7 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
 
       {teams.length > 0 && (
         <>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-1.5">Department / team</p>
+          <p className={`${SX.heading} mb-1.5`}>Department or team</p>
           {selectedTeams.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-1.5">
               {selectedTeams.map(t => (
@@ -164,9 +160,9 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
               onSelect={t => { toggleTeam(t.id); setTeamQuery('') }}
               getKey={t => t.id}
               placeholder="Search a department or team…"
-              className="flex items-center gap-2 border border-[#E4E4E7] bg-white px-3 py-2 focus-within:border-[#27272A] transition-colors"
+              className="flex items-center gap-2 h-9 rounded-[10px] border border-[#DDD8CC] bg-white px-3 focus-within:border-[#B8983C] focus-within:ring-2 focus-within:ring-[#B8983C]/20 transition"
               renderSuggestion={(t, active) => (
-                <div className={`px-3 py-2 text-sm ${active ? 'bg-[#F5F5F5]' : 'bg-white'}`}>{t.name}</div>
+                <div className={`px-3 py-2 text-[13.5px] ${active ? 'bg-[#FAF7F0]' : 'bg-white'}`}>{t.name}</div>
               )}
             />
           </div>
@@ -174,41 +170,41 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
       )}
 
       <div className="relative mb-3">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          className="w-full bg-white border border-[#E4E4E7] pl-8 pr-3 py-2 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+          placeholder="Search by name"
+          className={`${SX.field} pl-8`}
         />
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-[#A1A1AA] text-center py-10">No staff match these filters.</p>
+        <p className="text-[13px] text-slate-500 text-center py-10">Nobody matches these choices.</p>
       ) : (
-        <div className="overflow-x-auto border border-[#E4E4E7]">
-          <table className="w-full text-[10px] tabular-nums">
+        <div className="fx-card overflow-x-auto">
+          <table className="w-full text-[12px] tabular-nums">
             <thead>
-              <tr className="bg-[#27272A] text-white">
-                <th className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">Name</th>
-                <th className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">Designation</th>
-                <th className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">Category</th>
-                <th className="text-right font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">Salary</th>
-                <th className="text-right font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">PF</th>
-                <th className="text-right font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">ESI</th>
-                <th className="text-right font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">Net</th>
+              <tr className="bg-[#F7F5F0] border-b border-[#EEEAE1] text-slate-500">
+                <th className="text-left text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">Name</th>
+                <th className="text-left text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">Designation</th>
+                <th className="text-left text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">Category</th>
+                <th className="text-right text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">Salary</th>
+                <th className="text-right text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">PF</th>
+                <th className="text-right text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">ESI</th>
+                <th className="text-right text-[11.5px] font-medium px-2.5 py-2 whitespace-nowrap">Net</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r, i) => (
-                <tr key={i} className="border-b border-[#F4F4F5] last:border-0">
-                  <td className="px-2 py-1.5 text-[#18181B] font-semibold whitespace-nowrap">{r.name}</td>
-                  <td className="px-2 py-1.5 text-[#52525B] whitespace-nowrap">{r.designation}</td>
-                  <td className="px-2 py-1.5 text-[#52525B] whitespace-nowrap">{CATEGORY_LABEL[r.category]}</td>
-                  <td className="px-2 py-1.5 text-right text-[#52525B] whitespace-nowrap">{formatINR(r.baseAmount)}</td>
-                  <td className="px-2 py-1.5 text-right text-[#52525B] whitespace-nowrap">{r.pf ? formatINR(r.pf) : '—'}</td>
-                  <td className="px-2 py-1.5 text-right text-[#52525B] whitespace-nowrap">{r.esi ? formatINR(r.esi) : '—'}</td>
-                  <td className="px-2 py-1.5 text-right text-[#18181B] font-semibold whitespace-nowrap">{formatINR(r.net)}</td>
+                <tr key={i} className="border-b border-[#F0ECE3] last:border-0">
+                  <td className="px-2.5 py-1.5 text-slate-900 font-semibold whitespace-nowrap">{r.name}</td>
+                  <td className="px-2.5 py-1.5 text-slate-600 whitespace-nowrap">{r.designation}</td>
+                  <td className="px-2.5 py-1.5 text-slate-600 whitespace-nowrap">{CATEGORY_LABEL[r.category]}</td>
+                  <td className="px-2.5 py-1.5 text-right text-slate-600 whitespace-nowrap">{formatINR(r.baseAmount)}</td>
+                  <td className="px-2.5 py-1.5 text-right text-slate-600 whitespace-nowrap">{r.pf ? formatINR(r.pf) : '—'}</td>
+                  <td className="px-2.5 py-1.5 text-right text-slate-600 whitespace-nowrap">{r.esi ? formatINR(r.esi) : '—'}</td>
+                  <td className="px-2.5 py-1.5 text-right text-slate-900 font-semibold whitespace-nowrap">{formatINR(r.net)}</td>
                 </tr>
               ))}
             </tbody>
@@ -216,7 +212,7 @@ export default function SalarySheetPreviewModal({ cycle, rows, teams, onClose }:
         </div>
       )}
 
-      {message && <p className="text-[11px] text-[#71717A] mt-3 leading-relaxed">{message}</p>}
+      {message && <p className="text-[12.5px] text-slate-600 mt-3 leading-relaxed">{message}</p>}
     </ModalShell>
   )
 }

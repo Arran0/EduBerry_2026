@@ -1,24 +1,27 @@
-// Shared admin-aesthetic tokens for the Salary Manager — zinc + honey gold,
-// sharp cards. Mirrors the Fee Manager (/more/fees) so the two admin hubs feel
-// like one system.
+// Shared admin tokens for the Salary Manager, under the names the salary and
+// driver-payroll screens already import. They are the module's glass language
+// (see ./ui.tsx): square sheets, capsule controls, sentence-case labels.
+import { LABEL, SX } from '@/components/salary/ui'
+
 export const ADMIN = {
-  card: 'bg-white border border-[#E4E4E7] rounded-xl',
+  card: 'fx-card',
   // Search input with room for a left icon + right clear button.
-  input: 'w-full bg-white border border-[#E4E4E7] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
+  input: `${SX.field} pl-9 pr-9`,
   // Plain input (no leading icon) for forms.
-  inputPlain: 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
-  label: 'text-[10px] font-bold uppercase tracking-widest text-[#71717A]',
-  darkBtn: 'flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
-  ghostBtn: 'flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#D4D4D8] text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-50',
+  inputPlain: SX.field,
+  label: LABEL,
+  darkBtn: SX.dark,
+  ghostBtn: SX.ghost,
 } as const
 
 // Honey-gold accent used on dark surfaces (icons, highlights).
 export const ADMIN_GOLD = '#B8983C'
 
-// Status chips, restyled into the zinc palette (shared across cycle + record states).
+// Colour for a cycle's status chip. The frame (height, radius, type) comes
+// from whoever draws the chip.
 export const CYCLE_CHIP: Record<'open' | 'closed', string> = {
-  open: 'bg-[#F4F4F5] text-[#71717A] border border-[#E4E4E7]',
-  closed: 'bg-[#27272A] text-white border border-[#27272A]',
+  open: 'bg-slate-100 text-slate-600',
+  closed: 'bg-[#27272A] text-white',
 }
 
 // The stored status values stay 'open'/'closed'; the interface speaks of
@@ -30,23 +33,20 @@ export const CYCLE_STATUS_LABEL: Record<'open' | 'closed', string> = {
 }
 
 /** Shown once every record in a cycle has been paid out. */
-export const PAID_CHIP = 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+export const PAID_CHIP = 'bg-[#E6F2EA] text-[#1F6B42]'
 
-// ──────────────────────────────────────────────────────────────
-// Sharp-edge variants — the pay cycle sheet and its popups
-//
-// The cycle page is a spreadsheet, and rounded corners on a dense grid of
-// numbers cost horizontal room and soften something that should read as a
-// ledger. These are the same tokens with every radius removed.
-// ──────────────────────────────────────────────────────────────
+/**
+ * The pay cycle sheet and its popups. Same language, one step denser: the
+ * cycle page is a spreadsheet.
+ */
 export const SHARP = {
-  card: 'bg-white border border-[#E4E4E7]',
-  input: 'w-full bg-white border border-[#E4E4E7] px-2.5 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors',
-  darkBtn: 'inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-[11px] font-semibold px-2.5 py-1.5 transition-colors disabled:opacity-40',
-  ghostBtn: 'inline-flex items-center justify-center gap-1.5 bg-white border border-[#E4E4E7] text-[#71717A] hover:text-[#27272A] hover:border-[#A1A1AA] text-[11px] font-semibold px-2.5 py-1.5 transition-colors disabled:opacity-40',
+  card: 'fx-card',
+  input: SX.field,
+  darkBtn: SX.dark,
+  ghostBtn: SX.ghost,
   /** A ghost button holding a non-default selection — the filter/sort chips. */
-  activeBtn: 'inline-flex items-center justify-center gap-1.5 bg-[#27272A] border border-[#27272A] text-white text-[11px] font-semibold px-2.5 py-1.5 transition-colors',
-  label: 'text-[9px] font-bold uppercase tracking-[0.12em] text-[#A1A1AA]',
+  activeBtn: SX.choice(true),
+  label: LABEL,
 } as const
 
 /**
@@ -54,11 +54,11 @@ export const SHARP = {
  * bar in the stats strip. Net is the neutral remainder; the two withholdings
  * carry hue.
  *
- * Checked with the palette validator against this page's #FAFAFA surface:
- * the indigo/rose pair clears CVD separation (ΔE 25.4 protan) and the
- * normal-vision floor, and both clear 3:1 contrast. Every slice is also
- * labelled with its own figure beside the bar, so identity is never colour
- * alone. Don't re-step these without re-running the validator.
+ * Checked with the palette validator against a white surface: the indigo/rose
+ * pair clears CVD separation (ΔE 25.4 protan) and the normal-vision floor, and
+ * both clear 3:1 contrast. Every slice is also labelled with its own figure
+ * beside the bar, so identity is never colour alone. Don't re-step these
+ * without re-running the validator.
  */
 export const OUTLAY_COLORS = {
   net: '#27272A',

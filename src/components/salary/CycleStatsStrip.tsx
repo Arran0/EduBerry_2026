@@ -55,15 +55,15 @@ export default function CycleStatsStrip({ totals, filtered }: {
   const withheldPct = gross > 0 ? ((totals.statutory + totals.lop) / gross) * 100 : 0
 
   return (
-    <div className="bg-white border-y sm:border border-[#E4E4E7] mb-2.5">
+    <div className="fx-card fx-bleed mb-2.5">
       {/* 1px hairlines in both directions: the grid's background shows through
           a one-pixel gap between white cells. `divide-x` can't do this — it
           wraps to three columns on a phone and would draw a stray rule down
           the card's own left edge on the second row. */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-[#F4F4F5]">
-        <Cell label={filtered ? 'Shown' : 'Staff'} value={String(totals.count)} />
+      <div className="grid grid-cols-2 min-[420px]:grid-cols-3 lg:grid-cols-6 gap-px bg-[#EEEAE1]">
+        <Cell label={filtered ? 'People shown' : 'People'} value={String(totals.count)} />
         <Cell label="Base total" value={formatINR(totals.base)} />
-        <Cell label="Bonus & adj." value={formatINR(totals.additions)}
+        <Cell label="Bonus and extras" value={formatINR(totals.additions)}
           tone={totals.additions > 0 ? OUTLAY_COLORS.bonus : totals.additions < 0 ? OUTLAY_COLORS.lop : undefined} />
         <Cell label="Statutory" value={formatINR(totals.statutory)} tone={totals.statutory > 0 ? OUTLAY_COLORS.statutory : undefined} swatch />
         <Cell label="Loss of pay" value={formatINR(totals.lop)} tone={totals.lop > 0 ? OUTLAY_COLORS.lop : undefined} swatch />
@@ -71,11 +71,11 @@ export default function CycleStatsStrip({ totals, filtered }: {
       </div>
 
       {gross > 0 && (
-        <div className="border-t border-[#F4F4F5] px-3 py-2.5">
+        <div className="border-t border-[#EEEAE1] px-3.5 py-2.5">
           {/* Stacked composition of the gross outlay. The 2px gaps are drawn as
               surface-coloured borders rather than flex gaps so the segments
               always add up to exactly 100% of the track. */}
-          <div className="flex h-2 w-full overflow-hidden bg-[#F4F4F5]" role="img"
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-[#F1EEE6]" role="img"
             aria-label={slices.map(s => `${s.label} ${formatINR(s.value)}`).join(', ')}>
             {slices.map((s, i) => (
               <div
@@ -91,14 +91,14 @@ export default function CycleStatsStrip({ totals, filtered }: {
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {slices.map(s => (
-              <span key={s.key} className="inline-flex items-center gap-1.5 text-[10px] text-[#71717A]">
-                <span className="w-2 h-2 flex-shrink-0" style={{ background: s.color }} />
+              <span key={s.key} className="inline-flex items-center gap-1.5 text-[11.5px] text-slate-600">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
                 {s.label}
-                <span className="tabular-nums text-[#A1A1AA]">{((s.value / gross) * 100).toFixed(1)}%</span>
+                <span className="tabular-nums text-slate-400">{((s.value / gross) * 100).toFixed(1)}%</span>
               </span>
             ))}
-            <span className="ml-auto text-[10px] text-[#A1A1AA] tabular-nums">
-              {withheldPct.toFixed(1)}% withheld of {formatINR(gross)} gross
+            <span className="sm:ml-auto text-[11.5px] text-slate-500 tabular-nums">
+              {withheldPct.toFixed(1)}% held back of {formatINR(gross)} gross
             </span>
           </div>
         </div>
@@ -116,13 +116,13 @@ function Cell({ label, value, tone, strong, swatch }: {
   swatch?: boolean
 }) {
   return (
-    <div className="px-2.5 py-2 min-w-0 bg-white">
-      <p className={`${strong ? 'text-[15px]' : 'text-[13px]'} font-bold tabular-nums truncate text-[#18181B]`}
+    <div className="px-3 py-2.5 min-w-0 bg-white">
+      <p className={`${strong ? 'text-[16px]' : 'text-[14px]'} font-bold tabular-nums leading-tight break-all text-slate-900`}
         style={tone ? { color: tone } : undefined}>
         {value}
       </p>
-      <p className="text-[9px] text-[#A1A1AA] uppercase tracking-[0.12em] font-bold mt-0.5 truncate flex items-center gap-1">
-        {swatch && tone && <span className="w-1.5 h-1.5 flex-shrink-0" style={{ background: tone }} />}
+      <p className="text-[11.5px] text-slate-500 font-medium mt-0.5 leading-snug flex items-center gap-1.5">
+        {swatch && tone && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: tone }} />}
         {label}
       </p>
     </div>

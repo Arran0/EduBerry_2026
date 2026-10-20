@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
-import { CalendarRange, AlertCircle } from 'lucide-react'
+import { CalendarRange, Loader2 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
-import { Btn, LABEL } from '@/components/salary/ui'
+import { Btn, FormGroup, FormRow, Notice, SALARY_ICON, SX } from '@/components/salary/ui'
 import { generateSalaryCycle, ensureDriverRecordsInCycle, ensureSupportStaffRecordsInCycle, formatPeriod } from '@/lib/salary'
 import { defaultPayrollMonth } from '@/lib/salaryStats'
 
@@ -54,47 +54,36 @@ export default function NewCycleForm({ onClose, onCreated }: {
   return (
     <ModalShell
       onClose={onClose}
-      size="sm"
+      size="md"
       sharp
       title="New pay cycle"
-      subtitle="Staff, bus drivers & support staff together"
-      icon={<CalendarRange size={15} />}
-      iconClassName="bg-[#27272A] text-[#B8983C]"
+      subtitle="Staff, drivers and support staff in one cycle"
+      icon={<CalendarRange size={16} />}
+      iconClassName={SALARY_ICON}
       footer={
-        <div className="flex gap-1.5 justify-end">
-          <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Btn tone="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
           <Btn tone="dark" onClick={save} disabled={saving}>
+            {saving && <Loader2 size={13} className="animate-spin" />}
             {saving ? 'Creating…' : `Run ${formatPeriod(month, year)}`}
           </Btn>
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className={`${LABEL} block mb-1`}>Month</label>
-          <select value={month} onChange={e => setMonth(Number(e.target.value))} className={FIELD}>
+      <FormGroup note="Everyone gets a record at their base salary. Running a month again only adds people who are missing from it; nothing already there changes.">
+        <FormRow label="Month">
+          <select value={month} onChange={e => setMonth(Number(e.target.value))} className={`${SX.field} w-36 cursor-pointer`}>
             {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
-        </div>
-        <div>
-          <label className={`${LABEL} block mb-1`}>Year</label>
-          <select value={year} onChange={e => setYear(Number(e.target.value))} className={FIELD}>
+        </FormRow>
+        <FormRow label="Year">
+          <select value={year} onChange={e => setYear(Number(e.target.value))} className={`${SX.field} w-36 cursor-pointer`}>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-        </div>
-      </div>
+        </FormRow>
+      </FormGroup>
 
-      <p className="text-[12px] text-[#6B675A] leading-relaxed mt-3">
-        Creates a record for every staff member, bus driver and support staff member, using their base salary where one is set.
-        Re-running a month only adds records for people who don&apos;t have one yet — nothing already in the
-        cycle is touched.
-      </p>
-
-      {error && (
-        <div className="flex items-start gap-1.5 p-2 mt-3 bg-[#FCECEC] border border-[#EFCCCC] text-[#A93232] text-[11.5px]">
-          <AlertCircle size={13} className="flex-shrink-0 mt-px" /> {error}
-        </div>
-      )}
+      {error && <Notice tone="error" className="mt-3">{error}</Notice>}
     </ModalShell>
   )
 }
@@ -103,5 +92,3 @@ const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
-
-const FIELD = 'w-full bg-white border border-[#E3DFD3] px-2 py-[7px] text-[12.5px] leading-none text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors'

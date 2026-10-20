@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { SHARP } from '@/components/salary/adminUi'
+import { Btn, SX } from '@/components/salary/ui'
 import { SalaryRecord, SalaryRecordItem, addSalaryItem, deleteSalaryItem } from '@/lib/salary'
 
 export interface PreviewItem { label: string; amount: number }
@@ -47,54 +47,56 @@ export default function SalaryRecordItemsEditor({ record, onChanged, previewItem
     // expanding a row pushes half as much of the sheet off the screen.
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 items-start">
       {/* Base + items tally — always reflects Net pay exactly */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-[#71717A]">Base salary</span>
-          <span className="text-[#27272A] tabular-nums">{formatINR(Number(record.base_amount))}</span>
+      <div className="fx-card px-3 py-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-2 text-[12.5px]">
+          <span className="text-slate-600">Base salary</span>
+          <span className="text-slate-900 tabular-nums">{formatINR(Number(record.base_amount))}</span>
         </div>
         {previewItems?.map(it => (
-          <div key={it.label} className="flex items-center gap-2 text-xs">
-            <span className="flex-1 text-[#A1A1AA] truncate italic">{it.label}</span>
-            <span className={`tabular-nums ${it.amount < 0 ? 'text-[#BE123C]' : it.amount > 0 ? 'text-[#15803D]' : 'text-[#A1A1AA]'}`}>
+          <div key={it.label} className="flex items-center gap-2 text-[12.5px]">
+            <span className="flex-1 min-w-0 text-slate-500 break-words">{it.label} <span className="text-slate-400">(worked out)</span></span>
+            <span className={`tabular-nums ${it.amount < 0 ? 'text-[#BE123C]' : it.amount > 0 ? 'text-[#15803D]' : 'text-slate-400'}`}>
               {it.amount < 0 ? '-' : it.amount > 0 ? '+' : ''}{formatINR(Math.abs(it.amount))}
             </span>
-            <span className="w-[13px] flex-shrink-0" />
+            <span className="w-7 flex-shrink-0" />
           </div>
         ))}
         {items.map(it => (
-          <div key={it.id} className="flex items-center gap-2 text-xs">
-            <span className="flex-1 text-[#71717A] truncate">{it.label}</span>
+          <div key={it.id} className="flex items-center gap-2 text-[12.5px]">
+            <span className="flex-1 min-w-0 text-slate-700 break-words">{it.label}</span>
             <span className={`tabular-nums ${Number(it.amount) < 0 ? 'text-[#BE123C]' : 'text-[#15803D]'}`}>
               {Number(it.amount) < 0 ? '-' : '+'}{formatINR(Math.abs(Number(it.amount)))}
             </span>
-            <button onClick={() => remove(it.id)} disabled={busy}
-              className="p-0.5 text-[#D4D4D8] hover:text-[#BE123C] transition-colors">
+            <button onClick={() => remove(it.id)} disabled={busy} aria-label={`Remove ${it.label}`}
+              className={`${SX.icon} !w-7 !h-7 hover:!text-[#BE123C]`}>
               <Trash2 size={13} />
             </button>
           </div>
         ))}
-        <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-[#E4E4E7]">
-          <span className="text-xs font-semibold text-[#27272A]">Net pay</span>
-          <span className="text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+        <div className="flex items-center justify-between gap-2 pt-1.5 mt-1 border-t border-[#EEEAE1]">
+          <span className="text-[12.5px] font-semibold text-slate-900">Net pay</span>
+          <span className="text-[14px] font-bold text-slate-900 tabular-nums">{formatINR(net)}</span>
         </div>
       </div>
 
       {/* Add bonus / deduction — amount controls first, label describes it below */}
-      <div className="space-y-1.5">
-        <div className="flex gap-1.5">
-          <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'deduction')}
-            className="border border-[#E4E4E7] px-2 py-1.5 text-xs bg-white text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'deduction')} aria-label="Bonus or deduction"
+            className={`${SX.field} !w-auto flex-shrink-0 cursor-pointer`}>
             <option value="bonus">+ Bonus</option>
             <option value="deduction">− Deduction</option>
           </select>
-          <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount"
-            className="flex-1 min-w-0 bg-white border border-[#E4E4E7] px-2 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
-          <button onClick={add} disabled={busy || !label.trim() || !amount} className={SHARP.darkBtn}>
-            <Plus size={13} /> Add
-          </button>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount"
+            aria-label="Amount" className={`${SX.field} flex-1 min-w-0 tabular-nums`} />
         </div>
-        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Bonus / deduction label"
-          className={SHARP.input} />
+        <div className="flex gap-2">
+          <input value={label} onChange={e => setLabel(e.target.value)} placeholder="What it is for"
+            aria-label="Label" className={`${SX.field} flex-1 min-w-0`} />
+          <Btn tone="dark" onClick={add} disabled={busy || !label.trim() || !amount} className="!h-9">
+            <Plus size={14} /> Add
+          </Btn>
+        </div>
       </div>
     </div>
   )

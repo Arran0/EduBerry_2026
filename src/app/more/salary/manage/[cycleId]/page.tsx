@@ -6,13 +6,12 @@ import dynamic from 'next/dynamic'
 import { AnimatePresence } from 'framer-motion'
 import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, CalendarRange, Send, Download, ChevronRight,
+  ArrowLeft, CalendarRange, Send, Download, ChevronRight, Loader2,
   Receipt, SlidersHorizontal, Lock, LockOpen, CheckCheck, FileText, BadgeCheck, CalendarDays, Landmark,
   ShieldAlert,
 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
-import ModalShell from '@/components/ui/ModalShell'
 import ModalErrorBoundary from '@/components/ui/ModalErrorBoundary'
 import SalaryRecordItemsEditor, { PreviewItem } from '@/components/salary/SalaryRecordItemsEditor'
 import CycleSettingsModal from '@/components/salary/CycleSettingsModal'
@@ -23,8 +22,10 @@ import { describeRecordEdits, editFingerprint } from '@/lib/salaryEdits'
 import AttendanceCalendarModal from '@/components/salary/AttendanceCalendarModal'
 import CycleStatsStrip, { CycleTotals } from '@/components/salary/CycleStatsStrip'
 import CycleToolbar, { CycleFilters, DEFAULT_CYCLE_FILTERS } from '@/components/salary/CycleToolbar'
-import { ADMIN_GOLD, CYCLE_CHIP, CYCLE_STATUS_LABEL, PAID_CHIP, SHARP } from '@/components/salary/adminUi'
-import { SHEET } from '@/components/bus/adminUI'
+import { CYCLE_STATUS_LABEL } from '@/components/salary/adminUi'
+import {
+  Btn, Chip, ConfirmModal, Deck, Fact, IconChip, LABEL, Loading, Note, Notice, Num, Panel, SHELL, SX,
+} from '@/components/salary/ui'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { getDisplayRole, UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -118,7 +119,10 @@ function salarySheetDesignation(r: SalaryRecord): string {
  * from several string pieces to stay readable) would never get generated and
  * the grid would silently collapse to a single stacked column.
  */
-const GRID = 'grid items-center gap-x-1.5'
+const GRID = 'grid items-center gap-x-2'
+
+/** The laptop sheet below xl: who, then the five figures that decide a payslip. */
+const COMPACT_COLS = 'minmax(0,2.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr) 20px'
 const GRID_COLS = [
   // The sign-off sits first so it stays on screen at the width a phone scrolls
   // the sheet to — a check you have to scroll sideways to find is one that
@@ -715,8 +719,8 @@ export default function SalaryCycleDetailPage() {
     if (unverified.length > 0) {
       setConfirmAction(null)
       setDisburseMsg(
-        `${unverified.length} hand-edited row(s) still need checking before this cycle can be locked. ` +
-        'They are at the top of the sheet — tick each one to confirm its figures.',
+        `${unverified.length} row(s) with typed-in figures need ticking before this cycle can lock. ` +
+        'They are at the top of the sheet.',
       )
       return
     }
@@ -823,7 +827,7 @@ export default function SalaryCycleDetailPage() {
     if (!res.success) { setDisburseMsg(res.error ?? 'Failed to start payouts'); return }
 
     if (res.manual) {
-      setDisburseMsg('Bank disbursement is off — download the bank CSV above, upload it at your bank to disburse, then mark all as paid.')
+      setDisburseMsg('Bank payouts are off. Download the bank file above, upload it at your bank, then mark everyone paid.')
     } else if (res.file) {
       // bank_file mode: the money has not moved yet, so hand the admin the file
       // straight away rather than leaving them to hunt for it.
@@ -834,9 +838,9 @@ export default function SalaryCycleDetailPage() {
       a.download = res.file.filename
       a.click()
       URL.revokeObjectURL(url)
-      setDisburseMsg(`Prepared ${res.initiated ?? 0} transfer(s) as ${res.file.filename}. Upload it at your bank to release the money, then mark all as paid.`)
+      setDisburseMsg(`${res.initiated ?? 0} transfer(s) saved as ${res.file.filename}. Upload it at your bank to release the money, then mark everyone paid.`)
     } else {
-      setDisburseMsg(`Initiated ${res.initiated ?? 0} transfer(s) with your bank.`)
+      setDisburseMsg(`${res.initiated ?? 0} transfer(s) sent to your bank.`)
     }
     load()
   }
@@ -858,20 +862,20 @@ export default function SalaryCycleDetailPage() {
       setDisburseMsg(
         notApproved === 0
           ? cash > 0 && missingBank.length === 0
-            ? `Nothing to export: all ${cash} ${narrowed ? 'filtered ' : ''}record(s) are marked paid by cash.`
-            : 'No records with bank details on file to export. Add bank accounts first.'
+            ? `Nothing to download: all ${cash} ${narrowed ? 'filtered ' : ''}record(s) are paid in cash.`
+            : 'Nobody here has bank details on file. Add bank accounts first.'
           : !closed
-            ? 'Nothing to export yet — lock the cycle first so its records are approved for payment.'
-            : `Nothing to export: all ${notApproved} ${narrowed ? 'filtered ' : ''}record(s) are already marked paid.`,
+            ? 'Nothing to download yet. Lock the cycle first so its records are approved for payment.'
+            : `Nothing to download: all ${notApproved} ${narrowed ? 'filtered ' : ''}record(s) are already marked paid.`,
       )
       return
     }
     downloadCsv(fileName, rows)
     setDisburseMsg(
-      `Exported ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.csv.` +
-      (missingBank.length ? ` Skipped (no bank details): ${missingBank.join(', ')}.` : '') +
-      (notApproved > 0 ? ` Skipped ${notApproved} already-paid or unapproved record(s).` : '') +
-      (cash > 0 ? ` Skipped ${cash} paid-by-cash record(s).` : ''),
+      `Saved ${included}${narrowed ? ` of the ${visibleRecords.length} filtered` : ''} record(s) to ${fileName}.csv.` +
+      (missingBank.length ? ` Left out, no bank details: ${missingBank.join(', ')}.` : '') +
+      (notApproved > 0 ? ` Left out ${notApproved} already paid or not yet approved.` : '') +
+      (cash > 0 ? ` Left out ${cash} paid in cash.` : ''),
     )
   }
 
@@ -914,393 +918,470 @@ export default function SalaryCycleDetailPage() {
     }
   }), [records, computedRows, rowFigures])
 
+  const period = cycle ? formatPeriod(cycle.period_month, cycle.period_year) : ''
+
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="salary" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
-        {/* Phones give the sheet the entire viewport width — a payroll grid is
-            the one screen where a 16px gutter on each side is a column lost. */}
-        <div className="max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 py-3 sm:py-6">
-          <div className="px-2 sm:px-0">
-            <Link href="/more/salary" className="inline-flex items-center gap-1.5 text-xs text-[#71717A] hover:text-[#27272A] mb-2.5 transition-colors">
-              <ArrowLeft size={14} /> Salary Manager
-            </Link>
-          </div>
+      <div data-page-theme="salary" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
+        <div className={`${SHELL} px-4 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-14`}>
+          <Link href="/more/salary"
+            className="lg-pill inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 mb-3 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900 transition-colors">
+            <ArrowLeft size={14} /> Salary
+          </Link>
 
           {loading ? (
-            <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading…</p></div>
+            <Loading />
           ) : !cycle ? (
-            <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
-              Cycle not found.
-            </div>
+            <Panel><Note>This cycle does not exist any more.</Note></Panel>
           ) : (
             <>
-              {/* Wraps rather than squeezes: on a narrow phone the three controls
-                  drop to their own line instead of crushing the period heading. */}
-              <div className="flex flex-wrap items-center gap-2 mb-2.5 px-2 sm:px-0">
-                <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                  <CalendarRange style={{ color: ADMIN_GOLD }} size={17} />
-                </div>
-                <div className="flex-1 min-w-[150px]">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h1 className="font-display text-lg sm:text-xl font-bold text-[#18181B] leading-none">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
-                    <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${CYCLE_CHIP[cycle.status]}`}>
-                      {CYCLE_STATUS_LABEL[cycle.status]}
-                    </span>
-                    {allPaid && (
-                      <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] ${PAID_CHIP}`}>
-                        <BadgeCheck size={10} /> Paid
-                      </span>
-                    )}
-                    {cycle.payroll_config && (
-                      <span className="text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-[0.1em] bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4]">
-                        Custom rules
-                      </span>
-                    )}
+              {/* Title and the cycle's three controls. The controls drop to their
+                  own line on a narrow phone instead of crushing the month. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 mb-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1 basis-[220px]">
+                  <IconChip icon={CalendarRange} />
+                  <div className="min-w-0">
+                    <h1 className="font-display text-[1.3rem] sm:text-[1.6rem] font-bold leading-[1.15] text-slate-900 headline break-words">
+                      {period}
+                    </h1>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <Chip tone={closed ? 'dark' : 'neutral'}>{CYCLE_STATUS_LABEL[cycle.status]}</Chip>
+                      {allPaid && <Chip tone="good"><BadgeCheck size={11} /> All paid</Chip>}
+                      {cycle.payroll_config && <Chip tone="gold">Own rules</Chip>}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <LockSwitch
                     closed={closed}
                     disabled={busy || (!closed && records.length === 0)}
                     onSelect={next => setConfirmAction(next)}
                   />
-                  <button
-                    onClick={() => setShowSettings(true)}
-                    title="Cycle settings"
-                    aria-label="Cycle settings"
-                    className={`${SHARP.ghostBtn} !py-[7px]`}
-                  >
-                    <SlidersHorizontal size={13} />
-                  </button>
+                  <Btn tone="ghost" onClick={() => setShowSettings(true)} title="This cycle's PF, ESI, loss of pay and bonus rules">
+                    <SlidersHorizontal size={14} /> Rules
+                  </Btn>
                   {records.length > 0 && (
-                    <button
+                    <Btn
+                      tone="dark"
                       onClick={() => closed && setShowDocs(true)}
                       disabled={!closed}
-                      title={closed ? 'Download Centre' : 'Lock the cycle first — its figures are still a live preview until then'}
-                      className={`${SHARP.darkBtn} !py-[7px]`}
+                      title={closed ? 'Registers, bank files and returns' : 'Lock the cycle first. Until then its figures can still change.'}
                     >
-                      <Download size={13} /> <span className="hidden sm:inline">Download Centre</span>
-                    </button>
+                      <Download size={14} /> Downloads
+                    </Btn>
                   )}
                 </div>
               </div>
 
               {records.length === 0 ? (
-                <div className="bg-white border border-[#E4E4E7] p-8 text-center text-sm text-[#71717A]">
-                  {excludedCount > 0
-                    ? `Every record in this cycle belongs to someone who has since left or is hidden from the salary app (${excludedCount}).`
-                    : 'No eligible staff found for this cycle.'}
-                </div>
+                <Panel>
+                  <Note>
+                    {excludedCount > 0
+                      ? `Everyone in this cycle has since left or is hidden from the salary app (${excludedCount}).`
+                      : 'Nobody eligible was found for this cycle.'}
+                  </Note>
+                </Panel>
               ) : (
-                <>
+                <Deck>
                   <CycleStatsStrip totals={totals} filtered={narrowed} />
 
-
-                  <div className="px-2 sm:px-0">
-                    <CycleToolbar
-                      filters={filters}
-                      onChange={setFilters}
-                      teams={teams}
-                      shown={visibleRecords.length}
-                      total={records.length}
-                      onExportCsv={downloadBankCsv}
-                      exportDisabled={visibleRecords.length === 0}
-                    />
-                  </div>
+                  <CycleToolbar
+                    filters={filters}
+                    onChange={setFilters}
+                    teams={teams}
+                    shown={visibleRecords.length}
+                    total={records.length}
+                    onExportCsv={downloadBankCsv}
+                    exportDisabled={visibleRecords.length === 0}
+                  />
 
                   {(closed || disburseMsg) && (
-                    <div className="bg-white border border-[#E4E4E7] mb-2 px-2.5 py-2">
-                      {closed ? (
+                    <Panel className="mb-2.5 px-3.5 py-2.5">
+                      {closed && (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <button onClick={disburse} disabled={busy} className={SHARP.darkBtn}>
-                            <Send size={12} /> {busy ? 'Disbursing…' : autoProvider
+                          <Btn tone="gold" onClick={disburse} disabled={busy}>
+                            <Send size={13} /> {busy ? 'Sending…' : autoProvider
                               ? `Pay via ${payoutCfg?.provider}`
-                              : 'Disburse via linked bank'}
-                          </button>
+                              : 'Pay through the bank'}
+                          </Btn>
                           {!autoProvider && (
-                            <button onClick={markAllPaid} disabled={busy || allPaid} className={SHARP.ghostBtn}>
-                              <CheckCheck size={12} /> Mark all paid
-                            </button>
+                            <Btn tone="ghost" onClick={markAllPaid} disabled={busy || allPaid}>
+                              <CheckCheck size={13} /> Mark all paid
+                            </Btn>
                           )}
                         </div>
-                      ) : null}
+                      )}
                       {disburseMsg && (
-                        <p className={`text-[11px] text-[#71717A] leading-snug ${closed ? 'mt-1.5 pt-1.5 border-t border-[#F4F4F5]' : ''}`}>
+                        <p className={`text-[12.5px] text-slate-600 leading-relaxed break-words ${closed ? 'mt-2 pt-2 border-t border-[#EEEAE1]' : ''}`}>
                           {disburseMsg}
                         </p>
                       )}
-                    </div>
+                    </Panel>
                   )}
 
                   {!closed && unverified.length > 0 && (
-                    <div className="flex items-start gap-1.5 bg-[#FBF6E9] border border-[#EFE3C4] text-[#8A6D1F] px-2.5 py-2 mb-2 mx-2 sm:mx-0">
-                      <ShieldAlert size={13} className="flex-shrink-0 mt-px" />
-                      <p className="text-[11px] leading-snug flex-1">
-                        <span className="font-semibold">{unverified.length} row(s) have hand-typed figures.</span>{' '}
-                        They are pinned to the top of the sheet — tick each one to confirm it before locking the
-                        cycle. Editing a row again clears its tick.
-                      </p>
-                      <button
-                        onClick={verifyAll}
-                        className="flex-shrink-0 text-[11px] font-semibold underline decoration-[#EFE3C4] hover:decoration-[#8A6D1F] underline-offset-2"
-                      >
-                        Tick all
-                      </button>
-                    </div>
+                    <Notice tone="warn" className="mb-2.5">
+                      <span className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                        <span className="flex items-start gap-1.5 flex-1 basis-[240px]">
+                          <ShieldAlert size={14} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold">{unverified.length} {unverified.length === 1 ? 'row has' : 'rows have'} typed-in figures.</span>{' '}
+                            They are at the top. Tick each one once checked; the cycle cannot lock until they are. Editing a row again clears its tick.
+                          </span>
+                        </span>
+                        <button onClick={verifyAll} className="font-semibold underline underline-offset-2">Tick all</button>
+                      </span>
+                    </Notice>
                   )}
 
                   {!closed && (
-                    <p className="text-[10px] text-[#A1A1AA] mb-2 px-2 sm:px-0">
-                      Figures are a live preview. Lock the cycle to fix PF/ESI/LOP/bonus and enable disbursement.
-                      {excludedCount > 0 && ` ${excludedCount} record(s) hidden — left or hidden from the salary app.`}
+                    <p className="px-1 mb-2.5 text-[12px] text-slate-500 leading-snug">
+                      These figures follow attendance until you lock the cycle. Locking fixes PF, ESI, loss of pay and bonus, and lets you pay.
+                      {excludedCount > 0 && ` ${excludedCount} ${excludedCount === 1 ? 'person who has left or is hidden is' : 'people who have left or are hidden are'} not shown.`}
                     </p>
                   )}
 
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[1000px] bg-white border-y sm:border border-[#E4E4E7]">
-                      {/* Header — shares the GRID template with every data row, so labels always sit above their column.
-                          Always visible (not just sm+): it sits inside the same overflow-x-auto/min-w wrapper
-                          as the rows, so it scrolls in sync with them on phones instead of leaving the columns unlabeled. */}
-                      <div className="flex items-stretch bg-[#27272A]">
-                        <div className="w-1 flex-shrink-0" />
-                        <div className={`${GRID} flex-1 min-w-0 px-2.5 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
-                          <span className={`${SHEET.headCell} text-center`} title="Sign-off on hand-edited rows">✓</span>
-                          <span className={`${SHEET.headCell} pl-[42px]`}>Staff</span>
-                          <span className={`${SHEET.headCell} text-center`} title="Paid by cash — excluded from the bank CSV and automated payouts">Cash</span>
-                          <span className={`${SHEET.headCell} text-right`}>Base</span>
-                          <span className={`${SHEET.headCell} text-center`}>Days</span>
-                          <span className={`${SHEET.headCell} text-center`}>Leave</span>
-                          <span className={`${SHEET.headCell} text-center`}>Late</span>
-                          <span className={`${SHEET.headCell} text-center`}>Half</span>
-                          <span className={`${SHEET.headCell} text-right`}>LOP</span>
-                          <span className={`${SHEET.headCell} text-right`}>₹/Day</span>
-                          <span className={`${SHEET.headCell} text-right`}>PF</span>
-                          <span className={`${SHEET.headCell} text-right`}>ESI</span>
-                          <span className={`${SHEET.headCell} text-right`}>Other</span>
-                          <span className={`${SHEET.headCell} text-center`}>Pts</span>
-                          <span className={`${SHEET.headCell} text-right`}>Net pay</span>
-                        </div>
-                      </div>
+                  <div className="fx-card fx-bleed min-w-0">
+                    {/* Laptop header: the five figures that decide a payslip. */}
+                    <div className="hidden sm:grid xl:hidden items-center gap-x-3 px-3.5 py-2 bg-[#F7F5F0] border-b border-[#EEEAE1]"
+                      style={{ gridTemplateColumns: COMPACT_COLS }}>
+                      <span className={LABEL}>Person</span>
+                      <span className={`${LABEL} text-right`}>Base</span>
+                      <span className={`${LABEL} text-right`}>Loss of pay</span>
+                      <span className={`${LABEL} text-right`}>PF + ESI</span>
+                      <span className={`${LABEL} text-right`}>Net pay</span>
+                      <span />
+                    </div>
 
-                      {visibleRecords.length === 0 ? (
-                        <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">
-                          No staff match the current search and filters.
-                        </div>
-                      ) : mountedRecords.map((r, idx) => {
-                        const staffLike = r.staff
-                          ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role }
-                          : r.support_staff
-                            ? { full_name: r.support_staff.full_name, email: null, role: r.support_staff.designation || 'Support Staff' }
-                            // Account deleted since this cycle was locked — the name/role
-                            // frozen at lock time is all a payslip can still say about them.
-                            : r.person_name_snapshot
-                              ? { full_name: r.person_name_snapshot, email: null, role: r.person_role_snapshot || '' }
-                              : undefined
-                        const key = `payslip-${r.id}`
-                        const open = expanded.has(r.id)
-                        const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
-                        const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
-                        const edits = editsOf(r)
-                        const fingerprint = editFingerprint(edits)
-                        const signedOff = edits.length > 0 && verified.isVerified(r.id, fingerprint)
-                        // PF only computes when someone is enrolled *and* has a PF Basic wage,
-                        // and a stored override beats both. Say which it is, so a zero in this
-                        // column is never a mystery.
-                        const pfCfg = baseMap[recordPersonId(r)]
-                        const pfWhy = r.pf_amount_override != null
-                          ? `Manually set to ${formatINR(pf)} — clear the cell to use the computed figure`
-                          : !pfCfg?.pf_applicable
-                            ? 'PF is switched off for this person — turn it on in Base Salaries'
-                            : !(Number(pfCfg?.pf_basic) > 0)
-                              ? 'No PF Basic wage set for this person — add one in Base Salaries'
-                              : 'Computed from PF Basic x the PF rate'
-                        const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
-                        const hasBank = !!bankMap[recordPersonId(r)]
-                        return (
-                          <div key={r.id} className={idx < mountedRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => toggleExpanded(r.id)}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
-                              className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
-                            >
-                              <div className={`${SHEET.bar} ${bar}`} />
-                              <div className={`${GRID} flex-1 min-w-0 px-2.5 py-1.5`} style={{ gridTemplateColumns: GRID_COLS }}>
-                                {/* Empty for a row nothing was typed into: only a
-                                    hand-edited figure needs a person to vouch for it. */}
-                                {edits.length === 0 ? <span /> : (
-                                  <input
-                                    type="checkbox"
-                                    checked={signedOff}
-                                    disabled={closed}
-                                    onClick={e => e.stopPropagation()}
-                                    onChange={e => verified.setVerified(r.id, fingerprint, e.target.checked)}
-                                    title={`Hand-edited: ${edits.join(', ')}. Tick once you have checked these figures — editing the row again clears the tick.`}
-                                    aria-label={`Confirm hand-edited figures for ${recordPersonName(r) || 'this row'}`}
-                                    className="w-3 h-3 accent-[#27272A] cursor-pointer disabled:cursor-default"
-                                  />
-                                )}
-                                <div className="flex items-center gap-1 min-w-0">
-                                  <ChevronRight size={13} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                                  <Avatar avatarUrl={r.staff?.avatar_url} name={recordPersonName(r) || '?'} size={22} userId={r.staff_id ?? undefined} />
-                                  <div className="min-w-0 flex-1 leading-tight">
-                                    <p className="text-[11px] font-semibold text-[#18181B] truncate">{recordPersonName(r) || 'Staff'}</p>
-                                    <p className="text-[9px] text-[#71717A] truncate">
-                                      {r.staff
-                                        ? getDisplayRole(r.staff)
-                                        : r.support_staff
-                                          ? (r.support_staff.designation || 'Support Staff')
-                                          // Profile/support-staff row is gone (account deleted) — the role
-                                          // frozen at lock time is all that's left to describe them.
-                                          : r.person_role_snapshot
-                                            ? `${r.person_role_snapshot.charAt(0).toUpperCase()}${r.person_role_snapshot.slice(1)} · Deleted`
-                                            : 'Deleted'}
-                                    </p>
-                                  </div>
-                                  {!hasBank && !r.pay_by_cash && (
-                                    <span title="No bank account on file — this row can't be exported for disbursement"
-                                      className="flex-shrink-0 text-[#BE123C]">
-                                      <Landmark size={11} />
-                                    </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); r.staff && setDocsStaff(r.staff) }}
-                                    disabled={!r.staff}
-                                    title="Financial statements"
-                                    className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
-                                  >
-                                    <FileText size={11} />
-                                  </button>
-                                  {/* One calendar at a time: the popup can correct attendance, and
-                                      opening a second over it means two of them reload the cycle on
-                                      close, the last one winning with figures read before the other's
-                                      edit. */}
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); if (!calendarPerson && r.staff) setCalendarPerson(r.staff) }}
-                                    disabled={!r.staff || !!calendarPerson}
-                                    title={calendarPerson ? 'Close the open calendar first' : 'Attendance calendar'}
-                                    className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
-                                  >
-                                    <CalendarDays size={11} />
-                                  </button>
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  checked={r.pay_by_cash}
-                                  disabled={closed}
-                                  onClick={e => e.stopPropagation()}
-                                  onChange={e => saveOverride(r.id, { pay_by_cash: e.target.checked })}
-                                  title={r.pay_by_cash
-                                    ? 'Paid by cash this cycle — left out of the bank CSV and automated payouts'
-                                    : 'Mark paid by cash — leaves this person out of the bank CSV and automated payouts'}
-                                  aria-label={`Paid by cash for ${recordPersonName(r) || 'this row'}`}
-                                  className="w-3 h-3 justify-self-center accent-[#27272A] cursor-pointer disabled:cursor-default"
-                                />
-                                <EditableCell
-                                  value={Number(r.base_amount) || 0} derived editable={!closed}
-                                  format={formatINR} title="Base salary for this cycle"
-                                  onSave={v => saveOverride(r.id, { base_amount: v ?? 0 })}
-                                />
-                                <EditableCell
-                                  value={c?.workingDays ?? 0} derived={r.working_days_override == null} editable={!closed}
-                                  align="center" format={n => String(n)} title="Working days — clear to use the calendar month"
-                                  onSave={v => saveOverride(r.id, { working_days_override: v })}
-                                />
-                                <EditableCell
-                                  value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
-                                  align="center" format={n => String(n)}
-                                  title="Leave days — the Absent count on this staff member's attendance calendar for this month. Clear to go back to it."
-                                  onSave={v => saveOverride(r.id, { leave_override: v })}
-                                />
-                                <EditableCell
-                                  value={c?.lateCount ?? 0} derived={r.late_override == null} editable={!closed}
-                                  align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
-                                  onSave={v => saveOverride(r.id, { late_override: v })}
-                                />
-                                <EditableCell
-                                  value={c?.halfDayCount ?? 0} derived={r.half_day_override == null} editable={!closed}
-                                  align="center" format={n => String(n)} title="Half days — clear to use attendance"
-                                  onSave={v => saveOverride(r.id, { half_day_override: v })}
-                                />
-                                <span
-                                  className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-[#BE123C]' : 'text-[#71717A]'}`}
-                                  title={`${(c?.lopFromLeave ?? 0)} day(s) leave · ${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) late/half day`}
-                                >
-                                  {formatINR(lopTotalRs)}
-                                </span>
-                                <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
-                                <EditableCell
-                                  value={pf} derived={r.pf_amount_override == null} editable={!closed}
-                                  format={formatINR} title={pfWhy}
-                                  onSave={v => saveOverride(r.id, { pf_amount_override: v })}
-                                />
-                                <EditableCell
-                                  value={esi} derived={r.esi_amount_override == null} editable={!closed}
-                                  format={formatINR} title="ESI — clear to use the computed figure"
-                                  onSave={v => saveOverride(r.id, { esi_amount_override: v })}
-                                />
-                                {/* Hand-added bonuses and deductions, netted against each
-                                    other — the one column on the sheet that is nobody's
-                                    formula. Open the row to see what makes it up. */}
-                                <span
-                                  className={`text-right text-[11px] tabular-nums ${
-                                    manualTotal > 0 ? 'text-[#15803D] font-semibold'
-                                      : manualTotal < 0 ? 'text-[#BE123C] font-semibold'
-                                      : 'text-[#A1A1AA]'
-                                  }`}
-                                  title={manualItems.length === 0
-                                    ? 'No manual bonuses or deductions on this row'
-                                    : manualItems.map(i => `${i.label}: ${formatINR(Number(i.amount))}`).join('\n')}
-                                >
-                                  {manualTotal === 0 ? '—' : `${manualTotal > 0 ? '+' : '−'}${formatINR(Math.abs(manualTotal))}`}
-                                </span>
-                                <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-[#15803D]' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
-                                <span className="text-right text-[13px] font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+                    {/* Wide-screen header — shares GRID_COLS with every full row. */}
+                    <div className="hidden xl:flex items-stretch bg-[#F7F5F0] border-b border-[#EEEAE1]">
+                      <div className="w-[3px] flex-shrink-0" />
+                      <div className={`${GRID} flex-1 min-w-0 px-3 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
+                        <span className={`${LABEL} text-center`} title="Sign-off on rows with typed-in figures">✓</span>
+                        <span className={`${LABEL} pl-[42px]`}>Person</span>
+                        <span className={`${LABEL} text-center`} title="Paid in cash: left out of the bank file and automatic payouts">Cash</span>
+                        <span className={`${LABEL} text-right`}>Base</span>
+                        <span className={`${LABEL} text-center`}>Days</span>
+                        <span className={`${LABEL} text-center`}>Leave</span>
+                        <span className={`${LABEL} text-center`}>Late</span>
+                        <span className={`${LABEL} text-center`}>Half</span>
+                        <span className={`${LABEL} text-right`}>LOP</span>
+                        <span className={`${LABEL} text-right`}>Per day</span>
+                        <span className={`${LABEL} text-right`}>PF</span>
+                        <span className={`${LABEL} text-right`}>ESI</span>
+                        <span className={`${LABEL} text-right`}>Other</span>
+                        <span className={`${LABEL} text-center`}>Points</span>
+                        <span className={`${LABEL} text-right`}>Net pay</span>
+                      </div>
+                    </div>
+
+                    {visibleRecords.length === 0 ? (
+                      <Note>Nobody matches the search and filters.</Note>
+                    ) : mountedRecords.map(r => {
+                      const staffLike = r.staff
+                        ? { full_name: r.staff.full_name, email: r.staff.email, role: r.staff.role }
+                        : r.support_staff
+                          ? { full_name: r.support_staff.full_name, email: null, role: r.support_staff.designation || 'Support Staff' }
+                          // Account deleted since this cycle was locked — the name/role
+                          // frozen at lock time is all a payslip can still say about them.
+                          : r.person_name_snapshot
+                            ? { full_name: r.person_name_snapshot, email: null, role: r.person_role_snapshot || '' }
+                            : undefined
+                      const key = `payslip-${r.id}`
+                      const open = expanded.has(r.id)
+                      const { c, pf, esi, lopLateRs, lopLeaveRs, lopHalfDayRs, manualItems, manualTotal, previewItems, net } = rowFigures(r)
+                      const lopTotalRs = lopLateRs + lopLeaveRs + lopHalfDayRs
+                      const edits = editsOf(r)
+                      const fingerprint = editFingerprint(edits)
+                      const signedOff = edits.length > 0 && verified.isVerified(r.id, fingerprint)
+                      // PF only computes when someone is enrolled *and* has a PF Basic wage,
+                      // and a stored override beats both. Say which it is, so a zero in this
+                      // column is never a mystery.
+                      const pfCfg = baseMap[recordPersonId(r)]
+                      const pfWhy = r.pf_amount_override != null
+                        ? `Typed in as ${formatINR(pf)}. Clear the box to use the worked-out figure.`
+                        : !pfCfg?.pf_applicable
+                          ? 'PF is off for this person. Turn it on in Base salaries.'
+                          : !(Number(pfCfg?.pf_basic) > 0)
+                            ? 'No PF Basic wage for this person. Add one in Base salaries.'
+                            : 'PF Basic wage × the PF rate'
+                      const bar = r.status === 'paid' ? '#27272A' : r.status === 'approved' ? '#B8983C' : '#DDD8CC'
+                      const hasBank = !!bankMap[recordPersonId(r)]
+                      const name = recordPersonName(r) || 'Staff'
+                      const role = r.staff
+                        ? getDisplayRole(r.staff)
+                        : r.support_staff
+                          ? (r.support_staff.designation || 'Support staff')
+                          // Profile/support-staff row is gone (account deleted) — the role
+                          // frozen at lock time is all that's left to describe them.
+                          : r.person_role_snapshot
+                            ? `${capitalize(r.person_role_snapshot)} · deleted`
+                            : 'Deleted'
+
+                      const signOff = edits.length === 0 ? null : (
+                        <input
+                          type="checkbox"
+                          checked={signedOff}
+                          disabled={closed}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => verified.setVerified(r.id, fingerprint, e.target.checked)}
+                          title={`Typed in: ${edits.join(', ')}. Tick once checked. Editing the row again clears the tick.`}
+                          aria-label={`Confirm typed-in figures for ${name}`}
+                          className={SX.check}
+                        />
+                      )
+                      const cash = (
+                        <input
+                          type="checkbox"
+                          checked={r.pay_by_cash}
+                          disabled={closed}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => saveOverride(r.id, { pay_by_cash: e.target.checked })}
+                          title={r.pay_by_cash
+                            ? 'Paid in cash this cycle: left out of the bank file and automatic payouts'
+                            : 'Pay in cash: leaves this person out of the bank file and automatic payouts'}
+                          aria-label={`Paid in cash for ${name}`}
+                          className={SX.check}
+                        />
+                      )
+                      const noBank = !hasBank && !r.pay_by_cash && (
+                        <span title="No bank account on file, so this row cannot go in the bank file" className="flex-shrink-0 text-[#BE123C]">
+                          <Landmark size={13} />
+                        </span>
+                      )
+                      const toolButtons = (
+                        <>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); r.staff && setDocsStaff(r.staff) }}
+                            disabled={!r.staff}
+                            title="Salary documents"
+                            aria-label={`Salary documents for ${name}`}
+                            className={SX.icon}
+                          >
+                            <FileText size={14} />
+                          </button>
+                          {/* One calendar at a time: the popup can correct attendance, and
+                              opening a second over it means two of them reload the cycle on
+                              close, the last one winning with figures read before the other's
+                              edit. */}
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); if (!calendarPerson && r.staff) setCalendarPerson(r.staff) }}
+                            disabled={!r.staff || !!calendarPerson}
+                            title={calendarPerson ? 'Close the open calendar first' : 'Attendance calendar'}
+                            aria-label={`Attendance calendar for ${name}`}
+                            className={SX.icon}
+                          >
+                            <CalendarDays size={14} />
+                          </button>
+                        </>
+                      )
+
+                      const cells = {
+                        base: <EditableCell value={Number(r.base_amount) || 0} derived editable={!closed}
+                          format={formatINR} title="Base salary for this cycle"
+                          onSave={v => saveOverride(r.id, { base_amount: v ?? 0 })} />,
+                        days: <EditableCell value={c?.workingDays ?? 0} derived={r.working_days_override == null} editable={!closed}
+                          align="center" format={n => String(n)} title="Working days. Clear to use the calendar month."
+                          onSave={v => saveOverride(r.id, { working_days_override: v })} />,
+                        leave: <EditableCell value={c?.leaveCount ?? 0} derived={r.leave_override == null} editable={!closed}
+                          align="center" format={n => String(n)}
+                          title="Leave days: the Absent count on this person's attendance calendar for the month. Clear to go back to it."
+                          onSave={v => saveOverride(r.id, { leave_override: v })} />,
+                        late: <EditableCell value={c?.lateCount ?? 0} derived={r.late_override == null} editable={!closed}
+                          align="center" format={n => String(n)} title="Late arrivals. Clear to use attendance."
+                          onSave={v => saveOverride(r.id, { late_override: v })} />,
+                        half: <EditableCell value={c?.halfDayCount ?? 0} derived={r.half_day_override == null} editable={!closed}
+                          align="center" format={n => String(n)} title="Half days. Clear to use attendance."
+                          onSave={v => saveOverride(r.id, { half_day_override: v })} />,
+                        pf: <EditableCell value={pf} derived={r.pf_amount_override == null} editable={!closed}
+                          format={formatINR} title={pfWhy}
+                          onSave={v => saveOverride(r.id, { pf_amount_override: v })} />,
+                        esi: <EditableCell value={esi} derived={r.esi_amount_override == null} editable={!closed}
+                          format={formatINR} title="ESI. Clear to use the worked-out figure."
+                          onSave={v => saveOverride(r.id, { esi_amount_override: v })} />,
+                      }
+                      const lopText = (
+                        <span
+                          className={`text-right text-[12px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-[#BE123C]' : 'text-slate-400'}`}
+                          title={`${(c?.lopFromLeave ?? 0)} day(s) leave · ${(c?.lopFromLate ?? 0) + (c?.lopFromHalfDay ?? 0)} day(s) late or half day`}
+                        >
+                          {formatINR(lopTotalRs)}
+                        </span>
+                      )
+                      const otherText = (
+                        <span
+                          className={`text-right text-[12px] tabular-nums ${
+                            manualTotal > 0 ? 'text-[#15803D] font-semibold'
+                              : manualTotal < 0 ? 'text-[#BE123C] font-semibold'
+                              : 'text-slate-400'
+                          }`}
+                          title={manualItems.length === 0
+                            ? 'No bonuses or deductions added by hand'
+                            : manualItems.map(i => `${i.label}: ${formatINR(Number(i.amount))}`).join('\n')}
+                        >
+                          {manualTotal === 0 ? '—' : `${manualTotal > 0 ? '+' : '−'}${formatINR(Math.abs(manualTotal))}`}
+                        </span>
+                      )
+                      const points = (
+                        <span className={`text-center text-[12px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-[#15803D]' : 'text-slate-400'}`}>{c?.bonusPoints ?? 0}</span>
+                      )
+                      const toggle = () => toggleExpanded(r.id)
+                      const onKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
+
+                      return (
+                        <div key={r.id} className="relative border-b border-[#F0ECE3] last:border-b-0">
+                          <span className="absolute left-0 top-0 bottom-0 w-[3px] z-[1]" style={{ background: bar }} />
+
+                          {/* Phone: who, and what they take home. */}
+                          <div
+                            role="button" tabIndex={0} aria-expanded={open}
+                            onClick={toggle} onKeyDown={onKey}
+                            className="sm:hidden flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer hover:bg-[#FAF7F0] transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar avatarUrl={r.staff?.avatar_url} name={name} size={30} userId={r.staff_id ?? undefined} />
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-semibold text-slate-900 leading-snug break-words flex items-center gap-1.5">
+                                  {name}{noBank}
+                                </p>
+                                <p className="text-[11.5px] text-slate-500 leading-snug break-words">
+                                  {role}{lopTotalRs > 0 && <span className="text-[#BE123C]"> · LOP {formatINR(lopTotalRs)}</span>}
+                                </p>
                               </div>
                             </div>
-                            {open && (
-                              <div className="px-3 sm:px-4 py-3 bg-[#FAFAFA] border-t border-[#F4F4F5]">
-                                <div className="flex items-center justify-end gap-2 mb-2.5">
-                                  <button
-                                    disabled={pdfBusy === key}
-                                    onClick={() => openPdf(key, `Payslip — ${recordPersonName(r) || 'Staff'}`, () => buildPayslip(r, staffLike, bankMap[recordPersonId(r)]))}
-                                    className={SHARP.ghostBtn}
-                                  >
-                                    <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
-                                  </button>
-                                </div>
-                                <SalaryRecordItemsEditor
-                                  record={r}
-                                  onChanged={() => refreshRecord(r.id)}
-                                  previewItems={previewItems}
-                                  items={closed ? (r.items ?? []) : manualItems}
-                                  net={net}
-                                />
-                                {r.payout_status && (
-                                  <span className="inline-block text-[10px] px-2 py-0.5 font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4] mt-2">
-                                    payout: {r.payout_status}
-                                  </span>
-                                )}
-                                {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className="text-[14px] font-bold text-slate-900 tabular-nums">{formatINR(net)}</span>
+                              <ChevronRight size={16} className={`text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+                            </div>
                           </div>
-                        )
-                      })}
 
-                      {moreToMount > 0 && (
-                        <div ref={setSentinel} className="flex items-center justify-center gap-2 px-4 py-3 text-[11px] text-[#A1A1AA]">
-                          <span className="spinner-sm" aria-hidden />
-                          Loading {moreToMount} more row{moreToMount === 1 ? '' : 's'}…
+                          {/* Laptop: the five figures that decide a payslip. */}
+                          <div
+                            role="button" tabIndex={0} aria-expanded={open}
+                            onClick={toggle} onKeyDown={onKey}
+                            className="hidden sm:grid xl:hidden items-center gap-x-3 px-3.5 py-2 cursor-pointer hover:bg-[#FAF7F0] transition-colors"
+                            style={{ gridTemplateColumns: COMPACT_COLS }}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar avatarUrl={r.staff?.avatar_url} name={name} size={26} userId={r.staff_id ?? undefined} />
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-semibold text-slate-900 leading-snug break-words flex items-center gap-1.5">{name}{noBank}</p>
+                                <p className="text-[11.5px] text-slate-500 leading-snug break-words">{role}</p>
+                              </div>
+                            </div>
+                            <Num className="text-slate-700">{formatINR(Number(r.base_amount) || 0)}</Num>
+                            {lopText}
+                            <Num className="text-slate-700">{formatINR(pf + esi)}</Num>
+                            <span className="text-right text-[13.5px] font-bold text-slate-900 tabular-nums">{formatINR(net)}</span>
+                            <ChevronRight size={16} className={`justify-self-end text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+                          </div>
+
+                          {/* Wide screens: the whole row. */}
+                          <div
+                            role="button" tabIndex={0} aria-expanded={open}
+                            onClick={toggle} onKeyDown={onKey}
+                            className="hidden xl:flex items-stretch hover:bg-[#FAF7F0] transition-colors cursor-pointer"
+                          >
+                            <div className="w-[3px] flex-shrink-0" />
+                            <div className={`${GRID} flex-1 min-w-0 px-3 py-1.5`} style={{ gridTemplateColumns: GRID_COLS }}>
+                              {/* Empty for a row nothing was typed into: only a
+                                  typed-in figure needs a person to vouch for it. */}
+                              {signOff ?? <span />}
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <ChevronRight size={14} className={`text-slate-400 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                <Avatar avatarUrl={r.staff?.avatar_url} name={name} size={24} userId={r.staff_id ?? undefined} />
+                                <div className="min-w-0 flex-1 leading-tight">
+                                  <p className="text-[12.5px] font-semibold text-slate-900 break-words">{name}</p>
+                                  <p className="text-[11px] text-slate-500 break-words">{role}</p>
+                                </div>
+                                {noBank}
+                              </div>
+                              <span className="justify-self-center">{cash}</span>
+                              {cells.base}
+                              {cells.days}
+                              {cells.leave}
+                              {cells.late}
+                              {cells.half}
+                              {lopText}
+                              <span className="text-right text-[12px] tabular-nums text-slate-500">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
+                              {cells.pf}
+                              {cells.esi}
+                              {otherText}
+                              {points}
+                              <span className="text-right text-[13.5px] font-bold text-slate-900 tabular-nums">{formatINR(net)}</span>
+                            </div>
+                          </div>
+
+                          {open && (
+                            <div className="px-3.5 py-3 bg-[#FAF8F3] border-t border-[#EEEAE1]">
+                              {/* Below xl the row shows five figures; the rest of
+                                  the sheet's columns, editable, live here. */}
+                              <div className="xl:hidden mb-3">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-3 gap-y-2.5">
+                                  <Fact label="Base"><CellBox>{cells.base}</CellBox></Fact>
+                                  <Fact label="Working days"><CellBox>{cells.days}</CellBox></Fact>
+                                  <Fact label="Leave"><CellBox>{cells.leave}</CellBox></Fact>
+                                  <Fact label="Late"><CellBox>{cells.late}</CellBox></Fact>
+                                  <Fact label="Half days"><CellBox>{cells.half}</CellBox></Fact>
+                                  <Fact label="PF"><CellBox>{cells.pf}</CellBox></Fact>
+                                  <Fact label="ESI"><CellBox>{cells.esi}</CellBox></Fact>
+                                  <Fact label="Loss of pay"><CellBox>{lopText}</CellBox></Fact>
+                                  <Fact label="Per day"><CellBox><span className="text-right text-[12px] tabular-nums text-slate-500">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span></CellBox></Fact>
+                                  <Fact label="Other"><CellBox>{otherText}</CellBox></Fact>
+                                  <Fact label="Bonus points"><CellBox>{points}</CellBox></Fact>
+                                  <Fact label="Net pay"><CellBox><span className="text-right text-[13px] font-bold text-slate-900 tabular-nums">{formatINR(net)}</span></CellBox></Fact>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+                                  <label className="inline-flex items-center gap-2 text-[12.5px] text-slate-700 cursor-pointer">
+                                    {cash} Paid in cash
+                                  </label>
+                                  {signOff && (
+                                    <label className="inline-flex items-center gap-2 text-[12.5px] text-slate-700 cursor-pointer">
+                                      {signOff} Typed-in figures checked
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                                <p className={`${SX.heading} flex-1 basis-[160px]`}>Bonuses and deductions</p>
+                                <span className="flex items-center gap-0.5">{toolButtons}</span>
+                                <Btn
+                                  tone="ghost"
+                                  disabled={pdfBusy === key}
+                                  onClick={() => openPdf(key, `Payslip · ${name}`, () => buildPayslip(r, staffLike, bankMap[recordPersonId(r)]))}
+                                >
+                                  {pdfBusy === key ? <Loader2 size={13} className="animate-spin" /> : <Receipt size={13} />} Payslip
+                                </Btn>
+                              </div>
+                              <SalaryRecordItemsEditor
+                                record={r}
+                                onChanged={() => refreshRecord(r.id)}
+                                previewItems={previewItems}
+                                items={closed ? (r.items ?? []) : manualItems}
+                                net={net}
+                              />
+                              {r.payout_status && (
+                                <div className="mt-2.5"><Chip tone="gold">Payout: {r.payout_status}</Chip></div>
+                              )}
+                              {r.notes && <p className="text-[12px] text-slate-500 mt-2.5 italic break-words">{r.notes}</p>}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      )
+                    })}
+
+                    {moreToMount > 0 && (
+                      <div ref={setSentinel} className="flex items-center justify-center gap-2 px-4 py-3 text-[12px] text-slate-500">
+                        <span className="spinner-sm" aria-hidden />
+                        Loading {moreToMount} more…
+                      </div>
+                    )}
                   </div>
-                </>
+                </Deck>
               )}
             </>
           )}
@@ -1380,26 +1461,28 @@ export default function SalaryCycleDetailPage() {
           </ModalErrorBoundary>
         )}
         {confirmAction && (
-          <ModalShell key="confirm-lock" onClose={() => setConfirmAction(null)} size="sm" sharp>
-            <h3 className="font-bold text-[#18181B] mb-1.5">
-              {confirmAction === 'close' ? 'Lock this cycle?' : 'Unlock this cycle?'}
-            </h3>
-            <p className="text-sm text-[#71717A] mb-4 leading-relaxed">
-              {confirmAction === 'close'
-                ? 'This locks in PF, ESI, LOP, and task bonus for every record based on current attendance and settings, and enables disbursement. Columns stop being editable, but you can unlock again at any time to make changes.'
-                : 'This makes the cycle editable again and removes the auto-applied PF/ESI/LOP/bonus items so they recompute cleanly next time you lock. Manually added items are untouched.'}
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmAction(null)} className="px-3 py-2 text-sm font-semibold text-[#71717A] hover:text-[#27272A]">Cancel</button>
-              <button
-                onClick={confirmAction === 'close' ? closeCycle : reopenCycle}
-                disabled={busy}
-                className="bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-40"
-              >
-                {busy ? 'Working…' : confirmAction === 'close' ? 'Lock cycle' : 'Unlock cycle'}
-              </button>
-            </div>
-          </ModalShell>
+          <ConfirmModal
+            key="confirm-lock"
+            title={confirmAction === 'close' ? `Lock ${period}?` : `Unlock ${period}?`}
+            icon={confirmAction === 'close' ? <Lock size={16} /> : <LockOpen size={16} />}
+            confirmLabel={confirmAction === 'close' ? 'Lock cycle' : 'Unlock cycle'}
+            busyLabel={confirmAction === 'close' ? 'Locking…' : 'Unlocking…'}
+            busy={busy}
+            onConfirm={confirmAction === 'close' ? closeCycle : reopenCycle}
+            onClose={() => setConfirmAction(null)}
+          >
+            {confirmAction === 'close' ? (
+              <>
+                <p>PF, ESI, loss of pay and task bonus are fixed for every record from today&apos;s attendance and rules, and payment opens up.</p>
+                <p>The figures stop being editable. You can unlock again whenever you need to change something.</p>
+              </>
+            ) : (
+              <>
+                <p>The cycle becomes editable again. The PF, ESI, loss of pay and bonus lines are taken off so they are worked out afresh at the next lock.</p>
+                <p>Bonuses and deductions added by hand stay as they are.</p>
+              </>
+            )}
+          </ConfirmModal>
         )}
         {docsStaff && (
           <ModalErrorBoundary key="staff-statements" onClose={() => setDocsStaff(null)}>
@@ -1454,27 +1537,42 @@ function LockSwitch({ closed, disabled, onSelect }: {
   disabled: boolean
   onSelect: (action: 'close' | 'reopen') => void
 }) {
-  const seg = 'inline-flex items-center gap-1 px-2 py-[7px] text-[11px] font-semibold transition-colors disabled:cursor-default'
+  const seg = (on: boolean) => `relative inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold whitespace-nowrap transition
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 disabled:cursor-default ${
+    on
+      ? 'text-white bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_4px_10px_-4px_rgba(15,23,42,.45)]'
+      : 'text-slate-600 hover:text-slate-900 disabled:opacity-45 disabled:hover:text-slate-600'}`
   return (
-    <div className="inline-flex border border-[#27272A] flex-shrink-0" role="group" aria-label="Cycle lock state">
+    <div className="lg-pill inline-flex items-center gap-0.5 p-1 flex-shrink-0" role="group" aria-label="Cycle lock">
       <button
+        type="button"
         onClick={() => onSelect('reopen')}
         disabled={disabled || !closed}
         aria-pressed={!closed}
-        title={closed ? 'Unlock this cycle to edit it again' : 'This cycle is unlocked and editable'}
-        className={`${seg} ${closed ? 'bg-white text-[#71717A] hover:text-[#27272A] disabled:opacity-40' : 'bg-[#27272A] text-white'}`}
+        title={closed ? 'Unlock this cycle to edit it again' : 'This cycle is unlocked and can be edited'}
+        className={seg(!closed)}
       >
-        <LockOpen size={12} /> Open
+        <LockOpen size={13} /> Open
       </button>
       <button
+        type="button"
         onClick={() => onSelect('close')}
         disabled={disabled || closed}
         aria-pressed={closed}
-        title={closed ? 'This cycle is locked' : 'Lock this cycle to fix its figures and enable disbursement'}
-        className={`${seg} ${closed ? 'bg-[#27272A] text-white' : 'bg-white text-[#71717A] hover:text-[#27272A] disabled:opacity-40'}`}
+        title={closed ? 'This cycle is locked' : 'Lock this cycle to fix its figures and allow payment'}
+        className={seg(closed)}
       >
-        <Lock size={12} /> Locked
+        <Lock size={13} /> Locked
       </button>
+    </div>
+  )
+}
+
+/** A sheet cell given a box, so it reads as a field in the expanded card. */
+function CellBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="h-8 flex items-center justify-end rounded-[8px] bg-white border border-[#E2DDD2] px-2 min-w-0 [&>span]:w-full">
+      {children}
     </div>
   )
 }

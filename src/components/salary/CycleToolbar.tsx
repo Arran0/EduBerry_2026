@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
-import { Search, X, SlidersHorizontal, ArrowUpDown, Check, Table2 } from 'lucide-react'
-import { SHARP } from '@/components/salary/adminUi'
+import React, { useRef, useState } from 'react'
+import { SlidersHorizontal, ArrowUpDown, Table2 } from 'lucide-react'
+import {
+  Btn, SearchField, MenuButton, MenuPanel, MenuGroup, MenuOption, useMenuDismiss,
+} from '@/components/salary/ui'
 import type { TeamMembership } from '@/lib/teams'
 import type { RosterKindFilter } from '@/components/salary/RosterToolbar'
 
@@ -74,22 +76,9 @@ export default function CycleToolbar({
 }) {
   const [openMenu, setOpenMenu] = useState<'filter' | 'sort' | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-
   // Click-away — the menus are plain popovers, not modals, so they must not
   // trap the page or stack another scroll lock on it.
-  useEffect(() => {
-    if (!openMenu) return
-    const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpenMenu(null)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenMenu(null) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [openMenu])
+  useMenuDismiss(openMenu, setOpenMenu, wrapRef)
 
   const set = (patch: Partial<CycleFilters>) => onChange({ ...filters, ...patch })
 
@@ -106,154 +95,103 @@ export default function CycleToolbar({
   const sortLabel = SORTS.find(s => s.key === filters.sort)?.label ?? 'Name'
 
   return (
-    <div ref={wrapRef} className="relative flex flex-wrap items-center gap-1.5 mb-2">
-      <div className="relative flex-1 min-w-[140px] sm:max-w-xs">
-        <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#A1A1AA] pointer-events-none" />
-        <input
-          value={filters.search}
-          onChange={e => set({ search: e.target.value })}
-          placeholder="Search staff…"
-          className={`${SHARP.input} !pl-7 ${filters.search ? '!pr-7' : ''}`}
-        />
-        {filters.search && (
-          <button
-            onClick={() => set({ search: '' })}
-            aria-label="Clear search"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-[#27272A]"
-          >
-            <X size={13} />
-          </button>
-        )}
-      </div>
+    <div ref={wrapRef} className="relative flex flex-wrap items-center gap-2 mb-2.5">
+      <SearchField
+        value={filters.search}
+        onChange={v => set({ search: v })}
+        placeholder="Search people"
+        className="basis-full sm:basis-auto sm:max-w-xs"
+      />
 
-      <button
+      <MenuButton
+        icon={SlidersHorizontal}
+        active={activeFilterCount > 0}
+        open={openMenu === 'filter'}
         onClick={() => setOpenMenu(openMenu === 'filter' ? null : 'filter')}
-        className={activeFilterCount > 0 ? SHARP.activeBtn : SHARP.ghostBtn}
       >
-        <SlidersHorizontal size={12} /> Filter
-        {activeFilterCount > 0 && (
-          <span className="tabular-nums bg-white/20 px-1">{activeFilterCount}</span>
-        )}
-      </button>
+        Filter{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+      </MenuButton>
 
-      <button
+      <MenuButton
+        icon={ArrowUpDown}
+        active={filters.sort !== 'name' || filters.desc}
+        open={openMenu === 'sort'}
         onClick={() => setOpenMenu(openMenu === 'sort' ? null : 'sort')}
-        className={filters.sort !== 'name' || filters.desc ? SHARP.activeBtn : SHARP.ghostBtn}
       >
-        <ArrowUpDown size={12} /> {sortLabel}{filters.desc ? ' ↓' : ' ↑'}
-      </button>
+        {sortLabel}{filters.desc ? ' ↓' : ' ↑'}
+      </MenuButton>
 
-      <button
+      <Btn
+        tone="ghost"
         onClick={onExportCsv}
         disabled={exportDisabled}
         title={narrowed
-          ? `Export the ${shown} filtered row(s) as a bank upload file`
-          : 'Export every row as a bank upload file'}
-        className={SHARP.ghostBtn}
+          ? `Download the ${shown} filtered row(s) as a bank upload file`
+          : 'Download every row as a bank upload file'}
+        className="!h-9"
       >
-        <Table2 size={12} /> Bank CSV{narrowed ? ` (${shown})` : ''}
-      </button>
+        <Table2 size={14} /> Bank file{narrowed ? ` (${shown})` : ''}
+      </Btn>
 
-      <span className="ml-auto text-[10px] text-[#A1A1AA] tabular-nums">
-        {narrowed ? `${shown} of ${total}` : `${total} staff`}
+      <span className="ml-auto text-[12px] text-slate-500 tabular-nums whitespace-nowrap">
+        {narrowed ? `${shown} of ${total}` : `${total} people`}
       </span>
 
       {openMenu === 'filter' && (
-        <Popover onClear={activeFilterCount > 0
+        <MenuPanel onClear={activeFilterCount > 0
           ? () => set({ kind: 'all', teamIds: [], pay: 'all', noBank: false, withLop: false })
           : undefined}>
-          <Group label="Type">
+          <MenuGroup label="Who">
             {KIND_OPTIONS.map(o => (
-              <Option key={o.key} selected={filters.kind === o.key} onClick={() => set({ kind: o.key })}>
+              <MenuOption key={o.key} selected={filters.kind === o.key} onClick={() => set({ kind: o.key })}>
                 {o.label}
-              </Option>
+              </MenuOption>
             ))}
-          </Group>
-          <Group label="Payment">
+          </MenuGroup>
+          <MenuGroup label="Payment">
             {PAY_OPTIONS.map(o => (
-              <Option key={o.key} selected={filters.pay === o.key} onClick={() => set({ pay: o.key })}>
+              <MenuOption key={o.key} selected={filters.pay === o.key} onClick={() => set({ pay: o.key })}>
                 {o.label}
-              </Option>
+              </MenuOption>
             ))}
-          </Group>
-          <Group label="Attention">
-            <Option selected={filters.noBank} onClick={() => set({ noBank: !filters.noBank })}>
-              Missing bank details
-            </Option>
-            <Option selected={filters.withLop} onClick={() => set({ withLop: !filters.withLop })}>
+          </MenuGroup>
+          <MenuGroup label="Needs attention">
+            <MenuOption selected={filters.noBank} onClick={() => set({ noBank: !filters.noBank })}>
+              No bank details
+            </MenuOption>
+            <MenuOption selected={filters.withLop} onClick={() => set({ withLop: !filters.withLop })}>
               Has loss of pay
-            </Option>
-          </Group>
-          <Group label={`Teams${filters.teamIds.length ? ` · ${filters.teamIds.length}` : ''}`}>
+            </MenuOption>
+          </MenuGroup>
+          <MenuGroup label={`Teams${filters.teamIds.length ? ` · ${filters.teamIds.length}` : ''}`}>
             {teams.length === 0 ? (
-              <p className="px-2 py-1.5 text-[11px] text-[#A1A1AA]">No teams set up yet.</p>
+              <p className="px-3.5 py-2 text-[12.5px] text-slate-500">No teams set up yet.</p>
             ) : teams.map(t => (
-              <Option key={t.id} selected={filters.teamIds.includes(t.id)} onClick={() => toggleTeam(t.id)}>
-                <span className="truncate">{t.name}</span>
-                <span className="ml-auto pl-2 text-[10px] text-[#A1A1AA] tabular-nums">{t.memberIds.length}</span>
-              </Option>
+              <MenuOption key={t.id} selected={filters.teamIds.includes(t.id)} onClick={() => toggleTeam(t.id)}>
+                <span className="flex-1 min-w-0 break-words">{t.name}</span>
+                <span className="text-[12px] text-slate-400 tabular-nums">{t.memberIds.length}</span>
+              </MenuOption>
             ))}
-          </Group>
-        </Popover>
+          </MenuGroup>
+        </MenuPanel>
       )}
 
       {openMenu === 'sort' && (
-        <Popover>
-          <Group label="Sort by">
+        <MenuPanel>
+          <MenuGroup label="Sort by">
             {SORTS.map(s => (
-              <Option key={s.key} selected={filters.sort === s.key}
+              <MenuOption key={s.key} selected={filters.sort === s.key}
                 onClick={() => set({ sort: s.key, desc: s.key === filters.sort ? filters.desc : s.key !== 'name' })}>
                 {s.label}
-              </Option>
+              </MenuOption>
             ))}
-          </Group>
-          <Group label="Direction">
-            <Option selected={!filters.desc} onClick={() => set({ desc: false })}>Ascending</Option>
-            <Option selected={filters.desc} onClick={() => set({ desc: true })}>Descending</Option>
-          </Group>
-        </Popover>
+          </MenuGroup>
+          <MenuGroup label="Order">
+            <MenuOption selected={!filters.desc} onClick={() => set({ desc: false })}>Ascending</MenuOption>
+            <MenuOption selected={filters.desc} onClick={() => set({ desc: true })}>Descending</MenuOption>
+          </MenuGroup>
+        </MenuPanel>
       )}
     </div>
-  )
-}
-
-function Popover({ children, onClear }: { children: React.ReactNode; onClear?: () => void }) {
-  return (
-    <div className="absolute top-full left-0 right-0 sm:right-auto sm:w-64 z-30 mt-1 bg-white border border-[#27272A] shadow-lg max-h-[60vh] overflow-y-auto">
-      {children}
-      {onClear && (
-        <button onClick={onClear}
-          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-[#BE123C] hover:bg-[#FAFAFA] border-t border-[#F4F4F5]">
-          Clear all filters
-        </button>
-      )}
-    </div>
-  )
-}
-
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="border-b border-[#F4F4F5] last:border-b-0 py-1">
-      <p className={`${SHARP.label} px-2.5 py-1`}>{label}</p>
-      {children}
-    </div>
-  )
-}
-
-function Option({ selected, onClick, children }: {
-  selected: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-left transition-colors ${
-        selected ? 'bg-[#FAFAFA] font-semibold text-[#18181B]' : 'text-[#71717A] hover:bg-[#FAFAFA]'
-      }`}
-    >
-      <Check size={11} className={selected ? 'text-[#B8983C] flex-shrink-0' : 'opacity-0 flex-shrink-0'} />
-      {children}
-    </button>
   )
 }
