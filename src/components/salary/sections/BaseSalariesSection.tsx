@@ -10,11 +10,11 @@ import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolb
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
-import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, fetchHiddenSalaryMemberIds, upsertBaseSalary } from '@/lib/salary'
-import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries, upsertDriverBaseSalary } from '@/lib/driverSalary'
+import { StaffSalaryBase, fetchEligibleStaff, fetchBaseSalaries, fetchHiddenSalaryMemberIds, bulkUpsertRoster } from '@/lib/salary'
+import { DriverSalaryBase, fetchEligibleDrivers, fetchDriverBaseSalaries } from '@/lib/driverSalary'
 import {
   SupportStaff, SupportStaffSalaryBase,
-  fetchSupportStaff, fetchSupportStaffSalaryBases, upsertSupportStaffSalaryBase,
+  fetchSupportStaff, fetchSupportStaffSalaryBases,
 } from '@/lib/supportStaff'
 
 /**
@@ -74,6 +74,22 @@ interface Draft {
   uan: string
   ipNumber: string
   active: boolean
+}
+
+const ID_COLUMN = { staff: 'staff_id', driver: 'driver_id', support: 'support_staff_id' } as const
+
+/** A draft as the columns the base-salary tables store. */
+function inputOf(d: Draft) {
+  return {
+    base_amount: parseFloat(d.amount) || 0,
+    pf_basic: d.pfBasic.trim() === '' ? null : parseFloat(d.pfBasic) || 0,
+    pf_applicable: d.pfApplicable,
+    eps_applicable: d.epsApplicable,
+    esi_override: esiValueOf(d.esiChoice),
+    uan: d.uan.trim() === '' ? null : d.uan.trim(),
+    esi_ip_number: d.ipNumber.trim() === '' ? null : d.ipNumber.trim(),
+    active: d.active,
+  }
 }
 
 function esiChoiceOf(v: boolean | null | undefined): EsiChoice {
@@ -156,32 +172,48 @@ export default function BaseSalariesSection() {
     [entries, drafts],
   )
 
+  // One request per roster table for everything edited, then the saved values
+  // become the rows' "existing" state in place — no reload of the whole sheet.
   const flush = useCallback(async () => {
     const byKey = new Map(entries.map(e => [e.key, e]))
+    const saved = new Map<string, ReturnType<typeof inputOf>>()
+    const sent = new Map<string, Draft>()
+    const rows: Record<Kind, Record<string, unknown>[]> = { staff: [], driver: [], support: [] }
     for (const key of dirtyKeys) {
       const entry = byKey.get(key)
       const d = drafts[key]
       if (!entry || !d) continue
-      const input = {
-        base_amount: parseFloat(d.amount) || 0,
-        pf_basic: d.pfBasic.trim() === '' ? null : parseFloat(d.pfBasic) || 0,
-        pf_applicable: d.pfApplicable,
-        eps_applicable: d.epsApplicable,
-        esi_override: esiValueOf(d.esiChoice),
-        uan: d.uan.trim() === '' ? null : d.uan.trim(),
-        esi_ip_number: d.ipNumber.trim() === '' ? null : d.ipNumber.trim(),
-        active: d.active,
-      }
-      const res = entry.kind === 'staff'
-        ? await upsertBaseSalary({ staff_id: entry.person.id, ...input })
-        : entry.kind === 'driver'
-          ? await upsertDriverBaseSalary({ driver_id: entry.person.id, ...input })
-          : await upsertSupportStaffSalaryBase({ support_staff_id: entry.person.id, ...input })
-      if (!res.success) return res
+      const input = inputOf(d)
+      saved.set(key, input)
+      sent.set(key, d)
+      rows[entry.kind].push({ [ID_COLUMN[entry.kind]]: entry.person.id, ...input })
     }
-    await load()
-    return { success: true }
-  }, [entries, drafts, dirtyKeys, load])
+    const results = await Promise.all([
+      bulkUpsertRoster('staff_salary_base', 'staff_id', rows.staff),
+      bulkUpsertRoster('driver_payroll_base', 'driver_id', rows.driver),
+      bulkUpsertRoster('support_staff_salary_base', 'support_staff_id', rows.support),
+    ])
+    const failed = results.find(r => !r.success)
+    // A failed table keeps its rows dirty (the drafts are untouched), so the
+    // next save retries them; the tables that did save are folded in now.
+    const ok: Record<Kind, boolean> = { staff: results[0].success, driver: results[1].success, support: results[2].success }
+    const next = entries.map(e => {
+      const input = saved.get(e.key)
+      return input && ok[e.kind] ? { ...e, existing: { ...(e.existing ?? {}), ...input } as Base } : e
+    })
+    setEntries(next)
+    setDrafts(prev => {
+      const out = { ...prev }
+      // A row typed into again while it saved keeps the newer typing, and
+      // stays dirty for the next save.
+      for (const e of next) {
+        const was = sent.get(e.key)
+        if (was && ok[e.kind] && out[e.key] && sameDraft(out[e.key], was)) out[e.key] = draftOf(e.existing)
+      }
+      return out
+    })
+    return failed ?? { success: true }
+  }, [entries, drafts, dirtyKeys])
 
   const { state, error, saveNow } = useAutosave(dirtyKeys.length > 0, flush)
 

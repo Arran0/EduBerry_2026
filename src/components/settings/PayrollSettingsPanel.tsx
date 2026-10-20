@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Check } from 'lucide-react'
 import BankPayoutSettings from '@/components/settings/BankPayoutSettings'
+import { SettingsGlass } from '@/components/settings/primitives'
 import HiddenMembersSettings from '@/components/salary/HiddenMembersSettings'
 import CycleCalibrationCompact from '@/components/salary/CycleCalibrationCompact'
 import { ADMIN } from '@/components/salary/adminUi'
@@ -62,7 +63,9 @@ export default function PayrollSettingsPanel() {
           How salaries leave the school&apos;s bank. Driver payroll uses the same connection; its own options are
           under Bus Finance in App Settings.
         </p>
-        <BankPayoutSettings ctx="salary" />
+        <SettingsGlass>
+          <BankPayoutSettings ctx="salary" />
+        </SettingsGlass>
       </section>
 
       <section>

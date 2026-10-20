@@ -15,7 +15,7 @@ import {
 import BankConnectionFields from './BankConnectionFields'
 import {
   Field, TextInput, NumberInput, SelectInput, SettingsCard, ToggleRow,
-  SaveButton, InfoNote, WebhookUrlField, Advanced, SectionLabel,
+  SaveButton, InfoNote, WebhookUrlField, Advanced, SectionLabel, useSettingsSkin,
 } from './primitives'
 
 // Salary payout settings — the school's own bank moves the money, with no
@@ -45,6 +45,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const k = useSettingsSkin()
 
   const load = useCallback(async () => {
     const [c, s] = await Promise.all([fetchPayoutConfig(), fetchPaymentSecrets('payout')])
@@ -88,7 +89,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
 
   if (!loaded) {
     return (
-      <div className="py-12 text-center text-[#71717A] text-sm">
+      <div className={k.loading}>
         <Loader2 size={16} className="animate-spin inline mr-2 text-[#A1A1AA]" /> Loading…
       </div>
     )
@@ -97,14 +98,14 @@ export default function BankPayoutSettings({ ctx }: Props) {
   const set = <K extends keyof PayoutConfig>(key: K, value: PayoutConfig[K]) => setCfg({ ...cfg, [key]: value })
 
   return (
-    <div className="space-y-5">
+    <div className={k.stack}>
       <InfoNote tone="info">
-        Shared site-wide with {isDriver ? 'staff salary' : 'driver payroll'} — one bank arrangement powers both.
-        These are your school&apos;s own bank credentials; no payment company sits in between and takes a cut.
+        Staff salary and driver payroll share this connection. Money goes straight from the school&apos;s own
+        bank, with no payment company in between.
       </InfoNote>
 
       <SettingsCard icon={<Banknote size={15} className="text-[#B8983C]" />} title="Salary disbursement">
-        <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+        <p className={k.para}>
           When enabled, an approved {period} is sent to your bank for credit to each staff member&apos;s account.
           When disabled, admins pay from the bank portal and mark records as paid here.
         </p>
@@ -155,7 +156,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
       {/* Debit account — needed by both the API and the file. */}
       {cfg.enabled && cfg.provider !== 'manual' && (
         <SettingsCard icon={<Landmark size={15} className="text-[#B8983C]" />} title="Debit account">
-          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+          <p className={k.para}>
             The school current account salaries are paid from. Stored admin-only and never readable by staff.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -210,7 +211,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
                 <textarea
                   value={mapText} onChange={e => setMapText(e.target.value)} rows={7} spellCheck={false}
                   placeholder={'{\n  "amount": "txnAmount",\n  "ifsc": "beneIfscCode",\n  "credits": "transactionList"\n}'}
-                  className="border border-[#D4D4D8] bg-white px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#27272A] transition-colors w-full resize-y"
+                  className={k.textarea}
                 />
               </Field>
               <InfoNote tone="info">
@@ -228,7 +229,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
       {/* File hand-off. */}
       {cfg.enabled && cfg.provider === 'bank_file' && (
         <SettingsCard icon={<FileSpreadsheet size={15} className="text-[#B8983C]" />} title="Transfer file layout">
-          <p className="text-xs text-[#71717A] mb-4 leading-relaxed">
+          <p className={k.para}>
             Approving a {period} generates this file for download. Upload it in your bank&apos;s corporate portal
             (or drop it on your H2H path) to release the money. Match the column order to your bank&apos;s file spec.
           </p>
@@ -242,7 +243,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
                 value={cfg.file.columns.join('\n')}
                 onChange={e => set('file', { ...cfg.file, columns: e.target.value.split('\n').map(l => l.trim()).filter(Boolean) })}
                 rows={8} spellCheck={false}
-                className="border border-[#D4D4D8] bg-white px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#27272A] transition-colors w-full resize-y"
+                className={k.textarea}
               />
             </Field>
 
@@ -281,10 +282,10 @@ export default function BankPayoutSettings({ ctx }: Props) {
           <SectionLabel>Onboarding checklist</SectionLabel>
           <ul className="space-y-2">
             {ONBOARDING_CHECKLIST.map(item => (
-              <li key={item.field} className="flex items-start gap-2 text-xs leading-relaxed">
-                <span className="mt-1.5 w-1 h-1 bg-[#B8983C] flex-shrink-0" />
-                <span><span className="text-[#18181B] font-medium">{item.field}</span>
-                  <span className="text-[#A1A1AA]"> — {item.why}</span>
+              <li key={item.field} className={`flex items-start gap-2 leading-relaxed ${k.glass ? 'text-[12.5px]' : 'text-xs'}`}>
+                <span className={k.bullet} />
+                <span className="min-w-0 break-words"><span className="text-[#18181B] font-medium">{item.field}</span>
+                  <span className={k.glass ? 'text-slate-500' : 'text-[#A1A1AA]'}> — {item.why}</span>
                 </span>
               </li>
             ))}
@@ -298,7 +299,7 @@ export default function BankPayoutSettings({ ctx }: Props) {
       )}
 
       {error && (
-        <div className="p-3 bg-white border border-[#E4E4E7] text-xs text-[#71717A]">{error}</div>
+        <div className={k.error}>{error}</div>
       )}
 
       <SaveButton saving={saving} saved={saved} label="Save payout settings" onClick={save} />

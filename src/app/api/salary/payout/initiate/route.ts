@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server'
 import { getPayoutProvider, PayoutRequest, PayoutCredentials } from '@/lib/payoutProvider'
 import { normalizePayoutConfig, type PayoutConfig } from '@/lib/bankConfig'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
+import { isSent, reconcile } from '@/lib/payoutClaim'
 
 // Initiates bank disbursement for the approved records in a cycle. Admin-only.
 // Since cycles cover staff and bus drivers alike, this one route disburses both.
@@ -21,6 +22,7 @@ interface RecordRow {
   status: string
   staff_id: string
   pay_by_cash: boolean
+  payout_status: string | null
   staff: { full_name: string; is_banned: boolean } | null
   items: { amount: number }[]
 }
@@ -95,7 +97,7 @@ export async function POST(request: NextRequest) {
   const [{ data: records, error: recErr }, { data: hiddenRow }] = await Promise.all([
     admin
       .from('salary_records')
-      .select('id, base_amount, status, staff_id, pay_by_cash, staff:profiles!staff_id(full_name, is_banned), items:salary_record_items(amount)')
+      .select('id, base_amount, status, staff_id, pay_by_cash, payout_status, staff:profiles!staff_id(full_name, is_banned), items:salary_record_items(amount)')
       .eq('cycle_id', cycle_id)
       .eq('status', 'approved'),
     admin.from('site_settings').select('value').eq('key', 'salary_hidden_members').maybeSingle(),
@@ -107,14 +109,24 @@ export async function POST(request: NextRequest) {
   const hiddenIds = (hiddenRow?.value as { ids?: unknown } | null)?.ids
   const hidden = new Set(Array.isArray(hiddenIds) ? hiddenIds.filter((id): id is string => typeof id === 'string') : [])
 
-  const rows = ((records ?? []) as unknown as RecordRow[])
+  const eligible = ((records ?? []) as unknown as RecordRow[])
     .filter(r => !r.pay_by_cash && !r.staff?.is_banned && !hidden.has(r.staff_id))
-  if (rows.length === 0) {
-    return NextResponse.json({ success: false, error: 'No approved records to disburse in this cycle' }, { status: 409 })
+  // A record already handed to the bank stays 'approved' until the bank calls
+  // back or someone marks it paid. Sending it again would pay it twice, so only
+  // records never sent, or whose last attempt failed, go in this batch.
+  const unsent = eligible.filter(r => !isSent(r.payout_status))
+  if (unsent.length === 0) {
+    const sent = eligible.length
+    return NextResponse.json({
+      success: false,
+      error: sent
+        ? `All ${sent} approved record(s) have already been sent to the bank. Mark them paid once the bank confirms.`
+        : 'No approved records to disburse in this cycle',
+    }, { status: 409 })
   }
 
   // Bank accounts for the staff in this batch.
-  const staffIds = rows.map(r => r.staff_id)
+  const staffIds = unsent.map(r => r.staff_id)
   const { data: banks } = await admin
     .from('staff_bank_accounts')
     .select('staff_id, account_holder_name, account_number, ifsc, bank_name, payout_fund_account_id')
@@ -124,9 +136,11 @@ export async function POST(request: NextRequest) {
   const period = `${cycle.period_month}/${cycle.period_year}`
   const requests: PayoutRequest[] = []
   const missingBank: string[] = []
-  for (const r of rows) {
+  const sendable: RecordRow[] = []
+  for (const r of unsent) {
     const bank = bankByStaff.get(r.staff_id)
     if (!bank) { missingBank.push(r.staff?.full_name ?? r.staff_id); continue }
+    sendable.push(r)
     const net = Number(r.base_amount || 0) + r.items.reduce((s, i) => s + Number(i.amount || 0), 0)
     requests.push({
       reference: r.id,
@@ -149,17 +163,43 @@ export async function POST(request: NextRequest) {
     }, { status: 409 })
   }
 
+  // Claim the records before anything reaches the bank. The update only
+  // matches rows that are still unsent, so of two requests racing for the same
+  // cycle (a double click, two admins) each record goes to exactly one of them.
+  const { data: claimedRows, error: claimErr } = await admin
+    .from('salary_records')
+    .update({ payout_status: 'initiated' })
+    .in('id', sendable.map(r => r.id))
+    .eq('status', 'approved')
+    .or('payout_status.is.null,payout_status.eq.failed')
+    .select('id')
+  if (claimErr) {
+    console.error('payout/initiate: claim failed', claimErr)
+    return NextResponse.json({ success: false, error: 'Could not reserve the records for payment' }, { status: 500 })
+  }
+  const claimed = new Set((claimedRows ?? []).map(r => r.id as string))
+  const toSend = requests.filter(r => claimed.has(r.reference))
+  if (toSend.length === 0) {
+    return NextResponse.json({ success: false, error: 'These records are already being sent to the bank.' }, { status: 409 })
+  }
+
   // Hand the batch to the provider and reconcile each record with the result.
   const provider = getPayoutProvider(config, creds)
-  const batch = await provider.createBulkPayout(requests)
+  let batch: Awaited<ReturnType<typeof provider.createBulkPayout>>
+  try {
+    batch = await provider.createBulkPayout(toSend)
+  } catch (e) {
+    // Nothing is known to have reached the bank: release the claim so the
+    // admin can fix the connection and try again.
+    console.error('payout/initiate: provider threw', e)
+    await admin.from('salary_records').update({ payout_status: 'failed' }).in('id', [...claimed])
+    return NextResponse.json({ success: false, error: 'The bank connection failed. Nothing was sent.' }, { status: 502 })
+  }
 
   let initiated = 0
   const failures: string[] = []
+  await reconcile(admin, 'salary_records', batch.results)
   for (const res of batch.results) {
-    await admin.from('salary_records').update({
-      payout_status: res.status,
-      payout_reference: res.payoutId ?? null,
-    }).eq('id', res.reference)
     if (res.success) initiated++
     else if (res.error && !failures.includes(res.error)) failures.push(res.error)
   }
@@ -171,7 +211,7 @@ export async function POST(request: NextRequest) {
       success: false,
       error: failures[0] ?? 'The bank did not accept any transfer in this cycle',
       errors: failures,
-      total: requests.length,
+      total: toSend.length,
     }, { status: 502 })
   }
 
@@ -182,7 +222,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     initiated,
-    total: requests.length,
+    total: toSend.length,
     skipped_no_bank: missingBank,
     provider: provider.name,
     errors: failures,

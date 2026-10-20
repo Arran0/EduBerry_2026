@@ -845,3 +845,36 @@ export async function initiateCyclePayouts(cycleId: string): Promise<{
     return { success: false, error: 'Network error starting payouts' }
   }
 }
+
+// ============================================
+// Bulk roster writes
+// ============================================
+
+/** The roster tables a sheet may save into, and the column each is keyed by. */
+export type RosterTable =
+  | 'staff_salary_base' | 'driver_payroll_base' | 'support_staff_salary_base'
+  | 'staff_bank_accounts' | 'driver_bank_accounts' | 'support_staff_bank_accounts'
+
+/**
+ * Write every edited row of one roster table in a single request.
+ *
+ * The Base Salaries and Bank Accounts sheets used to save a row at a time,
+ * each preceded by a round trip to the auth server for the user id — forty
+ * calls in sequence for twenty edits. The session the client already holds
+ * names the user, and an array upsert writes them all at once; RLS still
+ * decides whether the write is allowed, exactly as for a single row.
+ */
+export async function bulkUpsertRoster(
+  table: RosterTable,
+  conflictColumn: 'staff_id' | 'driver_id' | 'support_staff_id',
+  rows: Record<string, unknown>[],
+): Promise<{ success: boolean; error?: string }> {
+  if (rows.length === 0) return { success: true }
+  const { data: { session } } = await supabase.auth.getSession()
+  const createdBy = session?.user?.id
+  const { error } = await supabase
+    .from(table)
+    .upsert(rows.map(r => ({ ...r, created_by: createdBy })), { onConflict: conflictColumn })
+  if (error) { console.error(`bulkUpsertRoster(${table}) failed:`, error); return { success: false, error: error.message } }
+  return { success: true }
+}

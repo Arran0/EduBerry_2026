@@ -56,7 +56,10 @@ export async function POST(request: NextRequest) {
       payout_reference: payoutId ?? record.id,
     }).eq('id', record.id)
   } else {
+    // A late or replayed failure never undoes a transfer the bank already
+    // settled: only a record not yet paid can be marked failed.
     await admin.from('driver_payroll_records').update({ payout_status: 'failed' }).eq('id', record.id)
+      .neq('status', 'paid')
   }
 
   return NextResponse.json({ ok: true })

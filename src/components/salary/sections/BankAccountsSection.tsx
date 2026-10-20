@@ -10,11 +10,11 @@ import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolb
 import SaveBar from '@/components/salary/SaveBar'
 import { useAutosave } from '@/components/salary/useAutosave'
 import { UserProfile, getDisplayRole } from '@/lib/supabase'
-import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, fetchHiddenSalaryMemberIds, upsertBankAccount } from '@/lib/salary'
-import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts, upsertDriverBankAccount } from '@/lib/bus'
+import { StaffBankAccount, fetchEligibleStaff, fetchBankAccounts, fetchHiddenSalaryMemberIds, bulkUpsertRoster } from '@/lib/salary'
+import { DriverBankAccount, fetchDrivers, fetchDriverBankAccounts } from '@/lib/bus'
 import {
   SupportStaff, SupportStaffBankAccount,
-  fetchSupportStaff, fetchSupportStaffBankAccounts, upsertSupportStaffBankAccount,
+  fetchSupportStaff, fetchSupportStaffBankAccounts,
 } from '@/lib/supportStaff'
 
 /**
@@ -75,6 +75,18 @@ function sameDraft(a: Draft, b: Draft): boolean {
   return a.holder === b.holder && a.bankName === b.bankName && a.account === b.account && a.ifsc === b.ifsc
 }
 
+const ID_COLUMN = { staff: 'staff_id', driver: 'driver_id', support: 'support_staff_id' } as const
+
+/** A draft as the columns the bank-account tables store. */
+function inputOf(d: Draft) {
+  return {
+    account_holder_name: d.holder.trim(),
+    account_number: d.account.trim(),
+    ifsc: d.ifsc.trim().toUpperCase(),
+    bank_name: d.bankName.trim() || null,
+  }
+}
+
 /** A row is only worth writing once the bank actually needs all three required fields. */
 function isComplete(d: Draft): boolean {
   return d.holder.trim() !== '' && d.account.trim() !== '' && d.ifsc.trim() !== ''
@@ -133,28 +145,45 @@ export default function BankAccountsSection() {
     [dirtyKeys, drafts],
   )
 
+  // One request per roster table for every complete edited row, then the
+  // saved values become the rows' "existing" state in place.
   const flush = useCallback(async () => {
     const byKey = new Map(entries.map(e => [e.key, e]))
+    const saved = new Map<string, ReturnType<typeof inputOf>>()
+    const sent = new Map<string, Draft>()
+    const rows: Record<Kind, Record<string, unknown>[]> = { staff: [], driver: [], support: [] }
     for (const key of savableKeys) {
       const entry = byKey.get(key)
       const d = drafts[key]
       if (!entry || !d) continue
-      const input = {
-        account_holder_name: d.holder.trim(),
-        account_number: d.account.trim(),
-        ifsc: d.ifsc.trim().toUpperCase(),
-        bank_name: d.bankName.trim() || null,
-      }
-      const res = entry.kind === 'staff'
-        ? await upsertBankAccount({ staff_id: entry.person.id, ...input })
-        : entry.kind === 'driver'
-          ? await upsertDriverBankAccount({ driver_id: entry.person.id, ...input })
-          : await upsertSupportStaffBankAccount({ support_staff_id: entry.person.id, ...input })
-      if (!res.success) return res
+      const input = inputOf(d)
+      saved.set(key, input)
+      sent.set(key, d)
+      rows[entry.kind].push({ [ID_COLUMN[entry.kind]]: entry.person.id, ...input })
     }
-    await load()
-    return { success: true }
-  }, [entries, drafts, savableKeys, load])
+    const results = await Promise.all([
+      bulkUpsertRoster('staff_bank_accounts', 'staff_id', rows.staff),
+      bulkUpsertRoster('driver_bank_accounts', 'driver_id', rows.driver),
+      bulkUpsertRoster('support_staff_bank_accounts', 'support_staff_id', rows.support),
+    ])
+    const failed = results.find(r => !r.success)
+    const ok: Record<Kind, boolean> = { staff: results[0].success, driver: results[1].success, support: results[2].success }
+    const next = entries.map(e => {
+      const input = saved.get(e.key)
+      return input && ok[e.kind] ? { ...e, existing: { ...(e.existing ?? {}), ...input } as Account } : e
+    })
+    setEntries(next)
+    setDrafts(prev => {
+      const out = { ...prev }
+      // A row typed into again while it saved keeps the newer typing.
+      for (const e of next) {
+        const was = sent.get(e.key)
+        if (was && ok[e.kind] && out[e.key] && sameDraft(out[e.key], was)) out[e.key] = draftOf(e.existing)
+      }
+      return out
+    })
+    return failed ?? { success: true }
+  }, [entries, drafts, savableKeys])
 
   const { state, error, saveNow } = useAutosave(savableKeys.length > 0, flush)
 
