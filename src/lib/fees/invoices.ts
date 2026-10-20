@@ -306,7 +306,30 @@ export interface ProfileListRow extends FeeProfileRow {
  * repo's own PERFORMANCE.md calls looping a query per row the most expensive
  * recurring mistake here, and this list is 930 rows on the whole-school view.
  */
+/**
+ * The last list each signed-in user got for a session, so a tab can paint at
+ * once from it while fetchProfileList brings the live one. Keyed by user as
+ * well as session: what a list shows depends on who may see amounts.
+ */
+const lastProfileList = new Map<string, ProfileListRow[]>()
+
+async function profileListKey(academicYearId: string): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  return `${data.session?.user.id ?? 'anon'}:${academicYearId}`
+}
+
+/** The cached list for this session, if one was loaded before — may be stale. */
+export async function peekProfileList(academicYearId: string): Promise<ProfileListRow[] | null> {
+  return lastProfileList.get(await profileListKey(academicYearId)) ?? null
+}
+
 export async function fetchProfileList(academicYearId: string): Promise<ProfileListRow[]> {
+  const list = await loadProfileList(academicYearId)
+  lastProfileList.set(await profileListKey(academicYearId), list)
+  return list
+}
+
+async function loadProfileList(academicYearId: string): Promise<ProfileListRow[]> {
   const [{ data: profiles, error: pErr }, { data: invoices, error: iErr }] = await Promise.all([
     supabase.from('fee_profiles_v')
       .select('id, student_id, academic_year_id, fee_group_id, structure_id, structure_source, status, prorate_from, is_rte, opening_balance, notes')

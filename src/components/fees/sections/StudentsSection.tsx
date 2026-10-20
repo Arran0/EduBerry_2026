@@ -19,7 +19,7 @@ import { FeeDeck, FilterMenu, ResetChip } from '@/components/fees/glass'
 import NoAccess from '@/components/fees/NoAccess'
 import { gradeLabel } from '@/lib/grades'
 import { supabase } from '@/lib/supabase'
-import { fetchProfileList, type ProfileListRow } from '@/lib/fees/invoices'
+import { fetchProfileList, peekProfileList, type ProfileListRow } from '@/lib/fees/invoices'
 
 interface GridGroup { id: string; grade: number; name: string; sections: string[] }
 
@@ -54,7 +54,9 @@ export default function StudentsSection({
 
   const load = useCallback(async () => {
     if (!year) return
-    setLoading(true)
+    const cached = await peekProfileList(year.id)
+    if (cached) setRows(cached)
+    setLoading(!cached)
     try {
       const [list, { data: grp }] = await Promise.all([
         fetchProfileList(year.id),

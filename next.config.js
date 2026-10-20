@@ -3,6 +3,7 @@ const { DefinePlugin } = require('webpack')
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
   images: {
     domains: ['tgxxqzeaqxiwoqzopcku.supabase.co'],
   },
@@ -19,6 +20,11 @@ const nextConfig = {
             key: 'Cache-Control',
             value: 'no-store',
           },
+          // Basic browser hardening: no MIME sniffing, no framing by other
+          // sites (clickjacking), and no full URLs leaked to other origins.
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
       {
