@@ -1,27 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Calendar, Clock, Plus, Trash2, Star, Users, ChevronRight, ListOrdered, FileText, AlertCircle, Edit3, Check, ShieldCheck, UserPlus, Search } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
+import { X, Calendar, Clock, Plus, Trash2, Star, Users, ChevronRight, ListOrdered, FileText, Edit3, Check, UserPlus, Search, FolderKanban, Loader2 } from 'lucide-react'
 import {
-  ProjectWithDetails,
-  ProjectMember,
-  Subtask,
-  NewSubtaskInput,
-  updateSubtaskStatus,
-  addSubtask,
-  deleteSubtask,
-  deleteProject,
-  updateProject,
-  addProjectMember,
-  removeProjectMember,
+  ProjectWithDetails, ProjectMember, Subtask, NewSubtaskInput, updateSubtaskStatus, addSubtask, deleteSubtask,
+  deleteProject, updateProject, addProjectMember, removeProjectMember,
 } from '@/lib/projects'
 import { getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus, canVerifyTask } from '@/lib/tasks'
+import { formatSlotTime } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import SubtaskCard from './SubtaskCard'
 import { useAuth } from '@/contexts/AuthContext'
+import { Btn, IconBtn, ConfirmSheet, FormCard, FormRow, Toggle, Notice, TaskSheet, Field, SubHead, shortDate } from './ui'
 
 interface ProjectCardProps {
   project: ProjectWithDetails
@@ -32,14 +24,7 @@ interface ProjectCardProps {
   availableAssignees?: UserProfile[]
 }
 
-export default function ProjectCard({
-  project,
-  canEdit,
-  canCheck,
-  onClose,
-  onUpdated,
-  availableAssignees = [],
-}: ProjectCardProps) {
+export default function ProjectCard({ project, canEdit, canCheck, onClose, onUpdated, availableAssignees = [] }: ProjectCardProps) {
   const { user } = useAuth()
   const [localProject, setLocalProject] = useState(project)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -53,13 +38,11 @@ export default function ProjectCard({
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
   const [sequentialTooltip, setSequentialTooltip] = useState<string | null>(null)
 
-  // Member search state
   const [showMemberSearch, setShowMemberSearch] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
   const [addingMember, setAddingMember] = useState<string | null>(null)
   const [removingMember, setRemovingMember] = useState<string | null>(null)
 
-  // Add subtask form state
   const [newSubTitle, setNewSubTitle] = useState('')
   const [newSubDesc, setNewSubDesc] = useState('')
   const [newSubDueDate, setNewSubDueDate] = useState('')
@@ -70,15 +53,14 @@ export default function ProjectCard({
   const [newSubRequireCheck, setNewSubRequireCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Keep local state in sync when project prop updates
+  const [confirm, setConfirm] = useState<{ kind: 'project' } | { kind: 'subtask'; id: string; title: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Follow the parent's fresh data, including an open subtask.
   useEffect(() => {
     setLocalProject(project)
-    // Sync selectedSubtask if it's open and the project has updated data
-    setSelectedSubtask(prev => {
-      if (!prev) return prev
-      const updated = project.subtasks.find(s => s.id === prev.id)
-      return updated ?? prev
-    })
+    setSelectedSubtask(prev => (prev ? project.subtasks.find(s => s.id === prev.id) ?? prev : prev))
   }, [project])
 
   const handleSaveTitle = async () => {
@@ -101,16 +83,9 @@ export default function ProjectCard({
   }
 
   const handleSaveDates = async () => {
-    const ok = await updateProject(localProject.id, {
-      start_date: startDateDraft || null,
-      end_date: endDateDraft || null,
-    })
+    const ok = await updateProject(localProject.id, { start_date: startDateDraft || null, end_date: endDateDraft || null })
     if (ok) {
-      setLocalProject(prev => ({
-        ...prev,
-        start_date: startDateDraft || null,
-        end_date: endDateDraft || null,
-      }))
+      setLocalProject(prev => ({ ...prev, start_date: startDateDraft || null, end_date: endDateDraft || null }))
       setEditingDates(false)
       onUpdated()
     }
@@ -125,32 +100,23 @@ export default function ProjectCard({
     }
   }
 
+  // Dismissed subtasks count as deleted — left out of the progress figures.
+  const countableSubtasks = localProject.subtasks.filter(s => s.status !== 'dismissed')
+  const completedCount = countableSubtasks.filter(s => s.status === 'checked' || (!s.require_check && s.status === 'done')).length
+  const totalCount = countableSubtasks.length
+  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+  // A fully completed project locks its subtasks' status.
+  const isProjectClosed = totalCount > 0 && completedCount === totalCount
+
   const handleSubtaskStatusTap = async (subtask: Subtask) => {
-    // Closed project → subtasks are locked. Verified ('checked') subtasks may
-    // only be re-opened by a verifier (supervisor who can check, or creator).
-    const countable = localProject.subtasks.filter(s => s.status !== 'dismissed')
-    const projectClosed = countable.length > 0 &&
-      countable.every(s => s.status === 'checked' || (!s.require_check && s.status === 'done'))
-    if (projectClosed) return
+    if (isProjectClosed) return
     const isVerifier = canVerifyTask(subtask, user?.id, canCheck)
     if (subtask.status === 'checked' && !isVerifier) return
     const next = getNextStatus(subtask.status, isVerifier, subtask.require_check ?? false)
     if (next === subtask.status) return
-
-    const result = await updateSubtaskStatus(
-      subtask.id,
-      next,
-      localProject.id,
-      localProject.sequential_mode
-    )
-
+    const result = await updateSubtaskStatus(subtask.id, next, localProject.id, localProject.sequential_mode)
     if (result.success) {
-      setLocalProject(prev => ({
-        ...prev,
-        subtasks: prev.subtasks.map(s =>
-          s.id === subtask.id ? { ...s, status: next } : s
-        ),
-      }))
+      setLocalProject(prev => ({ ...prev, subtasks: prev.subtasks.map(s => s.id === subtask.id ? { ...s, status: next } : s) }))
       setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, status: next } : prev)
       onUpdated()
     } else if (result.error) {
@@ -162,7 +128,6 @@ export default function ProjectCard({
   const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newSubTitle.trim()) return
-
     setSubmitting(true)
     const input: NewSubtaskInput = {
       title: newSubTitle.trim(),
@@ -176,63 +141,43 @@ export default function ProjectCard({
       created_by_id: user?.id,
       sort_order: localProject.subtasks.length,
     }
-
     const result = await addSubtask(localProject.id, input)
     setSubmitting(false)
-
     if (result) {
-      setLocalProject(prev => ({
-        ...prev,
-        subtasks: [...prev.subtasks, result],
-      }))
-      // Reset form
-      setNewSubTitle('')
-      setNewSubDesc('')
-      setNewSubDueDate('')
-      setNewSubTiming('')
-      setNewSubEndTime('')
-      setNewSubBonusPoints(0)
-      setNewSubAssignee('')
-      setNewSubRequireCheck(false)
+      setLocalProject(prev => ({ ...prev, subtasks: [...prev.subtasks, result] }))
+      setNewSubTitle(''); setNewSubDesc(''); setNewSubDueDate(''); setNewSubTiming(''); setNewSubEndTime('')
+      setNewSubBonusPoints(0); setNewSubAssignee(''); setNewSubRequireCheck(false)
       setShowAddSubtask(false)
       onUpdated()
     }
   }
 
-  const handleDeleteSubtask = async (subtaskId: string) => {
-    if (!confirm('Delete this subtask?')) return
-    const ok = await deleteSubtask(subtaskId)
-    if (ok) {
-      setLocalProject(prev => ({
-        ...prev,
-        subtasks: prev.subtasks.filter(s => s.id !== subtaskId),
-      }))
-      setSelectedSubtask(null)
-      onUpdated()
-    }
-  }
-
-  const handleDeleteProject = async () => {
-    if (!confirm('Delete this entire project and all its subtasks?')) return
-    const ok = await deleteProject(localProject.id)
-    if (ok) {
+  const handleConfirmDelete = async () => {
+    if (!confirm) return
+    setDeleting(true)
+    setDeleteError(null)
+    if (confirm.kind === 'project') {
+      const ok = await deleteProject(localProject.id)
+      setDeleting(false)
+      if (!ok) { setDeleteError('The project was not deleted. Try again.'); return }
+      setConfirm(null)
       onUpdated()
       onClose()
+      return
     }
+    const ok = await deleteSubtask(confirm.id)
+    setDeleting(false)
+    if (!ok) { setDeleteError('The subtask was not deleted. Try again.'); return }
+    setLocalProject(prev => ({ ...prev, subtasks: prev.subtasks.filter(s => s.id !== confirm.id) }))
+    setSelectedSubtask(null)
+    setConfirm(null)
+    onUpdated()
   }
 
-  // Members that aren't already in the project
-  const memberIds = useMemo(
-    () => new Set(localProject.members.map(m => m.user_id)),
-    [localProject.members]
-  )
+  const memberIds = useMemo(() => new Set(localProject.members.map(m => m.user_id)), [localProject.members])
   const filteredNonMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase()
-    return availableAssignees.filter(u => {
-      if (memberIds.has(u.id)) return false
-      if (!q) return true
-      return u.full_name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)
-    })
+    return availableAssignees.filter(u => !memberIds.has(u.id) && (!q || u.full_name?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)))
   }, [availableAssignees, memberIds, memberSearch])
 
   const handleAddMember = async (userId: string) => {
@@ -242,12 +187,7 @@ export default function ProjectCard({
     const ok = await addProjectMember(localProject.id, userId)
     setAddingMember(null)
     if (ok) {
-      const newMember: ProjectMember = {
-        id: `temp-${Date.now()}`,
-        project_id: localProject.id,
-        user_id: userId,
-        user: userProfile,
-      }
+      const newMember: ProjectMember = { id: `temp-${Date.now()}`, project_id: localProject.id, user_id: userId, user: userProfile }
       setLocalProject(prev => ({ ...prev, members: [...prev.members, newMember] }))
       setMemberSearch('')
       onUpdated()
@@ -259,616 +199,312 @@ export default function ProjectCard({
     const ok = await removeProjectMember(localProject.id, userId)
     setRemovingMember(null)
     if (ok) {
-      setLocalProject(prev => ({
-        ...prev,
-        members: prev.members.filter(m => m.user_id !== userId),
-      }))
+      setLocalProject(prev => ({ ...prev, members: prev.members.filter(m => m.user_id !== userId) }))
       onUpdated()
     }
   }
 
-  // Dismissed subtasks are treated as deleted — excluded from progress maths.
-  const countableSubtasks = localProject.subtasks.filter(s => s.status !== 'dismissed')
-  const completedCount = countableSubtasks.filter(s =>
-    s.status === 'checked' || (!s.require_check && s.status === 'done')
-  ).length
-  const totalCount = countableSubtasks.length
-  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
-  // A closed (fully completed) project locks its subtasks against status changes.
-  const isProjectClosed = totalCount > 0 && completedCount === totalCount
-
-  const modal = (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
-        onClick={(e) => { e.stopPropagation(); onClose() }}
-      >
-        <motion.div
-          initial={{ y: 40, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 40, opacity: 0 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 pt-4 pb-4 z-10">
-            {/* Mobile drag handle */}
-            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3 sm:hidden" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <ListOrdered size={16} className="text-mps-blue-600" />
-                  <span className="font-medium">Project</span>
-                </div>
-                {progress > 0 && (
-                  <span className="text-xs font-medium text-slate-500">
-                    {progress}%
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {canEdit && (
-                  <button
-                    onClick={handleDeleteProject}
-                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-                <button
-                  onClick={onClose}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Body */}
-          <div className="p-5 space-y-5">
-            {/* Title */}
-            <div>
-              {editingTitle && canEdit ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={titleDraft}
-                    onChange={e => setTitleDraft(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSaveTitle()}
-                    className="flex-1 text-xl font-bold text-slate-800 border border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
-                    autoFocus
-                  />
-                  <button onClick={handleSaveTitle} className="p-1.5 text-mps-green-600 hover:bg-mps-green-50 rounded-lg">
-                    <Check size={16} />
-                  </button>
-                  <button onClick={() => { setEditingTitle(false); setTitleDraft(localProject.title) }} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
-                    <X size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 group">
-                  <h2 className="text-xl font-bold text-slate-800">{localProject.title}</h2>
-                  {canEdit && (
-                    <button
-                      onClick={() => setEditingTitle(true)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-600 rounded transition-opacity"
-                    >
-                      <Edit3 size={14} />
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Description */}
-            <div>
-              {editingDesc && canEdit ? (
-                <div className="space-y-2">
-                  <textarea
-                    value={descDraft}
-                    onChange={e => setDescDraft(e.target.value)}
-                    rows={3}
-                    className="w-full text-sm text-slate-600 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50 resize-none"
-                    placeholder="Project description..."
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={handleSaveDesc} className="text-xs px-3 py-1.5 bg-mps-blue-500 text-white rounded-lg hover:bg-mps-blue-600">
-                      Save
-                    </button>
-                    <button onClick={() => { setEditingDesc(false); setDescDraft(localProject.description || '') }} className="text-xs px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="group">
-                  {localProject.description ? (
-                    <p className="text-sm text-slate-600 leading-relaxed">
-                      {localProject.description}
-                      {canEdit && (
-                        <button
-                          onClick={() => setEditingDesc(true)}
-                          className="inline-block ml-2 opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-slate-600 rounded transition-opacity"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                      )}
-                    </p>
-                  ) : canEdit ? (
-                    <button
-                      onClick={() => setEditingDesc(true)}
-                      className="text-sm text-slate-400 hover:text-slate-600"
-                    >
-                      + Add description
-                    </button>
-                  ) : null}
-                </div>
-              )}
-            </div>
-
-            {/* Dates & Sequential Mode */}
-            <div className="flex flex-wrap gap-3">
-              {editingDates && canEdit ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar size={14} className="text-slate-500" />
-                    <input
-                      type="date"
-                      value={startDateDraft}
-                      onChange={e => setStartDateDraft(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
-                    />
-                    <span className="text-slate-400 text-sm">to</span>
-                    <input
-                      type="date"
-                      value={endDateDraft}
-                      onChange={e => setEndDateDraft(e.target.value)}
-                      className="text-sm border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-mps-blue-500"
-                    />
-                  </div>
-                  <button onClick={handleSaveDates} className="p-1.5 text-mps-green-600 hover:bg-mps-green-50 rounded-lg">
-                    <Check size={14} />
-                  </button>
-                  <button onClick={() => { setEditingDates(false); setStartDateDraft(localProject.start_date || ''); setEndDateDraft(localProject.end_date || '') }} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {(localProject.start_date || localProject.end_date) && (
-                    <button
-                      onClick={() => canEdit && setEditingDates(true)}
-                      className="flex items-center gap-1.5 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                    >
-                      <Calendar size={14} />
-                      <span>
-                        {localProject.start_date || '?'} - {localProject.end_date || '?'}
-                      </span>
-                    </button>
-                  )}
-                  {!localProject.start_date && !localProject.end_date && canEdit && (
-                    <button
-                      onClick={() => setEditingDates(true)}
-                      className="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1"
-                    >
-                      <Calendar size={14} /> + Add dates
-                    </button>
-                  )}
-                </>
-              )}
-
-              {/* Sequential mode toggle */}
-              <button
-                onClick={() => canEdit && handleToggleSequential()}
-                className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                  localProject.sequential_mode
-                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-                } ${!canEdit ? 'cursor-default' : 'cursor-pointer'}`}
-                disabled={!canEdit}
-              >
-                <ListOrdered size={14} />
-                Sequential {localProject.sequential_mode ? 'ON' : 'OFF'}
-              </button>
-            </div>
-
-            {/* Progress bar */}
-            {totalCount > 0 && (
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-                  <span>Progress</span>
-                  <span>{completedCount}/{totalCount} subtasks ({progress}%)</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Members */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Users size={14} />
-                  Members ({localProject.members.length})
-                </h4>
-                {canEdit && availableAssignees.length > 0 && (
-                  <button
-                    onClick={() => { setShowMemberSearch(v => !v); setMemberSearch('') }}
-                    className="flex items-center gap-1 text-xs text-mps-blue-600 hover:text-mps-blue-700 font-medium"
-                  >
-                    <UserPlus size={13} /> Add member
-                  </button>
-                )}
-              </div>
-
-              {/* Member search panel */}
-              <AnimatePresence>
-                {showMemberSearch && canEdit && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden mb-3"
-                  >
-                    <div className="border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="relative border-b border-slate-100">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        <input
-                          autoFocus
-                          type="text"
-                          value={memberSearch}
-                          onChange={e => setMemberSearch(e.target.value)}
-                          placeholder="Search by name or role…"
-                          className="w-full pl-8 pr-3 py-2.5 text-sm focus:outline-none bg-slate-50"
-                        />
-                      </div>
-                      <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
-                        {filteredNonMembers.length === 0 ? (
-                          <p className="text-center text-xs text-slate-400 py-4">
-                            {memberSearch ? 'No matching users' : 'All available users are already members'}
-                          </p>
-                        ) : (
-                          filteredNonMembers.map(user => (
-                            <button
-                              key={user.id}
-                              onClick={() => handleAddMember(user.id)}
-                              disabled={addingMember === user.id}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-mps-blue-50 text-left transition-colors disabled:opacity-60"
-                            >
-                              <Avatar avatarUrl={user.avatar_url} name={user.full_name} size={28} userId={user.id} />
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-slate-700 truncate">{user.full_name}</p>
-                                <p className="text-[11px] text-slate-400 capitalize">{user.role}</p>
-                              </div>
-                              {addingMember === user.id ? (
-                                <span className="text-[10px] text-slate-400">Adding…</span>
-                              ) : (
-                                <Plus size={14} className="text-mps-blue-500 flex-shrink-0" />
-                              )}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="flex flex-wrap gap-2">
-                {localProject.members.map(m => (
-                  <span
-                    key={m.id}
-                    className="flex items-center gap-1.5 text-xs bg-mps-blue-50 text-mps-blue-700 px-2.5 py-1 rounded-full font-medium"
-                  >
-                    <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={20} userId={m.user?.id} />
-                    {m.user?.full_name || 'Unknown'}
-                    {canEdit && (
-                      <button
-                        onClick={() => handleRemoveMember(m.user_id)}
-                        disabled={removingMember === m.user_id}
-                        className="ml-0.5 text-mps-blue-400 hover:text-red-500 disabled:opacity-40 transition-colors"
-                        title="Remove member"
-                      >
-                        {removingMember === m.user_id ? (
-                          <span className="text-[9px]">…</span>
-                        ) : (
-                          <X size={11} />
-                        )}
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Sequential mode tooltip */}
-            <AnimatePresence>
-              {sequentialTooltip && (
-                <motion.div
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm px-4 py-2.5 rounded-xl"
-                >
-                  <AlertCircle size={16} />
-                  {sequentialTooltip}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Subtasks */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                  <FileText size={14} />
-                  Subtasks ({totalCount})
-                </h4>
-                {canEdit && (
-                  <button
-                    onClick={() => setShowAddSubtask(!showAddSubtask)}
-                    className="text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium flex items-center gap-1"
-                  >
-                    <Plus size={14} /> Add
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                {localProject.subtasks.map((subtask, index) => (
-                  <motion.div
-                    key={subtask.id}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03 }}
-                    className={`glass rounded-xl p-3 cursor-pointer hover:shadow-md transition-shadow ${subtask.status === 'dismissed' ? 'opacity-60' : ''}`}
-                    onClick={() => setSelectedSubtask(subtask)}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {/* Compact circle status button */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); if (!isProjectClosed) handleSubtaskStatusTap(subtask) }}
-                        disabled={isProjectClosed}
-                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${isProjectClosed ? 'cursor-not-allowed' : 'active:scale-95 hover:shadow-md'} ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
-                        title={isProjectClosed ? 'Project completed — status locked' : `${getDynamicStatusLabel(subtask.status, subtask.require_check)} — tap to change`}
-                      >
-                        <div className={`w-3 h-3 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
-                      </button>
-
-                      {/* Subtask info */}
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-medium text-sm truncate ${
-                          (subtask.status === 'checked' || subtask.status === 'dismissed' || (!subtask.require_check && subtask.status === 'done'))
-                            ? 'line-through text-slate-400' : 'text-slate-800'
-                        }`}>
-                          {localProject.sequential_mode && (
-                            <span className="text-xs text-slate-400 mr-1.5">#{index + 1}</span>
-                          )}
-                          {subtask.title}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden">
-                          {subtask.assignee && (
-                            <span className="text-xs text-slate-500 truncate min-w-0 flex-shrink">
-                              {subtask.assignee.full_name}
-                            </span>
-                          )}
-                          {subtask.due_date && (
-                            <span className="text-xs text-slate-400 flex items-center gap-0.5 flex-shrink-0">
-                              <Calendar size={9} /> {subtask.due_date}
-                            </span>
-                          )}
-                          {subtask.timing && (
-                            <span className="hidden sm:flex text-xs text-slate-400 items-center gap-0.5 flex-shrink-0">
-                              <Clock size={9} /> {subtask.timing}
-                            </span>
-                          )}
-                          {(subtask.bonus_points > 0 || subtask.tag === 'bonus') && (
-                            <span className="text-xs px-1 py-0.5 bg-amber-100 text-amber-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
-                              <Star size={8} /> {subtask.bonus_points > 0 ? `${subtask.bonus_points}BP` : 'B'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
-                    </div>
-                  </motion.div>
-                ))}
-
-                {totalCount === 0 && (
-                  <div className="text-center py-6 text-sm text-slate-400">
-                    No subtasks yet.{' '}
-                    {canEdit && (
-                      <button
-                        onClick={() => setShowAddSubtask(true)}
-                        className="text-mps-blue-600 hover:text-mps-blue-700 font-medium"
-                      >
-                        Add one
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Add Subtask Form */}
-            <AnimatePresence>
-              {showAddSubtask && canEdit && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <form onSubmit={handleAddSubtask} className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-                    {/* Form header */}
-                    <div className="bg-gradient-to-r from-mps-blue-50 to-slate-50 px-4 py-3 border-b border-slate-200 flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-mps-blue-500 flex items-center justify-center">
-                        <Plus size={14} className="text-white" />
-                      </div>
-                      <h5 className="text-sm font-semibold text-slate-700">New Subtask</h5>
-                    </div>
-
-                    <div className="p-4 space-y-3">
-                      <input
-                        type="text"
-                        value={newSubTitle}
-                        onChange={e => setNewSubTitle(e.target.value)}
-                        placeholder="Subtask title *"
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 focus:border-mps-blue-500 bg-slate-50/50"
-                        required
-                        autoFocus
-                      />
-
-                      <textarea
-                        value={newSubDesc}
-                        onChange={e => setNewSubDesc(e.target.value)}
-                        placeholder="Description (optional)"
-                        rows={2}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 resize-none bg-slate-50/50"
-                      />
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Assignee</label>
-                          <select
-                            value={newSubAssignee}
-                            onChange={e => setNewSubAssignee(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 bg-white"
-                          >
-                            <option value="">Unassigned</option>
-                            {localProject.members.map(m => (
-                              <option key={m.user_id} value={m.user_id}>
-                                {m.user?.full_name || 'Unknown'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Due Date</label>
-                          <input
-                            type="date"
-                            value={newSubDueDate}
-                            onChange={e => setNewSubDueDate(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Time</label>
-                          <input
-                            type="time"
-                            value={newSubTiming}
-                            onChange={e => setNewSubTiming(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">End Time</label>
-                          <input
-                            type="time"
-                            value={newSubEndTime}
-                            onChange={e => setNewSubEndTime(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Bonus Points</label>
-                          <input
-                            type="number"
-                            value={newSubBonusPoints}
-                            onChange={e => {
-                              const val = Number(e.target.value)
-                              setNewSubBonusPoints(val)
-                              if (val !== 0) setNewSubRequireCheck(true)
-                            }}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/40 bg-white"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Verification</label>
-                          <button
-                            type="button"
-                            onClick={() => newSubBonusPoints === 0 && setNewSubRequireCheck(v => !v)}
-                            disabled={newSubBonusPoints !== 0}
-                            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                              newSubRequireCheck
-                                ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-sm'
-                                : 'bg-white border-slate-200 text-slate-500'
-                            } ${newSubBonusPoints !== 0 ? 'cursor-not-allowed' : 'hover:border-slate-300'}`}
-                          >
-                            <ShieldCheck size={14} className={newSubRequireCheck ? 'text-amber-600' : 'text-slate-400'} />
-                            {newSubBonusPoints !== 0 ? 'Locked ON' : newSubRequireCheck ? 'Required' : 'Not required'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                        <button
-                          type="submit"
-                          disabled={submitting || !newSubTitle.trim()}
-                          className="flex-1 btn-primary text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {submitting ? 'Adding...' : 'Add Subtask'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowAddSubtask(false)}
-                          className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  )
-
-  if (typeof document === 'undefined') return null
+  const ok = 'w-8 h-8 inline-flex items-center justify-center rounded-full text-emerald-600 hover:bg-emerald-50 flex-shrink-0'
+  const cancel = 'w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 flex-shrink-0'
 
   return (
     <>
-      {createPortal(modal, document.body)}
-      {selectedSubtask && createPortal(
-        <AnimatePresence>
+      <TaskSheet
+        onClose={onClose}
+        size="xl"
+        title={editingTitle && canEdit ? 'Rename project' : localProject.title}
+        subtitle={totalCount > 0 ? `Project, ${completedCount} of ${totalCount} subtasks complete` : 'Project'}
+        icon={FolderKanban}
+        headerActions={canEdit ? (
+          <IconBtn quiet label="Delete project" onClick={() => setConfirm({ kind: 'project' })} className="hover:!text-red-600">
+            <Trash2 size={15} />
+          </IconBtn>
+        ) : undefined}
+      >
+        <div className="space-y-4">
+          {/* Title */}
+          {editingTitle && canEdit ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSaveTitle()}
+                className="tk-input !h-11 !text-[16px] font-semibold"
+                autoFocus
+              />
+              <button onClick={handleSaveTitle} className={ok} aria-label="Save name"><Check size={16} /></button>
+              <button onClick={() => { setEditingTitle(false); setTitleDraft(localProject.title) }} className={cancel} aria-label="Cancel"><X size={16} /></button>
+            </div>
+          ) : canEdit ? (
+            <button onClick={() => setEditingTitle(true)} className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-amber-700 hover:text-amber-800">
+              <Edit3 size={12} /> Rename
+            </button>
+          ) : null}
+
+          {/* Description */}
+          {editingDesc && canEdit ? (
+            <div className="space-y-2">
+              <textarea value={descDraft} onChange={e => setDescDraft(e.target.value)} rows={3} className="tk-input" placeholder="Project description" autoFocus />
+              <div className="flex gap-2">
+                <Btn tone="primary" onClick={handleSaveDesc}>Save</Btn>
+                <Btn onClick={() => { setEditingDesc(false); setDescDraft(localProject.description || '') }}>Cancel</Btn>
+              </div>
+            </div>
+          ) : localProject.description ? (
+            <p className="group text-[13.5px] text-slate-600 leading-relaxed break-words whitespace-pre-wrap">
+              {localProject.description}
+              {canEdit && (
+                <button onClick={() => setEditingDesc(true)} className="inline-flex ml-1.5 align-middle text-slate-400 hover:text-amber-700" aria-label="Edit description"><Edit3 size={12} /></button>
+              )}
+            </p>
+          ) : canEdit ? (
+            <button onClick={() => setEditingDesc(true)} className="text-[13px] text-slate-400 hover:text-amber-700">+ Add description</button>
+          ) : null}
+
+          {/* Dates and sequential mode */}
+          <div className="flex flex-wrap items-center gap-2">
+            {editingDates && canEdit ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <input type="date" value={startDateDraft} onChange={e => setStartDateDraft(e.target.value)} aria-label="Start date" className="tk-input !w-[10rem]" />
+                <span className="text-[12px] text-slate-400">to</span>
+                <input type="date" value={endDateDraft} onChange={e => setEndDateDraft(e.target.value)} aria-label="End date" className="tk-input !w-[10rem]" />
+                <button onClick={handleSaveDates} className={ok} aria-label="Save dates"><Check size={15} /></button>
+                <button onClick={() => { setEditingDates(false); setStartDateDraft(localProject.start_date || ''); setEndDateDraft(localProject.end_date || '') }} className={cancel} aria-label="Cancel"><X size={15} /></button>
+              </div>
+            ) : (localProject.start_date || localProject.end_date) ? (
+              <button
+                onClick={() => canEdit && setEditingDates(true)}
+                className="inline-flex items-center gap-1.5 min-h-[30px] px-3 py-1 rounded-full bg-[#fbf6ee] border border-amber-900/[0.08] text-[12.5px] font-medium text-slate-700 hover:border-amber-300 transition-colors"
+              >
+                <Calendar size={13} className="text-amber-600" />
+                {shortDate(localProject.start_date)} – {shortDate(localProject.end_date)}
+              </button>
+            ) : canEdit ? (
+              <button onClick={() => setEditingDates(true)} className="inline-flex items-center gap-1 text-[13px] text-slate-400 hover:text-amber-700">
+                <Calendar size={13} /> + Add dates
+              </button>
+            ) : null}
+            <button
+              onClick={() => canEdit && handleToggleSequential()}
+              disabled={!canEdit}
+              className={`inline-flex items-center gap-1.5 min-h-[30px] px-3 py-1 rounded-full border text-[12.5px] font-medium transition-colors ${
+                localProject.sequential_mode ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-amber-900/[0.1] hover:border-amber-300'} ${!canEdit ? 'cursor-default' : ''}`}
+            >
+              <ListOrdered size={13} />
+              Sequential {localProject.sequential_mode ? 'on' : 'off'}
+            </button>
+          </div>
+
+          {totalCount > 0 && (
+            <div>
+              <div className="flex items-center justify-between text-[12px] text-slate-500 mb-1.5">
+                <span>Progress</span>
+                <span className="font-semibold text-slate-700 tabular-nums">{completedCount}/{totalCount} subtasks, {progress}%</span>
+              </div>
+              <div className="h-2 bg-amber-900/[0.07] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-[width] duration-500" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          )}
+
+          {/* Members */}
+          <section>
+            <SubHead
+              icon={Users}
+              count={localProject.members.length}
+              right={canEdit && availableAssignees.length > 0 ? (
+                <button onClick={() => { setShowMemberSearch(v => !v); setMemberSearch('') }} className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700 hover:text-amber-800">
+                  <UserPlus size={13} /> {showMemberSearch ? 'Done' : 'Add member'}
+                </button>
+              ) : undefined}
+            >
+              Members
+            </SubHead>
+            {showMemberSearch && canEdit && (
+              <div className="tk-card !rounded-[14px] overflow-hidden mb-2">
+                <div className="p-2 border-b border-amber-900/[0.07]">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input autoFocus value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search by name or role" className="tk-input !pl-8" />
+                  </div>
+                </div>
+                <div className="max-h-44 overflow-y-auto overscroll-contain">
+                  {filteredNonMembers.length === 0 ? (
+                    <p className="text-center text-[12px] text-slate-400 py-4">{memberSearch ? 'No matching users' : 'Everyone available is already a member'}</p>
+                  ) : filteredNonMembers.map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => handleAddMember(u.id)}
+                      disabled={addingMember === u.id}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-amber-50/60 transition-colors disabled:opacity-60"
+                    >
+                      <Avatar avatarUrl={u.avatar_url} name={u.full_name} size={26} userId={u.id} />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-medium text-slate-700 break-words">{u.full_name}</span>
+                        <span className="block text-[11px] text-slate-400 capitalize">{u.role}</span>
+                      </span>
+                      {addingMember === u.id ? <Loader2 size={14} className="animate-spin text-amber-500" /> : <Plus size={14} className="text-amber-600 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {localProject.members.map(m => (
+                <span key={m.id} className="inline-flex items-center gap-1.5 min-h-[28px] py-0.5 pl-0.5 pr-1 rounded-full bg-amber-50 border border-amber-100 text-[12px] font-medium text-amber-900 max-w-full">
+                  <Avatar avatarUrl={m.user?.avatar_url} name={m.user?.full_name} size={24} userId={m.user?.id} />
+                  <span className="min-w-0 break-words leading-tight pr-1">{m.user?.full_name || 'Unknown'}</span>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleRemoveMember(m.user_id)}
+                      disabled={removingMember === m.user_id}
+                      className="w-5 h-5 inline-flex items-center justify-center rounded-full text-amber-500 hover:text-red-500 hover:bg-white disabled:opacity-40 transition flex-shrink-0"
+                      aria-label={`Remove ${m.user?.full_name || 'member'}`}
+                    >
+                      {removingMember === m.user_id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          {sequentialTooltip && (
+            <Notice tone="warn">{sequentialTooltip}</Notice>
+          )}
+
+          {/* Subtasks */}
+          <section>
+            <SubHead
+              icon={FileText}
+              count={totalCount}
+              right={canEdit ? (
+                <button onClick={() => setShowAddSubtask(v => !v)} className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700 hover:text-amber-800">
+                  <Plus size={13} /> Add
+                </button>
+              ) : undefined}
+            >
+              Subtasks
+            </SubHead>
+            {localProject.subtasks.length > 0 ? (
+              <div className="tk-card !rounded-[14px] tk-rule overflow-hidden">
+                {localProject.subtasks.map((subtask, index) => {
+                  const struck = subtask.status === 'checked' || subtask.status === 'dismissed' || (!subtask.require_check && subtask.status === 'done')
+                  return (
+                    <div key={subtask.id} className={`flex items-center gap-2 pl-2 pr-1.5 hover:bg-amber-50/40 transition-colors ${subtask.status === 'dismissed' ? 'opacity-60' : ''}`}>
+                      <button
+                        onClick={() => handleSubtaskStatusTap(subtask)}
+                        disabled={isProjectClosed}
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 transition ${isProjectClosed ? 'cursor-not-allowed' : 'active:scale-95'} ${getDynamicStatusColors(subtask.status, subtask.require_check)}`}
+                        title={isProjectClosed ? 'Project completed, status locked' : `${getDynamicStatusLabel(subtask.status, subtask.require_check)}: tap to change`}
+                        aria-label={getDynamicStatusLabel(subtask.status, subtask.require_check)}
+                      >
+                        <span className={`w-3 h-3 rounded-full ${getDynamicDotColor(subtask.status, subtask.require_check)}`} />
+                      </button>
+                      <button onClick={() => setSelectedSubtask(subtask)} className="flex-1 min-w-0 flex items-center gap-2 py-2 text-left">
+                        <span className="flex-1 min-w-0">
+                          <span className={`block text-[13.5px] font-medium leading-snug break-words ${struck ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            {localProject.sequential_mode && <span className="text-[12px] text-slate-400 mr-1 tabular-nums">#{index + 1}</span>}
+                            {subtask.title}
+                          </span>
+                          <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-[11.5px] text-slate-500">
+                            {subtask.assignee && <span className="break-words">{subtask.assignee.full_name}</span>}
+                            {subtask.due_date && <span className="inline-flex items-center gap-1"><Calendar size={10} />{shortDate(subtask.due_date)}</span>}
+                            {subtask.timing && <span className="inline-flex items-center gap-1"><Clock size={10} />{formatSlotTime(subtask.timing)}</span>}
+                            {(subtask.bonus_points > 0 || subtask.tag === 'bonus') && (
+                              <span className="inline-flex items-center gap-1 text-amber-700 font-semibold"><Star size={10} />{subtask.bonus_points > 0 ? `${subtask.bonus_points} BP` : 'Bonus'}</span>
+                            )}
+                          </span>
+                        </span>
+                        <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : !showAddSubtask && (
+              <div className="tk-well px-4 py-5 text-center text-[13px] text-slate-500">
+                No subtasks yet.{' '}
+                {canEdit && <button onClick={() => setShowAddSubtask(true)} className="font-semibold text-amber-700 hover:text-amber-800">Add one</button>}
+              </div>
+            )}
+          </section>
+
+          {/* Add subtask */}
+          {showAddSubtask && canEdit && (
+            <form onSubmit={handleAddSubtask} className="space-y-2.5">
+              <SubHead icon={Plus}>New subtask</SubHead>
+              <input value={newSubTitle} onChange={e => setNewSubTitle(e.target.value)} placeholder="Subtask title" aria-label="Subtask title" className="tk-input" required autoFocus />
+              <textarea value={newSubDesc} onChange={e => setNewSubDesc(e.target.value)} placeholder="Description (optional)" rows={2} className="tk-input" />
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Assignee">
+                  <select value={newSubAssignee} onChange={e => setNewSubAssignee(e.target.value)} className="tk-input cursor-pointer">
+                    <option value="">Unassigned</option>
+                    {localProject.members.map(m => <option key={m.user_id} value={m.user_id}>{m.user?.full_name || 'Unknown'}</option>)}
+                  </select>
+                </Field>
+                <Field label="Due date"><input type="date" value={newSubDueDate} onChange={e => setNewSubDueDate(e.target.value)} className="tk-input" /></Field>
+                <Field label="Start time"><input type="time" value={newSubTiming} onChange={e => setNewSubTiming(e.target.value)} className="tk-input" /></Field>
+                <Field label="End time"><input type="time" value={newSubEndTime} onChange={e => setNewSubEndTime(e.target.value)} className="tk-input" /></Field>
+              </div>
+              <FormCard>
+                <FormRow label="Bonus points" hint="Bonus subtasks always need verification">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={newSubBonusPoints || ''}
+                    placeholder="0"
+                    onChange={e => { const val = Number(e.target.value) || 0; setNewSubBonusPoints(val); if (val !== 0) setNewSubRequireCheck(true) }}
+                    className="tk-input !w-24 text-right tabular-nums"
+                  />
+                </FormRow>
+                <FormRow label="Verification">
+                  <Toggle checked={newSubRequireCheck} onChange={v => { if (newSubBonusPoints === 0) setNewSubRequireCheck(v) }} disabled={newSubBonusPoints !== 0} label="Require verification" />
+                </FormRow>
+              </FormCard>
+              <div className="flex items-center justify-end gap-2">
+                <Btn onClick={() => setShowAddSubtask(false)}>Cancel</Btn>
+                <Btn tone="primary" type="submit" disabled={submitting || !newSubTitle.trim()}>
+                  {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
+                  {submitting ? 'Adding…' : 'Add subtask'}
+                </Btn>
+              </div>
+            </form>
+          )}
+        </div>
+      </TaskSheet>
+
+      <AnimatePresence>
+        {selectedSubtask && (
           <SubtaskCard
+            key={selectedSubtask.id}
             subtask={selectedSubtask}
             canCheck={canCheck}
             canEdit={canEdit}
             onClose={() => setSelectedSubtask(null)}
             onStatusTap={handleSubtaskStatusTap}
             onSubtaskUpdated={onUpdated}
-            onDelete={() => handleDeleteSubtask(selectedSubtask.id)}
+            onDelete={() => setConfirm({ kind: 'subtask', id: selectedSubtask.id, title: selectedSubtask.title })}
             locked={isProjectClosed}
-            projectMembers={localProject.members
-              .map(m => m.user)
-              .filter((u): u is NonNullable<typeof u> => Boolean(u))}
+            projectMembers={localProject.members.map(m => m.user).filter((u): u is NonNullable<typeof u> => Boolean(u))}
           />
-        </AnimatePresence>,
-        document.body
+        )}
+      </AnimatePresence>
+
+      {confirm && (
+        <ConfirmSheet
+          title={confirm.kind === 'project' ? 'Delete this project?' : 'Delete this subtask?'}
+          icon={Trash2}
+          confirmLabel={deleting ? 'Deleting…' : confirm.kind === 'project' ? 'Delete project' : 'Delete subtask'}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={handleConfirmDelete}
+          onClose={() => { setConfirm(null); setDeleteError(null) }}
+        >
+          {confirm.kind === 'project'
+            ? <p><span className="font-semibold text-slate-800 break-words">{localProject.title}</span> and all its subtasks will be removed.</p>
+            : <p><span className="font-semibold text-slate-800 break-words">{confirm.title}</span> will be removed from the project.</p>}
+        </ConfirmSheet>
       )}
     </>
   )

@@ -94,6 +94,178 @@ body:has([data-page-theme="announcements"]) { overflow-x: hidden; }
 }
 body:has([data-page-theme="tasks"]) { background: linear-gradient(135deg, #fffbeb, #fef3c7, #fff7ed); }
 
+/* ============================================================ */
+/* Task Manager — "amber paper"                                  */
+/* ============================================================ */
+
+/* Warm white sheets on the amber page: a hairline tinted from the page's own
+   amber instead of grey, a soft warm shadow, and a highlight along the top
+   edge. Controls are capsules; the one strong colour is the amber-to-orange
+   of the primary action. No dark fills anywhere. */
+.tk-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fffdf9 100%);
+  border: 1px solid rgba(146, 64, 14, 0.09);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px rgba(120, 53, 15, 0.05),
+    0 18px 40px -28px rgba(120, 53, 15, 0.38);
+}
+/* A strip at the top of a card that holds its title and controls. */
+.tk-card-head {
+  background: linear-gradient(180deg, #fffaf2 0%, #fff6e9 100%);
+  border-bottom: 1px solid rgba(146, 64, 14, 0.08);
+}
+/* A recessed well inside a card: a stat, a timeline track. */
+.tk-well {
+  background: #fdf8f0;
+  border: 1px solid rgba(146, 64, 14, 0.07);
+  border-radius: 12px;
+}
+.tk-rule > * + * { border-top: 1px solid rgba(146, 64, 14, 0.07); }
+
+.tk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2.25rem;
+  padding: 0 0.95rem;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.tk-btn:active { transform: scale(0.97); }
+.tk-btn:disabled { opacity: 0.45; pointer-events: none; }
+.tk-btn:focus-visible,
+.tk-icon-btn:focus-visible,
+.tk-seg-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35); }
+.tk-btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 18px -10px rgba(234, 88, 12, 0.75);
+}
+.tk-btn-primary:hover { background: linear-gradient(135deg, #f8a91e 0%, #ef6517 100%); }
+.tk-btn-soft {
+  color: rgb(51 65 85);
+  background: #fff;
+  border: 1px solid rgba(146, 64, 14, 0.14);
+  box-shadow: 0 1px 2px rgba(120, 53, 15, 0.05);
+}
+.tk-btn-soft:hover { border-color: rgba(217, 119, 6, 0.45); color: rgb(146 64 14); }
+.tk-btn-danger {
+  color: #b91c1c;
+  background: #fff;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+.tk-btn-danger:hover { background: #fef2f2; }
+.tk-btn-danger-solid {
+  color: #fff;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 18px -10px rgba(220, 38, 38, 0.7);
+}
+
+.tk-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  color: rgb(100 116 139);
+  background: #fff;
+  border: 1px solid rgba(146, 64, 14, 0.12);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+}
+.tk-icon-btn:hover { color: rgb(180 83 9); border-color: rgba(217, 119, 6, 0.4); }
+.tk-icon-btn:active { transform: scale(0.94); }
+.tk-icon-btn[aria-pressed='true'] { color: rgb(180 83 9); background: #fff7e6; border-color: rgba(217, 119, 6, 0.45); }
+/* Borderless, for a row of actions in a popup header. */
+.tk-icon-btn.tk-quiet { border-color: transparent; background: transparent; }
+.tk-icon-btn.tk-quiet:hover { background: #fff7e6; }
+
+.tk-input {
+  width: 100%;
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0 0.8rem;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(146, 64, 14, 0.16);
+  font-size: 13.5px;
+  color: rgb(30 41 59);
+  box-shadow: inset 0 1px 2px rgba(120, 53, 15, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tk-input::placeholder { color: rgb(148 163 184); }
+.tk-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
+textarea.tk-input { height: auto; padding-top: 0.55rem; padding-bottom: 0.55rem; line-height: 1.4; resize: none; }
+@media (min-width: 640px) { .tk-input { height: 2.25rem; } }
+
+/* Segmented control: a warm recessed track, a white thumb. */
+.tk-seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 9999px;
+  background: rgba(146, 64, 14, 0.07);
+}
+.tk-seg-btn {
+  flex: 1 1 0;
+  height: 1.85rem;
+  padding: 0 0.85rem;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgb(120 113 108);
+  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tk-seg-btn:hover { color: rgb(146 64 14); }
+.tk-seg-btn[aria-pressed='true'] {
+  color: rgb(146 64 14);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(120, 53, 15, 0.12), 0 4px 10px -4px rgba(120, 53, 15, 0.22);
+}
+
+/* The amber square an icon sits in, on cards and popup headers. */
+.tk-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 6px 14px -8px rgba(234, 88, 12, 0.8);
+}
+
+/* Popups raised from the task pages: the sheet's header sits on a warm strip,
+   to match the cards it was opened from. */
+.modal-portal[data-page-theme="tasks"] [role='dialog'] {
+  background: linear-gradient(180deg, #fffaf2 0px, #ffffff 120px);
+}
+.modal-portal[data-page-theme="tasks"] [role='dialog'] > .border-b {
+  background: transparent;
+  border-color: rgba(146, 64, 14, 0.08);
+}
+/* A long task name wraps in the header rather than being cut off. */
+.modal-portal[data-page-theme="tasks"] [role='dialog'] > .border-b h2,
+.modal-portal[data-page-theme="tasks"] [role='dialog'] > .border-b h2 + p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.modal-portal[data-page-theme="tasks"] [role='dialog'] > .border-b h2 { font-size: 15.5px; line-height: 1.3; }
+.modal-portal[data-page-theme="tasks"] [role='dialog'] > .border-t {
+  background: #fffcf7;
+  border-color: rgba(146, 64, 14, 0.08);
+}
+
 [data-page-theme="exam"] {
   --page-primary: #27272A;
   --page-primary-light: #F4F4F5;

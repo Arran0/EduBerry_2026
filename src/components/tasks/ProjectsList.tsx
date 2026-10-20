@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import dynamic from 'next/dynamic'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   ChevronLeft,
@@ -16,9 +17,12 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
-import ProjectCard from './ProjectCard'
 import Avatar from '@/components/Avatar'
-import NewProjectForm from './NewProjectForm'
+import { IconChip, Btn, shortDate } from './ui'
+
+// Both popups load the first time they open.
+const ProjectCard = dynamic(() => import('./ProjectCard'))
+const NewProjectForm = dynamic(() => import('./NewProjectForm'))
 import {
   ProjectStatus,
   ProjectWithDetails,
@@ -56,14 +60,14 @@ const ACTIVE_PAGE_SIZE = 10
 const CLOSED_PAGE_SIZE = 5
 
 const PROJECT_BAR_COLORS = [
-  'bg-mps-blue-400',
-  'bg-mps-green-400',
-  'bg-purple-400',
   'bg-amber-400',
-  'bg-rose-400',
-  'bg-cyan-400',
-  'bg-orange-400',
   'bg-teal-400',
+  'bg-purple-400',
+  'bg-rose-400',
+  'bg-sky-400',
+  'bg-orange-400',
+  'bg-emerald-400',
+  'bg-fuchsia-400',
 ]
 
 function getProjectColor(index: number): string {
@@ -87,8 +91,9 @@ export default function ProjectsList({
   const [activeVisibleCount, setActiveVisibleCount] = useState(ACTIVE_PAGE_SIZE)
   const [closedVisibleCount, setClosedVisibleCount] = useState(CLOSED_PAGE_SIZE)
 
+  // Only the first load shows the spinner; a reload after an edit swaps the
+  // data in place.
   const loadProjects = useCallback(async () => {
-    setLoading(true)
     const data = await fetchProjectsForUser(userId, userRole)
     setProjects(data)
     setLoading(false)
@@ -178,50 +183,50 @@ export default function ProjectsList({
       <motion.div
         key={project.id}
         variants={itemVariants}
-        className={`p-4 cursor-pointer hover:bg-slate-50 transition-colors ${
+        className={`px-3.5 py-3 cursor-pointer hover:bg-amber-50/50 transition-colors ${
           project._status.isOverdue ? 'border-l-4 border-l-red-400' : ''
         } ${project._status.isCompletedAfterDue ? 'border-l-4 border-l-orange-400' : ''} ${isDimmed ? 'opacity-70' : ''}`}
         onClick={() => setSelectedProject(project)}
       >
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className={`font-semibold truncate ${
+            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+              <h3 className={`text-[14px] font-semibold leading-snug break-words min-w-0 ${
                 isDimmed ? 'line-through text-slate-400' : 'text-slate-800'
               }`}>
                 {project.title}
               </h3>
               {project.sequential_mode && (
-                <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
-                  <ListOrdered size={10} /> Seq
+                <span className="text-[11px] px-2 py-0.5 bg-purple-50 border border-purple-100 text-purple-700 rounded-full font-semibold flex items-center gap-1 flex-shrink-0">
+                  <ListOrdered size={10} /> Sequential
                 </span>
               )}
               {project._status.isOverdue && (
-                <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
+                <span className="text-[11px] px-2 py-0.5 bg-red-50 border border-red-100 text-red-700 rounded-full font-semibold flex items-center gap-1 flex-shrink-0">
                   <AlertTriangle size={10} /> Overdue
                 </span>
               )}
               {project._status.isCompleted && (
-                <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
+                <span className="text-[11px] px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-full font-semibold flex items-center gap-1 flex-shrink-0">
                   <CheckCircle2 size={10} /> Done
                 </span>
               )}
               {project._status.isCompletedAfterDue && (
-                <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded font-medium flex items-center gap-0.5 flex-shrink-0">
+                <span className="text-[11px] px-2 py-0.5 bg-orange-50 border border-orange-100 text-orange-700 rounded-full font-semibold flex items-center gap-1 flex-shrink-0">
                   <AlertTriangle size={10} /> Completed after due
                 </span>
               )}
             </div>
 
             {project.description && (
-              <p className="text-sm text-slate-500 truncate mb-2">{project.description}</p>
+              <p className="text-[12.5px] text-slate-500 leading-snug break-words mb-1">{project.description}</p>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-slate-500">
               {(project.start_date || project.end_date) && (
                 <span className="flex items-center gap-1">
                   <CalendarIcon size={11} />
-                  {project.start_date || '?'} - {project.end_date || '?'}
+                  {project.start_date ? shortDate(project.start_date) : '?'} – {project.end_date ? shortDate(project.end_date) : '?'}
                 </span>
               )}
               <span className="flex items-center gap-1">
@@ -234,14 +239,14 @@ export default function ProjectsList({
             </div>
 
             {total > 0 && (
-              <div className="mt-2.5 flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-amber-900/[0.07] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <span className="text-xs text-slate-400 flex-shrink-0">{done}/{total}</span>
+                <span className="text-[11px] font-semibold text-slate-500 tabular-nums flex-shrink-0">{done}/{total}</span>
               </div>
             )}
           </div>
@@ -264,20 +269,17 @@ export default function ProjectsList({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-bold text-slate-800 flex items-center gap-2">
-          <FolderKanban size={22} className="text-mps-blue-600" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-[17px] sm:text-xl font-bold text-slate-800 flex items-center gap-2.5">
+          <IconChip icon={FolderKanban} />
           Projects
         </h2>
         {canEdit && (
-          <button
-            onClick={() => setShowNewProject(true)}
-            className="btn-primary flex items-center gap-2 text-sm !py-1.5"
-          >
-            <Plus size={16} /> New Project
-          </button>
+          <Btn tone="primary" onClick={() => setShowNewProject(true)}>
+            <Plus size={15} /> New project
+          </Btn>
         )}
       </div>
 
@@ -287,13 +289,13 @@ export default function ProjectsList({
           <p className="text-sm text-slate-500">Loading projects...</p>
         </div>
       ) : projects.length === 0 ? (
-        <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-8 text-center">
-          <FolderKanban size={36} className="text-slate-300 mx-auto mb-3" />
+        <div className="tk-card p-8 text-center">
+          <FolderKanban size={32} className="text-amber-300 mx-auto mb-2.5" />
           <p className="text-slate-500 text-sm">No projects yet.</p>
           {canEdit && (
             <button
               onClick={() => setShowNewProject(true)}
-              className="mt-3 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium"
+              className="mt-3 text-sm text-amber-700 hover:text-amber-800 font-semibold"
             >
               Create your first project
             </button>
@@ -308,7 +310,7 @@ export default function ProjectsList({
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
-                className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
+                className="tk-card divide-y divide-amber-900/[0.06] overflow-hidden"
               >
                 {visibleActive.map(p => renderProjectCard(p))}
               </motion.div>
@@ -316,7 +318,7 @@ export default function ProjectsList({
               {activeVisibleCount < activeProjects.length && (
                 <button
                   onClick={() => setActiveVisibleCount(c => c + ACTIVE_PAGE_SIZE)}
-                  className="w-full mt-2 py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                  className="w-full mt-2 h-9 text-[12.5px] text-amber-700 hover:text-amber-800 font-semibold border border-dashed border-amber-300/70 rounded-full hover:bg-amber-50 transition-colors"
                 >
                   Load more
                 </button>
@@ -326,18 +328,19 @@ export default function ProjectsList({
 
           {/* Recently Completed */}
           {completedProjects.length > 0 && (
-            <div className="pt-2">
+            <div>
               <button
                 onClick={() => setShowClosedProjects(!showClosedProjects)}
-                className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 font-medium mb-3"
+                className="flex items-center gap-2 text-[13px] text-slate-600 hover:text-amber-800 font-semibold mb-2"
               >
                 {showClosedProjects ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                <CheckCircle2 size={14} className="text-blue-500" />
-                Completed Projects
+                <CheckCircle2 size={14} className="text-emerald-500" />
+                Completed projects
+                <span className="text-[12px] font-medium text-slate-400 tabular-nums">{completedProjects.length}</span>
               </button>
 
               {showClosedProjects && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {/* Search/filter — always visible when closed list is open */}
                   <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -345,8 +348,8 @@ export default function ProjectsList({
                       type="text"
                       value={closedSearch}
                       onChange={e => setClosedSearch(e.target.value)}
-                      placeholder="Search completed projects..."
-                      className="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-mps-blue-500/50"
+                      placeholder="Search completed projects"
+                      className="tk-input !pl-9"
                     />
                   </div>
 
@@ -354,7 +357,7 @@ export default function ProjectsList({
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
-                    className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-y divide-slate-100 overflow-hidden"
+                    className="tk-card divide-y divide-amber-900/[0.06] overflow-hidden"
                   >
                     {filteredClosed.map(p => renderProjectCard(p))}
                     {filteredClosed.length === 0 && closedSearch && (
@@ -365,7 +368,7 @@ export default function ProjectsList({
                   {!closedSearch && closedVisibleCount < completedProjects.length && (
                     <button
                       onClick={() => setClosedVisibleCount(c => c + CLOSED_PAGE_SIZE)}
-                      className="w-full py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                      className="w-full h-9 text-[12.5px] text-amber-700 hover:text-amber-800 font-semibold border border-dashed border-amber-300/70 rounded-full hover:bg-amber-50 transition-colors"
                     >
                       Load more
                     </button>
@@ -376,34 +379,34 @@ export default function ProjectsList({
           )}
 
           {/* Monthly Project Calendar */}
-          <div className="mt-8 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-lg font-bold text-slate-800 flex items-center gap-2">
-                <CalendarIcon size={18} className="text-mps-blue-600" />
-                Project Calendar
+          <div className="pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="font-display text-[15px] font-bold text-slate-800 flex items-center gap-2">
+                <CalendarIcon size={16} className="text-amber-600" />
+                Project calendar
               </h3>
-            </div>
-
-            <div className="flex items-center justify-center gap-1 mb-4">
-              <button onClick={goToPrevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-                <ChevronLeft size={16} />
-              </button>
-              <span className="text-sm font-semibold text-slate-600 px-2">{monthLabel}</span>
-              <button onClick={goToNextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-                <ChevronRight size={16} />
-              </button>
+              <span className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white border border-amber-900/[0.12] shadow-[0_1px_2px_rgba(120,53,15,.05)]">
+                <button onClick={goToPrevMonth} aria-label="Previous month" className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-amber-700 hover:bg-amber-50 transition">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-[13px] font-semibold text-slate-800 px-1.5 whitespace-nowrap">{monthLabel}</span>
+                <button onClick={goToNextMonth} aria-label="Next month" className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-amber-700 hover:bg-amber-50 transition">
+                  <ChevronRight size={16} />
+                </button>
+              </span>
             </div>
 
             {calendarProjects.length === 0 ? (
-              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm p-6 text-center">
+              <div className="tk-card p-6 text-center">
                 <p className="text-sm text-slate-400">No projects with dates in this month.</p>
               </div>
             ) : (
-              <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm overflow-hidden">
+              <div className="tk-card overflow-hidden">
                 <div className="overflow-x-auto">
-                  <div style={{ minWidth: `${Math.max(daysInMonth * 36 + 160, 600)}px` }}>
-                    <div className="flex border-b border-slate-100">
-                      <div className="w-40 flex-shrink-0 p-2 text-xs font-semibold text-slate-600 border-r border-slate-100">
+                  {/* 30px a day fits a whole month in the desktop card; a phone scrolls inside it. */}
+                  <div style={{ minWidth: `${Math.max(daysInMonth * 30 + 160, 600)}px` }}>
+                    <div className="flex border-b border-amber-900/[0.07] bg-[#fffaf2]">
+                      <div className="w-40 flex-shrink-0 p-2 text-[11.5px] font-semibold text-amber-900/70 border-r border-amber-900/[0.07]">
                         Project
                       </div>
                       <div className="flex flex-1">
@@ -417,9 +420,9 @@ export default function ProjectsList({
                           return (
                             <div
                               key={dayNum}
-                              className={`flex-1 min-w-[36px] text-center py-1.5 text-[10px] border-r border-slate-50 last:border-r-0 ${
-                                isToday ? 'bg-mps-blue-50 text-mps-blue-700 font-bold' :
-                                isWeekend ? 'text-slate-400 bg-slate-50/50' : 'text-slate-500'
+                              className={`flex-1 min-w-[30px] text-center py-1.5 text-[10.5px] tabular-nums border-r border-amber-900/[0.04] last:border-r-0 ${
+                                isToday ? 'bg-orange-100 text-orange-700 font-bold' :
+                                isWeekend ? 'text-slate-400 bg-amber-900/[0.02]' : 'text-slate-500'
                               }`}
                             >
                               {dayNum}
@@ -446,12 +449,12 @@ export default function ProjectsList({
                       return (
                         <div
                           key={project.id}
-                          className="flex border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                          className="flex border-b border-amber-900/[0.05] last:border-b-0 hover:bg-amber-50/40 transition-colors cursor-pointer"
                           onClick={() => setSelectedProject(project)}
                         >
-                          <div className="w-40 flex-shrink-0 p-2 text-xs font-medium text-slate-700 truncate border-r border-slate-100 flex items-center gap-1.5">
+                          <div className="w-40 flex-shrink-0 p-2 text-[12px] font-medium text-slate-700 border-r border-amber-900/[0.07] flex items-center gap-1.5">
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${barColor}`} />
-                            <span className="truncate">{project.title}</span>
+                            <span className="min-w-0 break-words leading-snug">{project.title}</span>
                           </div>
                           <div className="flex flex-1">
                             {Array.from({ length: daysInMonth }, (_, i) => {
@@ -467,13 +470,13 @@ export default function ProjectsList({
                               return (
                                 <div
                                   key={dayNum}
-                                  className={`flex-1 min-w-[36px] h-10 relative flex items-center justify-center border-r border-slate-50/50 last:border-r-0 ${
-                                    isToday ? 'bg-mps-blue-50/30' : ''
+                                  className={`flex-1 min-w-[30px] min-h-[40px] relative flex items-center justify-center border-r border-amber-900/[0.03] last:border-r-0 ${
+                                    isToday ? 'bg-orange-50/60' : ''
                                   }`}
                                 >
                                   {isInRange && (
                                     <div
-                                      className={`absolute inset-y-2 inset-x-0 ${barColor} opacity-30 ${
+                                      className={`absolute inset-y-2.5 inset-x-0 ${barColor} opacity-40 ${
                                         isRangeStart ? 'rounded-l-full ml-1' : ''
                                       } ${isRangeEnd ? 'rounded-r-full mr-1' : ''}`}
                                     />
@@ -501,25 +504,30 @@ export default function ProjectsList({
         </>
       )}
 
-      {/* Project Detail Modal */}
-      {selectedProject && (
-        <ProjectCard
-          project={selectedProject}
-          canEdit={canEdit}
-          canCheck={canCheck}
-          onClose={() => setSelectedProject(null)}
-          onUpdated={handleProjectUpdated}
-          availableAssignees={availableAssignees}
-        />
-      )}
+      <AnimatePresence>
+        {selectedProject && (
+          <ProjectCard
+            key={selectedProject.id}
+            project={selectedProject}
+            canEdit={canEdit}
+            canCheck={canCheck}
+            onClose={() => setSelectedProject(null)}
+            onUpdated={handleProjectUpdated}
+            availableAssignees={availableAssignees}
+          />
+        )}
+      </AnimatePresence>
 
-      <NewProjectForm
-        isOpen={showNewProject}
-        onClose={() => setShowNewProject(false)}
-        onProjectCreated={() => { loadProjects(); setShowNewProject(false) }}
-        currentUserId={userId}
-        availableAssignees={availableAssignees}
-      />
+      <AnimatePresence>
+        {showNewProject && (
+          <NewProjectForm
+            onClose={() => setShowNewProject(false)}
+            onProjectCreated={() => { loadProjects(); setShowNewProject(false) }}
+            currentUserId={userId}
+            availableAssignees={availableAssignees}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

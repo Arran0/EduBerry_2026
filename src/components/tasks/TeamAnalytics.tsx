@@ -13,6 +13,8 @@ import {
 } from '@/lib/teamAnalyticsCache'
 import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
+import { csvField } from '@/lib/attachmentPolicy'
+import { IconChip, Seg } from './ui'
 
 interface TeamAnalyticsProps {
   userId: string
@@ -22,27 +24,27 @@ interface TeamAnalyticsProps {
 
 // Gold / Silver / Bronze — deliberately distinct so #1, #2, #3 read at a glance.
 const TOP3_BORDER = [
-  'border-l-4 border-l-amber-400',
-  'border-l-4 border-l-slate-400',
-  'border-l-4 border-l-orange-600',
+  'border-l-[3px] border-l-amber-400',
+  'border-l-[3px] border-l-slate-300',
+  'border-l-[3px] border-l-orange-400',
 ]
 
 const TOP3_BG = [
-  'bg-gradient-to-r from-amber-100/90 to-yellow-50/50 border-amber-300 shadow-sm shadow-amber-200/50',
-  'bg-gradient-to-r from-slate-200/80 to-slate-50/50 border-slate-300',
-  'bg-gradient-to-r from-orange-100/80 to-amber-50/40 border-orange-300',
+  'bg-gradient-to-r from-amber-50 to-white',
+  'bg-gradient-to-r from-slate-50 to-white',
+  'bg-gradient-to-r from-orange-50/70 to-white',
 ]
 
 const RANK_COLORS = [
-  'bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-md shadow-amber-300/60 ring-2 ring-amber-200',
-  'bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-sm ring-2 ring-slate-200',
-  'bg-gradient-to-br from-orange-500 to-amber-700 text-white shadow-sm ring-2 ring-orange-200',
+  'bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-[0_4px_10px_-4px_rgba(217,119,6,.8)]',
+  'bg-gradient-to-br from-slate-200 to-slate-400 text-white',
+  'bg-gradient-to-br from-orange-300 to-orange-500 text-white',
 ]
 
-const SCORE_TEXT = ['text-amber-600', 'text-slate-500', 'text-orange-600']
+const SCORE_TEXT = ['text-amber-600', 'text-slate-600', 'text-orange-600']
 const BAR_GRADIENT = [
   'bg-gradient-to-r from-amber-400 to-yellow-400',
-  'bg-gradient-to-r from-slate-400 to-slate-300',
+  'bg-gradient-to-r from-slate-300 to-slate-200',
   'bg-gradient-to-r from-orange-500 to-amber-500',
 ]
 
@@ -197,12 +199,14 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       m.stats.overdue,
       `${m.stats.completionRate}%`,
     ])
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
+    // Quoted and formula-safe: a name with a comma stays one column, and one
+    // beginning with = can't run as a formula when the file is opened.
+    const csv = [headers, ...rows].map(r => r.map(csvField).join(',')).join('\r\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `team-statistics-${monthLabel.replace(' ', '-')}.csv`
+    a.download = `team-statistics-${toMonthParam(selectedMonth)}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -211,49 +215,36 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
   const leaderboardLabel = selectedTeam
     ? selectedTeam.name
     : isAdminOrPrincipal(userRole)
-      ? 'All Staff'
+      ? 'All staff'
       : isTeacher
-        ? 'My Team'
+        ? 'My team'
         : 'Team'
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 sm:space-y-4">
       {/* Month navigation */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-          {isTeacher ? 'My Team · ' : ''}Monthly report
-        </p>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={goPrevMonth}
-            className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"
-            aria-label="Previous month"
-          >
-            <ChevronLeft size={15} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-[17px] sm:text-xl font-bold text-slate-800 flex items-center gap-2.5">
+          <IconChip icon={Users} />
+          {isTeacher ? 'My team' : 'Team'}
+          <span className="text-[12.5px] font-medium text-slate-400">Monthly report</span>
+        </h2>
+        <span className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white border border-amber-900/[0.12] shadow-[0_1px_2px_rgba(120,53,15,.05)]">
+          <button onClick={goPrevMonth} className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-amber-700 hover:bg-amber-50 transition" aria-label="Previous month">
+            <ChevronLeft size={16} />
           </button>
-          <span className="text-xs font-semibold text-slate-600 px-1.5 min-w-[110px] text-center">
-            {monthLabel}
-          </span>
-          <button
-            onClick={goNextMonth}
-            disabled={isCurrentMonth}
-            className={`p-1 rounded-lg transition-colors ${
-              isCurrentMonth
-                ? 'text-slate-200 cursor-not-allowed'
-                : 'hover:bg-slate-100 text-slate-400'
-            }`}
-            aria-label="Next month"
-          >
-            <ChevronRight size={15} />
+          <span className="text-[13px] font-semibold text-slate-800 px-1.5 min-w-[110px] text-center whitespace-nowrap">{monthLabel}</span>
+          <button onClick={goNextMonth} disabled={isCurrentMonth} className="w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-amber-700 hover:bg-amber-50 disabled:opacity-30 disabled:pointer-events-none transition" aria-label="Next month">
+            <ChevronRight size={16} />
           </button>
-        </div>
+        </span>
       </div>
 
       {loading ? (
         <div className="space-y-5 animate-pulse">
           {/* Leaderboard skeleton */}
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-4">
+          <div className="tk-card p-3">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 bg-slate-200 rounded-md" />
                 <div className="w-24 h-4 bg-slate-200 rounded-md" />
@@ -262,7 +253,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             </div>
             <div className="space-y-2">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-100">
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-amber-900/[0.06]">
                   <div className="w-7 h-7 rounded-full bg-slate-200 flex-shrink-0" />
                   <div className="w-7 h-7 rounded-full bg-slate-200 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -276,10 +267,10 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             </div>
           </div>
           {/* Stats cards skeleton */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="p-4">
-                <div className="w-9 h-9 rounded-xl bg-slate-200 mb-3" />
+              <div key={i} className="tk-card p-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-200 mb-3" />
                 <div className="h-7 bg-slate-200 rounded-md w-14 mb-1.5" />
                 <div className="h-3 bg-slate-100 rounded-md w-28" />
               </div>
@@ -289,57 +280,37 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
       ) : (
         <>
           {/* ── Leaderboard ─────────────────────────────────────── */}
-          <div className="border-t border-slate-100 pt-4">
+          <div className="tk-card overflow-hidden">
 
             {/* Header row */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Trophy size={18} className="text-amber-500 flex-shrink-0" />
-                <h3 className="font-semibold text-slate-700 truncate">
-                  Leaderboard
-                </h3>
-                <span className="text-xs text-slate-400 font-normal truncate hidden sm:inline">
-                  · {leaderboardLabel}
-                </span>
+            <div className="tk-card-head flex flex-wrap items-center justify-between gap-2 px-3.5 py-2">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <Trophy size={16} className="text-amber-500 flex-shrink-0" />
+                <h3 className="text-[13.5px] font-semibold text-slate-800">Leaderboard</h3>
+                <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/80 rounded-full px-2 py-0.5 break-words">{leaderboardLabel}</span>
               </div>
 
               {/* Tasks / Bonus Points toggle */}
-              <div className="inline-flex gap-0.5 bg-slate-100 rounded-xl p-1 flex-shrink-0">
-                <button
-                  onClick={() => setLeaderboardBasis('completed')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    leaderboardBasis === 'completed'
-                      ? 'bg-white text-mps-blue-600 shadow-sm ring-1 ring-slate-200/60'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <CheckCircle2 size={12} />
-                  Tasks
-                </button>
-                <button
-                  onClick={() => setLeaderboardBasis('bonus')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    leaderboardBasis === 'bonus'
-                      ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200/60'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <Star size={12} />
-                  Bonus
-                </button>
-              </div>
+              <Seg
+                value={leaderboardBasis}
+                onChange={setLeaderboardBasis}
+                options={[
+                  { value: 'completed', label: <span className="inline-flex items-center gap-1"><CheckCircle2 size={12} /> Tasks</span> },
+                  { value: 'bonus', label: <span className="inline-flex items-center gap-1"><Star size={12} /> Bonus</span> },
+                ]}
+              />
             </div>
 
             {/* Team selector — admin / principal only */}
             {isAdminOrPrincipal(userRole) && teams.length > 0 && (
-              <div className="relative mb-4" ref={dropdownRef}>
+              <div className="relative px-2.5 pt-2.5" ref={dropdownRef}>
                 <button
                   onClick={() => setDropdownOpen(v => !v)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full flex items-center gap-2 px-3 min-h-[38px] py-1.5 rounded-[12px] border border-amber-900/[0.12] bg-white hover:border-amber-300 transition-colors text-[13px]"
                 >
-                  <Users size={14} className="text-slate-400 flex-shrink-0" />
-                  <span className="flex-1 text-left font-medium text-slate-700 truncate">
-                    {selectedTeam ? selectedTeam.name : 'All Teams'}
+                  <Users size={14} className="text-amber-600 flex-shrink-0" />
+                  <span className="flex-1 text-left font-medium text-slate-700 break-words min-w-0">
+                    {selectedTeam ? selectedTeam.name : 'All teams'}
                   </span>
                   {selectedTeam && (
                     <span className="text-xs text-slate-400">
@@ -359,10 +330,10 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -4, scale: 0.98 }}
                       transition={{ duration: 0.12 }}
-                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden"
+                      className="absolute top-full left-2.5 right-2.5 mt-1 tk-card z-30 overflow-hidden"
                     >
                       {/* Search */}
-                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-900/[0.07]">
                         <Search size={13} className="text-slate-400 flex-shrink-0" />
                         <input
                           autoFocus
@@ -380,12 +351,12 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                           onClick={() => { setSelectedTeamId(null); setDropdownOpen(false); setTeamSearch('') }}
                           className={`w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 transition-colors ${
                             !selectedTeamId
-                              ? 'bg-mps-blue-50 text-mps-blue-700 font-medium'
-                              : 'text-slate-700 hover:bg-slate-50'
+                              ? 'bg-amber-50 text-amber-800 font-semibold'
+                              : 'text-slate-700 hover:bg-amber-50/50'
                           }`}
                         >
                           <Trophy size={13} className="text-amber-400 flex-shrink-0" />
-                          All Teams
+                          All teams
                           <span className="ml-auto text-xs text-slate-400">{members.length} staff</span>
                         </button>
 
@@ -395,18 +366,18 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                             onClick={() => { setSelectedTeamId(t.id); setDropdownOpen(false); setTeamSearch('') }}
                             className={`w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 transition-colors ${
                               selectedTeamId === t.id
-                                ? 'bg-mps-blue-50 text-mps-blue-700 font-medium'
-                                : 'text-slate-700 hover:bg-slate-50'
+                                ? 'bg-amber-50 text-amber-800 font-semibold'
+                                : 'text-slate-700 hover:bg-amber-50/50'
                             }`}
                           >
                             <Users size={13} className="text-slate-400 flex-shrink-0" />
-                            <span className="flex-1 truncate">{t.name}</span>
+                            <span className="flex-1 min-w-0 break-words">{t.name}</span>
                             <span className="text-xs text-slate-400 flex-shrink-0">{t.member_count}</span>
                           </button>
                         ))}
 
                         {filteredTeams.length === 0 && (
-                          <p className="text-xs text-slate-400 text-center py-4">No teams found</p>
+                          <p className="text-xs text-slate-400 text-center py-4">No teams match that</p>
                         )}
                       </div>
                     </motion.div>
@@ -417,7 +388,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
 
             {/* Leaderboard list — unseparated, edge-to-edge, sharp corners on phone;
                 separated rounded rows contained within the page on desktop */}
-            <div className="bg-white -mx-4 sm:mx-0 sm:bg-transparent border-y border-slate-200 sm:border-0 divide-y divide-slate-100 sm:divide-y-0 sm:space-y-2">
+            <div className="p-2.5 space-y-1.5">
               {visibleLeaderboard.map((m, index) => {
                 const maxScore = leaderboard[0]
                   ? (leaderboardBasis === 'completed' ? leaderboard[0].stats.completed : leaderboard[0].stats.bonus)
@@ -432,10 +403,8 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className={`flex items-center gap-2.5 px-3 py-2 sm:rounded-xl sm:border transition-colors ${
-                      isTop3
-                        ? `${TOP3_BG[index]} ${TOP3_BORDER[index]}`
-                        : 'bg-white border-slate-100 hover:bg-slate-50'
+                    className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[12px] border border-amber-900/[0.06] transition-colors ${
+                      isTop3 ? `${TOP3_BG[index]} ${TOP3_BORDER[index]}` : 'bg-white hover:bg-amber-50/40'
                     }`}
                   >
                     {/* Rank — crown for the champion, bold numerals for everyone else */}
@@ -450,16 +419,16 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                     <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={index === 0 ? 28 : 24} userId={m.user.id} />
 
                     <div className="flex-1 min-w-0">
-                      <p className={`text-slate-800 truncate ${index === 0 ? 'font-bold text-sm' : 'font-medium text-[13px]'}`}>{m.user.full_name}</p>
+                      <p className={`text-slate-800 break-words leading-snug ${index === 0 ? 'font-bold text-sm' : 'font-medium text-[13px]'}`}>{m.user.full_name}</p>
                       <p className="text-[10px] text-slate-400 capitalize leading-tight">{m.user.role}</p>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {/* Progress bar — hidden on very small screens */}
-                      <div className="hidden sm:block w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="hidden sm:block w-20 h-1.5 bg-amber-900/[0.07] rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            isTop3 ? BAR_GRADIENT[index] : 'bg-gradient-to-r from-mps-blue-400 to-mps-blue-500'
+                            isTop3 ? BAR_GRADIENT[index] : 'bg-gradient-to-r from-amber-300 to-orange-400'
                           }`}
                           style={{ width: `${barPct}%` }}
                         />
@@ -477,7 +446,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
               {leaderboard.length === 0 && (
                 <div className="text-center py-10">
                   <Trophy size={32} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No data for this team yet</p>
+                  <p className="text-sm text-slate-500">No completed tasks for this team yet</p>
                 </div>
               )}
             </div>
@@ -485,7 +454,7 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
             {leaderboardVisibleCount < leaderboard.length && (
               <button
                 onClick={() => setLeaderboardVisibleCount(c => c + LEADERBOARD_PAGE_SIZE)}
-                className="w-full mt-2 py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                className="w-[calc(100%-1.25rem)] mx-2.5 mb-2.5 h-9 text-[12.5px] text-amber-700 hover:text-amber-800 font-semibold border border-dashed border-amber-300/70 rounded-full hover:bg-amber-50 transition-colors"
               >
                 Load more
               </button>
@@ -493,33 +462,33 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
           </div>
 
           {/* ── Summary Stats (4-up row) ─────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm divide-x divide-y sm:divide-y-0 divide-slate-100">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {([
-              { icon: <TrendingUp size={16} className="text-white" />, gradient: 'from-green-400 to-emerald-500', value: `${teamCompletionRate}%`, label: 'Completion Rate' },
-              { icon: <AlertTriangle size={16} className="text-white" />, gradient: 'from-red-400 to-rose-500', value: totalOverdue, label: 'Cumulative Overdue' },
-              { icon: <CheckCircle2 size={16} className="text-white" />, gradient: 'from-mps-blue-400 to-mps-blue-600', value: totalTasks, label: 'Total Tasks' },
-              { icon: <Star size={16} className="text-white" />, gradient: 'from-amber-400 to-yellow-500', value: totalBonus, label: 'Total Bonus' },
+              { icon: <TrendingUp size={14} />, tone: 'bg-emerald-50 text-emerald-600', value: `${teamCompletionRate}%`, label: 'Completion rate' },
+              { icon: <AlertTriangle size={14} />, tone: 'bg-red-50 text-red-500', value: totalOverdue, label: 'Overdue, all staff' },
+              { icon: <CheckCircle2 size={14} />, tone: 'bg-sky-50 text-sky-600', value: totalTasks, label: 'Total tasks' },
+              { icon: <Star size={14} />, tone: 'bg-amber-50 text-amber-600', value: totalBonus, label: 'Bonus points' },
             ] as const).map((stat, i) => (
-              <div key={i} className="p-4">
-                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
-                  {stat.icon}
-                </div>
-                <p className="text-2xl font-bold text-slate-800 leading-none mb-1">{stat.value}</p>
-                <p className="text-xs text-slate-400 leading-snug">{stat.label}</p>
+              <div key={i} className="tk-card !rounded-[16px] px-3.5 py-3 flex items-center gap-3 min-w-0">
+                <span className={`w-9 h-9 rounded-[11px] flex items-center justify-center flex-shrink-0 ${stat.tone}`}>{stat.icon}</span>
+                <span className="min-w-0">
+                  <span className="block font-display text-[1.35rem] font-bold text-slate-800 leading-none tabular-nums">{stat.value}</span>
+                  <span className="block text-[11.5px] text-slate-500 leading-snug mt-1 break-words">{stat.label}</span>
+                </span>
               </div>
             ))}
           </div>
 
           {/* ── Member Statistics (collapsible) ─────────────────── */}
-          <div className="bg-white -mx-4 sm:mx-0 border-y border-slate-200 sm:border sm:rounded-xl sm:shadow-sm overflow-hidden">
+          <div className="tk-card overflow-hidden">
             {/* Toggle header */}
             <button
               onClick={() => setStatsExpanded(v => !v)}
-              className="w-full flex items-center gap-2 p-4 hover:bg-slate-50/60 transition-colors"
+              className="w-full flex items-center gap-2 px-3.5 py-3 hover:bg-amber-50/40 transition-colors"
             >
-              <BarChart3 size={16} className="text-mps-blue-600 flex-shrink-0" />
-              <h3 className="font-semibold text-slate-700">Member Statistics</h3>
-              <span className="text-xs text-slate-400">({members.length} members)</span>
+              <BarChart3 size={15} className="text-amber-600 flex-shrink-0" />
+              <h3 className="text-[13.5px] font-semibold text-slate-800">Member statistics</h3>
+              <span className="text-[12px] text-slate-400 tabular-nums">{members.length}</span>
               <div className="flex-1" />
               <span className="text-xs text-slate-400 mr-1">{statsExpanded ? 'Hide' : 'Show'}</span>
               <ChevronDown
@@ -539,30 +508,30 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   className="overflow-hidden"
                 >
                   {/* Export button */}
-                  <div className="px-4 pb-2 pt-0 flex justify-end border-t border-slate-100">
+                  <div className="px-3.5 py-2 flex justify-end border-t border-amber-900/[0.07]">
                     <button
                       onClick={handleExportCSV}
-                      className="flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-mps-blue-600 bg-slate-100 hover:bg-mps-blue-50 rounded-lg transition-colors"
+                      className="tk-btn tk-btn-soft !h-8"
                     >
                       <Download size={12} /> Export CSV
                     </button>
                   </div>
 
                   {/* Mobile: compact cards */}
-                  <div className="sm:hidden divide-y divide-slate-100">
+                  <div className="sm:hidden divide-y divide-amber-900/[0.06]">
                     {visibleMembers.map(m => (
                       <div key={m.user.id} className="flex items-center gap-2.5 px-4 py-2">
                         <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={28} userId={m.user.id} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-semibold text-slate-800 truncate">{m.user.full_name}</p>
+                          <p className="text-[13px] font-semibold text-slate-800 break-words">{m.user.full_name}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="flex-1 h-1.5 bg-amber-900/[0.07] rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-mps-blue-500 to-mps-blue-400 rounded-full"
+                                className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 rounded-full"
                                 style={{ width: `${m.stats.completionRate}%` }}
                               />
                             </div>
-                            <span className="text-[10px] font-semibold text-mps-blue-600 flex-shrink-0">
+                            <span className="text-[10.5px] font-semibold text-amber-700 tabular-nums flex-shrink-0">
                               {m.stats.completionRate}%
                             </span>
                           </div>
@@ -581,18 +550,18 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-[13px]">
                       <thead>
-                        <tr className="border-b border-slate-100">
-                          <th className="text-left px-3 py-1.5 text-slate-500 font-medium">Name</th>
-                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Total</th>
-                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Completed</th>
-                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Bonus</th>
-                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Overdue</th>
-                          <th className="text-center px-3 py-1.5 text-slate-500 font-medium">Rate</th>
+                        <tr className="border-y border-amber-900/[0.07] bg-[#fffaf2] text-[11.5px]">
+                          <th className="text-left px-3 py-1.5 text-amber-900/70 font-semibold">Name</th>
+                          <th className="text-center px-3 py-1.5 text-amber-900/70 font-semibold">Total</th>
+                          <th className="text-center px-3 py-1.5 text-amber-900/70 font-semibold">Completed</th>
+                          <th className="text-center px-3 py-1.5 text-amber-900/70 font-semibold">Bonus</th>
+                          <th className="text-center px-3 py-1.5 text-amber-900/70 font-semibold">Overdue</th>
+                          <th className="text-center px-3 py-1.5 text-amber-900/70 font-semibold">Rate</th>
                         </tr>
                       </thead>
                       <tbody>
                         {visibleMembers.map(m => (
-                          <tr key={m.user.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                          <tr key={m.user.id} className="border-b border-amber-900/[0.05] hover:bg-amber-50/40">
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2">
                                 <Avatar avatarUrl={m.user.avatar_url} name={m.user.full_name} size={24} userId={m.user.id} />
@@ -616,9 +585,9 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                             </td>
                             <td className="text-center px-3 py-1.5">
                               <div className="flex items-center justify-center gap-2">
-                                <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="w-16 h-1.5 bg-amber-900/[0.07] rounded-full overflow-hidden">
                                   <div
-                                    className="h-full bg-gradient-to-r from-mps-blue-500 to-slate-400 rounded-full"
+                                    className="h-full bg-gradient-to-r from-amber-400 to-emerald-500 rounded-full"
                                     style={{ width: `${m.stats.completionRate}%` }}
                                   />
                                 </div>
@@ -632,10 +601,10 @@ export default function TeamAnalytics({ userId, userRole, isTeacher = false }: T
                   </div>
 
                   {memberVisibleCount < members.length && (
-                    <div className="p-3 border-t border-slate-100">
+                    <div className="p-2.5 border-t border-amber-900/[0.07]">
                       <button
                         onClick={() => setMemberVisibleCount(c => c + MEMBER_PAGE_SIZE)}
-                        className="w-full py-2 text-sm text-mps-blue-600 hover:text-mps-blue-700 font-medium border border-dashed border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                        className="w-full h-9 text-[12.5px] text-amber-700 hover:text-amber-800 font-semibold border border-dashed border-amber-300/70 rounded-full hover:bg-amber-50 transition-colors"
                       >
                         Load more
                       </button>

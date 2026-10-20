@@ -27,9 +27,10 @@ import VerificationAlerts from '@/components/tasks/VerificationAlerts'
 // out of the initial bundle. The Team tab's prefetch helper is imported eagerly
 // from its own module (see teamAnalyticsCache) so hovering the tab can warm the
 // cache without pulling the component's code in first.
-const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'))
-const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'))
-const TeamAnalytics = dynamic(() => import('@/components/tasks/TeamAnalytics'))
+const TabLoading = () => <div className="flex justify-center py-16"><div className="spinner" /></div>
+const TaskAnalytics = dynamic(() => import('@/components/tasks/TaskAnalytics'), { loading: TabLoading })
+const ProjectsList  = dynamic(() => import('@/components/tasks/ProjectsList'), { loading: TabLoading })
+const TeamAnalytics = dynamic(() => import('@/components/tasks/TeamAnalytics'), { loading: TabLoading })
 import { prefetchTeamAnalytics } from '@/lib/teamAnalyticsCache'
 import { fetchActiveProjectCount } from '@/lib/projects'
 import {
@@ -494,7 +495,10 @@ function TasksPageContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* The week is a grid of seven days by every period: on a wide
+              screen it gets the whole width. The other tabs read as
+              documents and keep the narrower measure. */}
+          <div className={`${activeTab === 'weekly' ? 'max-w-[1880px]' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5`}>
             {activeTab === 'weekly' && (
               <>
                 {canCheck && (

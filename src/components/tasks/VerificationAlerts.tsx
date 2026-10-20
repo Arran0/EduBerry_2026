@@ -69,16 +69,16 @@ export default function VerificationAlerts({ userId, refreshKey, onNavigate }: V
   if (!loaded || items.length === 0) return null
 
   return (
-    <div className="glass rounded-2xl border border-amber-200 bg-amber-50/60 mb-4 overflow-hidden">
+    <div className="tk-card mb-3 sm:mb-4 overflow-hidden">
       <button
         type="button"
         onClick={() => setCollapsed(v => !v)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-50 transition-colors"
+        className="tk-card-head w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-amber-50 transition-colors"
       >
-        <ShieldCheck size={15} className="text-amber-600 flex-shrink-0" />
-        <h3 className="text-sm font-semibold text-slate-700 flex-1">
-          Awaiting Your Verification
-          <span className="ml-1.5 text-xs font-normal text-amber-600">({items.length})</span>
+        <span className="tk-chip-icon w-7 h-7 !rounded-[10px]"><ShieldCheck size={14} /></span>
+        <h3 className="text-[13.5px] font-semibold text-slate-800 flex-1 min-w-0">
+          Awaiting your verification
+          <span className="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold tabular-nums">{items.length}</span>
         </h3>
         <ChevronDown
           size={16}
@@ -95,28 +95,28 @@ export default function VerificationAlerts({ userId, refreshKey, onNavigate }: V
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[360px] overflow-y-auto">
+            <div className="p-2.5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto overscroll-contain">
               {groups.map(group => (
-                <div key={group.assigneeId} className="rounded-xl border border-amber-200/70 bg-white overflow-hidden">
-                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/70 border-b border-amber-100">
+                <div key={group.assigneeId} className="rounded-[14px] border border-amber-900/[0.08] bg-white overflow-hidden min-w-0">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2] border-b border-amber-900/[0.06]">
                     <Avatar avatarUrl={group.avatarUrl} name={group.name} size={24} userId={group.assigneeId} />
-                    <span className="text-xs font-semibold text-slate-700 truncate flex-1">{group.name}</span>
+                    <span className="text-[12.5px] font-semibold text-slate-700 break-words min-w-0 flex-1">{group.name}</span>
                     <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 leading-none flex-shrink-0">
                       {group.tasks.length}
                     </span>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-amber-900/[0.05]">
                     {group.tasks.map(task => {
                       const due = formatDue(task.dueDate)
                       return (
                         <button
                           key={task.taskId}
                           onClick={() => onNavigate(task.assigneeId, task.dueDate, task.taskId)}
-                          className="group w-full flex items-center gap-2 px-3 py-2 hover:bg-amber-50/60 transition-colors text-left"
+                          className="group w-full flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50/60 transition-colors text-left"
                           title={`Open ${group.name}'s calendar at this task`}
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
-                          <span className="text-xs text-slate-700 truncate flex-1 group-hover:text-slate-900">
+                          <span className="text-[12.5px] text-slate-700 break-words min-w-0 flex-1 leading-snug group-hover:text-amber-900">
                             {task.title}
                           </span>
                           <span className={`text-[10px] flex-shrink-0 ${due.overdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
