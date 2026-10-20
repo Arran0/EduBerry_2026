@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { PageConfigProvider } from '@/contexts/PageConfigContext'
@@ -50,11 +51,17 @@ export const viewport: Viewport = {
   interactiveWidget: 'resizes-visual',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Reading the request makes every page render per request, which is what
+  // lets Next.js stamp the CSP nonce from src/middleware.ts on its scripts. A
+  // prerendered page would ship scripts without it and the browser would
+  // block them.
+  await headers()
+
   return (
     <html lang="en">
       <body className="mesh-bg min-h-screen">
