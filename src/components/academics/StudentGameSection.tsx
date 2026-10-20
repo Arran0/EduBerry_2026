@@ -294,7 +294,7 @@ function CoverCard({
 
           {/* Classroom name */}
           <p className={`mt-1.5 text-[9px] font-black uppercase tracking-widest ${t.accent}`}>{t.label}</p>
-          <h3 className="font-display text-[0.7rem] font-bold leading-tight headline text-slate-900 line-clamp-2">
+          <h3 className="font-display text-[0.7rem] font-bold leading-tight headline text-slate-900 ">
             {brief.classroom_title}
           </h3>
 
@@ -538,8 +538,8 @@ export function EduPointsCarousel({ briefs }: { briefs: Brief[] }) {
                   aria-label={`Go to classroom ${i + 1}`}
                   onClick={() => go(i)}
                   className={`rounded-full transition-all duration-300 ${
-                    i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
-                  }`}
+ i === active ? 'w-5 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+ }`}
                 />
               ))
             ) : (

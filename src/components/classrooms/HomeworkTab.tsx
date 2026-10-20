@@ -29,6 +29,7 @@ import {
   upsertTaskCompletion,
   getNextSmartboardStatus,
 } from '@/lib/smartboard'
+import { safeHref } from '@/lib/safeUrl'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             {task.title}
           </p>
           {task.description && (
-            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
+            <p className="text-xs text-slate-600 leading-snug mt-0.5">{task.description}</p>
           )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
@@ -410,11 +411,11 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             {file.title}
           </p>
           {file.description && (
-            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{file.description}</p>
+            <p className="text-xs text-slate-600 leading-snug mt-0.5">{file.description}</p>
           )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CLASSWORK</span>
-            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">{file.folder.title}</span>
+            <span className="min-w-0 text-[10px] text-slate-600 break-words max-w-[10rem]">{file.folder.title}</span>
             {file.edu_points > 0 && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
                 <Star size={10} /> {file.edu_points} EP
@@ -446,8 +447,8 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             <CalendarDays size={16} className="text-[var(--page-primary-dark,#0891b2)]" />
           </div>
           <div className="min-w-0">
-            <h2 className="font-semibold text-slate-800 text-sm">Classroom Calendar</h2>
-            <p className="text-xs text-slate-500 truncate">
+            <h2 className="font-semibold text-slate-800 text-sm">Calendar</h2>
+            <p className="min-w-0 text-xs text-slate-500 break-words">
               {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {files.length} classwork item{files.length !== 1 ? 's' : ''}
             </p>
           </div>
@@ -460,7 +461,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0"
             style={{ background: 'var(--page-primary, #06b6d4)' }}
           >
-            <Plus size={13} /> New Homework
+            <Plus size={13} /> New homework
           </button>
         )}
       </div>
@@ -468,7 +469,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── New homework popup ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {canManage && showForm && (
-          <ModalShell onClose={() => { setShowForm(false); setNewHwDate('') }} bare>
+          <ModalShell onClose={() => { setShowForm(false); setNewHwDate('') }} bare glass>
             <SmartboardHomeworkForm
               createdBy={userId}
               classroomId={classroomId}
@@ -521,7 +522,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
         <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
             <BookOpen size={13} className="text-slate-500" />
-            <h3 className="text-sm font-semibold text-slate-700">No Due Date</h3>
+            <h3 className="text-sm font-semibold text-slate-700">No due date</h3>
             <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full ml-0.5">
               {undatedHw.length + undatedCw.length}
             </span>
@@ -589,7 +590,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CW</span>
-                      <span className="text-[10px] text-slate-600 truncate">{file.folder.title}</span>
+                      <span className="min-w-0 text-[10px] text-slate-600 break-words">{file.folder.title}</span>
                       {file.edu_points > 0 && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700">
                           <Star size={9} /> {file.edu_points} EP
@@ -607,7 +608,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── Edit homework modal (staff/smartboard) ───────────────────────────── */}
       <AnimatePresence>
         {editTask && (
-          <ModalShell onClose={() => setEditTask(null)} size="lg" bare>
+          <ModalShell onClose={() => setEditTask(null)} size="lg" bare glass>
             <SmartboardHomeworkForm
               createdBy={userId}
               classroomId={classroomId}
@@ -623,7 +624,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
       {/* ── Edit classwork modal (staff/smartboard) ─────────────────────────── */}
       <AnimatePresence>
         {editClasswork && canManage && (
-          <ModalShell onClose={() => setEditClasswork(null)} size="lg" bare>
+          <ModalShell onClose={() => setEditClasswork(null)} size="lg" bare glass>
             <ClassroomFileEditForm
               file={editClasswork}
               onCancel={() => setEditClasswork(null)}
@@ -725,7 +726,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                   <span>
                     {(() => {
                       const s = hwCompletionMap[detailTask.id]?.status ?? 'not_done'
-                      if (s === 'not_done') return 'Not Done'
+                      if (s === 'not_done') return 'Not done'
                       if (s === 'partial')  return 'Partial'
                       if (s === 'done')     return detailTask.require_check ? 'Awaiting verification' : 'Completed'
                       return 'Verified'
@@ -827,13 +828,13 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                 {fileTrackingData.map(p => (
                   <div key={p.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
                     <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={22} />
-                    <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 truncate">{p.student?.full_name ?? 'Student'}</p>
+                    <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 break-words">{p.student?.full_name ?? 'Student'}</p>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize flex-shrink-0 ${
-                      p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
-                        : p.status === 'done'  ? 'bg-yellow-100 text-yellow-700'
-                        : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}>
+ p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
+ : p.status === 'done' ? 'bg-yellow-100 text-yellow-700'
+ : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
+ : 'bg-slate-100 text-slate-500'
+ }`}>
                       {p.status.replace('_', ' ')}
                     </span>
                   </div>
@@ -860,7 +861,7 @@ function AttachmentDisplay({ url, name }: { url: string; name: string | null }) 
         <div className="rounded-xl overflow-hidden border border-slate-200 aspect-video">
           <iframe src={embedUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
         </div>
-        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-red-600 hover:underline">
+        <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-red-600 hover:underline">
           <Youtube size={13} /> Open on YouTube
         </a>
       </div>
@@ -870,18 +871,18 @@ function AttachmentDisplay({ url, name }: { url: string; name: string | null }) 
   const isLink = !name || name.startsWith('http')
   if (isLink) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors">
+      <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors">
         <Link2 size={14} />
-        <span className="flex-1 truncate">{name || url}</span>
+        <span className="min-w-0 flex-1 break-words">{name || url}</span>
         <ExternalLink size={12} />
       </a>
     )
   }
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors">
+    <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors">
       <FileText size={14} />
-      <span className="flex-1 truncate"><Paperclip size={12} className="inline mr-1" />{name || 'Attachment'}</span>
+      <span className="min-w-0 flex-1 break-words"><Paperclip size={12} className="inline mr-1" />{name || 'Attachment'}</span>
       <ExternalLink size={12} />
     </a>
   )

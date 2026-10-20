@@ -150,7 +150,7 @@ export default function AcademicRecordPage() {
               <div className="flex items-center gap-2.5 min-w-0">
                 <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={32} userId={studentId} />
                 <div className="min-w-0">
-                  <p className="font-semibold text-slate-800 text-sm truncate leading-tight">{student.full_name}</p>
+                  <p className="min-w-0 font-semibold text-slate-800 text-sm break-words leading-tight">{student.full_name}</p>
                   <p className="text-xs text-slate-400 leading-tight">
                     {student.grade ? `Grade ${student.grade}` : ''}
                     {student.grade && student.section ? ` · ${student.section}` : student.section ?? ''}
@@ -159,7 +159,7 @@ export default function AcademicRecordPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-slate-500">Academic Record</p>
+              <p className="text-sm text-slate-500">Academic record</p>
             )}
           </div>
         </div>
@@ -180,17 +180,17 @@ export default function AcademicRecordPage() {
               {/* ── Academic year tabs ── */}
               {years.length > 0 && (
                 <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Academic Year</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Academic year</span>
                   <div className="flex flex-wrap gap-1.5">
                     {years.map(year => (
                       <button
                         key={year}
                         onClick={() => setSelectedYear(year)}
                         className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                          selectedYear === year
-                            ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
-                        }`}
+ selectedYear === year
+ ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
+ : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
+ }`}
                       >
                         AY {year}
                       </button>
@@ -317,10 +317,10 @@ function ReportCardBlock({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/50 font-semibold">
-              {branding.tagline || 'Report Card'}
+              {branding.tagline || 'Report card'}
             </p>
             <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
-              {branding.schoolName || 'Report Card'}
+              {branding.schoolName || 'Report card'}
             </h3>
             <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5 flex-wrap">
               <Bookmark size={12} className="opacity-70" /> {title}
@@ -341,7 +341,7 @@ function ReportCardBlock({
       {/* Student info strip */}
       <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 sm:gap-4 text-xs">
         <InfoField label="Student">{student.full_name}</InfoField>
-        <InfoField label="Email"><span className="truncate block">{student.email}</span></InfoField>
+        <InfoField label="Email"><span className="min-w-0 break-all block">{student.email}</span></InfoField>
         <InfoField label="Class">
           {student.grade ? `Grade ${student.grade}` : '—'}
           {student.section ? ` · ${student.section}` : ''}
@@ -463,7 +463,7 @@ function InfoField({ label, children }: { label: string; children: React.ReactNo
   return (
     <div className="min-w-0">
       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold">{label}</p>
-      <p className="text-sm font-medium text-slate-700 truncate mt-0.5">{children}</p>
+      <p className="min-w-0 text-sm font-medium text-slate-700 break-words mt-0.5">{children}</p>
     </div>
   )
 }

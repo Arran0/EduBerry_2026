@@ -6,8 +6,12 @@ import {
   Users, Circle, CircleDot, CheckCircle2, Link2, Youtube, ExternalLink,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
+import ModalShell from '@/components/ui/ModalShell'
+import { askConfirm } from '@/components/ui/sheet'
+import { safeHref } from '@/lib/safeUrl'
+import { AnimatePresence } from 'framer-motion'
 import {
-  FormHeader, HeaderAction, FieldLabel, ToggleCard, PointsPicker, FormFooter, INPUT_CLASS,
+  FormHeader, HeaderAction, FieldLabel, ToggleCard, PointsPicker, FormFooter, INPUT_CLASS, FORM_SHELL, FORM_BODY,
 } from '@/components/classrooms/WorkFormKit'
 import { Classroom } from '@/lib/classrooms'
 import {
@@ -219,7 +223,7 @@ export default function SmartboardHomeworkForm({
 
   const handleDelete = async () => {
     if (!task) return
-    if (!confirm("Delete this homework? It disappears from every student's calendar.")) return
+    if (!(await askConfirm({ title: 'Delete this homework?', body: 'It disappears from every student’s calendar.', danger: true }))) return
     setDeleting(true)
     const ok = await deleteSmartboardTask(task.id)
     setDeleting(false)
@@ -243,12 +247,12 @@ export default function SmartboardHomeworkForm({
     <>
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-t-[1.75rem] sm:rounded-[1.75rem] overflow-hidden shadow-[0_-12px_48px_-12px_rgba(15,23,42,0.32)] sm:shadow-[0_32px_80px_-20px_rgba(15,23,42,0.45)] ring-1 ring-slate-900/[0.06]"
+        className={FORM_SHELL}
       >
         {/* Header */}
         <FormHeader
           icon={isEdit ? <Save size={17} /> : <Plus size={17} />}
-          title={heading ?? (isEdit ? 'Homework' : 'New Homework')}
+          title={heading ?? (isEdit ? 'Homework' : 'New homework')}
           subtitle={isEdit ? 'Edit this homework for the whole class' : 'Appears on every student’s calendar'}
           actions={
             <>
@@ -269,7 +273,7 @@ export default function SmartboardHomeworkForm({
           }
         />
 
-        <div className="max-h-[70dvh] sm:max-h-[62dvh] overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3 space-y-3 bg-slate-50/60">
+        <div className={FORM_BODY}>
 
         <div>
           <FieldLabel>Title</FieldLabel>
@@ -428,7 +432,7 @@ export default function SmartboardHomeworkForm({
           ) : /* upload */ attachmentUrl ? (
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
               <FileText size={15} className="text-indigo-500 flex-shrink-0" />
-              <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm font-medium text-indigo-700 hover:underline truncate">{attachmentName || 'Attachment'}</a>
+              <a href={safeHref(attachmentUrl)} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm font-medium text-indigo-700 hover:underline break-words">{attachmentName || 'Attachment'}</a>
               <button type="button" onClick={clearAttachment} className="p-1 text-slate-500 hover:text-rose-600 flex-shrink-0">
                 <X size={14} />
               </button>
@@ -455,25 +459,25 @@ export default function SmartboardHomeworkForm({
           onCancel={onCancel}
           disabled={!title.trim() || saving || uploading}
           submitIcon={saving ? <Loader2 size={15} className="animate-spin" /> : isEdit ? <Save size={15} /> : <Plus size={15} />}
-          submitLabel={isEdit ? 'Save changes' : 'Add Homework'}
+          submitLabel={isEdit ? 'Save changes' : 'Add homework'}
         />
       </form>
 
-      {/* Student tracking modal */}
-      {showTracking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowTracking(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full sm:max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-              <Users size={15} className="text-indigo-500" />
-              <p className="text-sm font-semibold text-slate-700 flex-1">Student progress</p>
-              {completions.length > 0 && (
-                <span className="text-xs text-slate-500">{doneCount}/{completions.length} done · {submittedCount} submitted</span>
-              )}
-              <button type="button" onClick={() => setShowTracking(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-2">
+      {/* Student tracking */}
+      <AnimatePresence>
+        {showTracking && (
+          <ModalShell
+            glass
+            size="2xl"
+            zClass="z-[60]"
+            onClose={() => setShowTracking(false)}
+            title="Student progress"
+            subtitle={completions.length > 0 ? `${doneCount} of ${completions.length} done · ${submittedCount} submitted` : undefined}
+            icon={<Users size={16} />}
+            iconClassName="themed-chip"
+            bodyClassName="!px-2 !py-2"
+          >
+            <div>
               {loadingMembers ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500 py-6 px-4"><Loader2 size={13} className="animate-spin" /> Loading…</div>
               ) : completions.length === 0 ? (
@@ -484,13 +488,16 @@ export default function SmartboardHomeworkForm({
                     <div key={c.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
                       <Avatar avatarUrl={c.student?.avatar_url} name={c.student?.full_name ?? ''} email={c.student?.email ?? ''} size={22} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-700 truncate">{c.student?.full_name ?? 'Unknown'}</p>
-                        {c.submission && (
-                          <p className="text-[10px] text-slate-500 truncate flex items-center gap-0.5">
-                            {/^https?:\/\//.test(c.submission) ? <Link2 size={9} /> : <FileText size={9} />}
-                            {c.submission}
+                        <p className="text-xs font-medium text-slate-700 break-words">{c.student?.full_name ?? 'Unknown'}</p>
+                        {c.submission && (safeHref(c.submission) && /^https?:\/\//i.test(c.submission) ? (
+                          <a href={safeHref(c.submission)} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-600 hover:underline break-all inline-flex items-start gap-1">
+                            <Link2 size={10} className="mt-0.5 flex-shrink-0" />{c.submission}
+                          </a>
+                        ) : (
+                          <p className="text-[11px] text-slate-500 break-words flex items-start gap-1">
+                            <FileText size={10} className="mt-0.5 flex-shrink-0" />{c.submission}
                           </p>
-                        )}
+                        ))}
                       </div>
                       <button
                         type="button" onClick={() => cycleStatus(c)}
@@ -505,9 +512,9 @@ export default function SmartboardHomeworkForm({
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
     </>
   )
 }

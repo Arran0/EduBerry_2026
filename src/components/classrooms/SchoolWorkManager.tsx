@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import {
   ChevronRight, Circle, CircleDot, CheckCircle2,
-  AlertTriangle, Clock, ChevronDown, X, BookOpen, Folder,
+  AlertTriangle, Clock, ChevronDown, BookOpen, Folder,
   FileText, ExternalLink, Link2, CalendarDays, Star, Loader2, Send, ShieldCheck,
 } from 'lucide-react'
 import {
@@ -23,6 +23,8 @@ import WorkWeekCalendar, {
   CalendarViewMode, WorkWeekCalendarSkeleton, BLEED_CARD_INSET,
   addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
+import { safeHref } from '@/lib/safeUrl'
+import ModalShell from '@/components/ui/ModalShell'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,9 +61,9 @@ const VSTATUS_BORDER: Record<VisualStatus, string> = {
 }
 
 const VSTATUS_LABEL: Record<VisualStatus, string> = {
-  not_done: 'Not Done',
-  partial:  'In Progress',
-  awaiting: 'Awaiting Review',
+  not_done: 'Not done',
+  partial:  'In progress',
+  awaiting: 'Waiting for check',
   done:     'Completed',
 }
 
@@ -129,10 +131,10 @@ function EduPointsBadge({
     <span
       title={reason}
       className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-tight border cursor-default ${
-        earned
-          ? 'bg-amber-500 text-white border-amber-500'
-          : 'bg-amber-50 text-amber-600 border-amber-200'
-      }`}
+ earned
+ ? 'bg-amber-500 text-white border-amber-500'
+ : 'bg-amber-50 text-amber-600 border-amber-200'
+ }`}
     >
       <Star size={8} className={earned ? 'fill-current' : ''} />
       {earned ? `+${points}` : points} EP
@@ -542,12 +544,12 @@ export default function SchoolWorkManager({
             {item.title}
           </p>
           {item.description && (
-            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{item.description}</p>
+            <p className="text-xs text-slate-600 leading-snug mt-0.5">{item.description}</p>
           )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-100 text-cyan-700">CLASSWORK</span>
             {item.edu_points > 0 && <EduPointsBadge points={item.edu_points} earned={earned} />}
-            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">{item.classroomTitle}</span>
+            <span className="min-w-0 text-[10px] text-slate-600 break-words max-w-[10rem]">{item.classroomTitle}</span>
           </div>
         </div>
         <ChevronRight size={15} className="text-slate-400 flex-shrink-0 mt-1" />
@@ -612,7 +614,7 @@ export default function SchoolWorkManager({
             {task.title}
           </p>
           {task.description && (
-            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
+            <p className="text-xs text-slate-600 leading-snug mt-0.5">{task.description}</p>
           )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
@@ -627,7 +629,7 @@ export default function SchoolWorkManager({
                 <ShieldCheck size={10} /> Verified
               </span>
             )}
-            <span className="text-[10px] text-slate-600 truncate max-w-[10rem]">
+            <span className="min-w-0 text-[10px] text-slate-600 break-words max-w-[10rem]">
               {task.classroom_title ?? task.homeroom_name}
             </span>
           </div>
@@ -664,13 +666,13 @@ export default function SchoolWorkManager({
           onClick={() => isCw ? setDetailItem(entry.item) : setDetailHomework(entry.task)}
           className="flex-1 min-w-0 text-left"
         >
-          <p className={`text-sm font-medium truncate ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+          <p className={`min-w-0 text-sm font-medium break-words ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
             {isCw ? entry.item.title : entry.task.title}
           </p>
           <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
             <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold leading-tight ${
-              isCw ? 'bg-cyan-100 text-cyan-700' : 'bg-purple-100 text-purple-600'
-            }`}>
+ isCw ? 'bg-cyan-100 text-cyan-700' : 'bg-purple-100 text-purple-600'
+ }`}>
               {isCw ? 'CW' : 'HW'}
             </span>
             {points > 0 && (
@@ -680,7 +682,7 @@ export default function SchoolWorkManager({
                 reason={earned ? undefined : 'Points not awarded — completed after due date'}
               />
             )}
-            <span className="truncate">
+            <span className="min-w-0 break-words">
               {isCw ? entry.item.classroomTitle : (entry.task.classroom_title ?? entry.task.homeroom_name)}
             </span>
           </div>
@@ -781,7 +783,7 @@ export default function SchoolWorkManager({
       <WorkListPanel
         tone={TONE_UNDATED}
         icon={Clock}
-        title="No Due Date"
+        title="No due date"
         countLabel={String(undated.length)}
         countTitle={`${undated.length} item${undated.length === 1 ? '' : 's'} with no due date`}
         entries={undated}
@@ -793,57 +795,34 @@ export default function SchoolWorkManager({
       {/* ── Homework Detail Popup ─────────────────────────────────────────────── */}
       <AnimatePresence>
         {detailHomework && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => { setDetailHomework(null); setHwExpandedSubmit(null) }}
+          <ModalShell
+            key="hw-detail"
+            onClose={() => { setDetailHomework(null); setHwExpandedSubmit(null) }}
+            size="md"
+            title={detailHomework.title}
+            subtitle={detailHomework.classroom_title ?? detailHomework.homeroom_name ?? 'Homework'}
+            icon={<BookOpen size={16} />}
+            iconClassName="bg-purple-100 text-purple-600"
+            bodyClassName="space-y-4"
           >
-            <motion.div
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-              initial={{ scale: 0.92, opacity: 0, y: 24 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 24 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">Homework</span>
-                  {detailHomework.due_date && parseDate(detailHomework.due_date) < today &&
-                    !hwIsCompleted(detailHomework.my_status, detailHomework.require_check) && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 flex items-center gap-1">
-                      <AlertTriangle size={10} /> Overdue
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setDetailHomework(null); setHwExpandedSubmit(null) }}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="px-6 py-5 space-y-5">
-                {/* Title + status cycle button */}
-                <div>
-                  <h2 className={`text-xl font-bold leading-snug mb-3 ${hwVS(detailHomework.my_status, detailHomework.require_check) === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                    {detailHomework.title}
-                  </h2>
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => cycleHwStatus(detailHomework)}
                     disabled={hwSavingId === detailHomework.id}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border-2 text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 ${VSTATUS_CHIP[hwVS(detailHomework.my_status, detailHomework.require_check)]}`}
+                    title="Tap to change"
+                    className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border-2 text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 ${VSTATUS_CHIP[hwVS(detailHomework.my_status, detailHomework.require_check)]}`}
                   >
                     {hwSavingId === detailHomework.id
                       ? <Loader2 size={14} className="animate-spin" />
                       : VSTATUS_ICON[hwVS(detailHomework.my_status, detailHomework.require_check)]}
                     <span>{VSTATUS_LABEL[hwVS(detailHomework.my_status, detailHomework.require_check)]}</span>
-                    <span className="text-xs opacity-50 font-normal">tap to change</span>
                   </button>
+                  {detailHomework.due_date && parseDate(detailHomework.due_date) < today &&
+                    !hwIsCompleted(detailHomework.my_status, detailHomework.require_check) && (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-600 inline-flex items-center gap-1">
+                      <AlertTriangle size={11} /> Overdue
+                    </span>
+                  )}
                 </div>
 
                 {/* Awaiting verification notice */}
@@ -851,7 +830,7 @@ export default function SchoolWorkManager({
                   <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-yellow-50 border border-yellow-200">
                     <ShieldCheck size={16} className="text-yellow-600 mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-yellow-700 font-medium leading-relaxed">
-                      Awaiting teacher verification. EduPoints will be awarded only after your teacher reviews and approves this work.
+                      Waiting for your teacher to check it. EduPoints are added once they approve.
                     </p>
                   </div>
                 )}
@@ -865,14 +844,6 @@ export default function SchoolWorkManager({
 
                 {/* Meta */}
                 <div className="space-y-2.5">
-                  {(detailHomework.classroom_title || detailHomework.homeroom_name) && (
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                        <BookOpen size={14} className="text-purple-500" />
-                      </div>
-                      <span>{detailHomework.classroom_title ?? detailHomework.homeroom_name}</span>
-                    </div>
-                  )}
                   {detailHomework.due_date && (
                     <div className="flex items-center gap-3 text-sm">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${parseDate(detailHomework.due_date) < today ? 'bg-red-50' : 'bg-slate-50'}`}>
@@ -904,20 +875,20 @@ export default function SchoolWorkManager({
                   const earned   = hwEarned(detailHomework.my_status, detailHomework.require_check, detailHomework.due_date, today)
                   const overdue  = detailHomework.due_date && parseDate(detailHomework.due_date) < today
                   return (
-                    <div className={`p-4 rounded-2xl border ${earned ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className={`p-3 rounded-2xl border ${earned ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
                       <div className="flex items-center gap-2.5 mb-1.5">
                         <Star size={16} className={earned ? 'text-amber-500 fill-amber-500' : 'text-amber-400'} />
                         <span className={`text-sm font-bold ${earned ? 'text-amber-700' : 'text-slate-600'}`}>
-                          {earned ? `+${detailHomework.edu_points} EduPoints Earned!` : `${detailHomework.edu_points} EduPoints`}
+                          {earned ? `+${detailHomework.edu_points} EduPoints earned` : `${detailHomework.edu_points} EduPoints`}
                         </span>
                       </div>
                       {!earned && (
                         <p className="text-xs text-slate-500 leading-relaxed">
                           {vs === 'awaiting'
-                            ? 'Points awarded only after teacher verifies your submission.'
+                            ? 'Added once your teacher checks your work.'
                             : overdue
-                              ? 'Points not awarded — work was completed after the due date.'
-                              : 'Complete this task on time to earn EduPoints.'}
+                              ? 'Not added: it was finished after the due date.'
+                              : 'Finish it by the due date to earn them.'}
                         </p>
                       )}
                     </div>
@@ -926,10 +897,10 @@ export default function SchoolWorkManager({
 
                 {/* Submission */}
                 {detailHomework.requires_submission && (
-                  <div className="border-t border-slate-100 pt-5">
+                  <div className="border-t border-slate-100 pt-4">
                     <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
                       <Send size={11} />
-                      {detailHomework.my_submission ? 'Your Submission' : 'Submit Your Work'}
+                      {detailHomework.my_submission ? 'Your submission' : 'Submit your work'}
                     </p>
                     {hwExpandedSubmit === detailHomework.id ? (
                       <div className="space-y-2.5">
@@ -972,23 +943,21 @@ export default function SchoolWorkManager({
 
                 {/* Attachment */}
                 {detailHomework.attachment_url && (
-                  <div className="border-t border-slate-100 pt-5">
+                  <div className="border-t border-slate-100 pt-4">
                     <p className="text-xs font-semibold text-slate-500 mb-3">Attachment</p>
                     <a
-                      href={detailHomework.attachment_url}
+                      href={safeHref(detailHomework.attachment_url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors"
                     >
                       <FileText size={16} className="text-slate-500 flex-shrink-0" />
-                      <span className="flex-1 truncate">{detailHomework.attachment_name || 'View Attachment'}</span>
+                      <span className="flex-1 min-w-0 break-words">{detailHomework.attachment_name || 'Open attachment'}</span>
                       <ExternalLink size={13} className="text-slate-400 flex-shrink-0" />
                     </a>
                   </div>
                 )}
-              </div>
-            </motion.div>
-          </motion.div>
+          </ModalShell>
         )}
       </AnimatePresence>
 
@@ -1001,53 +970,30 @@ export default function SchoolWorkManager({
           const isOverdue = detailItem.due_date && parseDate(detailItem.due_date) < today
 
           return (
-            <motion.div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setDetailItem(null)}
+            <ModalShell
+              key="cw-detail"
+              onClose={() => setDetailItem(null)}
+              size="md"
+              title={detailItem.title}
+              subtitle={detailItem.classroomTitle}
+              icon={<FileText size={16} />}
+              iconClassName="bg-cyan-100 text-cyan-700"
+              bodyClassName="space-y-4"
             >
-              <motion.div
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-                initial={{ scale: 0.92, opacity: 0, y: 24 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.92, opacity: 0, y: 24 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-100 text-cyan-700">Classwork</span>
-                    {isOverdue && vs !== 'done' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 flex items-center gap-1">
-                        <AlertTriangle size={10} /> Overdue
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setDetailItem(null)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                <div className="px-6 py-5 space-y-5">
-                  {/* Title + status cycle button */}
-                  <div>
-                    <h2 className={`text-xl font-bold leading-snug mb-3 ${vs === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                      {detailItem.title}
-                    </h2>
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => handleToggle(detailItem)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border-2 text-sm font-semibold transition-all active:scale-95 ${VSTATUS_CHIP[vs]}`}
+                      title="Tap to change"
+                      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border-2 text-sm font-semibold transition-all active:scale-95 ${VSTATUS_CHIP[vs]}`}
                     >
                       {VSTATUS_ICON[vs]}
                       <span>{VSTATUS_LABEL[vs]}</span>
-                      <span className="text-xs opacity-50 font-normal">tap to change</span>
                     </button>
+                    {isOverdue && vs !== 'done' && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-600 inline-flex items-center gap-1">
+                        <AlertTriangle size={11} /> Overdue
+                      </span>
+                    )}
                   </div>
 
                   {/* Awaiting verification notice */}
@@ -1055,7 +1001,7 @@ export default function SchoolWorkManager({
                     <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-yellow-50 border border-yellow-200">
                       <ShieldCheck size={16} className="text-yellow-600 mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-yellow-700 font-medium leading-relaxed">
-                        Awaiting teacher verification. EduPoints will be awarded only after your teacher reviews and approves this work.
+                        Waiting for your teacher to check it. EduPoints are added once they approve.
                       </p>
                     </div>
                   )}
@@ -1069,12 +1015,6 @@ export default function SchoolWorkManager({
 
                   {/* Meta */}
                   <div className="space-y-2.5">
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <div className="w-8 h-8 rounded-xl bg-cyan-50 flex items-center justify-center flex-shrink-0">
-                        <BookOpen size={14} className="text-cyan-500" />
-                      </div>
-                      <span>{detailItem.classroomTitle}</span>
-                    </div>
                     {detailItem.folder.title && (
                       <div className="flex items-center gap-3 text-sm text-slate-600">
                         <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
@@ -1112,20 +1052,20 @@ export default function SchoolWorkManager({
 
                   {/* EduPoints section */}
                   {detailItem.edu_points > 0 && (
-                    <div className={`p-4 rounded-2xl border ${earned ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className={`p-3 rounded-2xl border ${earned ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
                       <div className="flex items-center gap-2.5 mb-1.5">
                         <Star size={16} className={earned ? 'text-amber-500 fill-amber-500' : 'text-amber-400'} />
                         <span className={`text-sm font-bold ${earned ? 'text-amber-700' : 'text-slate-600'}`}>
-                          {earned ? `+${detailItem.edu_points} EduPoints Earned!` : `${detailItem.edu_points} EduPoints`}
+                          {earned ? `+${detailItem.edu_points} EduPoints earned` : `${detailItem.edu_points} EduPoints`}
                         </span>
                       </div>
                       {!earned && (
                         <p className="text-xs text-slate-500 leading-relaxed">
                           {vs === 'awaiting'
-                            ? 'Points awarded only after teacher verifies your submission.'
+                            ? 'Added once your teacher checks your work.'
                             : isOverdue
-                              ? 'Points not awarded — work was completed after the due date.'
-                              : 'Complete this task on time to earn EduPoints.'}
+                              ? 'Not added: it was finished after the due date.'
+                              : 'Finish it by the due date to earn them.'}
                         </p>
                       )}
                     </div>
@@ -1133,41 +1073,39 @@ export default function SchoolWorkManager({
 
                   {/* Attachment */}
                   {detailItem.attachment_url && (
-                    <div className="border-t border-slate-100 pt-5">
+                    <div className="border-t border-slate-100 pt-4">
                       <p className="text-xs font-semibold text-slate-500 mb-3">Attachment</p>
                       {detailItem.attachment_name === 'Link' ? (
                         <a
-                          href={detailItem.attachment_url} target="_blank" rel="noopener noreferrer"
+                          href={safeHref(detailItem.attachment_url)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
                         >
                           <Link2 size={16} className="flex-shrink-0" />
-                          <span className="flex-1 truncate">{detailItem.attachment_url}</span>
+                          <span className="flex-1 min-w-0 break-all">{detailItem.attachment_url}</span>
                           <ExternalLink size={13} className="flex-shrink-0" />
                         </a>
                       ) : detailItem.attachment_url.includes('youtube') || detailItem.attachment_url.includes('youtu.be') ? (
                         <a
-                          href={detailItem.attachment_url} target="_blank" rel="noopener noreferrer"
+                          href={safeHref(detailItem.attachment_url)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors"
                         >
                           <ExternalLink size={16} className="flex-shrink-0" />
-                          <span className="flex-1">YouTube Video</span>
+                          <span className="flex-1">YouTube video</span>
                           <ExternalLink size={13} className="flex-shrink-0" />
                         </a>
                       ) : (
                         <a
-                          href={detailItem.attachment_url} target="_blank" rel="noopener noreferrer"
+                          href={safeHref(detailItem.attachment_url)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors"
                         >
                           <FileText size={16} className="text-slate-500 flex-shrink-0" />
-                          <span className="flex-1 truncate">{detailItem.attachment_name || 'View Attachment'}</span>
+                          <span className="flex-1 min-w-0 break-words">{detailItem.attachment_name || 'Open attachment'}</span>
                           <ExternalLink size={13} className="text-slate-400 flex-shrink-0" />
                         </a>
                       )}
                     </div>
                   )}
-                </div>
-              </motion.div>
-            </motion.div>
+            </ModalShell>
           )
         })()}
       </AnimatePresence>

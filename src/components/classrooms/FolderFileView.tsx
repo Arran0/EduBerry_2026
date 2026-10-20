@@ -25,6 +25,8 @@ import { UserRole, UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
 import { FieldLabel, ToggleCard, PointsPicker, INPUT_CLASS } from '@/components/classrooms/WorkFormKit'
+import { safeHref } from '@/lib/safeUrl'
+import { askConfirm, tellUser, SHEET_BTN_GHOST, SHEET_BTN_PRIMARY } from '@/components/ui/sheet'
 
 interface FolderFileViewProps {
   classroomId: string
@@ -44,7 +46,7 @@ const STATUS_ICON: Record<FileStatus, React.ReactNode> = {
 }
 
 const STATUS_LABEL: Record<FileStatus, string> = {
-  not_done: 'Not Done',
+  not_done: 'Not done',
   partial:  'Partial',
   done:     'Checking',
   completed:'Completed',
@@ -101,12 +103,12 @@ function FolderList({ canManage, folders, onReorder, children }: {
 }) {
   if (canManage) {
     return (
-      <Reorder.Group as="div" axis="y" values={folders} onReorder={onReorder} className="space-y-3">
+      <Reorder.Group as="div" axis="y" values={folders} onReorder={onReorder} className="space-y-2">
         {children}
       </Reorder.Group>
     )
   }
-  return <div className="space-y-3">{children}</div>
+  return <div className="space-y-2">{children}</div>
 }
 
 function FolderItem({ canManage, folder, onDragEnd, children }: {
@@ -121,7 +123,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
         as="div"
         value={folder}
         onDragEnd={onDragEnd}
-        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-300 bg-white sm:shadow-sm"
+        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05)] sm:shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]"
         whileDrag={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, scale: 1.01 }}
       >
         {children}
@@ -129,7 +131,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
     )
   }
   return (
-    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-300 bg-white sm:shadow-sm">
+    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05)] sm:shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]">
       {children}
     </div>
   )
@@ -281,7 +283,7 @@ export default function FolderFileView({
       setNewFolderTitle(''); setNewFolderDesc('')
       setShowNewFolder(false)
     } else {
-      alert('Could not create folder. You may not have permission, or there was a network error.')
+      tellUser('Folder not created', 'You may not have permission to add folders here, or the connection dropped. Try again.')
     }
   }
 
@@ -306,7 +308,7 @@ export default function FolderFileView({
     if (newFileAttachmentMode === 'youtube' && newFileYoutubeUrl.trim()) {
       const embed = extractYouTubeEmbedUrl(newFileYoutubeUrl.trim())
       if (!embed) {
-        alert('Invalid YouTube URL. Please use a youtube.com or youtu.be link.')
+        tellUser('That is not a YouTube link', 'Paste a youtube.com or youtu.be address.')
         setUploadingFile(false)
         return
       }
@@ -317,7 +319,7 @@ export default function FolderFileView({
     } else if (newFileAttachmentMode === 'upload' && newFileUpload) {
       const uploaded = await uploadClassroomFile(classroomId, newFileUpload)
       if ('error' in uploaded) {
-        alert(uploaded.error)
+        tellUser('Upload failed', uploaded.error)
         setUploadingFile(false)
         return
       }
@@ -351,7 +353,7 @@ export default function FolderFileView({
   }
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm('Delete this folder and all its files?')) return
+    if (!(await askConfirm({ title: 'Delete this folder?', body: 'Every file in it is deleted too.', danger: true }))) return
     if (await deleteFolder(folderId)) {
       setFolders(prev => prev.filter(f => f.id !== folderId))
     }
@@ -383,7 +385,7 @@ export default function FolderFileView({
   }
 
   const handleDeleteFile = async (fileId: string, folderId: string) => {
-    if (!confirm('Delete this file?')) return
+    if (!(await askConfirm({ title: 'Delete this file?', body: 'Students lose their progress on it.', danger: true }))) return
     if (await deleteFile(fileId)) {
       setFolderFiles(prev => ({
         ...prev,
@@ -478,7 +480,7 @@ export default function FolderFileView({
       const uploaded = await uploadSubmissionFile(fileId, userId, submitFile)
       if ('error' in uploaded) {
         setSubmittingWork(false)
-        alert(uploaded.error)
+        tellUser('Upload failed', uploaded.error)
         return
       }
       content = uploaded.url
@@ -567,7 +569,7 @@ export default function FolderFileView({
             onClick={() => setShowNewFolder(!showNewFolder)}
             className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg shadow-slate-900/20 bg-slate-800 hover:bg-slate-900 active:scale-95 flex-shrink-0"
           >
-            <Plus size={13} /> New Folder
+            <Plus size={13} /> New folder
           </button>
         )}
       </div>
@@ -580,9 +582,9 @@ export default function FolderFileView({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreateFolder}
-            className="mx-2 sm:mx-0 rounded-2xl p-4 space-y-3 overflow-hidden border bg-slate-50 border-slate-200"
+            className="mx-2 sm:mx-0 rounded-2xl p-3 sm:p-4 space-y-2.5 overflow-hidden border bg-white border-slate-200"
           >
-            <p className="text-xs font-semibold text-slate-600">New Folder</p>
+            <p className="text-xs font-semibold text-slate-600">New folder</p>
             <input
               type="text" value={newFolderTitle}
               onChange={e => setNewFolderTitle(e.target.value)}
@@ -597,10 +599,8 @@ export default function FolderFileView({
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/50 resize-none bg-white"
             />
             <div className="flex items-center gap-2 justify-end">
-              <button type="button" onClick={() => setShowNewFolder(false)} className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-2">Cancel</button>
-              <button type="submit" disabled={!newFolderTitle.trim()}
-                className="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 bg-slate-700 hover:bg-slate-900"
-              >Create Folder</button>
+              <button type="button" onClick={() => setShowNewFolder(false)} className={SHEET_BTN_GHOST}>Cancel</button>
+              <button type="submit" disabled={!newFolderTitle.trim()} className={SHEET_BTN_PRIMARY}>Create folder</button>
             </div>
           </motion.form>
         )}
@@ -626,22 +626,20 @@ export default function FolderFileView({
 
             return (
               <FolderItem key={folder.id} canManage={canManage} folder={folder} onDragEnd={handleFolderDragEnd}>
-                <div className="h-1 bg-slate-200" />
-
                 {/* Folder Header */}
                 <button
                   onClick={() => toggleFolder(folder.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
                 >
                   <div className="p-2 rounded-xl flex-shrink-0 bg-slate-100">
                     <Folder size={16} className="text-slate-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-slate-800 text-sm">{folder.title}</span>
+                      <span className="min-w-0 font-semibold text-slate-800 text-sm break-words">{folder.title}</span>
                     </div>
                     {folder.description && (
-                      <p className="text-xs text-slate-600 truncate mt-0.5">{folder.description}</p>
+                      <p className="min-w-0 text-xs text-slate-600 break-words mt-0.5">{folder.description}</p>
                     )}
                     {isStudent && summary && (
                       <div className="flex items-center gap-2 mt-1">
@@ -662,21 +660,21 @@ export default function FolderFileView({
                   {canManage && (
                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <div
-                        className="p-1.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing rounded-lg transition-colors"
                         title="Drag to reorder"
                       >
                         <GripVertical size={13} />
                       </div>
                       <button
                         onClick={() => openEditFolder(folder)}
-                        className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                         title="Edit folder"
                       >
                         <Edit3 size={13} />
                       </button>
                       <button
                         onClick={() => handleDeleteFolder(folder.id)}
-                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -737,7 +735,7 @@ export default function FolderFileView({
                             className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors mb-2"
                           >
                             <BarChart2 size={13} />
-                            Student Progress
+                            Student progress
                             {showFolderProgress === folder.id
                               ? <ChevronDown size={13} />
                               : <ChevronRight size={13} />
@@ -764,7 +762,7 @@ export default function FolderFileView({
                                       return (
                                         <div key={s.user_id} className="flex items-center gap-3">
                                           <Avatar avatarUrl={s.user.avatar_url} name={s.user.full_name} size={28} userId={s.user_id} />
-                                          <span className="text-xs font-medium text-slate-700 w-32 truncate flex-shrink-0">
+                                          <span className="min-w-0 text-xs font-medium text-slate-700 w-32 break-words flex-shrink-0">
                                             {s.user.full_name}
                                           </span>
                                           <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -797,7 +795,7 @@ export default function FolderFileView({
                             }}
                             className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg mb-2 transition-colors text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
                           >
-                            <Plus size={12} /> Add Classwork
+                            <Plus size={12} /> Add classwork
                           </button>
                         )}
 
@@ -854,8 +852,8 @@ export default function FolderFileView({
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className={`text-sm font-semibold ${
-                                      status === 'completed' ? 'line-through text-slate-500' : 'text-slate-800'
-                                    }`}>
+ status === 'completed' ? 'line-through text-slate-500' : 'text-slate-800'
+ }`}>
                                       {file.title}
                                     </span>
                                     {isStudent && status !== 'not_done' && (
@@ -877,10 +875,10 @@ export default function FolderFileView({
                                     )}
                                     {file.edu_points > 0 && (
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 border ${
-                                        isStudent && status === 'completed'
-                                          ? 'bg-amber-500 text-white border-amber-500'
-                                          : 'bg-amber-50 text-amber-600 border-amber-200'
-                                      }`}>
+ isStudent && status === 'completed'
+ ? 'bg-amber-500 text-white border-amber-500'
+ : 'bg-amber-50 text-amber-600 border-amber-200'
+ }`}>
                                         <Star size={9} className={isStudent && status === 'completed' ? 'fill-current' : ''} />
                                         {isStudent && status === 'completed' ? `+${file.edu_points} EP` : `${file.edu_points} EP`}
                                       </span>
@@ -925,7 +923,7 @@ export default function FolderFileView({
                                       )}
                                       {attachType === 'other' && (
                                         <a
-                                          href={file.attachment_url!}
+                                          href={safeHref(file.attachment_url)}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs font-medium hover:bg-slate-100 transition-colors border border-slate-200"
@@ -951,10 +949,10 @@ export default function FolderFileView({
                                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0 self-start">
                                   {file.due_date && (
                                     <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                      fileOverdue && (!isStudent || status !== 'completed')
-                                        ? 'text-red-500 bg-red-50 px-1.5 py-0.5 rounded-lg'
-                                        : 'text-slate-400'
-                                    }`}>
+ fileOverdue && (!isStudent || status !== 'completed')
+ ? 'text-red-500 bg-red-50 px-1.5 py-0.5 rounded-lg'
+ : 'text-slate-400'
+ }`}>
                                       {new Date(file.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                     </span>
                                   )}
@@ -969,7 +967,7 @@ export default function FolderFileView({
                                       </button>
                                       <button
                                         onClick={() => handleDeleteFile(file.id, folder.id)}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                                       >
                                         <Trash2 size={13} />
                                       </button>
@@ -1046,7 +1044,7 @@ export default function FolderFileView({
           <ModalShell
             onClose={() => setShowTracking(null)}
             size="2xl"
-            title="Student Tracking"
+            title="Student progress"
             subtitle={trackingData.file?.title}
             icon={<Users size={15} />}
             iconClassName="themed-chip"
@@ -1055,14 +1053,14 @@ export default function FolderFileView({
                 <div className="flex flex-wrap gap-2 mb-4 text-xs">
                   {trackingData.file.requires_check ? (
                     <>
-                      <span className="flex items-center gap-1"><Circle size={12} className="text-red-400" /> Not Done</span>
+                      <span className="flex items-center gap-1"><Circle size={12} className="text-red-400" /> Not done</span>
                       <span className="flex items-center gap-1"><CircleDot size={12} className="text-amber-500" /> Partial</span>
                       <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-yellow-500" /> Checking</span>
                       <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500" /> Completed</span>
                     </>
                   ) : (
                     <>
-                      <span className="flex items-center gap-1"><Circle size={12} className="text-red-400" /> Not Done</span>
+                      <span className="flex items-center gap-1"><Circle size={12} className="text-red-400" /> Not done</span>
                       <span className="flex items-center gap-1"><CircleDot size={12} className="text-amber-500" /> Partial</span>
                       <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500" /> Completed</span>
                     </>
@@ -1085,7 +1083,7 @@ export default function FolderFileView({
                     return (
                       <div key={member.user_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
                         <Avatar avatarUrl={member.user.avatar_url} name={member.user.full_name} size={22} userId={member.user_id} />
-                        <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 truncate">
+                        <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 break-words">
                           {member.user.full_name}
                           {sub && <span className="ml-1 text-slate-400 font-normal">· submitted</span>}
                         </p>
@@ -1140,7 +1138,7 @@ export default function FolderFileView({
               )}
               {expandedSub.sub.submission_type === 'link' && (
                 <a
-                  href={expandedSub.sub.content}
+                  href={safeHref(expandedSub.sub.content)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-3 bg-indigo-50 rounded-xl text-indigo-600 hover:bg-indigo-100 transition-colors text-sm font-medium"
@@ -1156,7 +1154,7 @@ export default function FolderFileView({
                 const isDoc = DOC_EXTENSIONS.includes(ext)
                 if (isImg) {
                   return (
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+                    <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="block">
                       <img src={url} alt="Submitted file" className="w-full max-h-72 object-contain rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
                     </a>
                   )
@@ -1165,15 +1163,15 @@ export default function FolderFileView({
                   return (
                     <div className="space-y-2">
                       <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`} className="w-full h-64 rounded-xl border border-slate-200" title="Document preview" />
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium">
+                      <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium">
                         <ExternalLink size={12} /> Open in new tab
                       </a>
                     </div>
                   )
                 }
                 return (
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors text-sm font-medium">
-                    <FileText size={14} /> View Submitted File
+                  <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors text-sm font-medium">
+                    <FileText size={14} /> Open submitted file
                   </a>
                 )
               })()}
@@ -1187,7 +1185,7 @@ export default function FolderFileView({
           <ModalShell
             onClose={() => { setShowNewFile(null); resetNewFileForm() }}
             size="lg"
-            title="New Classwork"
+            title="New classwork"
             subtitle={folders.find(f => f.id === showNewFile)?.title}
             icon={<Plus size={16} />}
             iconClassName="themed-chip"
@@ -1208,7 +1206,7 @@ export default function FolderFileView({
                   disabled={!newFileTitle.trim() || uploadingFile}
                 >
                   <Plus size={15} />
-                  {uploadingFile ? 'Uploading…' : 'Add Classwork'}
+                  {uploadingFile ? 'Uploading…' : 'Add classwork'}
                 </button>
               </div>
             }
@@ -1340,7 +1338,7 @@ export default function FolderFileView({
                     {newFileUpload ? (
                       <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
                         <FileText size={15} className="text-indigo-500 flex-shrink-0" />
-                        <span className="flex-1 min-w-0 text-sm font-medium text-indigo-700 truncate">{newFileUpload.name}</span>
+                        <span className="flex-1 min-w-0 text-sm font-medium text-indigo-700 break-words">{newFileUpload.name}</span>
                         <button type="button" onClick={() => { setNewFileUpload(null); setNewFileAttachmentMode('none') }} className="p-1 text-slate-500 hover:text-rose-600 flex-shrink-0">
                           <X size={15} />
                         </button>
@@ -1427,13 +1425,13 @@ export default function FolderFileView({
               onClick={() => setDocViewerUrl(null)}
             >
               <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                <p className="text-white/70 text-sm">Document Viewer</p>
+                <p className="text-white/70 text-sm">Document</p>
                 <button onClick={() => setDocViewerUrl(null)} className="text-white/80 hover:text-white transition-colors p-1">
                   <X size={22} />
                 </button>
               </div>
               <div className="flex-1 px-4 pb-4" onClick={e => e.stopPropagation()}>
-                <iframe src={docViewerUrl} className="w-full h-full rounded-xl shadow-2xl bg-white" title="Document Viewer" />
+                <iframe src={docViewerUrl} className="w-full h-full rounded-xl shadow-2xl bg-white" title="Document" />
               </div>
             </motion.div>
           )}

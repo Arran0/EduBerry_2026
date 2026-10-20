@@ -6,6 +6,7 @@ import { ReportCardRemark, upsertRemark, deleteRemark } from '@/lib/classrooms'
 import { UserProfile } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import { useKeyboardInset } from '@/hooks/useKeyboardInset'
+import { askConfirm } from '@/components/ui/sheet'
 
 /**
  * The remarks a report card carries, and the box for writing one.
@@ -67,7 +68,7 @@ export default function RemarksPanel({
 
   const handleDelete = async () => {
     if (!myRemark) return
-    if (!confirm('Delete your remark?')) return
+    if (!(await askConfirm({ title: 'Delete your remark?', danger: true, body: 'It is removed from this report card.' }))) return
     setSaving(true)
     await deleteRemark(myRemark.id)
     setSaving(false)
@@ -80,7 +81,7 @@ export default function RemarksPanel({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Avatar avatarUrl={viewer?.avatar_url} name={viewer?.full_name ?? 'You'} size={24} userId={viewerId} />
-        <p className="text-xs font-semibold text-slate-700 truncate">{viewer?.full_name ?? 'Your remark'}</p>
+        <p className="min-w-0 text-xs font-semibold text-slate-700 break-words">{viewer?.full_name ?? 'Your remark'}</p>
         <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full uppercase tracking-wide font-bold">
           {viewer?.role ?? 'Staff'}
         </span>
@@ -205,7 +206,7 @@ function RemarkBubble({ remark, self = false }: { remark: ReportCardRemark; self
       <Avatar avatarUrl={author?.avatar_url} name={author?.full_name ?? 'Staff'} size={26} userId={remark.author_id} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-xs font-semibold text-slate-700 truncate">{author?.full_name ?? 'Staff'}</p>
+          <p className="min-w-0 text-xs font-semibold text-slate-700 break-words">{author?.full_name ?? 'Staff'}</p>
           {author?.role && (
             <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase tracking-wide font-bold">
               {author.role}

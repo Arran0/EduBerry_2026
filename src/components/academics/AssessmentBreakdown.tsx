@@ -53,7 +53,7 @@ export function AssessmentBreakdown({ entries }: { entries: StudentReportCardEnt
           <li key={entry.assessment.id} className="text-xs">
             <div className="flex items-center gap-1.5 text-slate-600">
               <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0" aria-hidden />
-              <span className="truncate flex-1">{entry.assessment.title}</span>
+              <span className="min-w-0 break-words flex-1">{entry.assessment.title}</span>
               <span className="font-semibold tabular-nums text-slate-700">
                 <MarkText
                   marks={m?.marks ?? null}
@@ -72,7 +72,7 @@ export function AssessmentBreakdown({ entries }: { entries: StudentReportCardEnt
                       key={c.id}
                       className="flex items-center gap-1.5 text-[11px] text-slate-500"
                     >
-                      <span className="truncate flex-1">{c.name}</span>
+                      <span className="min-w-0 break-words flex-1">{c.name}</span>
                       <span className="tabular-nums">
                         <MarkText
                           marks={cm?.marks ?? null}

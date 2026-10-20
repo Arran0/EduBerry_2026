@@ -7,6 +7,7 @@ import { LogIn, Clock, LogOut, MonitorPlay, Home, Megaphone } from 'lucide-react
 import { useAuth } from '@/contexts/AuthContext'
 import { usePageConfig } from '@/contexts/PageConfigContext'
 import Footer from '@/components/Footer'
+import { SheetConfirmHost } from '@/components/ui/sheet'
 import { useScrolled } from '@/hooks/useScrolled'
 
 interface SmartboardLayoutProps {
@@ -149,9 +150,10 @@ export default function SmartboardLayout({ children }: SmartboardLayoutProps) {
       </header>
 
       {/* key remounts page content after a long background period (matches ProtectedLayout) */}
-      <main key={dataRefreshKey} className="w-full max-w-6xl mx-auto flex-1">
+      <main key={dataRefreshKey} className="w-full min-w-0 max-w-6xl mx-auto flex-1 overflow-x-clip">
         {children}
       </main>
+      <SheetConfirmHost />
       <Footer />
     </div>
   )

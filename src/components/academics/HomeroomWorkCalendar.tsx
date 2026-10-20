@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
-  Plus, ChevronRight, Clock, Star, ShieldCheck, Send, BookOpen, Users, CalendarDays,
+  Plus, ChevronRight, Clock, Star, ShieldCheck, Send, BookOpen, Users,
   FileText, ExternalLink,
 } from 'lucide-react'
 import { Homeroom, fetchClassroomsHoldingHomeroomStudents } from '@/lib/homerooms'
@@ -15,6 +15,7 @@ import WorkWeekCalendar, {
   CalendarViewMode, WorkWeekCalendarSkeleton, BLEED_CARD_INSET,
   addDays, formatDate, getWeekStart, parseDate, themeFromGradient,
 } from '@/components/calendar/WorkWeekCalendar'
+import { safeHref } from '@/lib/safeUrl'
 
 /** Only the fields the picker and row labels need. */
 type MappableClassroom = Pick<Classroom, 'id' | 'title'>
@@ -158,10 +159,10 @@ export default function HomeroomWorkCalendar({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-snug text-slate-800">{task.title}</p>
           {task.description && (
-            <p className="text-xs text-slate-600 leading-snug line-clamp-2 mt-0.5">{task.description}</p>
+            <p className="text-xs text-slate-600 leading-snug mt-0.5">{task.description}</p>
           )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">HOMEWORK</span>
+            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">Homework</span>
             {task.timing && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-600">
                 <Clock size={10} /> {task.timing}
@@ -182,7 +183,7 @@ export default function HomeroomWorkCalendar({
                 <Send size={10} /> Submission
               </span>
             )}
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 truncate max-w-[12rem]">
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 min-w-0 break-words">
               <Users size={10} className="flex-shrink-0" /> {scopeLabel(task)}
             </span>
           </div>
@@ -220,8 +221,8 @@ export default function HomeroomWorkCalendar({
                   key={h.id}
                   onClick={() => { setActiveHomeroomId(h.id); setSelectedDay(null) }}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${
-                    on ? 'text-white shadow-sm' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-800'
-                  }`}
+ on ? 'text-white shadow-sm' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-800'
+ }`}
                   style={on ? { background: `linear-gradient(to right, ${themeGradFrom}, ${themeGradTo})` } : undefined}
                 >
                   {h.name}
@@ -230,7 +231,7 @@ export default function HomeroomWorkCalendar({
             })}
           </div>
         ) : (
-          <p className="text-xs text-slate-500 min-w-0 truncate">
+          <p className="text-xs text-slate-500 min-w-0 break-words">
             Homework for <span className="font-semibold text-slate-700">{activeHomeroom.name}</span>
           </p>
         )}
@@ -243,16 +244,15 @@ export default function HomeroomWorkCalendar({
           className="keep-round flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold text-white transition-all shadow-lg hover:brightness-95 active:scale-95 flex-shrink-0 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100 disabled:cursor-not-allowed"
           style={{ background: themeGradFrom }}
         >
-          <Plus size={13} /> New Homework
+          <Plus size={13} /> New homework
         </button>
       </div>
 
       {!loading && !canCreate && (
-        <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
-          Homework is set against a classroom, and none could be found holding a student from{' '}
-          <span className="font-semibold text-slate-700">{activeHomeroom.name}</span>. Check that
-          its students are enrolled in their classrooms, and that your admin has applied the latest
-          database update.
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
+          Homework is set in a classroom, and no classroom has students from{' '}
+          <span className="font-semibold">{activeHomeroom.name}</span> yet. Ask your admin to add
+          them to their classrooms.
         </p>
       )}
 
@@ -278,23 +278,11 @@ export default function HomeroomWorkCalendar({
             rootClassName={BLEED_CARD_INSET}
           />
 
-          {tasks.length === 0 && (
-            <div className="-mx-4 sm:mx-0 bg-white border-y sm:border sm:rounded-2xl border-slate-200 p-10 text-center">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: theme.primaryLight }}>
-                <CalendarDays size={26} style={{ color: theme.primary }} />
-              </div>
-              <p className="text-slate-700 font-semibold text-sm mb-1">No homework yet</p>
-              <p className="text-slate-600 text-xs">
-                Add homework for {activeHomeroom.name} — map it to a classroom to reach just that group.
-              </p>
-            </div>
-          )}
-
           {undated.length > 0 && (
             <div className="-mx-4 sm:mx-0 bg-white border-y sm:border sm:rounded-2xl border-slate-200 overflow-hidden">
               <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
                 <BookOpen size={13} className="text-slate-500" />
-                <h3 className="text-sm font-semibold text-slate-700">No Due Date</h3>
+                <h3 className="text-sm font-semibold text-slate-700">No due date</h3>
                 <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full ml-0.5">{undated.length}</span>
               </div>
               <div className="divide-y divide-slate-100">
@@ -310,7 +298,7 @@ export default function HomeroomWorkCalendar({
       {/* New homework */}
       <AnimatePresence>
         {showForm && (
-          <ModalShell onClose={() => { setShowForm(false); setNewHwDate('') }} bare>
+          <ModalShell onClose={() => { setShowForm(false); setNewHwDate('') }} bare glass>
             <SmartboardHomeworkForm
               createdBy={userId}
               homeroomId={activeHomeroom.id}
@@ -371,13 +359,13 @@ export default function HomeroomWorkCalendar({
             </div>
             {detailTask.attachment_url && (
               <a
-                href={detailTask.attachment_url}
+                href={safeHref(detailTask.attachment_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors"
               >
                 <FileText size={14} className="flex-shrink-0" />
-                <span className="flex-1 truncate">{detailTask.attachment_name || 'Attachment'}</span>
+                <span className="min-w-0 flex-1 break-words">{detailTask.attachment_name || 'Attachment'}</span>
                 <ExternalLink size={12} className="flex-shrink-0" />
               </a>
             )}
@@ -391,7 +379,7 @@ export default function HomeroomWorkCalendar({
       {/* Edit homework */}
       <AnimatePresence>
         {editTask && (
-          <ModalShell onClose={() => setEditTask(null)} size="lg" bare>
+          <ModalShell onClose={() => setEditTask(null)} size="lg" bare glass>
             <SmartboardHomeworkForm
               createdBy={userId}
               homeroomId={activeHomeroom.id}

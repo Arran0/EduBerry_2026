@@ -47,39 +47,6 @@ import {
   buildExportTable, downloadClasswiseWorkbook, allComponentNames,
 } from '@/lib/classwiseMarks'
 
-// ─── Congratulations messages (auto-rotated by student + title hash) ──────────
-const CONGRATS_MESSAGES = [
-  {
-    headline: 'Outstanding Performance!',
-    sub: 'Exceptional dedication and hard work have led to these brilliant results. Well done!',
-  },
-  {
-    headline: 'Brilliant Achievement!',
-    sub: 'Your commitment to excellence is truly reflected in these remarkable grades. Keep it up!',
-  },
-  {
-    headline: 'Excellent Results!',
-    sub: 'A wonderful performance this term — your talent and effort are clearly paying off.',
-  },
-  {
-    headline: 'Top of the Class!',
-    sub: 'An impressive and well-earned achievement. You should be very proud of yourself.',
-  },
-  {
-    headline: 'Stellar Performance!',
-    sub: 'Outstanding grades that speak volumes about your diligence and passion for learning.',
-  },
-  {
-    headline: 'Wonderful Grades!',
-    sub: 'Your perseverance and focus have produced truly commendable results this term.',
-  },
-]
-
-function pickCongrats(seed: string) {
-  const idx = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % CONGRATS_MESSAGES.length
-  return CONGRATS_MESSAGES[idx]
-}
-
 // ─── Props / main section ─────────────────────────────────────────────────────
 
 interface ReportCardsSectionProps {
@@ -175,7 +142,7 @@ function ReportCardsSectionInner({ user, profile, isStudent }: ReportCardsSectio
       {/* ── Section header — mirrors the other academics headers exactly.
           For a student the whole header is the expand control; staff keep a
           plain heading over an always-open panel. ── */}
-      <div className="flex items-center justify-between gap-3 mb-4 min-h-[2.5rem]">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <HeaderShell
           asButton={isStudent}
           expanded={expanded}
@@ -248,26 +215,21 @@ function HeaderShell({
   expanded: boolean
   onToggle: () => void
 }) {
+  // The same chip, size and type as SectionHeading, so this header lines up
+  // with the other Academics headings.
   const inner = (
     <>
-      <div className="icon-chip w-10 h-10 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
-        <Award size={18} className="relative z-10 text-white drop-shadow-sm" />
+      <div className="icon-chip w-8 h-8 flex-shrink-0 bg-gradient-to-br from-rose-400 to-pink-600">
+        <Award size={15} className="relative z-10 text-white" />
       </div>
-      <h2 className="font-display text-[1.4rem] font-bold leading-none headline text-slate-900 truncate">
-        Report Cards
+      <h2 className="min-w-0 flex-1 font-display text-[1.125rem] sm:text-[1.25rem] font-bold leading-tight text-slate-900 break-words">
+        Report cards
       </h2>
-      {/* The same fading hairline the other academics headings carry (see
-          SectionHeading), so all four headers read as one family. */}
-      <div
-        className="flex-1 h-px min-w-[1rem]"
-        style={{ background: 'linear-gradient(to right, rgba(148,163,184,0.45), rgba(148,163,184,0))' }}
-        aria-hidden
-      />
     </>
   )
 
   if (!asButton) {
-    return <div className="flex items-center gap-3 min-w-0 flex-1">{inner}</div>
+    return <div className="flex items-center gap-2.5 min-w-0 flex-1 min-h-[2.25rem]">{inner}</div>
   }
 
   return (
@@ -275,23 +237,23 @@ function HeaderShell({
       onClick={onToggle}
       aria-expanded={expanded}
       aria-controls="report-cards-panel"
-      className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 group"
+      className="flex items-center gap-2.5 min-w-0 flex-1 min-h-[2.25rem] text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 group"
     >
       {inner}
       {/* A labelled pill, not a bare chevron: a glyph on its own never said
           what tapping the heading would do. */}
       <span
         className={`keep-round flex-shrink-0 inline-flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold border shadow-sm transition-colors ${
-          expanded
-            ? 'bg-rose-50 border-rose-200 text-rose-600'
-            : 'bg-white/80 border-white/80 text-slate-600 group-hover:text-rose-600 group-hover:border-rose-200'
-        }`}
+ expanded
+ ? 'bg-rose-50 border-rose-200 text-rose-600'
+ : 'bg-white/80 border-white/80 text-slate-600 group-hover:text-rose-600 group-hover:border-rose-200'
+ }`}
         aria-hidden
       >
         {expanded ? 'Hide' : 'View'}
         <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </span>
-      <span className="sr-only">{expanded ? 'Collapse report cards' : 'Expand report cards'}</span>
+      
     </button>
   )
 }
@@ -358,8 +320,8 @@ function PublishPanel({
 
   return (
     <div className={`mx-3 sm:mx-0 rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 flex items-center gap-3 flex-wrap ${
-      published ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'
-    }`}>
+ published ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'
+ }`}>
       <div className="flex-1 min-w-[12rem]">
         <div className="flex items-center gap-2 flex-wrap">
           {loading ? (
@@ -388,8 +350,8 @@ function PublishPanel({
           onClick={toggle}
           disabled={loading || saving}
           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-colors disabled:opacity-50 ${
-            published ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
-          }`}
+ published ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
+ }`}
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : published ? <EyeOff size={13} /> : <Eye size={13} />}
           {saving ? 'Saving…' : published ? 'Unpublish' : 'Publish'}
@@ -435,22 +397,22 @@ function StaffReportCardView({
         <button
           onClick={() => setTab('individual')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            tab === 'individual'
-              ? 'bg-white shadow text-slate-800'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
+ tab === 'individual'
+ ? 'bg-white shadow text-slate-800'
+ : 'text-slate-500 hover:text-slate-700'
+ }`}
         >
           <UserIcon size={12} /> Individual
         </button>
         <button
           onClick={() => setTab('classwise')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            tab === 'classwise'
-              ? 'bg-white shadow text-slate-800'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
+ tab === 'classwise'
+ ? 'bg-white shadow text-slate-800'
+ : 'text-slate-500 hover:text-slate-700'
+ }`}
         >
-          <Table2 size={12} /> Class Marks
+          <Table2 size={12} /> Class marks
         </button>
       </div>
 
@@ -616,10 +578,10 @@ function StaffReportCardSearch({
                 >
                   <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={28} userId={student.id} />
                   <div className="min-w-0 flex-1">
-                    <p title={student.full_name} className="text-sm font-semibold text-slate-700 truncate">
+                    <p title={student.full_name} className="min-w-0 text-sm font-semibold text-slate-700 break-words">
                       {student.full_name}
                     </p>
-                    <p className="text-[11px] text-slate-400 truncate">
+                    <p className="min-w-0 text-[11px] text-slate-400 break-words">
                       {student.grade != null || student.section
                         // gradeLabel, not `Grade ${n}`: pre-primary grades are
                         // stored negative (-1 is UKG, not "Grade -1").
@@ -656,8 +618,8 @@ function StaffReportCardSearch({
             >
               <Avatar avatarUrl={s.avatar_url} name={s.full_name} size={36} userId={s.id} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-700 truncate">{s.full_name}</p>
-                <p className="text-xs text-slate-400 truncate">{s.email}</p>
+                <p className="min-w-0 text-sm font-semibold text-slate-700 break-words">{s.full_name}</p>
+                <p className="min-w-0 text-xs text-slate-400 break-all">{s.email}</p>
               </div>
               {(s.grade || s.section) && (
                 <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
@@ -778,10 +740,10 @@ function ClasswiseExportModal({
               key={option.label}
               onClick={() => setSort(option.value)}
               className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                sortMatches(sort, option.value)
-                  ? 'bg-slate-700 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+ sortMatches(sort, option.value)
+ ? 'bg-slate-700 text-white'
+ : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
             >
               {option.label}
             </button>
@@ -801,8 +763,8 @@ function ClasswiseExportModal({
                   : { by: 'subject', classroomId: id, dir: 'desc' })
             }}
             className={`rounded-full text-[11px] font-semibold px-2.5 py-1 border-0 focus:outline-none focus:ring-2 focus:ring-slate-300 ${
-              sort.by === 'subject' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
+ sort.by === 'subject' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
+ }`}
             title="Sort on one subject's marks"
           >
             <option value="">By subject…</option>
@@ -835,8 +797,8 @@ function ClasswiseExportModal({
                 onClick={() => toggleSubject(s.classroomId)}
                 disabled={last}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors disabled:cursor-not-allowed ${
-                  on ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-400 line-through'
-                }`}
+ on ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-400 line-through'
+ }`}
                 title={last
                   ? 'The sheet needs at least one subject'
                   : on ? `Leave ${s.subject} out of the sheet` : `Put ${s.subject} back in`}
@@ -862,8 +824,8 @@ function ClasswiseExportModal({
             onClick={() => setIncludeComponents(v => !v)}
             disabled={!hasComponents}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              includeComponents ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
+ includeComponents ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
             title={hasComponents
               ? 'Add a column per component alongside each subject total'
               : 'No assessment under this report card is split into components'}
@@ -890,8 +852,8 @@ function ClasswiseExportModal({
                   onClick={() => setExcluded(prev =>
                     prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                    on ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 line-through'
-                  }`}
+ on ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 line-through'
+ }`}
                   title={on ? `Drop ${name} from the totals` : `Count ${name} toward the totals again`}
                 >
                   {on ? <CheckSquare size={12} /> : <Square size={12} />}
@@ -920,8 +882,8 @@ function ClasswiseExportModal({
                 <th
                   key={h}
                   className={`text-left px-2.5 py-2 font-bold text-slate-600 whitespace-nowrap border-b border-slate-200 ${
-                    i === 0 ? 'sticky left-0 bg-slate-50 z-[2]' : ''
-                  }`}
+ i === 0 ? 'sticky left-0 bg-slate-50 z-[2]' : ''
+ }`}
                 >
                   {h}
                 </th>
@@ -938,10 +900,10 @@ function ClasswiseExportModal({
                   <td
                     key={i}
                     className={`px-2.5 py-1.5 whitespace-nowrap tabular-nums ${
-                      i === 0
-                        ? 'sticky left-0 bg-inherit font-semibold text-slate-700 z-[1]'
-                        : 'text-slate-600'
-                    }`}
+ i === 0
+ ? 'sticky left-0 bg-inherit font-semibold text-slate-700 z-[1]'
+ : 'text-slate-600'
+ }`}
                   >
                     {cell}
                   </td>
@@ -966,7 +928,7 @@ function ClasswiseExportModal({
           className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
         >
           {writing ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-          {writing ? 'Writing…' : 'Download Excel'}
+          {writing ? 'Writing…' : 'Download Excel file'}
         </button>
       </div>
     </ModalShell>
@@ -1135,7 +1097,7 @@ function ClasswiseMarksView({
         </div>
 
         <div>
-          <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Report Card</label>
+          <label className="block text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Report card</label>
           <select
             value={selectedTitle}
             onChange={e => handleTitleChange(e.target.value)}
@@ -1157,15 +1119,15 @@ function ClasswiseMarksView({
           className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
-          {loading ? 'Loading…' : 'Load Marks'}
+          {loading ? 'Loading…' : 'Load marks'}
         </button>
 
         {loaded && anyComponents && (
           <button
             onClick={() => setShowSplit(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-              splitVisible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
+ splitVisible ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
             title="Show each subject's components inside its cell"
           >
             <SplitSquareHorizontal size={13} /> Components
@@ -1217,7 +1179,7 @@ function ClasswiseMarksView({
               {/* Summary strip */}
               <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] sm:text-xs">
                 <span className="font-bold text-slate-800">G{selectedGrade}·{selectedSection}</span>
-                <span className="text-slate-500 truncate max-w-[40%]">{selectedTitle}</span>
+                <span className="min-w-0 text-slate-500 break-words max-w-[40%]">{selectedTitle}</span>
                 <span className="text-slate-400">{students.length}s · {subjects.length}sub</span>
                 {overallAverage.pct != null && (
                   <span className="ml-auto flex items-center gap-1.5 font-semibold text-slate-700">
@@ -1254,12 +1216,12 @@ function ClasswiseMarksView({
                           <button
                             onClick={() => toggleSort({ by: 'subject', classroomId: s.classroomId, dir: 'desc' })}
                             className={`flex flex-col items-center gap-0.5 mx-auto transition-colors ${
-                              isSubjectSort(s.classroomId) ? 'text-slate-900' : 'hover:text-slate-800'
-                            }`}
+ isSubjectSort(s.classroomId) ? 'text-slate-900' : 'hover:text-slate-800'
+ }`}
                             title={`Sort by ${s.subject}`}
                           >
                             <span className="flex items-center gap-1 leading-tight">
-                              <span className="truncate max-w-[84px] sm:max-w-none">{s.subject}</span>
+                              <span className="min-w-0 break-words max-w-[84px] sm:max-w-none">{s.subject}</span>
                               <SortArrow active={isSubjectSort(s.classroomId)} dir={sort.dir} />
                             </span>
                             <span className="text-[8px] sm:text-[9px] font-semibold text-slate-400 normal-case tracking-normal">
@@ -1272,8 +1234,8 @@ function ClasswiseMarksView({
                         <button
                           onClick={() => toggleSort({ by: 'overall', dir: 'desc' })}
                           className={`flex flex-col items-center gap-0.5 mx-auto transition-colors ${
-                            sort.by === 'overall' ? 'text-slate-900' : 'hover:text-slate-900'
-                          }`}
+ sort.by === 'overall' ? 'text-slate-900' : 'hover:text-slate-900'
+ }`}
                         >
                           <span className="flex items-center gap-1 leading-tight">
                             Overall
@@ -1318,7 +1280,7 @@ function ClasswiseMarksView({
                                 <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={22} userId={student.id} />
                               </span>
                               <span className="text-slate-400 tabular-nums text-[10px] sm:hidden w-3.5 flex-shrink-0">{idx + 1}</span>
-                              <span className="font-semibold text-slate-700 truncate text-[11px] leading-tight">{student.full_name}</span>
+                              <span className="min-w-0 font-semibold text-slate-700 break-words text-[11px] leading-tight">{student.full_name}</span>
                             </button>
                           </td>
 
@@ -1347,7 +1309,7 @@ function ClasswiseMarksView({
                                     <span className="mt-0.5 pt-0.5 border-t border-slate-200/80 w-full flex flex-col items-center gap-px">
                                       {cell.components.map(part => (
                                         <span key={part.name} className="flex items-baseline justify-center gap-1 text-[8px] sm:text-[9px] text-slate-400 leading-tight">
-                                          <span className="truncate max-w-[52px] sm:max-w-[70px]">{part.name}</span>
+                                          <span className="min-w-0 break-words max-w-[52px] sm:max-w-[70px]">{part.name}</span>
                                           <span className="tabular-nums font-semibold text-slate-500">
                                             {roundMark(part.obtained)}/{roundMark(part.max)}
                                           </span>
@@ -1409,7 +1371,7 @@ function ClasswiseMarksView({
                                     const avg = componentAverages[i][name]
                                     return (
                                       <span key={name} className="flex items-baseline justify-center gap-1 text-[8px] sm:text-[9px] text-slate-400 leading-tight">
-                                        <span className="truncate max-w-[52px] sm:max-w-[70px]">{name}</span>
+                                        <span className="min-w-0 break-words max-w-[52px] sm:max-w-[70px]">{name}</span>
                                         <span className="tabular-nums font-semibold text-slate-500">
                                           {avg && avg.pct != null ? `${num(avg.mean)}/${num(avg.meanMax)}` : '—'}
                                         </span>
@@ -1569,7 +1531,7 @@ function ReportCardForStudent({
       {selfView && availableYears.length > 1 && (
         <div className="flex flex-wrap items-center gap-2.5 px-3 sm:px-0">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-            <CalendarRange size={13} className="text-rose-400" /> Academic Year
+            <CalendarRange size={13} className="text-rose-400" /> Academic year
           </span>
           <div className="inline-flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-full">
             {availableYears.map(year => (
@@ -1577,10 +1539,10 @@ function ReportCardForStudent({
                 key={year}
                 onClick={() => setSelectedYear(year)}
                 className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
-                  selectedYear === year
-                    ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
+ selectedYear === year
+ ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-sm'
+ : 'text-slate-500 hover:text-slate-800'
+ }`}
               >
                 {year}
               </button>
@@ -1685,10 +1647,6 @@ function ReportCard({
   const periodStart = dates[0]
   const periodEnd = dates[dates.length - 1]
 
-  const congratsMsg = useMemo(
-    () => pickCongrats(studentProfile.id + title),
-    [studentProfile.id, title]
-  )
   const showCongrats = totalMax > 0 && overallPct >= 81
 
   return (
@@ -1716,10 +1674,10 @@ function ReportCard({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/50 font-semibold">
-              {branding.tagline || 'Report Card'}
+              {branding.tagline || 'Report card'}
             </p>
             <h3 className="text-base sm:text-xl font-bold tracking-tight leading-tight mt-0.5">
-              {branding.schoolName || 'Report Card'}
+              {branding.schoolName || 'Report card'}
             </h3>
             <p className="text-xs sm:text-sm text-white/70 mt-1 sm:mt-1.5 font-medium flex items-center gap-1.5 flex-wrap">
               <Bookmark size={12} className="opacity-70" /> {title}
@@ -1742,7 +1700,7 @@ function ReportCard({
       <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 sm:gap-4 text-xs">
         <Field label="Student">{studentProfile.full_name}</Field>
         <Field label="Email">
-          <span className="truncate block">{studentProfile.email}</span>
+          <span className="min-w-0 break-all block">{studentProfile.email}</span>
         </Field>
         <Field label="Class">
           {studentProfile.grade ? `Grade ${studentProfile.grade}` : '—'}
@@ -1846,12 +1804,12 @@ function ReportCard({
             {subjects.length} subject{subjects.length === 1 ? '' : 's'} · {entries.length} assessment{entries.length === 1 ? '' : 's'}
           </div>
           <div className="ml-auto text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
-            {overallPct >= 33 ? 'Result · Pass' : 'Result · Needs Improvement'}
+            {overallPct >= 33 ? 'Pass' : 'Below pass mark'}
           </div>
         </div>
       )}
 
-      {/* ── Congratulations card (A1 / A2 only) ── */}
+      {/* ── Top grade band (A1 / A2 only) ── */}
       <AnimatePresence>
         {showCongrats && (
           <motion.div
@@ -1885,10 +1843,10 @@ function ReportCard({
                 {/* Message */}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-900 text-sm leading-tight">
-                    {congratsMsg.headline}
+                    In the top grade band
                   </p>
                   <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">
-                    {congratsMsg.sub}
+                    {`${overallPct.toFixed(0)}% across ${subjects.length} subject${subjects.length === 1 ? '' : 's'} this term.`}
                   </p>
                 </div>
 
@@ -1925,7 +1883,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div className="min-w-0">
       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-semibold">{label}</p>
-      <p className="text-sm font-medium text-slate-700 truncate mt-0.5">{children}</p>
+      <p className="min-w-0 text-sm font-medium text-slate-700 break-words mt-0.5">{children}</p>
     </div>
   )
 }

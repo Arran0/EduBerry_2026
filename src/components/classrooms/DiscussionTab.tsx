@@ -13,6 +13,8 @@ import { UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBottomNav } from '@/contexts/BottomNavContext'
+import { safeHref } from '@/lib/safeUrl'
+import { askConfirm, tellUser } from '@/components/ui/sheet'
 
 const ATTACH_MARKER = '__ATTACH__'
 
@@ -77,7 +79,7 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
   const isImage = attach.type === 'image' || (attach.type === 'document' && isImageUrl(attach.url))
   if (isImage) {
     return (
-      <a href={attach.url} target="_blank" rel="noopener noreferrer" className="block mt-1.5 w-fit">
+      <a href={safeHref(attach.url)} target="_blank" rel="noopener noreferrer" className="block mt-1.5 w-fit">
         <img
           src={attach.url}
           alt={attach.name}
@@ -89,19 +91,19 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
   if (attach.type === 'link') {
     return (
       <a
-        href={attach.url}
+        href={safeHref(attach.url)}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 mt-1.5 px-3 py-1.5 bg-blue-50 rounded-lg text-xs text-blue-600 hover:bg-blue-100 transition-colors border border-blue-100 max-w-full"
       >
         <ExternalLink size={12} className="flex-shrink-0" />
-        <span className="truncate">{attach.name || attach.url}</span>
+        <span className="min-w-0 break-words">{attach.name || attach.url}</span>
       </a>
     )
   }
   return (
     <a
-      href={attach.url}
+      href={safeHref(attach.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="group/file inline-flex items-center gap-2.5 mt-1.5 pl-2.5 pr-3 py-2 bg-slate-50 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200 max-w-full"
@@ -110,7 +112,7 @@ function AttachDisplay({ attach }: { attach: AttachInfo }) {
         <FileText size={15} className="text-teal-600" />
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-medium truncate max-w-[200px]">{attach.name || 'Document'}</span>
+        <span className="min-w-0 block text-xs font-medium break-words max-w-[200px]">{attach.name || 'Document'}</span>
         <span className="block text-[10px] text-slate-400">Tap to open</span>
       </span>
       <Download size={13} className="flex-shrink-0 text-slate-300 group-hover/file:text-teal-600 transition-colors" />
@@ -123,7 +125,7 @@ function MessageBody({ content }: { content: string }) {
   return (
     <>
       {text && (
-        <span className="text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-snug">{text}</span>
+        <span className="min-w-0 text-[15px] text-slate-700 whitespace-pre-wrap break-words leading-snug">{text}</span>
       )}
       {attach && <AttachDisplay attach={attach} />}
     </>
@@ -293,9 +295,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       setUploading(true)
       const res = await uploadDiscussionFile(attachFile, classroomId, userId)
       setUploading(false)
-      if (!res) { alert('Upload failed, please try again.'); return null }
+      if (!res) { tellUser('Upload failed', 'The file did not upload. Try again.'); return null }
       attachInfo = res
     } else if (attachMode === 'link' && attachLinkUrl.trim()) {
+      if (!safeHref(attachLinkUrl)) { tellUser('That link cannot be shared', 'Use a web address that starts with https://.'); return null }
       attachInfo = { url: attachLinkUrl.trim(), name: attachLinkName.trim() || attachLinkUrl.trim(), type: 'link' }
     }
     const base = newPostContent.trim()
@@ -341,7 +344,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
   }
 
   const handleDelete = async (postId: string) => {
-    if (!confirm('Delete this message?')) return
+    if (!(await askConfirm({ title: 'Delete this message?', danger: true, body: 'It is removed for everyone in the classroom.' }))) return
     // Optimistic delete (top-level or reply)
     setPosts(prev =>
       prev.filter(p => p.id !== postId).map(p =>
@@ -563,7 +566,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                     </span>
                 }
                 <span className="flex-1 min-w-0">
-                  <span className="block text-xs font-medium text-slate-700 truncate">{attachFile.name}</span>
+                  <span className="min-w-0 block text-xs font-medium text-slate-700 break-words">{attachFile.name}</span>
                   <span className="block text-[10px] text-slate-400">{(attachFile.size / 1024).toFixed(0)} KB</span>
                 </span>
                 <button type="button" onClick={resetAttach} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
@@ -597,10 +600,10 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
                   type="button"
                   onClick={() => setShowAttachMenu(s => !s)}
                   className={`w-9 h-9 flex items-center justify-center !rounded-full transition-all ${
-                    showAttachMenu || attachMode !== 'none'
-                      ? 'bg-teal-100 text-teal-600'
-                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
-                  }`}
+ showAttachMenu || attachMode !== 'none'
+ ? 'bg-teal-100 text-teal-600'
+ : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+ }`}
                   title="Share a file or link"
                 >
                   <Plus size={18} className={`transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />

@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import ModalShell from '@/components/ui/ModalShell'
 import { MonitorPlay, BookOpen, Users, Pencil } from 'lucide-react'
 import SmartboardLayout from '@/components/SmartboardLayout'
 import ClassroomButton from '@/components/classrooms/ClassroomButton'
@@ -203,15 +204,9 @@ export default function SmartboardDashboardPage() {
       )}
       </div>
 
-      {openTask && profile && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
-          onClick={e => { if (e.target === e.currentTarget) setOpenTask(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-          >
+      <AnimatePresence>
+        {openTask && profile && (
+          <ModalShell onClose={() => setOpenTask(null)} size="lg" bare glass>
             <SmartboardHomeworkForm
               createdBy={profile.id}
               homeroomId={homeroom?.id ?? null}
@@ -221,9 +216,9 @@ export default function SmartboardDashboardPage() {
               onUpdated={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
               onDeleted={() => { setOpenTask(null); setReloadSignal(s => s + 1) }}
             />
-          </motion.div>
-        </div>
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {showBannerEditor && homeroom && (
         <SmartboardBannerEditor

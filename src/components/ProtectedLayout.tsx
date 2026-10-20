@@ -9,6 +9,7 @@ import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import LeaveNotificationsListener from '@/components/notifications/LeaveNotificationsListener'
 import AttendancePunchPrompt from '@/components/attendance/AttendancePunchPrompt'
+import { SheetConfirmHost } from '@/components/ui/sheet'
 
 interface ProtectedLayoutProps {
   children: React.ReactNode
@@ -169,9 +170,13 @@ export default function ProtectedLayout({ children, staffOnly = false, adminOnly
         pulling fresh data from Supabase without a hard refresh.
         The Navbar is intentionally outside the key so it is not disrupted.
       */}
-      <main key={dataRefreshKey} className="flex-1">
+      {/* overflow-x-clip: nothing a page draws can scroll the screen sideways
+          (clip, not hidden, so sticky headers inside keep working). */}
+      <main key={dataRefreshKey} className="flex-1 min-w-0 overflow-x-clip">
         {children}
       </main>
+      {/* The in-app confirm / notice popup (askConfirm, tellUser). */}
+      <SheetConfirmHost />
       <Footer />
     </div>
   )

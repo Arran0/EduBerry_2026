@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Plus, X, Loader2, Star, BookOpen, Maximize2, FileText } from 'lucide-react'
 import {
   Classroom, ClassroomFile, ClassroomFolder,
   fetchClassroomFilesForDateRange,
 } from '@/lib/classrooms'
+import ModalShell from '@/components/ui/ModalShell'
 import SmartboardHomeworkForm from './SmartboardHomeworkForm'
 import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
 import {
@@ -340,43 +340,30 @@ export default function SmartboardWeeklyCalendar({
       </div>
 
       {/* Edit classwork — opened when a CW chip is clicked */}
-      {editCwFile && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
-          onClick={e => { if (e.target === e.currentTarget) setEditCwFile(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-          >
+      <AnimatePresence>
+        {editCwFile && (
+          <ModalShell onClose={() => setEditCwFile(null)} size="lg" bare glass>
             <ClassroomFileEditForm
               file={editCwFile}
               onCancel={() => setEditCwFile(null)}
               onUpdated={(updated) => { setCwFiles(prev => prev.map(f => f.id === updated.id ? updated : f)); setEditCwFile(null) }}
               onDeleted={(id) => { setCwFiles(prev => prev.filter(f => f.id !== id)); setEditCwFile(null) }}
             />
-          </motion.div>
-        </div>,
-        document.body,
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
 
       {/* Expanded homework box — opened mid-typing from the quick-add */}
-      {expandDay && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4"
-          onClick={e => { if (e.target === e.currentTarget) setExpandDay(null) }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-            className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto"
-          >
+      <AnimatePresence>
+        {expandDay && (
+          <ModalShell onClose={() => setExpandDay(null)} size="lg" bare glass>
             <SmartboardHomeworkForm
               createdBy={createdBy}
               homeroomId={homeroomId}
               classrooms={classrooms}
               defaultTitle={draftTitle}
               defaultDueDate={expandDay}
-              heading="New Homework"
+              heading="New homework"
               onCancel={() => setExpandDay(null)}
               onCreated={(task) => {
                 setTasks(prev => [...prev, task])
@@ -387,10 +374,9 @@ export default function SmartboardWeeklyCalendar({
                 onTaskActivity?.()
               }}
             />
-          </motion.div>
-        </div>,
-        document.body,
-      )}
+          </ModalShell>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

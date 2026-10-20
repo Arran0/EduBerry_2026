@@ -16,6 +16,7 @@ import { rescaleMark } from '@/lib/reportCardGrading'
 import Avatar from '@/components/Avatar'
 import ReportCardTitlePicker from '@/components/classrooms/ReportCardTitlePicker'
 import ModalShell from '@/components/ui/ModalShell'
+import { askConfirm } from '@/components/ui/sheet'
 
 interface AssessmentsTabProps {
   classroomId: string
@@ -216,7 +217,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this assessment?')) return
+    if (!(await askConfirm({ title: 'Delete this assessment?', body: 'Its marks are deleted with it.', danger: true }))) return
     const success = await deleteAssessment(id)
     if (success) {
       setAssessments((prev) => prev.filter((a) => a.id !== id))
@@ -464,10 +465,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     // Dropping a component takes its marks with it, so say so before it
     // happens rather than after.
     const removed = components.filter(c => !componentDrafts.some(d => d.id === c.id))
-    if (removed.length > 0 && !confirm(
-      `Removing ${removed.map(c => `"${c.name}"`).join(', ')} will delete the marks entered for `
-      + `${removed.length === 1 ? 'it' : 'them'}. Continue?`
-    )) return
+    if (removed.length > 0 && !(await askConfirm({
+      title: `Remove ${removed.length === 1 ? 'a component' : `${removed.length} components`}?`,
+      body: `Removing ${removed.map(c => `“${c.name}”`).join(', ')} deletes the marks entered for ${removed.length === 1 ? 'it' : 'them'}.`,
+      confirmLabel: 'Remove',
+      danger: true,
+    }))) return
 
     setSavingComponents(true)
     const saved = await saveAssessmentComponents(
@@ -713,7 +716,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             onClick={() => setShowNewForm(!showNewForm)}
             className="keep-round flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold transition-all shadow-lg shadow-amber-500/25 active:scale-95 flex-shrink-0"
           >
-            <Plus size={13} /> New Assessment
+            <Plus size={13} /> New assessment
           </button>
         )}
       </div>
@@ -730,11 +733,11 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
           >
             <div className="flex items-center gap-2 mb-1">
               <Plus size={14} className="text-amber-600" />
-              <span className="text-sm font-semibold text-slate-700">New Assessment</span>
+              <span className="text-sm font-semibold text-slate-700">New assessment</span>
             </div>
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 flex items-center gap-1 mb-1">
-                <Bookmark size={11} /> Report Card Title
+                <Bookmark size={11} /> Report card title
                 <span className="text-slate-500 normal-case font-normal">(optional)</span>
               </label>
               <ReportCardTitlePicker
@@ -766,7 +769,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
               <div className="flex items-center gap-1.5">
-                <label htmlFor="new-assessment-max-marks" className="text-xs font-medium text-slate-500 whitespace-nowrap">Max Marks</label>
+                <label htmlFor="new-assessment-max-marks" className="text-xs font-medium text-slate-500 whitespace-nowrap">Max marks</label>
                 <input
                   id="new-assessment-max-marks"
                   type="number"
@@ -864,10 +867,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       }
                     }}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-                      marksheetSort === 'marks'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+ marksheetSort === 'marks'
+ ? 'bg-amber-100 text-amber-700'
+ : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
                     title="Sort by marks"
                   >
                     {marksheetSort === 'marks'
@@ -885,10 +888,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                       }
                     }}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-                      marksheetSort === 'name'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+ marksheetSort === 'name'
+ ? 'bg-amber-100 text-amber-700'
+ : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
                     title="Sort by name"
                   >
                     {marksheetSort === 'name'
@@ -902,10 +905,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   <button
                     onClick={() => setShowComponentEditor(v => !v)}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-                      showComponentEditor || components.length > 0
-                        ? 'bg-indigo-100 text-indigo-700'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+ showComponentEditor || components.length > 0
+ ? 'bg-indigo-100 text-indigo-700'
+ : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+ }`}
                     title="Split this assessment into components"
                   >
                     <SplitSquareHorizontal size={12} />
@@ -956,8 +959,8 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                   {/* Total conversion — an optional second maximum the marks
                       are reported at. Blank it out to drop the column. */}
                   <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                    conversionTotal != null ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
-                  }`}>
+ conversionTotal != null ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
+ }`}>
                     {editingConversion ? (
                       <>
                         <span className="whitespace-nowrap">Convert to</span>
@@ -1079,10 +1082,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                       setImportQuery('')
                                     }}
                                     className={`absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${
-                                      importPickerRow === idx || draft.imported
-                                        ? 'bg-indigo-100 text-indigo-600'
-                                        : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                                    }`}
+ importPickerRow === idx || draft.imported
+ ? 'bg-indigo-100 text-indigo-600'
+ : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+ }`}
                                     title="Import marks from another marksheet in this classroom"
                                   >
                                     <FileInput size={13} />
@@ -1183,7 +1186,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                           className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-indigo-50/60 transition-colors disabled:opacity-50"
                                         >
                                           <div className="min-w-0 flex-1">
-                                            <p className="text-[11px] font-semibold text-slate-700 truncate">{candidate.title}</p>
+                                            <p className="min-w-0 text-[11px] font-semibold text-slate-700 break-words">{candidate.title}</p>
                                             <p className="text-[9px] text-slate-400">
                                               out of {Number(candidate.max_marks)}
                                               {candidate.date ? ` · ${new Date(candidate.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
@@ -1310,7 +1313,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                             <th className="py-1 pr-1.5 font-bold">Student</th>
                             {components.map(c => (
                               <th key={c.id} className="py-1 px-1 sm:px-2 text-center w-[58px] sm:w-24 font-bold">
-                                <span className="block truncate" title={c.name}>{c.name}</span>
+                                <span className="min-w-0 block break-words" title={c.name}>{c.name}</span>
                                 <span className="block font-semibold text-slate-400 normal-case tracking-normal">
                                   /{Number(c.max_marks)}
                                 </span>
@@ -1359,7 +1362,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                       <Avatar avatarUrl={student.user.avatar_url} name={student.user.full_name} size={22} userId={student.user_id} />
                                     </span>
                                     <span className="sm:hidden text-slate-400 tabular-nums w-3.5 flex-shrink-0 text-[9px]">{idx + 1}</span>
-                                    <span className="truncate font-medium text-slate-700">{student.user.full_name}</span>
+                                    <span className="min-w-0 break-words font-medium text-slate-700">{student.user.full_name}</span>
                                   </div>
                                 </td>
 
@@ -1390,10 +1393,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                           placeholder={mark.isAbsent ? 'AB' : '—'}
                                           title={cellError ?? `${c.name} — out of ${Number(c.max_marks)}`}
                                           className={`w-[52px] sm:w-14 border rounded-md sm:rounded-lg px-1 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
-                                            cellError
-                                              ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
-                                              : 'border-slate-200 focus:ring-amber-400/50'
-                                          }`}
+ cellError
+ ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
+ : 'border-slate-200 focus:ring-amber-400/50'
+ }`}
                                         />
                                       </div>
                                     </td>
@@ -1430,10 +1433,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                         placeholder={mark.isAbsent ? 'AB' : '—'}
                                         title={error ?? undefined}
                                         className={`w-[52px] sm:w-14 border rounded-md sm:rounded-lg px-1 py-1 text-center tabular-nums focus:outline-none focus:ring-2 transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:placeholder:text-slate-400 ${
-                                          error
-                                            ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
-                                            : 'border-slate-200 focus:ring-amber-400/50'
-                                        }`}
+ error
+ ? 'border-red-300 focus:ring-red-400/50 bg-red-50/60'
+ : 'border-slate-200 focus:ring-amber-400/50'
+ }`}
                                       />
                                     </div>
                                   )}
@@ -1456,10 +1459,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                     <span className="text-[9px] px-1 py-0.5 rounded-full font-bold bg-slate-200 text-slate-500">AB</span>
                                   ) : pct != null ? (
                                     <span className={`text-[9px] px-1 py-0.5 rounded-full font-bold ${
-                                      pct >= 80 ? 'bg-green-100 text-green-700' :
-                                      pct >= 60 ? 'bg-amber-100 text-amber-700' :
-                                      'bg-red-100 text-red-700'
-                                    }`}>{pct}</span>
+ pct >= 80 ? 'bg-green-100 text-green-700' :
+ pct >= 60 ? 'bg-amber-100 text-amber-700' :
+ 'bg-red-100 text-red-700'
+ }`}>{pct}</span>
                                   ) : <span className="text-slate-400">—</span>}
                                 </td>
                                 <td className="py-1 pl-1 sm:pl-2 text-center align-middle">
@@ -1482,10 +1485,10 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                                       }
                                     }}
                                     className={`p-1 rounded-lg transition-colors ${
-                                      mark.isAbsent
-                                        ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                                        : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
-                                    }`}
+ mark.isAbsent
+ ? 'bg-red-100 text-red-600 hover:bg-red-200'
+ : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
+ }`}
                                     title={mark.isAbsent ? 'Unmark absent' : 'Mark absent'}
                                   >
                                     <UserX size={13} />
@@ -1504,7 +1507,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                         disabled={saving || hasInvalidMarks}
                         className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-lg shadow-amber-500/25 active:scale-[0.99] transition-all disabled:opacity-60 disabled:shadow-none"
                       >
-                        <Save size={15} /> {saving ? 'Saving...' : 'Save Marks'}
+                        <Save size={15} /> {saving ? 'Saving...' : 'Save marks'}
                       </button>
                     </div>
                   </>
@@ -1615,8 +1618,8 @@ function AssessmentCard({
   return (
     <div
       className={`bg-white border-y sm:border sm:rounded-2xl border-slate-300 sm:shadow-sm transition-all ${
-        isStaff && !isEditing ? 'cursor-pointer hover:shadow-md hover:border-slate-400' : ''
-      }`}
+ isStaff && !isEditing ? 'cursor-pointer hover:shadow-md hover:border-slate-400' : ''
+ }`}
       onClick={isStaff && !isEditing ? () => onMarksheet(assessment.id) : undefined}
     >
       <div className="p-4">
@@ -1695,10 +1698,10 @@ function AssessmentCard({
                   )}
                   {pct != null && (
                     <span className={`text-sm font-bold px-2.5 py-1 rounded-xl ${
-                      pct >= 80 ? 'bg-green-100 text-green-700' :
-                      pct >= 60 ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
+ pct >= 80 ? 'bg-green-100 text-green-700' :
+ pct >= 60 ? 'bg-amber-100 text-amber-700' :
+ 'bg-red-100 text-red-700'
+ }`}>
                       {pct}%
                     </span>
                   )}
@@ -1776,7 +1779,7 @@ function AssessmentCard({
             >
               <div>
                 <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
-                  <Bookmark size={10} /> Report Card Title
+                  <Bookmark size={10} /> Report card title
                   <span className="text-slate-400 normal-case font-normal">(optional)</span>
                 </label>
                 <ReportCardTitlePicker
@@ -1807,7 +1810,7 @@ function AssessmentCard({
                   className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
                 <div className="flex items-center gap-1.5">
-                  <label htmlFor={`edit-max-marks-${assessment.id}`} className="text-xs font-medium text-slate-500 whitespace-nowrap">Max Marks</label>
+                  <label htmlFor={`edit-max-marks-${assessment.id}`} className="text-xs font-medium text-slate-500 whitespace-nowrap">Max marks</label>
                   <input
                     id={`edit-max-marks-${assessment.id}`}
                     type="number"

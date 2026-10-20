@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import Avatar from '@/components/Avatar'
 import Link from 'next/link'
 import PageBanner from '@/components/PageBanner'
 import PageToolbar, { ListSentinel } from '@/components/PageToolbar'
+import ModalShell from '@/components/ui/ModalShell'
+import { askConfirm, SheetFooter, SheetLabel, SHEET_BTN_PRIMARY, SHEET_INPUT } from '@/components/ui/sheet'
 import UserEmailSuggest from '@/components/UserEmailSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
@@ -33,8 +34,8 @@ const itemVariants = {
   show: { opacity: 1 },
 }
 
-// Admin input style helper
-const ai = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full'
+/** The academic years a classroom can be set in, "2020-21" onwards. */
+const ACADEMIC_YEARS = Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` })
 
 export default function ClassroomManagerPage() {
   const { user, profile } = useAuth()
@@ -62,6 +63,8 @@ export default function ClassroomManagerPage() {
   const [memberError, setMemberError] = useState('')
 
   const [classroomSearch, setClassroomSearch] = useState('')
+
+  const closeCreate = () => { setShowCreateForm(false); setCreateError('') }
 
   function academicYearToDates(ay: string): { start_date: string | null; end_date: string | null } {
     const match = ay.match(/^(\d{4})-(\d{2,4})$/)
@@ -98,7 +101,11 @@ export default function ClassroomManagerPage() {
   }
 
   const handleToggleClose = async (classroom: ClassroomWithDetails) => {
-    if (isClassroomClosed(classroom)) {
+    const closing = !isClassroomClosed(classroom)
+    if (!(await askConfirm(closing
+      ? { title: 'Close this classroom?', body: `“${classroom.title}” becomes read-only for everyone. You can reopen it later.`, confirmLabel: 'Close classroom' }
+      : { title: 'Reopen this classroom?', body: `“${classroom.title}” runs again until the end of its academic year.`, confirmLabel: 'Reopen' }))) return
+    if (!closing) {
       const reopenEnd = classroom.start_date
         ? `${parseInt(classroom.start_date.split('-')[0]) + 1}-03-31` : null
       await updateClassroom(classroom.id, { end_date: reopenEnd })
@@ -168,7 +175,7 @@ export default function ClassroomManagerPage() {
         coordinatorId = coordProfile.id
       } else {
         setCreating(false)
-        alert('Coordinator email not found or user does not have coordinator/principal/admin role.')
+        setCreateError('No coordinator, principal or admin has that email.')
         return
       }
     }
@@ -259,7 +266,11 @@ export default function ClassroomManagerPage() {
   }
 
   const handleDeleteClassroom = async (classroomId: string, title: string) => {
-    if (!window.confirm(`Delete classroom "${title}"? This cannot be undone.`)) return
+    if (!(await askConfirm({
+      title: 'Delete this classroom?',
+      body: `“${title}” and everything in it (content, homework, assessments and marks) is deleted for good.`,
+      danger: true,
+    }))) return
     const ok = await deleteClassroom(classroomId)
     if (ok) {
       if (expandedClassroom === classroomId) { setExpandedClassroom(null); setExpandedDetails(null) }
@@ -271,12 +282,12 @@ export default function ClassroomManagerPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="admin" style={{ backgroundColor: '#FDFCF9', minHeight: '100vh' }}>
+      <div data-page-theme="classrooms" style={{ minHeight: '100vh' }}>
         <PageBanner
           settingKey="classrooms_banner"
           defaultBanner={CLASSROOMS_BANNER_DEFAULT}
           icon={<BookOpen size={26} className="text-white" />}
-          title="Classroom Management"
+          title="Classrooms"
           subtitle={!loading && total > 0
             ? `${bandTotals.active} active · ${bandTotals.closed} closed`
             : 'Create and manage classrooms'}
@@ -287,125 +298,33 @@ export default function ClassroomManagerPage() {
           actions={isAdmin ? (
             <>
               <button
-                onClick={() => setShowCreateForm(v => !v)}
+                onClick={() => setShowCreateForm(true)}
                 className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg border border-[#27272A] transition-colors"
               >
-                {showCreateForm ? <X size={15} /> : <Plus size={15} />}
-                {showCreateForm ? 'Cancel' : 'New Classroom'}
+                <Plus size={15} />
+                New classroom
               </button>
               <button
-                onClick={() => setShowCreateForm(v => !v)}
+                onClick={() => setShowCreateForm(true)}
+                aria-label="New classroom"
                 className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border border-[#27272A] rounded-lg flex items-center justify-center text-white transition-colors"
               >
-                {showCreateForm ? <X size={16} /> : <Plus size={18} />}
+                <Plus size={18} />
               </button>
             </>
           ) : undefined}
         />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10" style={{ opacity: bannerEditing ? 0.35 : 1, pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease' }}>
 
           <PageToolbar
             search={classroomSearch}
             onSearchChange={setClassroomSearch}
-            searchPlaceholder="Search classrooms by title or description…"
+            searchPlaceholder="Search classrooms"
             summary={!loading && total > 0
               ? `${visibleRows.length} of ${total} loaded · ${bandTotals.active} active · ${bandTotals.closed} closed`
               : undefined}
           />
-
-          {/* Create form */}
-          <AnimatePresence>
-            {showCreateForm && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                className="mb-3 overflow-hidden"
-              >
-                <form onSubmit={handleCreateClassroom} className="border border-[#D4D4D8] border-l-4 border-l-[#525252] bg-[#F5F5F5] rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4D4D8] bg-[#27272A]">
-                    <span className="text-sm font-bold text-[#F5F5F5]">New Classroom</span>
-                    <button type="button" onClick={() => setShowCreateForm(false)} className="p-1 text-[#F5F5F5]/60 hover:text-[#F5F5F5] transition-colors">
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <div className="p-5 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Title *</label>
-                        <input type="text" value={newClassroom.title} onChange={e => setNewClassroom({ ...newClassroom, title: e.target.value })} className={ai} placeholder="e.g., Class 10-A Science" required />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
-                          <input type="number" value={newClassroom.grade} onChange={e => setNewClassroom({ ...newClassroom, grade: e.target.value })} className={ai} placeholder="10" min="1" max="12" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
-                          <input type="text" value={newClassroom.section} onChange={e => setNewClassroom({ ...newClassroom, section: e.target.value })} className={ai} placeholder="A" maxLength={5} />
-                        </div>
-                      </div>
-                    </div>
-                    {/* Says up front what a grade + section pulls in on its own,
-                        so the roster arriving pre-filled is never a surprise —
-                        and the same rule that governs the Import Homeroom panel
-                        below: a homeroom always brings its class teacher. */}
-                    <div className="flex items-start gap-2 text-[11px] leading-relaxed text-[#525252] bg-[#EBEBEB] border border-[#D4D4D8] rounded-lg px-3 py-2">
-                      <Info size={13} className="flex-shrink-0 mt-0.5 text-[#71717A]" />
-                      <span>
-                        {newClassroom.grade && newClassroom.section.trim() ? (
-                          <>
-                            Every homeroom for <strong>Grade {newClassroom.grade} {newClassroom.section.trim().toUpperCase()}</strong> joins
-                            automatically — its students, its smart board, and its <strong>class teacher</strong>.
-                          </>
-                        ) : (
-                          <>
-                            Set a grade and section and every homeroom matching it joins automatically — students,
-                            smart board, and <strong>class teacher</strong>. Homerooms imported later bring their
-                            class teachers too.
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</label>
-                      <SubjectPicker value={newClassroom.subject} onChange={v => setNewClassroom({ ...newClassroom, subject: v })} className="w-full" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Description</label>
-                      <textarea value={newClassroom.description} onChange={e => setNewClassroom({ ...newClassroom, description: e.target.value })} className={`${ai} resize-none`} rows={2} placeholder="Brief description…" />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Coordinator Email</label>
-                        <UserEmailSuggest value={newClassroom.coordinator_email} onChange={v => setNewClassroom({ ...newClassroom, coordinator_email: v })} roles={['coordinator', 'principal', 'admin']} placeholder="coordinator@school.com" className={ai} />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Teacher Email</label>
-                        <UserEmailSuggest value={newClassroom.teacher_email} onChange={v => setNewClassroom({ ...newClassroom, teacher_email: v })} roles={['teacher', 'coordinator', 'principal', 'admin']} placeholder="teacher@school.com" className={ai} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year *</label>
-                      <select value={newClassroom.academic_year} onChange={e => { setNewClassroom({ ...newClassroom, academic_year: e.target.value }); setCreateError('') }} className={ai}>
-                        <option value="">Select academic year…</option>
-                        {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y+1).slice(-2)}` }).map(ay => (
-                          <option key={ay} value={ay}>{ay}</option>
-                        ))}
-                      </select>
-                      {createError && <p className="text-xs text-rose-600 mt-1">{createError}</p>}
-                    </div>
-                    <div className="flex justify-end gap-3 pt-1">
-                      <button type="button" onClick={() => { setShowCreateForm(false); setCreateError('') }} className="px-4 py-2 border border-[#D4D4D8] text-[#18181B] text-sm hover:bg-[#EBEBEB] transition-colors">Cancel</button>
-                      <button type="submit" disabled={creating} className="flex items-center gap-2 px-5 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50">
-                        {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                        Create Classroom
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* List */}
           {loading ? (
@@ -416,11 +335,11 @@ export default function ClassroomManagerPage() {
           ) : total === 0 && !debouncedSearch ? (
             <div className="border border-[#D4D4D8] bg-[#F5F5F5] p-12 text-center">
               <BookOpen size={36} className="text-[#D4D4D8] mx-auto mb-3" />
-              <p className="text-sm font-semibold text-[#18181B] mb-1">No Classrooms Yet</p>
+              <p className="text-sm font-semibold text-[#18181B] mb-1">No classrooms yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first classroom to get started.</p>
               {isAdmin && (
                 <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors mx-auto">
-                  <Plus size={14} /> Create Classroom
+                  <Plus size={14} /> New classroom
                 </button>
               )}
             </div>
@@ -431,12 +350,13 @@ export default function ClassroomManagerPage() {
           ) : (
             <div className="border border-[#D4D4D8] rounded-xl overflow-hidden">
               {/* Column headers */}
-              <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Title</span>
-                <span className="w-28 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Subject</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">A.Y.</span>
-                <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] flex-shrink-0">Members</span>
-                <span className="w-32 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right flex-shrink-0">Actions</span>
+              <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3 text-[11.5px] font-semibold text-[#C9C9CF]">
+                <span className="w-2 flex-shrink-0" aria-hidden />
+                <span className="flex-1">Classroom</span>
+                <span className="w-32 flex-shrink-0">Subject</span>
+                <span className="w-16 flex-shrink-0">Year</span>
+                <span className="w-20 flex-shrink-0">Members</span>
+                <span className="w-32 text-right flex-shrink-0">Actions</span>
               </div>
 
               {/* One sequence — active rows, then closed ones, with the band
@@ -446,7 +366,7 @@ export default function ClassroomManagerPage() {
                   <React.Fragment key={classroom.id}>
                     {(i === 0 || visibleRows[i - 1].closed !== closed) && (closed || bandTotals.closed > 0) && (
                       <div className="bg-[#27272A]/90 px-4 py-1.5 flex items-center gap-2 border-t border-[#27272A]">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{closed ? 'Closed' : 'Active'}</span>
+                        <span className="text-[11.5px] font-semibold text-[#C9C9CF]">{closed ? 'Closed' : 'Active'}</span>
                         <span className="text-[10px] text-[#A1A1AA]/60 font-medium">{closed ? bandTotals.closed : bandTotals.active}</span>
                       </div>
                     )}
@@ -477,78 +397,144 @@ export default function ClassroomManagerPage() {
         </div>
       </div>
 
-      {/* Edit modal */}
-      {editingClassroom && createPortal(
-        <AnimatePresence>
-          <motion.div
-            key="classroom-edit-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-            onClick={() => setEditingClassroom(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
-              transition={{ duration: 0.18 }}
-              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
-                <h2 className="text-base font-semibold text-white">Edit Classroom</h2>
-                <button onClick={() => setEditingClassroom(null)} className="text-white/60 hover:text-white transition-colors">
-                  <X size={18} />
+
+      {/* New classroom */}
+      <AnimatePresence>
+        {showCreateForm && (
+          <ModalShell
+            key="classroom-create"
+            onClose={closeCreate}
+            size="lg"
+            sharp
+            title="New classroom"
+            subtitle="Students of the grade and section join on their own"
+            icon={<BookOpen size={16} />}
+            iconClassName="text-white [background:linear-gradient(135deg,#3D3B40,#8B6F47)]"
+            footer={
+              <SheetFooter onCancel={closeCreate}>
+                <button type="submit" form="classroom-create-form" disabled={creating || !newClassroom.title.trim()} className={SHEET_BTN_PRIMARY}>
+                  {creating ? <Loader2 className="animate-spin" /> : <Plus />}
+                  Create classroom
                 </button>
+              </SheetFooter>
+            }
+          >
+            <form id="classroom-create-form" onSubmit={handleCreateClassroom} className="space-y-3.5">
+              <div>
+                <SheetLabel htmlFor="nc-title">Title</SheetLabel>
+                <input id="nc-title" type="text" value={newClassroom.title} onChange={e => setNewClassroom({ ...newClassroom, title: e.target.value })} className={SHEET_INPUT} placeholder="Class 10 A Science" required autoFocus />
               </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Title *</label>
-                  <input type="text" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className={ai} />
+                  <SheetLabel htmlFor="nc-grade">Grade</SheetLabel>
+                  <input id="nc-grade" type="number" inputMode="numeric" value={newClassroom.grade} onChange={e => setNewClassroom({ ...newClassroom, grade: e.target.value })} className={SHEET_INPUT} placeholder="10" min="1" max="12" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Description</label>
-                  <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className={`${ai} resize-none`} rows={2} />
+                  <SheetLabel htmlFor="nc-section">Section</SheetLabel>
+                  <input id="nc-section" type="text" value={newClassroom.section} onChange={e => setNewClassroom({ ...newClassroom, section: e.target.value })} className={SHEET_INPUT} placeholder="A" maxLength={5} />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Academic Year</label>
-                  <select value={editForm.academic_year} onChange={e => setEditForm({ ...editForm, academic_year: e.target.value })} className={ai}>
-                    <option value="">Select year…</option>
-                    {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
-                      <option key={ay} value={ay}>{ay}</option>
-                    ))}
+                <div className="col-span-2 sm:col-span-1">
+                  <SheetLabel htmlFor="nc-year">Academic year</SheetLabel>
+                  <select id="nc-year" value={newClassroom.academic_year} onChange={e => { setNewClassroom({ ...newClassroom, academic_year: e.target.value }); setCreateError('') }} className={SHEET_INPUT} required>
+                    <option value="">Choose…</option>
+                    {ACADEMIC_YEARS.map(ay => <option key={ay} value={ay}>{ay}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Grade</label>
-                    <input type="number" value={editForm.grade} onChange={e => setEditForm({ ...editForm, grade: e.target.value })} className={ai} placeholder="10" min="1" max="12" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Section</label>
-                    <input type="text" value={editForm.section} onChange={e => setEditForm({ ...editForm, section: e.target.value })} className={ai} placeholder="A" maxLength={5} />
-                  </div>
+              </div>
+              {/* What a grade + section pulls in on its own, so a roster that
+                  arrives pre-filled is never a surprise. */}
+              <p className="flex items-start gap-2 text-[12px] leading-relaxed text-slate-600 bg-slate-50 rounded-xl px-3 py-2">
+                <Info size={13} className="flex-shrink-0 mt-0.5 text-slate-400" />
+                <span>
+                  {newClassroom.grade && newClassroom.section.trim() ? (
+                    <>Every homeroom for <strong>Grade {newClassroom.grade} {newClassroom.section.trim().toUpperCase()}</strong> joins: its students, its smart board and its class teacher.</>
+                  ) : (
+                    <>With a grade and section set, every matching homeroom joins: students, smart board and class teacher.</>
+                  )}
+                </span>
+              </p>
+              <div>
+                <SheetLabel>Subject</SheetLabel>
+                <SubjectPicker value={newClassroom.subject} onChange={v => setNewClassroom({ ...newClassroom, subject: v })} className="w-full" />
+              </div>
+              <div>
+                <SheetLabel htmlFor="nc-desc" hint="optional">Description</SheetLabel>
+                <textarea id="nc-desc" value={newClassroom.description} onChange={e => setNewClassroom({ ...newClassroom, description: e.target.value })} className={`${SHEET_INPUT} resize-none`} rows={2} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <SheetLabel hint="optional">Coordinator email</SheetLabel>
+                  <UserEmailSuggest value={newClassroom.coordinator_email} onChange={v => { setNewClassroom({ ...newClassroom, coordinator_email: v }); setCreateError('') }} roles={['coordinator', 'principal', 'admin']} placeholder="coordinator@school.com" className={SHEET_INPUT} />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-1.5">Subject</label>
-                  <SubjectPicker value={editForm.subject} onChange={v => setEditForm({ ...editForm, subject: v })} className="w-full" />
+                  <SheetLabel hint="optional">Teacher email</SheetLabel>
+                  <UserEmailSuggest value={newClassroom.teacher_email} onChange={v => setNewClassroom({ ...newClassroom, teacher_email: v })} roles={['teacher', 'coordinator', 'principal', 'admin']} placeholder="teacher@school.com" className={SHEET_INPUT} />
                 </div>
               </div>
-              <div className="flex gap-3 px-6 py-4 border-t border-[#E4E4E7] flex-shrink-0">
+              {createError && <p role="alert" className="text-[12.5px] text-rose-600">{createError}</p>}
+            </form>
+          </ModalShell>
+        )}
+      </AnimatePresence>
+      {/* Edit classroom */}
+      <AnimatePresence>
+        {editingClassroom && (
+          <ModalShell
+            key="classroom-edit"
+            onClose={() => setEditingClassroom(null)}
+            size="lg"
+            sharp
+            title="Edit classroom"
+            subtitle={editForm.title || undefined}
+            icon={<Edit3 size={16} />}
+            iconClassName="text-white [background:linear-gradient(135deg,#3D3B40,#8B6F47)]"
+            footer={
+              <SheetFooter onCancel={() => setEditingClassroom(null)}>
                 <button
-                  onClick={() => handleSaveEdit(editingClassroom)} disabled={saving || !editForm.title.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                  onClick={() => handleSaveEdit(editingClassroom)}
+                  disabled={saving || !editForm.title.trim()}
+                  className={SHEET_BTN_PRIMARY}
                 >
-                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  Save Changes
+                  {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                  Save changes
                 </button>
-                <button onClick={() => setEditingClassroom(null)} className="px-4 py-2.5 border border-[#D4D4D8] text-[#18181B] text-sm font-medium rounded-lg hover:bg-[#F5F5F5] transition-colors">
-                  Cancel
-                </button>
+              </SheetFooter>
+            }
+          >
+            <div className="space-y-3.5">
+              <div>
+                <SheetLabel htmlFor="ec-title">Title</SheetLabel>
+                <input id="ec-title" type="text" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className={SHEET_INPUT} />
               </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>,
-        document.body
-      )}
+              <div>
+                <SheetLabel htmlFor="ec-desc" hint="optional">Description</SheetLabel>
+                <textarea id="ec-desc" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className={`${SHEET_INPUT} resize-none`} rows={2} />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <SheetLabel htmlFor="ec-grade">Grade</SheetLabel>
+                  <input id="ec-grade" type="number" inputMode="numeric" value={editForm.grade} onChange={e => setEditForm({ ...editForm, grade: e.target.value })} className={SHEET_INPUT} placeholder="10" min="1" max="12" />
+                </div>
+                <div>
+                  <SheetLabel htmlFor="ec-section">Section</SheetLabel>
+                  <input id="ec-section" type="text" value={editForm.section} onChange={e => setEditForm({ ...editForm, section: e.target.value })} className={SHEET_INPUT} placeholder="A" maxLength={5} />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <SheetLabel htmlFor="ec-year">Academic year</SheetLabel>
+                  <select id="ec-year" value={editForm.academic_year} onChange={e => setEditForm({ ...editForm, academic_year: e.target.value })} className={SHEET_INPUT}>
+                    <option value="">Choose…</option>
+                    {ACADEMIC_YEARS.map(ay => <option key={ay} value={ay}>{ay}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <SheetLabel>Subject</SheetLabel>
+                <SubjectPicker value={editForm.subject} onChange={v => setEditForm({ ...editForm, subject: v })} className="w-full" />
+              </div>
+            </div>
+          </ModalShell>
+        )}
+      </AnimatePresence>
     </ProtectedLayout>
   )
 }
@@ -586,6 +572,10 @@ function ClassroomRow({
 
   // A smart board is an account with role 'smartboard'; it joins the roster at
   // teacher level, so its membership role says nothing about what it is.
+  const academicYear = classroom.start_date
+    ? `${parseInt(classroom.start_date.split('-')[0])}-${String(parseInt(classroom.start_date.split('-')[0]) + 1).slice(-2)}`
+    : ''
+
   const boards = useMemo(
     () => (expandedDetails?.members ?? []).filter(m => m.user?.role === 'smartboard'),
     [expandedDetails],
@@ -595,58 +585,50 @@ function ClassroomRow({
     <motion.div variants={itemVariants}>
       {/* Row */}
       <div
-        className={`flex items-center gap-3 px-3 py-1.5 border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#EBEBEB] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
+        className={`flex items-center gap-3 px-3 py-2 sm:py-1.5 bg-white border-b border-[#E4E4E7] last:border-b-0 hover:bg-[#F5F4F1] transition-colors cursor-pointer ${closed ? 'opacity-60' : ''}`}
         onClick={onExpand}
       >
         {/* Icon dot */}
         <div className={`w-2 h-2 flex-shrink-0 rounded-full ${closed ? 'bg-[#D4D4D8]' : 'bg-[#71717A]'}`} />
 
-        {/* Title + subject */}
+        {/* Title, with subject, year and members underneath on a phone */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`truncate text-[13px] font-semibold leading-tight ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
-            {closed && <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-[#27272A] text-[#A1A1AA]">Closed</span>}
+            <span className={`min-w-0 break-words text-[13px] font-semibold leading-tight ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
+            {closed && <span className="text-[10.5px] font-semibold px-1.5 py-0.5 bg-[#27272A] text-[#D4D4D8]">Closed</span>}
           </div>
           {classroom.description && (
-            <p className="hidden truncate text-[11px] leading-tight text-[#71717A] sm:block">{classroom.description}</p>
+            <p className="hidden sm:block min-w-0 break-words text-[11px] leading-tight text-[#71717A] mt-0.5">{classroom.description}</p>
           )}
+          <p className="sm:hidden flex flex-wrap gap-x-2.5 text-[11px] leading-snug text-[#71717A] mt-0.5">
+            {classroom.subject && <span className="inline-flex items-center gap-1"><Tag size={10} />{classroom.subject}</span>}
+            {academicYear && <span>{academicYear}</span>}
+            <span>{classroom.member_count ?? 0} members</span>
+          </p>
         </div>
 
-        {/* Subject — desktop */}
-        <div className="hidden sm:block w-28 flex-shrink-0">
-          {classroom.subject ? (
-            <span className="text-xs text-[#71717A] flex items-center gap-1 truncate">
-              <Tag size={10} className="flex-shrink-0" /> {classroom.subject}
-            </span>
-          ) : null}
-        </div>
-
-        {/* AY — desktop */}
-        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
-          {classroom.start_date
-            ? `${parseInt(classroom.start_date.split('-')[0])}-${String(parseInt(classroom.start_date.split('-')[0]) + 1).slice(-2)}`
-            : ''}
+        <span className="hidden sm:block w-32 flex-shrink-0 min-w-0 text-xs text-[#71717A] break-words">
+          {classroom.subject}
         </span>
-
-        {/* Members — desktop */}
-        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0">
-          {classroom.member_count ?? 0} members
+        <span className="hidden sm:block text-xs text-[#71717A] w-16 flex-shrink-0 tabular-nums">{academicYear}</span>
+        <span className="hidden sm:block text-xs text-[#71717A] w-20 flex-shrink-0 tabular-nums">
+          {classroom.member_count ?? 0}
         </span>
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 w-32 justify-end flex-shrink-0">
-          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="View classroom">
+        <div className="flex items-center gap-0.5 sm:w-32 justify-end flex-shrink-0">
+          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Open classroom" aria-label="Open classroom">
             <ExternalLink size={14} />
           </Link>
           {isAdmin && (
             <>
-              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`p-1.5 transition-colors ${closed ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'}>
+              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`hidden sm:inline-flex p-1.5 transition-colors ${closed ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'} aria-label={closed ? 'Reopen classroom' : 'Close classroom'}>
                 {closed ? <Lock size={14} /> : <LockOpen size={14} />}
               </button>
-              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit">
+              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="hidden sm:inline-flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit" aria-label="Edit classroom">
                 <Edit3 size={14} />
               </button>
-              <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete">
+              <button onClick={e => { e.stopPropagation(); onDelete() }} className="hidden sm:inline-flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete" aria-label="Delete classroom">
                 <Trash2 size={14} />
               </button>
             </>
@@ -661,7 +643,22 @@ function ClassroomRow({
       <AnimatePresence>
         {expanded && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-5 py-4 space-y-4">
+            <div className="border-b border-[#E4E4E7] bg-[#F5F5F5] px-3 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
+
+              {/* On a phone the row has room for two icons only; the rest live here. */}
+              {isAdmin && (
+                <div className="sm:hidden flex flex-wrap gap-2">
+                  <button onClick={onStartEdit} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
+                    <Edit3 size={13} /> Edit
+                  </button>
+                  <button onClick={onToggleClose} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
+                    {closed ? <LockOpen size={13} /> : <Lock size={13} />} {closed ? 'Reopen' : 'Close'}
+                  </button>
+                  <button onClick={onDelete} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-[13px] font-medium text-rose-600">
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </div>
+              )}
 
               {/* Add member */}
               {isAdmin && !closed && (
@@ -669,7 +666,7 @@ function ClassroomRow({
                   <div className="flex-1 min-w-0">
                     <UserEmailSuggest
                       value={addMemberEmailInput} onChange={v => onAddMemberEmailChange(v)}
-                      placeholder="Add member by email…"
+                      placeholder="Email to add"
                       className="border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full"
                     />
                   </div>
@@ -687,8 +684,8 @@ function ClassroomRow({
                 onClick={() => setShowMembers(v => !v)}
                 className="w-full flex items-center justify-between py-2 px-3 bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
               >
-                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
-                  <Users size={12} /> Members
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-[#3F3F46]">
+                  <Users size={13} /> Members
                   {expandedDetails && <span className="font-normal text-[#71717A] normal-case">({expandedDetails.members.length})</span>}
                 </span>
                 <ChevronDown size={13} className={`text-[#71717A] transition-transform ${showMembers ? 'rotate-180' : ''}`} />
@@ -710,8 +707,8 @@ function ClassroomRow({
                             <div className="flex items-center gap-3 min-w-0">
                               <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} profileSeed={member.user} />
                               <div className="min-w-0">
-                                <p className="truncate text-[13px] font-medium leading-tight text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
-                                <p className="truncate text-[11px] leading-tight text-[#71717A]">{member.user?.email}</p>
+                                <p className="break-words text-[13px] font-medium leading-tight text-[#18181B]">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="break-all text-[11px] leading-tight text-[#71717A]">{member.user?.email}</p>
                               </div>
                               {/* The person's own label — their admin-set display_role
                                   ("HM") when they have one, else the standard name for
@@ -808,8 +805,8 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between py-2 px-3 hover:bg-[#EBEBEB] transition-colors"
       >
-        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
-          <Home size={12} /> Import Homeroom
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-[#3F3F46]">
+          <Home size={13} /> Import a homeroom
         </span>
         <ChevronDown size={13} className={`text-[#71717A] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -836,9 +833,9 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
                 Imported <strong>{result.name}</strong>: {result.students} student{result.students !== 1 ? 's' : ''}
                 {result.board ? ' + smart board' : ''}
                 {result.teacher ? ' + class teacher' : ''}.
-                {result.hadBoard && !result.board ? ' Smart board could not be added — check console.' : ''}
+                {result.hadBoard && !result.board ? ' The smart board could not be added.' : ''}
                 {!result.hadBoard ? ' No smart board linked to this homeroom.' : ''}
-                {result.hadTeacher && !result.teacher ? ' Class teacher could not be added — check console.' : ''}
+                {result.hadTeacher && !result.teacher ? ' The class teacher could not be added.' : ''}
                 {!result.hadTeacher ? ' No class teacher set for this homeroom.' : ''}
               </span>
             </div>
@@ -855,13 +852,13 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
               results.map(hr => (
                 <div key={hr.id} className="flex items-center gap-2 py-1.5 px-2 border border-[#E4E4E7] rounded hover:bg-[#F5F5F5]">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#18181B] truncate flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-[#18181B] min-w-0 break-words flex items-center gap-1.5">
                       {hr.name}
                       {hr.smartboard_id && <MonitorPlay size={11} className="text-indigo-500 flex-shrink-0" />}
                     </p>
                     {/* Names the teacher who will come along, so the import is
                         never a surprise addition to the classroom roster. */}
-                    <p className="text-[11px] text-[#71717A] truncate">
+                    <p className="text-[11px] text-[#71717A] break-words">
                       {hr.class_teacher
                         ? <>Class teacher: {hr.class_teacher.full_name}</>
                         : 'No class teacher set'}
@@ -931,8 +928,8 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
   return (
     <div className="border border-[#D4D4D8] bg-white rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#E4E4E7]">
-        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#525252]">
-          <MonitorPlay size={12} className="text-indigo-500" /> Smart Boards
+        <span className="flex items-center gap-2 text-[13px] font-semibold text-[#3F3F46]">
+          <MonitorPlay size={13} className="text-indigo-500" /> Smart boards
           {loaded && <span className="font-normal text-[#71717A] normal-case">({boards.length})</span>}
         </span>
         {loaded && !picking && (
@@ -963,8 +960,8 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
                   <MonitorPlay size={14} className="text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[#18181B]">{b.user?.full_name}</p>
-                  <p className="truncate text-[11px] text-[#71717A]">{b.user?.email}</p>
+                  <p className="break-words text-sm font-medium text-[#18181B]">{b.user?.full_name}</p>
+                  <p className="break-all text-[11px] text-[#71717A]">{b.user?.email}</p>
                 </div>
                 <span className="flex-shrink-0 rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
                   Board
@@ -1014,7 +1011,7 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
               ) : available.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-[#A1A1AA]">
                   {accounts.length === 0
-                    ? 'No smart board accounts exist yet — create one from the Homeroom Manager.'
+                    ? 'There are no smart board accounts yet. Create one in Homerooms.'
                     : query
                       ? 'No smart board matches that search.'
                       : 'Every smart board account is already in this classroom.'}
@@ -1026,8 +1023,8 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
                       <MonitorPlay size={13} className="text-white" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#18181B]">{acc.full_name}</p>
-                      <p className="truncate text-[11px] text-[#71717A]">{acc.email}</p>
+                      <p className="break-words text-sm font-medium text-[#18181B]">{acc.full_name}</p>
+                      <p className="break-all text-[11px] text-[#71717A]">{acc.email}</p>
                     </div>
                     <button
                       onClick={() => handleAdd(acc)}

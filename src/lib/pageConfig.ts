@@ -318,6 +318,18 @@ export async function fetchSettingResult<T>(key: string, fallback: T): Promise<S
   }
 }
 
+/**
+ * The cached value for `key` right now, without waiting on the network — so a
+ * page can paint its banner on the first frame and let fetchSetting correct it.
+ * Null when nothing has been cached in this browser yet.
+ */
+export function peekSetting<T>(key: string, fallback: T): T | null {
+  if (!snapshot) snapshot = readPersistedSnapshot()
+  const value = snapshot?.values[key]
+  if (value == null || typeof value !== 'object') return snapshot ? fallback : null
+  return { ...fallback, ...value } as T
+}
+
 export async function fetchSetting<T>(key: string, fallback: T): Promise<T> {
   return (await fetchSettingResult(key, fallback)).value
 }
@@ -415,6 +427,7 @@ export const ACADEMICS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   imageUrl: '',
 }
 export const fetchAcademicsBannerConfig = () => fetchSetting<AnnouncementBannerConfig>('academics_banner', ACADEMICS_BANNER_DEFAULT)
+export const peekAcademicsBannerConfig  = () => peekSetting<AnnouncementBannerConfig>('academics_banner', ACADEMICS_BANNER_DEFAULT)
 export const saveAcademicsBannerConfig  = (c: AnnouncementBannerConfig) => saveSetting('academics_banner', c)
 
 // Task Manager banner (reuses the same type)

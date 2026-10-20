@@ -27,6 +27,7 @@ import {
   uploadClassroomImage,
 } from '@/lib/classrooms'
 import { recordClassroomVisit } from '@/lib/classroomVisits'
+import { safeSrc } from '@/lib/safeUrl'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { pickClassroomPalette, classroomGradient, classroomLogoGradient } from '@/lib/classroomPalette'
 import { isStaffRole } from '@/lib/supabase'
@@ -52,6 +53,10 @@ const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }
 
 const TAB_VALUES: Tab[] = ['coursework', 'homework', 'assessments', 'discussion', 'analysis']
 
+function formatDay(iso: string): string {
+  return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 function ClassroomDetailPageContent() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -64,7 +69,6 @@ function ClassroomDetailPageContent() {
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [bannerLum, setBannerLum] = useState<number | null>(null)
   const [bannerReady, setBannerReady] = useState(false)
-  const [showDates, setShowDates] = useState(true)
 
   const loadClassroom = useCallback(async () => {
     if (!id) return
@@ -77,15 +81,6 @@ function ClassroomDetailPageContent() {
   useEffect(() => {
     loadClassroom()
   }, [loadClassroom])
-
-  // Start/end date briefly announces itself, then fades out to keep the
-  // banner meta row minimal.
-  useEffect(() => {
-    if (!classroom?.start_date) return
-    setShowDates(true)
-    const t = setTimeout(() => setShowDates(false), 1000)
-    return () => clearTimeout(t)
-  }, [classroom?.id, classroom?.start_date])
 
   useEffect(() => {
     if (id) recordClassroomVisit(id)
@@ -107,21 +102,27 @@ function ClassroomDetailPageContent() {
   const classroomId  = classroom?.id
   const classroomBanner = classroom?.banner_url
 
+  const bannerSrc = safeSrc(classroomBanner)
+  const logoSrc = safeSrc(classroom?.logo_url)
+
   useEffect(() => {
     if (!classroomId) return
     setBannerReady(false)
-    if (classroomBanner) {
-      sampleImageLuminance(classroomBanner, 0.6).then(setBannerLum)
-      const img = new window.Image()
-      img.onload = () => setBannerReady(true)
-      img.onerror = () => setBannerReady(true)
-      img.src = classroomBanner
+    if (bannerSrc) {
+      sampleImageLuminance(bannerSrc, 0.6).then(setBannerLum)
     } else {
       const p = pickClassroomPalette(classroomId)
       setBannerLum((hexToLuminance(p.from) + hexToLuminance(p.to)) / 2)
-      setBannerReady(true)
     }
-  }, [classroomBanner, classroomId])
+  }, [bannerSrc, classroomId])
+
+  // The tab lives in the URL, so a reload or a shared link opens the same one.
+  const selectTab = (t: Tab) => {
+    setActiveTab(t)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', t)
+    window.history.replaceState(window.history.state, '', url)
+  }
 
   if (!user || !profile) return null
 
@@ -140,12 +141,13 @@ function ClassroomDetailPageContent() {
   }
 
   const tabs: { id: Tab; label: string; shortLabel: string }[] = [
-    { id: 'coursework',  label: 'Content',            shortLabel: 'Content'      },
-    { id: 'homework',    label: 'Classroom Calendar', shortLabel: 'Calendar'     },
-    { id: 'assessments', label: 'Assessments',        shortLabel: 'Assessments' },
-    { id: 'discussion',  label: 'Discussion',         shortLabel: 'Discussion'  },
+    { id: 'coursework',  label: 'Content',     shortLabel: 'Content'    },
+    { id: 'homework',    label: 'Calendar',    shortLabel: 'Calendar'   },
+    // Shorter names on a phone: a fifth of a 360px screen has no room for the long ones.
+    { id: 'assessments', label: 'Assessments', shortLabel: 'Marks'      },
+    { id: 'discussion',  label: 'Discussion',  shortLabel: 'Chat'       },
     // Staff-only performance analysis
-    ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis', shortLabel: 'Analytics' }] : []),
+    ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis', shortLabel: 'Analysis' }] : []),
   ]
 
   // Smart boards open classrooms inside their own shell (permanent board nav),
@@ -186,75 +188,40 @@ function ClassroomDetailPageContent() {
           </div>
         ) : (
           <>
-            {/* ── Immersive Banner ── */}
-            <AnimatePresence>
-              {bannerReady && (
-                <motion.div
-                  key="classroom-banner"
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  transition={{ type: 'spring', stiffness: 45, damping: 14 }}
-                  className="relative overflow-hidden"
-                >
-              {/* Background: banner image or this classroom's gradient palette */}
-              <div className="absolute inset-0" style={{ background: classroomGradient(palette!) }}>
-                {classroom.banner_url && (
-                  <img
-                    src={classroom.banner_url}
-                    alt=""
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                )}
-              </div>
-
-              {/* Decorative glow orbs (visible on the gradient banner) */}
-              {!classroom.banner_url && (
-                <>
-                  <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: palette!.orbA }} />
-                  <div className="absolute -bottom-20 left-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ background: palette!.orbB }} />
-                </>
+            {/* ── Banner: a short strip, painted at once. The photo, if any,
+                 fades in over the classroom's own gradient when it arrives. ── */}
+            <div className="relative overflow-hidden" style={{ background: classroomGradient(palette!) }}>
+              {bannerSrc && (
+                <img
+                  src={bannerSrc}
+                  alt=""
+                  decoding="async"
+                  onLoad={() => setBannerReady(true)}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${bannerReady ? 'opacity-100' : 'opacity-0'}`}
+                />
               )}
-
-              {/* Radial sheen */}
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.14),transparent_60%)] pointer-events-none" />
-
-              {/* Legibility scrim over banner images, tuned to the sampled luminance */}
-              {classroom.banner_url && (
+              {/* Soft light from the top left, and a legibility wash over a photo */}
+              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_60%)]" />
+              {bannerSrc && (
                 <div
-                  className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${
+                  className={`absolute inset-0 pointer-events-none ${
                     bannerOnDark
-                      ? 'bg-gradient-to-t from-slate-950/55 via-slate-950/15 to-slate-950/25'
-                      : 'bg-gradient-to-t from-white/65 via-white/15 to-white/30'
+                      ? 'bg-gradient-to-t from-slate-950/55 via-slate-950/20 to-slate-950/25'
+                      : 'bg-gradient-to-t from-white/65 via-white/20 to-white/30'
                   }`}
                 />
               )}
 
-              {/* Change banner button (staff only) — small pencil icon, matching the home page banner */}
-              {canEditClassroom && !closed && (
-                <label
-                  className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/25 hover:bg-black/45 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-all active:scale-90"
-                  title="Change banner"
-                >
-                  <Pencil size={13} className="text-white" />
-                  <input type="file" accept="image/*" className="hidden" onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) handleImageUpload('banner', f)
-                  }} />
-                </label>
-              )}
-
-              {/* Content overlay — deliberately short: the banner is chrome, not
-                  content, so it never eats more than a sliver of the viewport. */}
-              <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3.5 sm:pt-5 pb-11 sm:pb-12">
-                {/* Classroom info */}
+              <div className="relative max-w-7xl 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-10 sm:pt-5 sm:pb-12">
                 <div className="flex items-center gap-3 sm:gap-4">
                   {/* Logo */}
                   <div className="relative group flex-shrink-0">
-                    <div className={`keep-round w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 sm:ring-[3px] transition-all duration-300 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : ''} overflow-hidden`}
+                    <div
+                      className={`keep-round w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)] ring-2 ${bannerOnDark ? 'ring-white/90' : 'ring-white'} ${closed ? 'bg-slate-500' : ''} overflow-hidden`}
                       style={closed ? undefined : { background: classroomLogoGradient(palette!) }}
                     >
-                      {classroom.logo_url ? (
-                        <img src={classroom.logo_url} alt="" className="w-full h-full object-cover" />
+                      {logoSrc ? (
+                        <img src={logoSrc} alt="" className="w-full h-full object-cover" />
                       ) : closed ? (
                         <Lock size={20} />
                       ) : (
@@ -262,135 +229,119 @@ function ClassroomDetailPageContent() {
                       )}
                     </div>
                     {canEditClassroom && !closed && (
-                      <label className="keep-round absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                      <label
+                        className="keep-round absolute inset-0 flex items-center justify-center bg-black/45 rounded-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 cursor-pointer transition-opacity text-white"
+                        title="Change logo"
+                      >
                         <Camera size={16} />
-                        <input type="file" accept="image/*" className="hidden" onChange={e => {
+                        <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={e => {
                           const f = e.target.files?.[0]
                           if (f) handleImageUpload('logo', f)
+                          e.target.value = ''
                         }} />
                       </label>
                     )}
                   </div>
 
-                  {/* Title + meta */}
+                  {/* Title + meta — the title wraps; it is never cut short. */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h1
-                        className={`font-display headline text-[1.25rem] sm:text-2xl font-bold leading-tight truncate transition-colors duration-300 ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
-                        style={bannerOnDark ? { textShadow: '0 2px 12px rgba(0,0,0,0.45)' } : undefined}
-                      >
-                        {classroom.title}
-                      </h1>
+                    <h1
+                      className={`font-display text-[1.25rem] sm:text-[1.6rem] font-bold leading-tight break-words ${bannerOnDark ? 'text-white' : 'text-slate-900'}`}
+                      style={bannerOnDark ? { textShadow: '0 2px 12px rgba(0,0,0,0.4)' } : undefined}
+                    >
+                      {classroom.title}
                       {closed && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 border backdrop-blur-md transition-colors duration-300 ${bannerOnDark ? 'bg-white/20 text-white border-white/25' : 'bg-white/70 text-slate-700 border-white/80'}`}>
+                        <span className={`keep-round ml-2 align-middle inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold ${bannerOnDark ? 'bg-white/20 text-white' : 'bg-white/75 text-slate-700'}`}>
                           <Lock size={10} /> Closed
                         </span>
                       )}
-                    </div>
+                    </h1>
                     {classroom.description && (
                       <p
-                        className={`hidden sm:block text-xs mt-0.5 line-clamp-1 max-w-2xl transition-colors duration-300 ${bannerOnDark ? 'text-white/85' : 'text-slate-700'}`}
+                        className={`hidden sm:block text-[13px] mt-0.5 max-w-3xl break-words ${bannerOnDark ? 'text-white/85' : 'text-slate-700'}`}
                         style={bannerOnDark ? { textShadow: '0 1px 6px rgba(0,0,0,0.35)' } : undefined}
                       >
                         {classroom.description}
                       </p>
                     )}
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
+                    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[12px] font-medium ${bannerOnDark ? 'text-white/90' : 'text-slate-700'}`}>
                       <button
                         onClick={() => setShowMembersModal(true)}
-                        className={`inline-flex items-center gap-1 text-[11px] font-semibold underline-offset-2 hover:underline transition-colors duration-300 ${
-                          bannerOnDark ? 'text-white/90 hover:text-white' : 'text-slate-700 hover:text-slate-900'
-                        }`}
+                        className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline"
                       >
-                        <Users size={11} /> {classroom.member_count || 0} members
+                        <Users size={12} /> {classroom.member_count || 0} members
                       </button>
-                      <AnimatePresence>
-                        {classroom.start_date && showDates && (
-                          <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.5, ease: 'easeInOut' }}
-                            className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors duration-300 ${
-                              bannerOnDark ? 'text-white/80' : 'text-slate-700'
-                            }`}
-                          >
-                            <Calendar size={11} />
-                            {new Date(classroom.start_date).toLocaleDateString()}
-                            {classroom.end_date && (
-                              <> – {new Date(classroom.end_date).toLocaleDateString()}</>
-                            )}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
+                      {classroom.start_date && (
+                        <span className="hidden sm:inline-flex items-center gap-1">
+                          <Calendar size={12} />
+                          {formatDay(classroom.start_date)}
+                          {classroom.end_date && <> to {formatDay(classroom.end_date)}</>}
+                        </span>
+                      )}
                     </div>
                   </div>
+
+                  {canEditClassroom && !closed && (
+                    <label
+                      className="keep-round flex-shrink-0 self-start w-9 h-9 rounded-full bg-black/25 hover:bg-black/40 flex items-center justify-center cursor-pointer transition-colors"
+                      title="Change banner"
+                    >
+                      <Pencil size={14} className="text-white" />
+                      <span className="sr-only">Change banner</span>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={e => {
+                        const f = e.target.files?.[0]
+                        if (f) handleImageUpload('banner', f)
+                        e.target.value = ''
+                      }} />
+                    </label>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* Bottom wave fade into page background */}
-              <div
-                className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
-                style={{ background: 'linear-gradient(to bottom, transparent, rgba(248,250,252,0.6))' }}
-              />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* ── Tabs — full-bleed flat strip with an icon chip + sliding
-                 underline, matching the Task Manager's mini nav bar. The bar
-                 itself spans the full browser width; only its contents align
-                 to the page's max-w-7xl column. ── */}
-            <div className="relative z-10 -mt-7 bg-white border-b border-slate-200 shadow-sm">
-              <div className="max-w-7xl mx-auto px-1 sm:px-6 lg:px-8">
-                <div className="flex items-stretch gap-0.5 sm:gap-1">
-                  {tabs.map(tab => {
-                    const meta = TAB_META[tab.id]
-                    const isActive = activeTab === tab.id
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-0.5 sm:px-6 py-2.5 sm:py-4 font-semibold transition-colors duration-200 ${
-                          isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-800'
-                        }`}
-                      >
-                        <span
-                          className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 flex-shrink-0 ${
-                            isActive
-                              ? `${meta.bg} ${meta.color} shadow-sm scale-100`
-                              : 'text-slate-500 group-hover:text-slate-700 group-hover:bg-slate-50 scale-95'
-                          }`}
-                        >
-                          {meta.icon}
-                        </span>
-                        <span className="relative z-10 leading-none sm:hidden text-[10px] truncate max-w-full">{tab.shortLabel}</span>
-                        <span className="relative z-10 leading-none hidden sm:inline text-sm whitespace-nowrap">{tab.label}</span>
-                        {isActive && (
-                          <motion.span
-                            layoutId="classroom-active-tab"
-                            className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
-                            style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
-                            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                          />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+            {/* ── Tabs — a glass switch riding on the banner's lower edge ── */}
+            <div className="relative z-10 -mt-7 max-w-7xl 2xl:max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8">
+              <nav className="cr-tabs" aria-label="Classroom sections">
+                {tabs.map(tab => {
+                  const meta = TAB_META[tab.id]
+                  const isActive = activeTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => selectTab(tab.id)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-3 py-1.5 sm:py-2 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--page-primary)]/50 ${
+                        isActive ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="classroom-active-tab"
+                          className="lg-seg-thumb"
+                          transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                        />
+                      )}
+                      <span className={`relative flex-shrink-0 ${isActive ? meta.color : ''}`}>{meta.icon}</span>
+                      <span className="relative text-center leading-tight text-[10.5px] sm:text-[13px] whitespace-nowrap">
+                        <span className="sm:hidden">{tab.shortLabel}</span>
+                        <span className="hidden sm:inline">{tab.label}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </nav>
             </div>
 
             {/* ── Content area ──
                 Phones run edge-to-edge (no side gutters) so cards get the full
                 screen width; the bottom padding keeps the floating assistant
                 clear of the last card. */}
-            <div className="relative z-10 max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-24">
+            <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-28 sm:pb-24">
               {/* Closed notice */}
               {closed && (
-                <div className="mx-2 sm:mx-0 mb-4 px-4 py-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200 rounded-2xl text-sm text-amber-800 flex items-center gap-2 shadow-sm">
-                  <Lock size={15} />
-                  This classroom has ended. Content is read-only.
+                <div className="mx-3 sm:mx-0 mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl text-[13px] text-amber-800 flex items-start gap-2">
+                  <Lock size={14} className="mt-0.5 flex-shrink-0" />
+                  This classroom has ended. You can read everything here but not change it.
                 </div>
               )}
 
@@ -457,17 +408,17 @@ function ClassroomDetailPageContent() {
                   subtitle={`${classroom.members.length} ${classroom.members.length === 1 ? 'person' : 'people'} in this classroom`}
                   icon={<Users size={16} />}
                   iconClassName="bg-cyan-100 text-cyan-600"
-                  bodyClassName="space-y-1"
+                  bodyClassName="!px-2 !py-2 space-y-0.5"
                 >
                   {classroom.members.length === 0 ? (
                     <p className="text-sm text-slate-500 text-center py-8">No members yet</p>
                   ) : (
                     classroom.members.map(member => (
-                      <div key={member.id} className="flex items-center gap-3 py-2.5 px-3 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors">
-                        <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={40} userId={member.user?.id} />
+                      <div key={member.id} className="flex items-center gap-3 py-2 px-2 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors">
+                        <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={34} userId={member.user?.id} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{member.user?.full_name || 'Unknown'}</p>
-                          <p className="text-xs text-slate-500 truncate">{member.user?.email}</p>
+                          <p className="text-sm font-semibold text-slate-800 break-words">{member.user?.full_name || 'Unknown'}</p>
+                          <p className="text-xs text-slate-500 break-all">{member.user?.email}</p>
                         </div>
                         <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize flex-shrink-0 ${
                           member.role === 'teacher'
