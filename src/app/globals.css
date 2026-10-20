@@ -670,6 +670,13 @@ body {
     border-left-width: 0;
     border-right-width: 0;
   }
+  /* A sheet inside a deck that already bleeds only has the deck's own body
+     padding (0.625rem) to give back — cancelling the full page gutter there
+     would push it past the screen edge. */
+  .fx-deck .fx-bleed {
+    margin-left: -0.625rem;
+    margin-right: -0.625rem;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {

@@ -55,44 +55,44 @@ export default function PayrollSettingsPanel() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mb-1">Salary payout</p>
-        <p className="text-xs text-[#71717A] mb-3 leading-relaxed">
-          How salaries reach staff bank accounts from your school&apos;s own bank. Driver payroll shares this
-          connection and is configured under Bus Finance in App Settings.
+        <h3 className="text-[15px] font-semibold text-slate-900 leading-snug">Salary payout</h3>
+        <p className="text-[12.5px] text-slate-500 mt-0.5 mb-3 leading-relaxed">
+          How salaries leave the school&apos;s bank. Driver payroll uses the same connection; its own options are
+          under Bus Finance in App Settings.
         </p>
         <BankPayoutSettings ctx="salary" />
-        <div className="mt-4">
-          <HiddenMembersSettings />
-        </div>
       </section>
 
       <section>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#B8983C] mb-1">Default cycle settings</p>
-        <p className="text-xs text-[#71717A] mb-3 leading-relaxed">
-          What every new pay cycle starts from. These are the same rules the cycle settings popup edits — a
-          cycle can still override them for itself, and one that does says so at the top of its sheet.
+        <HiddenMembersSettings />
+      </section>
+
+      <section>
+        <h3 className="text-[15px] font-semibold text-slate-900 leading-snug">Rules for new cycles</h3>
+        <p className="text-[12.5px] text-slate-500 mt-0.5 mb-3 leading-relaxed">
+          Every new pay cycle starts with these. A cycle can set its own from its Rules button, and the sheet says
+          when it has.
         </p>
 
         {loading ? (
           <div className={`${ADMIN.card} h-64 animate-pulse`} />
         ) : (
-          <div className="bg-white border border-[#E4E4E7] p-3">
+          <>
             <CycleCalibrationCompact calibration={calibration} onChange={setCalibration} />
 
-            {error && <p className="text-xs text-rose-600 mt-3">{error}</p>}
+            {error && <p className="text-[12.5px] text-[#A93232] mt-3">{error}</p>}
 
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <button onClick={saveCalibration} disabled={saving}
-                className="inline-flex items-center justify-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-4 py-2 transition-colors disabled:opacity-40">
-                {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save defaults'}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3">
+              <button onClick={saveCalibration} disabled={saving} className={ADMIN.darkBtn}>
+                {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save rules'}
               </button>
-              <p className="text-[11px] text-[#A1A1AA]">
-                Changing a default does not touch a cycle already running on its own override.
+              <p className="text-[12px] text-slate-500 leading-snug">
+                Cycles that already have their own rules keep them.
               </p>
             </div>
-          </div>
+          </>
         )}
       </section>
     </div>

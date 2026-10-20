@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Bus, HardHat } from 'lucide-react'
+import { Bus, HardHat, Wallet } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
-  Sheet, SheetHead, SheetRow, SheetSkeleton, SectionBar, Note, Column,
+  Sheet, SheetHead, SheetRow, SheetSkeleton, Note, Column, Deck, Notice, Fact, Switch, SX,
 } from '@/components/salary/ui'
 import RosterToolbar, { RosterKindFilter } from '@/components/salary/RosterToolbar'
 import SaveBar from '@/components/salary/SaveBar'
@@ -24,15 +24,15 @@ import {
  * generated and the grid silently collapses to one stacked column.
  */
 const COLS = [
-  'minmax(150px,1.8fr)',  // person (avatar + name + role)
-  'minmax(88px,1fr)',     // monthly base
-  'minmax(88px,1fr)',     // PF basic
-  'minmax(30px,0.32fr)',  // PF applicable
-  'minmax(34px,0.34fr)',  // EPS applicable
-  'minmax(72px,0.8fr)',   // ESI mode
-  'minmax(104px,1.1fr)',  // UAN
-  'minmax(96px,1fr)',     // ESI IP number
-  'minmax(42px,0.42fr)',  // active
+  'minmax(170px,1.8fr)',  // person (avatar + name + role)
+  'minmax(96px,1fr)',     // monthly base
+  'minmax(96px,1fr)',     // PF basic
+  'minmax(34px,0.32fr)',  // PF applicable
+  'minmax(38px,0.34fr)',  // EPS applicable
+  'minmax(84px,0.8fr)',   // ESI mode
+  'minmax(118px,1.1fr)',  // UAN
+  'minmax(108px,1fr)',    // ESI IP number
+  'minmax(46px,0.42fr)',  // active
 ].join(' ')
 
 const COLUMNS: Column[] = [
@@ -44,11 +44,11 @@ const COLUMNS: Column[] = [
   { label: 'ESI', align: 'left' },
   { label: 'UAN' },
   { label: 'ESI IP no.' },
-  { label: 'Live', align: 'center' },
+  { label: 'Paid', align: 'center' },
 ]
 
-const CELL = 'w-full bg-white border border-[#E3DFD3] px-1.5 py-[3px] text-[11px] leading-[1.4] tabular-nums text-[#27272A] placeholder:text-[#B5B0A1] focus:outline-none focus:border-[#27272A] transition-colors'
-const FLAG = 'ring-1 ring-[#C0392B] border-[#C0392B] placeholder:text-[#C0392B]'
+const CELL = SX.cell
+const FLAG = '!border-[#C0392B] ring-1 ring-[#C0392B]/30 placeholder:text-[#C0392B]'
 
 type Kind = 'staff' | 'driver' | 'support'
 type Base = StaffSalaryBase | DriverSalaryBase | SupportStaffSalaryBase
@@ -234,13 +234,12 @@ export default function BaseSalariesSection() {
   }, [entries, drafts])
 
   return (
-    <>
-      <SectionBar
-        title="Base salaries"
-        hint={loading
-          ? 'Used when running a monthly cycle · staff, drivers & support staff'
-          : `${warnings.onPayroll} of ${entries.length} on payroll · used when running a cycle`}
-      />
+    <Deck title="Base salaries" icon={Wallet}>
+      <p className="px-1 pb-2 text-[12px] text-slate-500 leading-snug">
+        {loading
+          ? 'What each person is paid a month. A new cycle starts from these.'
+          : `${warnings.onPayroll} of ${entries.length} on payroll · a new cycle starts from these`}
+      </p>
 
       {!loading && entries.length > 0 && (
         <RosterToolbar
@@ -248,8 +247,8 @@ export default function BaseSalariesSection() {
           kind={kindFilter} onKindChange={setKindFilter} kindCounts={kindCounts}
           toggles={[
             { key: 'offPayroll', label: 'Off payroll', selected: offPayrollOnly, onClick: () => setOffPayrollOnly(v => !v) },
-            { key: 'pfBasic', label: 'Missing PF Basic wage', selected: missingPfBasicOnly, onClick: () => setMissingPfBasicOnly(v => !v) },
-            { key: 'uan', label: 'Missing UAN', selected: missingUanOnly, onClick: () => setMissingUanOnly(v => !v) },
+            { key: 'pfBasic', label: 'No PF Basic wage', selected: missingPfBasicOnly, onClick: () => setMissingPfBasicOnly(v => !v) },
+            { key: 'uan', label: 'No UAN', selected: missingUanOnly, onClick: () => setMissingUanOnly(v => !v) },
           ]}
           sortOptions={[{ key: 'name', label: 'Name' }, { key: 'base', label: 'Base salary' }]}
           sort={sort} onSortChange={setSort} desc={desc} onDescChange={setDesc}
@@ -259,26 +258,24 @@ export default function BaseSalariesSection() {
       )}
 
       {!loading && (warnings.pfBasicMissing > 0 || warnings.uanMissing > 0) && (
-        <ul className="text-[10.5px] text-[#A93232] mb-2 space-y-0.5">
+        <Notice tone="error" className="mb-2.5">
           {warnings.pfBasicMissing > 0 && (
-            <li>{warnings.pfBasicMissing} with PF on have no PF Basic wage — their PF computes to ₹0.</li>
+            <p>{warnings.pfBasicMissing} with PF on have no PF Basic wage, so their PF comes to ₹0.</p>
           )}
           {warnings.uanMissing > 0 && (
-            <li>{warnings.uanMissing} PF members have no valid 12-digit UAN — the EPF return leaves them out.</li>
+            <p>{warnings.uanMissing} PF members have no 12-digit UAN and will be left out of the EPF return.</p>
           )}
-        </ul>
+        </Notice>
       )}
 
-      <Sheet minWidth={880}>
-        {/* The header scrolls sideways with the rows it labels, so it stays on
-            phones too — nine unlabelled PF/ESI columns are unreadable without it. */}
-        <SheetHead cols={COLS} columns={COLUMNS} />
+      <Sheet minWidth={940}>
+        <SheetHead cols={COLS} columns={COLUMNS} className="hidden lg:flex" />
         {loading ? (
           <SheetSkeleton />
         ) : entries.length === 0 ? (
           <Note>No staff, driver or support staff accounts yet.</Note>
         ) : visible.length === 0 ? (
-          <Note>No one matches the current search and filters.</Note>
+          <Note>No one matches the search and filters.</Note>
         ) : visible.map(e => (
           <BaseRow
             key={e.key}
@@ -289,7 +286,7 @@ export default function BaseSalariesSection() {
           />
         ))}
       </Sheet>
-    </>
+    </Deck>
   )
 }
 
@@ -321,91 +318,158 @@ function BaseRow({ entry, draft, dirty, onChange }: {
   const ipBad = (draft.esiChoice === 'on' || draft.ipNumber !== '') && draft.ipNumber.length !== 10
 
   const accent = dirty ? '#8A6D1F' : draft.active && existing ? '#B8983C' : 'transparent'
+  const role = kind === 'support' ? ((person as SupportStaff).designation || 'Support staff') : getDisplayRole(person as UserProfile)
+
+  const who = (size: number) => (
+    <div className="flex items-center gap-2 min-w-0">
+      <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={size} userId={kind === 'support' ? undefined : person.id} />
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="font-semibold text-slate-900 text-[13px] break-words">{person.full_name}</p>
+        <p className="text-[11.5px] text-slate-500 break-words flex items-center gap-1">
+          {kind === 'driver' && <Bus size={11} className="flex-shrink-0" />}
+          {kind === 'support' && <HardHat size={11} className="flex-shrink-0" />}
+          {role}
+        </p>
+      </div>
+    </div>
+  )
+
+  const pfTitle = pfUnticked
+    ? 'PF Basic is set but PF is off, so no PF will be deducted. Tick to apply it.'
+    : 'PF applicable'
+  const epsTitle = draft.pfApplicable
+    ? 'In the Employees Pension Scheme: 8.33% of the employer share is filed under EPS. Untick for members outside the pension scheme.'
+    : 'Only applies once PF is on'
+  const pfBasicTitle = pfBasicMissing
+    ? 'PF is on but no PF Basic wage is set, so PF comes to ₹0. Enter the wage PF is worked out on.'
+    : 'PF Basic wage (PF is worked out on this, not gross pay)'
+  const uanTitle = uanMissing
+    ? 'PF is on but there is no UAN. This person cannot go in the EPF return until one is entered.'
+    : 'EPFO Universal Account Number (12 digits)'
+  const ipTitle = ipMissing
+    ? 'ESI applies but there is no IP number. This person cannot go in the ESI return until one is entered.'
+    : 'ESIC Insured Person number (10 digits)'
+
+  const esiSelect = (
+    <select value={draft.esiChoice} onChange={e => onChange({ esiChoice: e.target.value as EsiChoice })}
+      title="ESI applicability" className={`${CELL} cursor-pointer`}>
+      <option value="auto">Auto</option>
+      <option value="on">Always</option>
+      <option value="off">Never</option>
+    </select>
+  )
+  const uanInput = (
+    <input
+      inputMode="numeric" maxLength={12} value={draft.uan}
+      onChange={e => onChange({ uan: digits(e.target.value).slice(0, 12) })}
+      placeholder={uanMissing ? 'Needed' : '12 digits'} title={uanTitle}
+      className={`${CELL} ${uanBad ? FLAG : ''}`} />
+  )
+  const ipInput = (
+    <input
+      inputMode="numeric" maxLength={10} value={draft.ipNumber}
+      onChange={e => onChange({ ipNumber: digits(e.target.value).slice(0, 10) })}
+      placeholder={ipMissing ? 'Needed' : '10 digits'} title={ipTitle}
+      className={`${CELL} ${ipBad ? FLAG : ''}`} />
+  )
 
   return (
-    <SheetRow cols={COLS} accent={accent}>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={20} userId={kind === 'support' ? undefined : person.id} />
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="font-semibold text-[#18181B] text-[11.5px] truncate">{person.full_name}</p>
-          <p className="text-[9.5px] text-[#A8A395] truncate flex items-center gap-1">
-            {kind === 'driver' && <Bus size={8} className="flex-shrink-0" />}
-            {kind === 'support' && <HardHat size={8} className="flex-shrink-0" />}
-            {kind === 'support' ? ((person as SupportStaff).designation || 'Support Staff') : getDisplayRole(person as UserProfile)}
-          </p>
+    <>
+      {/* Phone and tablet: one card per person, every field labelled. */}
+      <div className="lg:hidden relative px-3.5 py-3 border-b border-[#F0ECE3] last:border-b-0">
+        <span className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: accent }} />
+        <div className="flex items-start justify-between gap-3">
+          {who(30)}
+          <label className="flex items-center gap-2 flex-shrink-0 pt-0.5">
+            <span className="text-[12px] text-slate-500">Paid</span>
+            <Switch checked={draft.active} onChange={v => onChange({ active: v })} label={`Include ${person.full_name} in pay cycles`} />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-2.5 mt-3">
+          <Fact label="Monthly base">
+            <Money value={draft.amount} onChange={v => onChange({ amount: v })} title="Monthly base salary" />
+          </Fact>
+          <Fact label="PF Basic wage">
+            <Money value={draft.pfBasic} onChange={v => onChange({ pfBasic: v })}
+              placeholder={pfBasicMissing ? 'Needed' : '0'} flagged={pfBasicMissing} title={pfBasicTitle} />
+          </Fact>
+          <Fact label="ESI">{esiSelect}</Fact>
+          <Fact label="UAN">{uanInput}</Fact>
+          <Fact label="ESI IP number">{ipInput}</Fact>
+          <Fact label="Schemes">
+            <div className="flex flex-wrap gap-1.5">
+              <ToggleChip on={draft.pfApplicable} flagged={pfUnticked} title={pfTitle}
+                onClick={() => onChange({ pfApplicable: !draft.pfApplicable })}>PF</ToggleChip>
+              <ToggleChip on={draft.epsApplicable} disabled={!draft.pfApplicable} title={epsTitle}
+                onClick={() => onChange({ epsApplicable: !draft.epsApplicable })}>EPS</ToggleChip>
+            </div>
+          </Fact>
         </div>
       </div>
 
-      <Money value={draft.amount} onChange={v => onChange({ amount: v })} title="Monthly base salary" />
+      {/* Desktop: the sheet. */}
+      <SheetRow cols={COLS} accent={accent} className="hidden lg:flex">
+        {who(24)}
 
-      <Money
-        value={draft.pfBasic}
-        onChange={v => onChange({ pfBasic: v })}
-        placeholder={pfBasicMissing ? 'Needed' : '0.00'}
-        flagged={pfBasicMissing}
-        title={pfBasicMissing
-          ? 'PF is on but no PF Basic wage is set, so PF will compute to ₹0 — enter the wage PF is calculated on'
-          : 'PF Basic wage (used for PF, not gross salary)'}
-      />
+        <Money value={draft.amount} onChange={v => onChange({ amount: v })} title="Monthly base salary" />
 
-      <label
-        className={`flex items-center justify-center cursor-pointer select-none h-full ${pfUnticked ? 'ring-1 ring-[#B8983C]' : ''}`}
-        title={pfUnticked
-          ? 'PF Basic is set but PF is off, so no PF will be deducted — tick to apply it'
-          : 'PF applicable'}
-      >
-        <input type="checkbox" checked={draft.pfApplicable} onChange={e => onChange({ pfApplicable: e.target.checked })}
-          className="w-3 h-3 accent-[#27272A]" />
-      </label>
+        <Money
+          value={draft.pfBasic}
+          onChange={v => onChange({ pfBasic: v })}
+          placeholder={pfBasicMissing ? 'Needed' : '0'}
+          flagged={pfBasicMissing}
+          title={pfBasicTitle}
+        />
 
-      <label
-        className="flex items-center justify-center cursor-pointer select-none"
-        title={draft.pfApplicable
-          ? 'In the Employees Pension Scheme — 8.33% of the employer share is filed under EPS. Untick for members excluded from the pension scheme, whose whole employer share goes to EPF.'
-          : 'Only applies once PF is switched on'}
-      >
-        <input type="checkbox" checked={draft.epsApplicable} disabled={!draft.pfApplicable}
-          onChange={e => onChange({ epsApplicable: e.target.checked })}
-          className="w-3 h-3 accent-[#27272A] disabled:opacity-30" />
-      </label>
+        <label
+          className={`flex items-center justify-center cursor-pointer select-none h-8 rounded-[8px] ${pfUnticked ? 'ring-1 ring-[#B8983C]' : ''}`}
+          title={pfTitle}
+        >
+          <input type="checkbox" checked={draft.pfApplicable} onChange={e => onChange({ pfApplicable: e.target.checked })}
+            aria-label={`PF for ${person.full_name}`} className={SX.check} />
+        </label>
 
-      <select value={draft.esiChoice} onChange={e => onChange({ esiChoice: e.target.value as EsiChoice })}
-        title="ESI applicability" className={CELL}>
-        <option value="auto">Auto</option>
-        <option value="on">Always</option>
-        <option value="off">Never</option>
-      </select>
+        <label className="flex items-center justify-center cursor-pointer select-none" title={epsTitle}>
+          <input type="checkbox" checked={draft.epsApplicable} disabled={!draft.pfApplicable}
+            onChange={e => onChange({ epsApplicable: e.target.checked })}
+            aria-label={`EPS for ${person.full_name}`} className={SX.check} />
+        </label>
 
-      {/* The two portal identifiers. Without them the member simply cannot be
-          filed for, so the field is flagged as soon as the scheme is on. */}
-      <input
-        inputMode="numeric" maxLength={12} value={draft.uan}
-        onChange={e => onChange({ uan: digits(e.target.value).slice(0, 12) })}
-        placeholder={uanMissing ? 'Needed' : '12 digits'}
-        title={uanMissing
-          ? 'PF is on but no UAN is set — this member cannot be included in the EPF return until one is entered'
-          : 'EPFO Universal Account Number (12 digits)'}
-        className={`${CELL} ${uanBad ? FLAG : ''}`} />
+        {esiSelect}
 
-      <input
-        inputMode="numeric" maxLength={10} value={draft.ipNumber}
-        onChange={e => onChange({ ipNumber: digits(e.target.value).slice(0, 10) })}
-        placeholder={ipMissing ? 'Needed' : '10 digits'}
-        title={ipMissing
-          ? 'ESI applies to this person but no IP number is set — they cannot be included in the ESI return until one is entered'
-          : 'ESIC Insured Person number (10 digits)'}
-        className={`${CELL} ${ipBad ? FLAG : ''}`} />
+        {/* The two portal identifiers. Without them the member simply cannot be
+            filed for, so the field is flagged as soon as the scheme is on. */}
+        {uanInput}
+        {ipInput}
 
-      <label className="flex items-center justify-center cursor-pointer select-none" title="Include in pay cycles">
-        <input type="checkbox" checked={draft.active} onChange={e => onChange({ active: e.target.checked })}
-          className="w-3 h-3 accent-[#27272A]" />
-      </label>
-    </SheetRow>
+        <label className="flex items-center justify-center cursor-pointer select-none" title="Include in pay cycles">
+          <input type="checkbox" checked={draft.active} onChange={e => onChange({ active: e.target.checked })}
+            aria-label={`Include ${person.full_name} in pay cycles`} className={SX.check} />
+        </label>
+      </SheetRow>
+    </>
+  )
+}
+
+/** An on/off capsule for a scheme in the phone card. */
+function ToggleChip({ on, onClick, disabled, flagged, title, children }: {
+  on: boolean
+  onClick: () => void
+  disabled?: boolean
+  flagged?: boolean
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={onClick} disabled={disabled} title={title}
+      className={`${SX.choice(on)} !h-8 disabled:opacity-40 ${flagged ? 'ring-2 ring-[#B8983C]' : ''}`}>
+      {children}
+    </button>
   )
 }
 
 /** A rupee field: the symbol sits inside the box so the digits stay right-aligned. */
-function Money({ value, onChange, placeholder = '0.00', title, flagged }: {
+function Money({ value, onChange, placeholder = '0', title, flagged }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
@@ -414,11 +478,11 @@ function Money({ value, onChange, placeholder = '0.00', title, flagged }: {
 }) {
   return (
     <div className="relative min-w-0">
-      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#B5B0A1] text-[10px] pointer-events-none">₹</span>
+      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px] pointer-events-none">₹</span>
       <input
-        type="number" min="0" step="0.01" value={value} onChange={e => onChange(e.target.value)}
+        type="number" inputMode="decimal" min="0" step="0.01" value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder} title={title}
-        className={`${CELL} pl-4 text-right ${flagged ? FLAG : ''}`} />
+        className={`${CELL} pl-5 text-right ${flagged ? FLAG : ''}`} />
     </div>
   )
 }

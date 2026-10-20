@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw, TriangleAlert } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
-import { Chip, MonthStepper, StatTile } from '@/components/salary/ui'
+import { Chip, Deck, MonthStepper, Notice, StatTile } from '@/components/salary/ui'
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { formatPeriod } from '@/lib/salary'
 import { recomputePendingAttendance } from '@/lib/attendance'
@@ -132,7 +132,7 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
         key: 'base' as const,
         label: 'Payroll cost',
         value: compactINR(s?.gross ?? 0),
-        sub: s?.headcount ? `${s.headcount} on payroll` : 'nobody on payroll',
+        sub: s?.headcount ? `${s.headcount} on payroll` : 'Nobody on payroll',
         percent: delta(x => x.gross),
         goodWhenUp: false,
         shade: 0 as const,
@@ -141,7 +141,7 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
         key: 'cycles' as const,
         label: 'Net pay',
         value: compactINR(s?.net ?? 0),
-        sub: s?.bonus ? `incl. ${compactINR(s.bonus)} task bonus` : 'after deductions',
+        sub: s?.bonus ? `Includes ${compactINR(s.bonus)} task bonus` : 'After deductions',
         percent: delta(x => x.net),
         goodWhenUp: true,
         shade: 1 as const,
@@ -166,9 +166,9 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
         label: 'Disbursed',
         value: total > 0 ? `${paid}/${total}` : '—',
         sub: total === 0
-          ? (s?.projected ? 'cycle not run yet' : 'no records this month')
+          ? (s?.projected ? 'Cycle not run yet' : 'No records this month')
           : paid === total
-          ? 'everyone paid'
+          ? 'Everyone paid'
           : `${compactINR(s?.pendingAmount ?? 0)} still to pay`,
         // A payout count is progress through one month, not a trend across two.
         percent: null,
@@ -183,49 +183,46 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
     return formatPeriod(b.month, b.year)
   }, [period])
 
+  const status = error ? (
+    <Chip tone="bad">Unavailable</Chip>
+  ) : loading ? (
+    <Chip tone="neutral">Loading</Chip>
+  ) : stats?.projected ? (
+    <Chip tone="gold">Projected</Chip>
+  ) : stats?.actual ? (
+    <Chip tone={stats.locked ? 'dark' : 'neutral'}>{stats.locked ? 'Locked' : 'Open'}</Chip>
+  ) : (
+    <Chip tone="neutral">No cycle yet</Chip>
+  )
+
   return (
-    <div>
+    <Deck>
       {/* Naming the month the arrows compare against saves anyone having to
           work out what a "▲6.4%" on the tiles below is measured from. */}
       <MonthStepper
-        className="mb-1.5"
+        className="px-1 pb-2.5"
         label={formatPeriod(period.month, period.year)}
-        sub={prev ? `vs ${previousLabel}` : undefined}
+        sub={prev ? `Compared with ${previousLabel}` : undefined}
         onPrev={() => setPeriod(p => shiftMonth(p.year, p.month, -1))}
         onNext={() => setPeriod(p => shiftMonth(p.year, p.month, 1))}
         canNext={!atLatest}
-        right={
-          error ? (
-            <Chip tone="bad">Unavailable</Chip>
-          ) : loading ? (
-            <Chip tone="neutral">Loading</Chip>
-          ) : stats?.projected ? (
-            <Chip tone="gold">Projected</Chip>
-          ) : stats?.actual ? (
-            <Chip tone={stats.locked ? 'dark' : 'neutral'}>{stats.locked ? 'Locked' : 'Open'}</Chip>
-          ) : (
-            <Chip tone="neutral">No cycle</Chip>
-          )
-        }
+        right={status}
       />
 
       {error && (
-        <div className="flex items-start gap-1.5 border border-[#EFCCCC] bg-[#FCECEC] px-2.5 py-2 mb-1.5">
-          <TriangleAlert size={13} className="text-[#A93232] flex-shrink-0 mt-px" />
-          <p className="flex-1 text-[11px] text-[#A93232] leading-snug">
-            <span className="font-semibold">These figures did not load.</span> They are not zero — nothing was
-            read. {error}
-          </p>
-          <button
-            onClick={retry}
-            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#A93232] hover:text-[#7A1F1F] flex-shrink-0"
-          >
-            <RefreshCw size={11} /> Retry
-          </button>
-        </div>
+        <Notice tone="error" className="mb-2.5">
+          <span className="flex flex-wrap items-start gap-x-3 gap-y-1">
+            <span className="flex-1 basis-[220px]">
+              <span className="font-semibold">These figures did not load.</span> They are not zero; nothing was read. {error}
+            </span>
+            <button onClick={retry} className="inline-flex items-center gap-1 font-semibold underline underline-offset-2">
+              <RefreshCw size={12} /> Retry
+            </button>
+          </span>
+        </Notice>
       )}
 
-      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-1.5 ${error ? 'opacity-40' : ''}`}>
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-2 ${error ? 'opacity-40' : ''}`}>
         {tiles.map(t => (
           <StatTile
             key={t.label}
@@ -240,6 +237,6 @@ export default function SalarySummary({ onSelect, refreshKey = 0 }: Props) {
           />
         ))}
       </div>
-    </div>
+    </Deck>
   )
 }

@@ -1,132 +1,151 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Banknote, Landmark, Wallet, CalendarRange, Settings } from 'lucide-react'
+// ─────────────────────────────────────────────────────────────────────────────
+// The Salary module.
+//
+// Laid out like the transport and fee admins: the banner, one capsule switch
+// overlapping its foot, and the three places under it.
+//
+//   Pay cycles     — the month's figures, then every cycle run.
+//   Base salaries  — what each person is paid, and their PF/ESI details.
+//   Bank accounts  — where each salary goes.
+//
+// The tab lives in the URL so a link or a bookmark lands on the right one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import React, { Suspense, useCallback, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Banknote, CalendarRange, Landmark, Settings, Wallet } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
-import dynamic from 'next/dynamic'
-const PayCyclesSection    = dynamic(() => import('@/components/salary/sections/PayCyclesSection'))
-const BaseSalariesSection = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'))
-const BankAccountsSection = dynamic(() => import('@/components/salary/sections/BankAccountsSection'))
-const SalarySummary       = dynamic(() => import('@/components/salary/SalarySummary'))
-const StaffSalaryView     = dynamic(() => import('@/components/salary/StaffSalaryView'))
-const PayrollSettingsPanel = dynamic(() => import('@/components/settings/PayrollSettingsPanel'))
 import ModalShell from '@/components/ui/ModalShell'
+import { GlassSegments } from '@/components/transport/glass'
+import { Loading, SALARY_ICON, SHELL } from '@/components/salary/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { SALARY_BANNER_DEFAULT } from '@/lib/pageConfig'
 
-export default function SalaryPage() {
-  const { profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
+const PayCyclesSection    = dynamic(() => import('@/components/salary/sections/PayCyclesSection'), { loading: () => <Loading /> })
+const BaseSalariesSection = dynamic(() => import('@/components/salary/sections/BaseSalariesSection'), { loading: () => <Loading /> })
+const BankAccountsSection = dynamic(() => import('@/components/salary/sections/BankAccountsSection'), { loading: () => <Loading /> })
+const SalarySummary       = dynamic(() => import('@/components/salary/SalarySummary'))
+const StaffSalaryView     = dynamic(() => import('@/components/salary/StaffSalaryView'), { loading: () => <Loading /> })
+const PayrollSettingsPanel = dynamic(() => import('@/components/settings/PayrollSettingsPanel'), { loading: () => <Loading /> })
 
+export default function SalaryPage() {
   return (
     <ProtectedLayout staffOnly>
-      <div data-page-theme="salary">
-        {isAdmin ? <AdminSalaryHub /> : <StaffSalaryView />}
-      </div>
+      {/* useSearchParams needs a Suspense boundary to stay out of the
+          static-render bailout. */}
+      <Suspense fallback={<Loading />}>
+        <SalaryGate />
+      </Suspense>
     </ProtectedLayout>
   )
 }
 
-// ──────────────────────────────────────────────────────────────
-// Admin hub — inline sections: Pay Cycles / Base Salaries / Bank Accounts
-// ──────────────────────────────────────────────────────────────
+function SalaryGate() {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
+  return (
+    <div data-page-theme="salary" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
+      {isAdmin ? <AdminSalaryHub /> : <StaffSalaryView />}
+    </div>
+  )
+}
 
 type SectionKey = 'cycles' | 'base' | 'bank'
 
-const SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'cycles', label: 'Pay Cycles', icon: <CalendarRange size={14} /> },
-  { key: 'base', label: 'Base Salaries', icon: <Wallet size={14} /> },
-  { key: 'bank', label: 'Bank Accounts', icon: <Landmark size={14} /> },
+const SECTIONS = [
+  { key: 'cycles' as const, label: 'Pay cycles', icon: CalendarRange },
+  { key: 'base' as const,   label: 'Base salaries', icon: Wallet },
+  { key: 'bank' as const,   label: 'Bank accounts', icon: Landmark },
 ]
 
+/** Solid white on the banner: a translucent control over a photo cannot be read. */
+const BANNER_BTN =
+  'inline-flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-full bg-white text-slate-900 text-[12px] font-semibold ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] hover:bg-slate-50 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]'
+
 function AdminSalaryHub() {
-  const [section, setSection] = useState<SectionKey>('cycles')
+  const router = useRouter()
+  const params = useSearchParams()
+  const tab = params.get('tab')
+  const section: SectionKey = SECTIONS.some(s => s.key === tab) ? tab as SectionKey : 'cycles'
   const [bannerEditing, setBannerEditing] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showSettings, setShowSettings] = useState(params.get('panel') === 'settings')
+
+  const go = useCallback((next: SectionKey) => {
+    router.replace(next === 'cycles' ? '/more/salary' : `/more/salary?tab=${next}`, { scroll: false })
+  }, [router])
 
   return (
-    <div style={{ minHeight: '100vh' }}>
+    <>
       <PageBanner
         settingKey="salary_banner"
         defaultBanner={SALARY_BANNER_DEFAULT}
         icon={<Banknote size={26} className="text-white" />}
-        title="Salary Manager"
-        subtitle="Pay cycles, base salaries & bank details for staff and bus drivers"
+        title="Salary"
+        subtitle="Pay cycles, base pay and bank details"
         isAdmin
         onEditingChange={setBannerEditing}
-        maxWidth="max-w-5xl"
+        maxWidth="max-w-7xl 2xl:max-w-[1600px]"
         backgroundIcon={<Wallet size={150} className="text-white" />}
         actions={
-          <button
-            onClick={() => setShowSettings(true)}
-            title="Payroll settings"
-            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white text-sm font-medium border border-white/25 rounded-lg backdrop-blur-sm transition-colors"
-          >
-            <Settings size={15} />
+          <button onClick={() => setShowSettings(true)} aria-label="Payroll settings" className={BANNER_BTN}>
+            <Settings size={13} className="text-[#8B6F47]" />
             <span className="hidden sm:inline">Settings</span>
           </button>
         }
       />
 
-      {/* A narrow gutter on phones: the stat tiles float inside it, and the
-          dense sheets below cancel it themselves so a payroll table gets the
-          whole screen.
-
-          The month stepper starts below the banner rather than tucked up into
-          it: a control that straddles the banner's bottom edge reads as having
-          slipped out of place, and half of it loses contrast against the
-          banner image behind it. */}
-      <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-10">
-        {/* Everything but the banner fades while the banner is being edited */}
-        <div style={{ opacity: bannerEditing ? 0.35 : 1, filter: bannerEditing ? 'blur(1.5px)' : 'none', pointerEvents: bannerEditing ? 'none' : 'auto', userSelect: bannerEditing ? 'none' : 'auto', transition: 'opacity 0.25s ease, filter 0.25s ease' }}>
-
-          {/* Month-scoped payroll figures. Clicking a tile jumps to its section. */}
-          <SalarySummary onSelect={setSection} />
-
-          {/* Section toggler. Staff and bus drivers are shown together within
-              each section, not split by tabs. */}
-          <div className="flex border-b border-[#E3DFD3] mt-4 mb-3">
-            {SECTIONS.map(t => {
-              const active = section === t.key
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setSection(t.key)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 pb-1.5 text-[11px] sm:text-[12px] font-bold uppercase tracking-[0.06em] border-b-2 -mb-px transition-colors ${
-                    active ? 'border-[#B8983C] text-[#18181B]' : 'border-transparent text-[#A8A395] hover:text-[#6B675A]'
-                  }`}
-                >
-                  {t.icon}
-                  <span className="truncate">{t.label}</span>
-                </button>
-              )
-            })}
+      <div className={`${SHELL} px-4 sm:px-6 lg:px-8 pb-14`}>
+        {/* Everything but the banner fades while the banner is being edited. */}
+        <div style={{
+          opacity: bannerEditing ? 0.35 : 1,
+          pointerEvents: bannerEditing ? 'none' : 'auto',
+          userSelect: bannerEditing ? 'none' : 'auto',
+          transition: 'opacity 0.25s ease',
+        }}>
+          {/* The switch overlaps the banner. Solid, not glass: through a
+              translucent control the banner photo shows as noise. */}
+          <div className="relative z-10 -mt-6 sm:-mt-7 mb-4 sm:mb-6 flex justify-center sm:justify-start">
+            <GlassSegments
+              layoutId="salary-hub-tab"
+              items={SECTIONS}
+              value={section}
+              onChange={go}
+              stretch
+              className="!bg-white ring-1 ring-black/[.06] shadow-[0_14px_30px_-12px_rgba(15,23,42,.55)]"
+            />
           </div>
 
-          {section === 'cycles' && <PayCyclesSection />}
+          {section === 'cycles' && (
+            <div className="space-y-4 sm:space-y-5">
+              <SalarySummary onSelect={go} />
+              <PayCyclesSection />
+            </div>
+          )}
           {section === 'base' && <BaseSalariesSection />}
           {section === 'bank' && <BankAccountsSection />}
         </div>
       </div>
 
       {/* The same panel /admin/payroll-settings renders, opened where payroll is
-          actually being run. One copy of the settings, two ways in — a second
-          copy would be two things to keep in step and eventually two answers. */}
+          actually run. One copy of the settings, two ways in. */}
       {showSettings && (
         <ModalShell
           onClose={() => setShowSettings(false)}
           size="2xl"
+          sharp
           title="Payroll settings"
-          subtitle="Salary payout and the default rules every new cycle starts from"
+          subtitle="Payout bank, hidden people and the rules a new cycle starts with"
           icon={<Settings size={16} />}
-          iconClassName="bg-[#27272A] text-white"
-          bodyClassName="bg-[#F5F5F5]"
-          minHClass="sm:min-h-[36rem]"
+          iconClassName={SALARY_ICON}
+          minHClass="sm:min-h-[34rem]"
         >
           <PayrollSettingsPanel />
         </ModalShell>
       )}
-    </div>
+    </>
   )
 }

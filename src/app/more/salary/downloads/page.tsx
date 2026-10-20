@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, BadgeCheck, CalendarRange, ScrollText, Banknote } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, CalendarRange, ScrollText, FolderOpen, Download, Loader2 } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -15,17 +15,17 @@ import {
   StatementSpec, buildPayslip, buildSalaryLedger, buildSalaryCertificate, buildAnnualStatement,
 } from '@/components/salary/statements/generate'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
+import { Chip, IconChip, Loading, Panel, PanelHead, SX } from '@/components/salary/ui'
 
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 
-const STATUS_CHIP: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-500',
-  approved: 'bg-blue-100 text-blue-700',
-  paid: 'bg-emerald-100 text-emerald-700',
+const STATUS: Record<string, { label: string; tone: 'neutral' | 'gold' | 'good' }> = {
+  draft: { label: 'In progress', tone: 'neutral' },
+  approved: { label: 'Approved', tone: 'gold' },
+  paid: { label: 'Paid', tone: 'good' },
 }
 
 export default function SalaryDownloadsPage() {
-  const router = useRouter()
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<SalaryRecord[]>([])
@@ -73,111 +73,91 @@ export default function SalaryDownloadsPage() {
     setBusy(null)
   }
 
+  const yearHasRecords = records.some(r => r.cycle?.period_year === selectedYear)
+
   return (
     <ProtectedLayout staffOnly>
-      <div data-page-theme="salary" className="min-h-screen bg-[#F8F8F8]">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-5 pb-12">
+      <div data-page-theme="salary" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 pt-3 sm:pt-6 pb-14">
+          <Link href="/more/salary"
+            className="lg-pill inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 mb-3 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900 transition-colors">
+            <ArrowLeft size={14} /> My salary
+          </Link>
 
-          {/* Back nav */}
-          <button onClick={() => router.push('/more/salary')}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-5">
-            <ArrowLeft size={15} /> My Salary
-          </button>
-
-          <h1 className="text-lg font-bold text-slate-800 mb-4">Salary Documents</h1>
+          <div className="flex items-center gap-3 mb-4">
+            <IconChip icon={FolderOpen} />
+            <h1 className="font-display text-[1.3rem] sm:text-[1.6rem] font-bold leading-[1.15] text-slate-900 headline break-words">
+              Salary documents
+            </h1>
+          </div>
 
           {loading ? (
-            <div className="text-center py-16"><div className="spinner mx-auto" /></div>
+            <Loading />
           ) : (
-            <>
-              {/* ── Rectangle with 3 square statement buttons ── */}
-              <div className="bg-[#EFEFEF] rounded-2xl p-3 mb-2">
-                <div className="flex gap-2">
-                  {/* Salary Certificate */}
+            <div className="space-y-4">
+              <div className="fx-deck fx-bleed p-2.5 sm:p-3">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     disabled={busy === 'cert' || !staff}
-                    onClick={() => open('cert', 'Salary Certificate', () => buildSalaryCertificate(staff!, base?.base_amount))}
-                    className="flex-1 flex flex-col items-center justify-center gap-2 bg-white rounded-xl py-5 px-2 text-center hover:bg-slate-50 transition-colors disabled:opacity-40"
+                    onClick={() => open('cert', 'Salary certificate', () => buildSalaryCertificate(staff!, base?.base_amount))}
+                    className={SX.tile}
                   >
-                    <BadgeCheck size={22} className="text-slate-600" strokeWidth={1.5} />
-                    <span className="text-[11px] font-semibold text-slate-600 leading-tight">
-                      {busy === 'cert' ? '…' : 'Certificate'}
-                    </span>
+                    <BadgeCheck size={20} className="text-[#8B6F47]" />
+                    <span className="text-[13px] font-semibold text-slate-900 leading-snug">{busy === 'cert' ? 'Building…' : 'Certificate'}</span>
                   </button>
-
-                  {/* Annual Salary Statement */}
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <button
-                      disabled={busy === 'annual' || records.filter(r => r.cycle?.period_year === selectedYear).length === 0}
-                      onClick={() => open('annual', 'Annual Salary Statement', () => buildAnnualStatement(staff!, selectedYear, records))}
-                      className="flex-1 flex flex-col items-center justify-center gap-2 bg-white rounded-xl py-4 px-2 text-center hover:bg-slate-50 transition-colors disabled:opacity-40"
-                    >
-                      <CalendarRange size={22} className="text-slate-600" strokeWidth={1.5} />
-                      <span className="text-[11px] font-semibold text-slate-600 leading-tight">
-                        {busy === 'annual' ? '…' : 'Annual'}
-                      </span>
-                    </button>
-                    <select
-                      value={selectedYear}
-                      onChange={e => setSelectedYear(Number(e.target.value))}
-                      className="w-full text-[11px] text-slate-500 bg-white border-0 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-1 focus:ring-slate-300 cursor-pointer"
-                    >
-                      {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Salary Ledger */}
+                  <button
+                    disabled={busy === 'annual' || !yearHasRecords}
+                    onClick={() => open('annual', `Annual statement ${selectedYear}`, () => buildAnnualStatement(staff!, selectedYear, records))}
+                    className={SX.tile}
+                  >
+                    <CalendarRange size={20} className="text-[#8B6F47]" />
+                    <span className="text-[13px] font-semibold text-slate-900 leading-snug">{busy === 'annual' ? 'Building…' : 'Annual'}</span>
+                    <span className="text-[11.5px] text-slate-500">{selectedYear}</span>
+                  </button>
                   <button
                     disabled={busy === 'ledger' || records.length === 0}
-                    onClick={() => open('ledger', 'Salary Ledger', () => buildSalaryLedger(staff!, records))}
-                    className="flex-1 flex flex-col items-center justify-center gap-2 bg-white rounded-xl py-5 px-2 text-center hover:bg-slate-50 transition-colors disabled:opacity-40"
+                    onClick={() => open('ledger', 'Salary ledger', () => buildSalaryLedger(staff!, records))}
+                    className={SX.tile}
                   >
-                    <ScrollText size={22} className="text-slate-600" strokeWidth={1.5} />
-                    <span className="text-[11px] font-semibold text-slate-600 leading-tight">
-                      {busy === 'ledger' ? '…' : 'Ledger'}
-                    </span>
+                    <ScrollText size={20} className="text-[#8B6F47]" />
+                    <span className="text-[13px] font-semibold text-slate-900 leading-snug">{busy === 'ledger' ? 'Building…' : 'Ledger'}</span>
                   </button>
                 </div>
+                <label className="flex flex-wrap items-center justify-end gap-2 mt-2.5 px-1">
+                  <span className="text-[12px] text-slate-500">Year for the annual statement</span>
+                  <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
+                    className={`${SX.field} !w-auto !h-8 cursor-pointer`}>
+                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </label>
               </div>
 
-              {/* ── Payslips ── */}
-              <div className="mt-6">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">
-                  Payslips
-                </p>
+              <Panel bleed>
+                <PanelHead title="Payslips" />
                 {records.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-8">No payslips yet.</p>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    {records.map((r, i) => {
-                      const period = r.cycle ? formatPeriod(r.cycle.period_month, r.cycle.period_year) : 'Salary'
-                      const key = `payslip-${r.id}`
-                      return (
-                        <button
-                          key={r.id}
-                          disabled={busy === key}
-                          onClick={() => open(key, `Payslip — ${period}`, () => buildPayslip(r, staff, bank))}
-                          className={`w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-50 transition-colors disabled:opacity-50 ${
-                            i < records.length - 1 ? 'border-b border-slate-100' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <Banknote size={15} className="text-slate-300 flex-shrink-0" />
-                            <span className="text-sm font-medium text-slate-700 truncate">{period}</span>
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <span className="text-sm font-semibold text-slate-800 tabular-nums">{formatINR(salaryNet(r))}</span>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_CHIP[r.status] ?? 'bg-slate-100 text-slate-500'}`}>
-                              {r.status[0].toUpperCase() + r.status.slice(1)}
-                            </span>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </>
+                  <p className="text-[13px] text-slate-500 text-center py-8">No payslips yet.</p>
+                ) : records.map(r => {
+                  const period = r.cycle ? formatPeriod(r.cycle.period_month, r.cycle.period_year) : 'Salary'
+                  const key = `payslip-${r.id}`
+                  const st = STATUS[r.status] ?? STATUS.draft
+                  return (
+                    <button
+                      key={r.id}
+                      disabled={busy === key}
+                      onClick={() => open(key, `Payslip · ${period}`, () => buildPayslip(r, staff, bank))}
+                      className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 border-b border-[#F0ECE3] last:border-b-0 text-left hover:bg-[#FAF7F0] transition-colors disabled:opacity-50"
+                    >
+                      <span className="flex-1 min-w-[7rem] text-[13.5px] font-semibold text-slate-900 break-words">{period}</span>
+                      <Chip tone={st.tone}>{st.label}</Chip>
+                      <span className="text-[13px] font-semibold text-slate-900 tabular-nums">{formatINR(salaryNet(r))}</span>
+                      {busy === key
+                        ? <Loader2 size={15} className="animate-spin text-[#8B6F47] flex-shrink-0" />
+                        : <Download size={15} className="text-[#8B6F47] flex-shrink-0" />}
+                    </button>
+                  )
+                })}
+              </Panel>
+            </div>
           )}
         </div>
 

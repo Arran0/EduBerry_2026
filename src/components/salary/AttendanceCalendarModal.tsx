@@ -6,6 +6,7 @@ import { CalendarDays } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
 import { UserProfile } from '@/lib/supabase'
 import StaffAttendanceCalendarSkeleton from '@/components/attendance/StaffAttendanceCalendarSkeleton'
+import { SALARY_ICON } from '@/components/salary/ui'
 
 // Loaded on demand — the calendar pulls in attendance, holiday and leave data
 // that a payroll sheet has no use for until someone actually opens it.
@@ -58,7 +59,7 @@ export default function AttendanceCalendarModal({ person, viewerId, year, month,
       title={person.full_name}
       subtitle={periodLabel ? `Attendance calendar · ${periodLabel}` : 'Attendance calendar'}
       icon={<CalendarDays size={16} />}
-      iconClassName={sharp ? 'bg-[#27272A] text-white' : 'bg-slate-800 text-white'}
+      iconClassName={sharp ? SALARY_ICON : 'bg-slate-800 text-white'}
     >
       <StaffAttendanceCalendar
         staffId={person.id}

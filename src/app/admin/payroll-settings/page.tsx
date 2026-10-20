@@ -2,9 +2,10 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Banknote } from 'lucide-react'
+import { ArrowLeft, Settings } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import PayrollSettingsPanel from '@/components/settings/PayrollSettingsPanel'
+import { IconChip } from '@/components/salary/ui'
 
 // Payroll Settings. The body is `PayrollSettingsPanel`, mounted here and again
 // behind the Salary Manager's settings button — one copy of the settings, two
@@ -13,27 +14,26 @@ import PayrollSettingsPanel from '@/components/settings/PayrollSettingsPanel'
 export default function PayrollSettingsPage() {
   return (
     <ProtectedLayout adminOnly>
-      <div className="min-h-screen bg-[#F5F5F5]">
-        {/* Header, matching Admin Space — this page is reached from that list. */}
-        <div className="bg-[#27272A] border-b border-[#3F3F46]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center gap-4">
-            <Link href="/more/admin-space" className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0">
-              <ArrowLeft size={16} />
-            </Link>
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-9 h-9 bg-[#3F3F46] flex items-center justify-center flex-shrink-0">
-                <Banknote size={16} className="text-[#B8983C]" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base font-bold text-white tracking-tight">Payroll Settings</h1>
-                <p className="text-xs text-zinc-500">Salary payout and default cycle rules</p>
-              </div>
+      <div data-page-theme="salary" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
+        <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-14">
+          <Link href="/more/admin-space"
+            className="lg-pill inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 mb-3 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900 transition-colors">
+            <ArrowLeft size={14} /> Admin Space
+          </Link>
+
+          <div className="flex items-center gap-3 mb-4 sm:mb-5">
+            <IconChip icon={Settings} />
+            <div className="min-w-0">
+              <h1 className="font-display text-[1.3rem] sm:text-[1.6rem] font-bold leading-[1.15] text-slate-900 headline break-words">
+                Payroll settings
+              </h1>
+              <p className="text-[12.5px] text-slate-500 mt-0.5 leading-snug">Payout bank, hidden people and the rules a new cycle starts with</p>
             </div>
           </div>
-        </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <PayrollSettingsPanel />
+          <div className="fx-card p-4 sm:p-5">
+            <PayrollSettingsPanel />
+          </div>
         </div>
       </div>
     </ProtectedLayout>

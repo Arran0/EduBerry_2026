@@ -24,24 +24,25 @@ export default function SaveBar({ dirtyCount, state, error, onSave }: {
   const saving = state === 'saving'
 
   return (
-    <div className="flex items-center gap-1.5 flex-shrink-0">
+    <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
       {state === 'error' ? (
-        <Chip tone="bad" className="max-w-[9rem] sm:max-w-none">
-          <AlertCircle size={10} className="flex-shrink-0" />
-          <span className="truncate">{error ?? 'Could not save'}</span>
-        </Chip>
+        // Wraps rather than truncating: the reason is the part worth reading.
+        <span className="inline-flex items-start gap-1 min-w-0 text-[12px] leading-snug text-[#A93232] break-words">
+          <AlertCircle size={13} className="flex-shrink-0 mt-px" />
+          {error ?? 'Could not save'}
+        </span>
       ) : saving ? (
-        <Chip tone="neutral"><Loader2 size={10} className="animate-spin" /> Saving</Chip>
+        <Chip tone="neutral"><Loader2 size={11} className="animate-spin" /> Saving</Chip>
       ) : dirtyCount > 0 ? (
         <Chip tone="gold">
-          {dirtyCount} unsaved<span className="hidden sm:inline"> · autosaves</span>
+          {dirtyCount} unsaved<span className="hidden sm:inline"> · saves itself</span>
         </Chip>
       ) : state === 'saved' ? (
-        <Chip tone="good"><Check size={10} /> Saved</Chip>
+        <Chip tone="good"><Check size={11} /> Saved</Chip>
       ) : null}
 
       <Btn tone="dark" onClick={onSave} disabled={saving || dirtyCount === 0}>
-        <Save size={11} /> Save
+        <Save size={13} /> Save
       </Btn>
     </div>
   )

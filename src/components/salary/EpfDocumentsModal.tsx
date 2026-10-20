@@ -6,6 +6,7 @@ import {
   Table2, HeartPulse, SlidersHorizontal, AlertTriangle, Check,
 } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
+import { Btn, SALARY_ICON, SX } from '@/components/salary/ui'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
 import { SalaryCycle, formatPeriod } from '@/lib/salary'
 import {
@@ -147,9 +148,9 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
   const DOCS: { key: DocKey | 'summary'; label: string; sub: string; icon: React.ReactNode; count: number }[] = [
     { key: 'ecr-txt', label: 'EPF ECR', sub: 'Text · upload', icon: <FileText size={15} />, count: filableEcr.length },
     { key: 'ecr-csv', label: 'EPF ECR', sub: 'CSV', icon: <Table2 size={15} />, count: filableEcr.length },
-    { key: 'epf-xlsx', label: 'Wage Sheet', sub: 'Excel', icon: <FileSpreadsheet size={15} />, count: filableEcr.length },
-    { key: 'esi-xls', label: 'ESI Monthly', sub: 'Excel 97-2003', icon: <HeartPulse size={15} />, count: filableEsi.length },
-    { key: 'summary', label: 'Remittance', sub: 'Summary PDF', icon: <Landmark size={15} />, count: filableEcr.length + filableEsi.length },
+    { key: 'epf-xlsx', label: 'Wage sheet', sub: 'Excel', icon: <FileSpreadsheet size={20} />, count: filableEcr.length },
+    { key: 'esi-xls', label: 'ESI monthly', sub: 'Excel 97-2003', icon: <HeartPulse size={20} />, count: filableEsi.length },
+    { key: 'summary', label: 'Remittance', sub: 'Summary PDF', icon: <Landmark size={20} />, count: filableEcr.length + filableEsi.length },
   ]
 
   /** Row count for whichever document is open in the preview — feeds the footer below. */
@@ -165,33 +166,34 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
       onClose={onClose}
       size="xl"
       sharp
-      title={viewing ? DOC_TITLES[viewing] : 'EPF / ESI Filing'}
+      title={viewing ? DOC_TITLES[viewing] : 'EPF and ESI returns'}
       subtitle={`${period} · ${filableEcr.length} EPF member${filableEcr.length === 1 ? '' : 's'} · ${filableEsi.length} insured person${filableEsi.length === 1 ? '' : 's'}`}
-      icon={viewing ? (
-        <button onClick={() => setViewing(null)} title="Back" className="w-full h-full flex items-center justify-center">
-          <ChevronLeft size={18} className="text-[#B8983C]" />
-        </button>
-      ) : <Landmark size={16} className="text-[#B8983C]" />}
-      iconClassName="bg-[#27272A] text-white"
+      icon={<Landmark size={16} />}
+      iconClassName={SALARY_ICON}
       headerActions={!viewing && (
-        <button onClick={() => setShowSettings(s => !s)} title="Establishment details & rates"
-          className={`p-1.5 transition-colors ${showSettings ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5]'}`}>
-          <SlidersHorizontal size={16} />
+        <button onClick={() => setShowSettings(s => !s)} title="Establishment details and rates"
+          aria-label="Establishment details and rates" aria-pressed={showSettings}
+          className={showSettings ? `${SX.icon} !bg-[#27272A] !text-white` : `lg-control w-9 h-9 flex-shrink-0`}>
+          <SlidersHorizontal size={15} />
         </button>
       )}
       footer={viewing && !loading ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-[#71717A]">{viewingRowCount} row{viewingRowCount === 1 ? '' : 's'}</p>
-          <button onClick={() => download(viewing)} disabled={busy === viewing}
-            className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-semibold px-4 py-2 transition-colors disabled:opacity-50">
-            <Download size={15} /> {busy === viewing ? 'Saving…' : 'Download'}
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Btn tone="ghost" onClick={() => setViewing(null)} className="!pl-2.5">
+            <ChevronLeft size={14} /> All returns
+          </Btn>
+          <span className="flex items-center gap-2">
+            <span className="text-[12px] text-slate-500 tabular-nums">{viewingRowCount} row{viewingRowCount === 1 ? '' : 's'}</span>
+            <Btn tone="dark" onClick={() => download(viewing)} disabled={busy === viewing}>
+              <Download size={13} /> {busy === viewing ? 'Saving…' : 'Download'}
+            </Btn>
+          </span>
         </div>
       ) : undefined}
     >
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-14 text-[#A1A1AA]">
-          <Loader2 size={18} className="animate-spin" /><span className="text-sm">Loading…</span>
+        <div className="flex items-center justify-center gap-2 py-14 text-slate-400">
+          <Loader2 size={18} className="animate-spin" /><span className="text-[13px]">Loading…</span>
         </div>
       ) : viewing ? (
         <DocumentPreviewBody docKey={viewing} ecrRows={ecrRows} esiRows={esiRows} />
@@ -201,8 +203,8 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
             <ConfigPanel config={config} saving={saving} saved={saved} onChange={saveConfig} />
           )}
 
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Filing documents</p>
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          <p className={`${SX.heading} mb-2`}>Files for the portals</p>
+          <div className="grid grid-cols-2 min-[460px]:grid-cols-3 md:grid-cols-5 gap-2">
             {DOCS.map(doc => {
               const empty = doc.count === 0
               return (
@@ -210,17 +212,13 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
                   key={doc.key}
                   onClick={() => doc.key === 'summary' ? openSummary() : setViewing(doc.key)}
                   disabled={empty || busy === doc.key}
-                  className={`flex flex-col items-center justify-center gap-1 py-3 border transition-all ${
-                    empty
-                      ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
-                      : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
-                  }`}
+                  className={SX.tile}
                 >
-                  <span className={empty ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
-                  <span className="text-[11px] font-semibold leading-tight text-center">
-                    {busy === doc.key ? '…' : doc.label}
+                  <span className="text-[#8B6F47]">{busy === doc.key ? <Loader2 size={20} className="animate-spin" /> : doc.icon}</span>
+                  <span className="text-[13px] font-semibold text-slate-900 leading-snug">
+                    {busy === doc.key ? 'Building…' : doc.label}
                   </span>
-                  <span className={`text-[9px] font-normal leading-none ${empty ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>
+                  <span className="text-[11.5px] text-slate-500 leading-snug">
                     {doc.sub}
                   </span>
                 </button>
@@ -229,18 +227,18 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
           </div>
 
           {/* Contribution totals — the figures the challans are raised for. */}
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mt-5 mb-2">Remittance for {period}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="border border-[#E4E4E7] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">EPF</p>
+          <p className={`${SX.heading} mt-5 mb-2`}>To pay for {period}</p>
+          <div className="grid grid-cols-1 min-[460px]:grid-cols-2 gap-2">
+            <div className="fx-card p-3.5">
+              <p className="text-[13px] font-semibold text-slate-900 mb-2">EPF</p>
               <Line label="A/c 1 — EPF" value={epf.accountOne} />
               <Line label="A/c 10 — EPS" value={epf.accountTen} />
               <Line label="A/c 21 — EDLI" value={epf.accountTwentyOne} />
               <Line label="A/c 2 — Admin" value={epf.accountTwo} />
               <Line label="Total" value={epf.grandTotal} strong />
             </div>
-            <div className="border border-[#E4E4E7] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] mb-2">ESI</p>
+            <div className="fx-card p-3.5">
+              <p className="text-[13px] font-semibold text-slate-900 mb-2">ESI</p>
               <Line label="Wages" value={esi.totalWages} />
               <Line label="Employee 0.75%" value={esi.employeeShare} />
               <Line label="Employer 3.25%" value={esi.employerShare} />
@@ -253,7 +251,7 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
             <IssueList
               tone="rose"
               title={`${blockers.length} left out of the returns`}
-              note="Add the missing identifier in Salary Manager → Base salaries, then generate again."
+              note="Add the missing number in Salary → Base salaries, then open this again."
               items={blockers}
             />
           )}
@@ -261,31 +259,30 @@ export default function EpfDocumentsModal({ cycle, sourceRows, daysInMonth, onCl
             <IssueList
               tone="amber"
               title={`${warnings.length} to reconcile`}
-              note="These members are filed, but the return claims a different figure from what the cycle deducted. Check the PF Basic wage or the override on the cycle."
+              note="These people are in the return, but it shows a different figure from what the cycle took off. Check their PF Basic wage, or any figure typed in on the cycle."
               items={warnings}
             />
           )}
 
-          <div className="mt-4 pt-3 border-t border-[#F4F4F5]">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] block mb-1.5">
-              ESI reason code for members with no paid days
+          <div className="mt-4 pt-3 border-t border-[#EEEAE1]">
+            <label className={`${SX.heading} block mb-1.5`}>
+              ESI reason for people with no paid days
             </label>
             <select value={zeroDayReason} onChange={e => setZeroDayReason(e.target.value)}
-              className="w-full bg-white border border-[#E4E4E7] px-3 py-2 text-xs text-[#27272A] focus:outline-none focus:border-[#27272A]">
+              className={`${SX.field} cursor-pointer`}>
               {Object.entries(ESI_REASON_CODES).filter(([c]) => c !== '0').map(([code, label]) => (
                 <option key={code} value={code}>{code} — {label}</option>
               ))}
             </select>
-            <p className="text-[10px] text-[#A1A1AA] mt-1.5 leading-relaxed">
-              Only codes that keep the person on the employer&apos;s roll are offered. Removing someone
-              (left service, retired, expired) needs a last working day and is done on the ESIC portal itself.
+            <p className="text-[12px] text-slate-500 mt-1.5 leading-relaxed">
+              Only reasons that keep the person on the school&apos;s roll are listed. Taking someone off
+              (left, retired, died) needs a last working day and is done on the ESIC portal.
             </p>
           </div>
 
-          <p className="text-[10px] text-[#A1A1AA] mt-4 leading-relaxed">
-            Names are filed in capitals with only letters and spaces, as both portals require. Wages fall in
-            proportion to the days lost to leave and late marks on this cycle. Check the figures against the
-            portals before remitting.
+          <p className="text-[12px] text-slate-500 mt-4 leading-relaxed">
+            Names go in capitals with letters and spaces only, as both portals need. Wages are cut in
+            proportion to days lost to leave and late marks in this cycle. Check against the portals before paying.
           </p>
         </>
       )}
@@ -326,26 +323,26 @@ function DocumentPreviewBody({ docKey, ecrRows, esiRows }: {
   return (
     <>
       {raw !== null ? (
-        <pre className="text-[10px] leading-relaxed font-mono text-[#27272A] bg-[#FAFAFA] border border-[#E4E4E7] p-3 whitespace-pre overflow-x-auto">
+        <pre className="fx-card text-[11px] leading-relaxed font-mono text-slate-800 p-3 whitespace-pre overflow-x-auto">
           {raw || 'No members to file.'}
         </pre>
       ) : tableRows.length === 0 ? (
-        <p className="text-sm text-[#A1A1AA] text-center py-10">No members to file.</p>
+        <p className="text-[13px] text-slate-500 text-center py-10">Nobody to file.</p>
       ) : (
-        <div className="overflow-x-auto border border-[#E4E4E7]">
-          <table className="w-full text-[10px] tabular-nums">
+        <div className="fx-card overflow-x-auto">
+          <table className="w-full text-[11.5px] tabular-nums">
             <thead>
-              <tr className="bg-[#27272A] text-white">
+              <tr className="bg-[#F7F5F0] border-b border-[#EEEAE1]">
                 {headers.map(h => (
-                  <th key={h} className="text-left font-bold uppercase tracking-wide px-2 py-2 whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left text-[11.5px] font-medium text-slate-500 px-2.5 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {tableRows.map((row, i) => (
-                <tr key={i} className="border-b border-[#F4F4F5] last:border-0">
+                <tr key={i} className="border-b border-[#F0ECE3] last:border-0">
                   {row.map((cell, c) => (
-                    <td key={c} className={`px-2 py-1.5 whitespace-nowrap ${c === 1 ? 'text-[#18181B] font-semibold' : 'text-[#52525B]'}`}>
+                    <td key={c} className={`px-2.5 py-1.5 whitespace-nowrap ${c === 1 ? 'text-slate-900 font-semibold' : 'text-slate-600'}`}>
                       {cell === '' ? '—' : cell}
                     </td>
                   ))}
@@ -356,7 +353,7 @@ function DocumentPreviewBody({ docKey, ecrRows, esiRows }: {
         </div>
       )}
 
-      <p className="text-[10px] text-[#A1A1AA] mt-3 leading-relaxed">
+      <p className="text-[12px] text-slate-500 mt-3 leading-relaxed">
         {docKey === 'ecr-txt' && 'Fields are separated by #~# in EPFO’s own order: UAN, name, gross / EPF / EPS / EDLI wages, EPF and EPS contributions remitted, their difference, NCP days, refund of advances. Upload this file as-is.'}
         {docKey === 'ecr-csv' && 'The same eleven fields, comma separated, for checking in a spreadsheet. The portal takes the text file, not this one.'}
         {docKey === 'epf-xlsx' && 'The office working copy. Wage columns are typed values; EPS and EDLI wages, both contributions and their difference stay live formulas, so correcting a wage re-adds the rest.'}
@@ -370,7 +367,7 @@ function DocumentPreviewBody({ docKey, ecrRows, esiRows }: {
 // Establishment details & rates
 // ============================================
 
-const fieldCls = 'w-full bg-white border border-[#E4E4E7] px-2.5 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+const fieldCls = SX.field
 
 function ConfigPanel({ config, saving, saved, onChange }: {
   config: StatutoryConfig
@@ -386,9 +383,9 @@ function ConfigPanel({ config, saving, saved, onChange }: {
   const fromPct = (s: string) => (parseFloat(s) || 0) / 100
 
   return (
-    <div className="border border-[#E4E4E7] bg-[#FAFAFA] p-3 mb-4">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-2.5">Establishment &amp; rates</p>
-      <div className="grid grid-cols-2 gap-2 mb-2">
+    <div className="fx-card p-3.5 mb-4">
+      <p className={`${SX.heading} mb-2.5`}>Establishment details and rates</p>
+      <div className="grid grid-cols-1 min-[460px]:grid-cols-2 gap-2.5 mb-2.5">
         <Field label="EPF establishment ID">
           <input value={draft.epf_establishment_id} onChange={e => set({ epf_establishment_id: e.target.value.toUpperCase() })}
             placeholder="TNMAS0012345000" className={fieldCls} />
@@ -398,7 +395,7 @@ function ConfigPanel({ config, saving, saved, onChange }: {
             inputMode="numeric" maxLength={17} placeholder="17 digits" className={fieldCls} />
         </Field>
       </div>
-      <div className="grid grid-cols-3 gap-2 mb-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-3">
         <Field label="EPF %">
           <input type="number" step="0.01" value={pct(draft.epf_rate)} onChange={e => set({ epf_rate: fromPct(e.target.value) })} className={fieldCls} />
         </Field>
@@ -430,16 +427,15 @@ function ConfigPanel({ config, saving, saved, onChange }: {
 
       <label className="flex items-start gap-2 cursor-pointer mb-3" title="Contribute only up to the pension ceiling, even where the PF Basic wage is higher">
         <input type="checkbox" checked={draft.cap_epf_wages} onChange={e => set({ cap_epf_wages: e.target.checked })}
-          className="w-3.5 h-3.5 accent-[#27272A] mt-0.5" />
-        <span className="text-[11px] text-[#52525B] leading-snug">
-          Cap EPF wages at the pension ceiling — leave off to contribute on each member&apos;s full PF Basic wage.
+          className={`${SX.check} mt-0.5`} />
+        <span className="text-[12.5px] text-slate-700 leading-snug">
+          Stop EPF wages at the pension ceiling. Leave off to pay on each person&apos;s full PF Basic wage.
         </span>
       </label>
 
-      <button onClick={() => onChange(draft)} disabled={saving}
-        className="flex items-center gap-1.5 bg-[#27272A] hover:bg-[#18181B] text-white text-xs font-semibold px-3 py-2 transition-colors disabled:opacity-50">
+      <Btn tone="dark" onClick={() => onChange(draft)} disabled={saving}>
         {saved ? <><Check size={13} /> Saved</> : saving ? 'Saving…' : 'Save rates'}
-      </button>
+      </Btn>
     </div>
   )
 }
@@ -447,7 +443,7 @@ function ConfigPanel({ config, saving, saved, onChange }: {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <label className="text-[9px] font-bold uppercase tracking-widest text-[#A1A1AA] block mb-1">{label}</label>
+      <label className="text-[11.5px] font-medium text-slate-500 block mb-1">{label}</label>
       {children}
     </div>
   )
@@ -459,9 +455,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Line({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
   return (
-    <div className={`flex items-baseline justify-between gap-2 ${strong ? 'mt-1.5 pt-1.5 border-t border-[#F4F4F5]' : 'mb-0.5'}`}>
-      <span className={`text-[10px] ${strong ? 'font-bold text-[#18181B]' : 'text-[#71717A]'}`}>{label}</span>
-      <span className={`tabular-nums ${strong ? 'text-xs font-bold text-[#18181B]' : 'text-[11px] text-[#52525B]'}`}>
+    <div className={`flex flex-wrap items-baseline justify-between gap-x-2 ${strong ? 'mt-1.5 pt-1.5 border-t border-[#EEEAE1]' : 'mb-1'}`}>
+      <span className={`text-[12px] ${strong ? 'font-semibold text-slate-900' : 'text-slate-500'}`}>{label}</span>
+      <span className={`tabular-nums ${strong ? 'text-[13px] font-bold text-slate-900' : 'text-[12.5px] text-slate-700'}`}>
         {formatINR(value)}
       </span>
     </div>
@@ -475,21 +471,21 @@ function IssueList({ tone, title, note, items }: {
   items: { name: string; reason: string }[]
 }) {
   const cls = tone === 'rose'
-    ? 'border-rose-200 bg-rose-50 text-rose-700'
-    : 'border-[#EFE3C4] bg-[#FBF6E9] text-[#8A6D1F]'
+    ? 'border-[#C24141] bg-[#FCEDED] text-[#962C2C]'
+    : 'border-[#B8983C] bg-[#FBF4E2] text-[#6E5513]'
   return (
-    <div className={`mt-3 border p-3 ${cls}`}>
-      <p className="flex items-center gap-1.5 text-[11px] font-bold mb-1.5">
+    <div className={`mt-3 border-l-[3px] px-3.5 py-2.5 ${cls}`}>
+      <p className="flex items-center gap-1.5 text-[12.5px] font-semibold mb-1.5">
         <AlertTriangle size={13} className="flex-shrink-0" /> {title}
       </p>
       <ul className="space-y-0.5 max-h-32 overflow-y-auto">
         {items.map((it, i) => (
-          <li key={i} className="text-[10px] leading-snug opacity-90">
+          <li key={i} className="text-[12px] leading-snug break-words">
             <span className="font-semibold">{it.name}</span> — {it.reason}
           </li>
         ))}
       </ul>
-      <p className="text-[10px] mt-1.5 opacity-75 leading-relaxed">{note}</p>
+      <p className="text-[12px] mt-1.5 opacity-80 leading-relaxed">{note}</p>
     </div>
   )
 }
