@@ -26,17 +26,16 @@ import {
   AnnouncementBannerConfig, fetchPageBanner, savePageBanner, BANNER_PRESETS, BANNER_DEFAULT, TASK_BANNER_DEFAULT,
   ACADEMICS_BANNER_DEFAULT, EXAM_BANNER_DEFAULT, ATTENDANCE_BANNER_DEFAULT, STAFF_ATTENDANCE_BANNER_DEFAULT,
   LEAVE_BANNER_DEFAULT, STAFF_LEAVE_BANNER_DEFAULT, FEES_BANNER_DEFAULT, SALARY_BANNER_DEFAULT, BUS_BANNER_DEFAULT,
-  TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT, DESIGN_BANNER_DEFAULT,
+  TIMETABLE_BANNER_DEFAULT, FEEDBACK_BANNER_DEFAULT,
 } from '@/lib/pageConfig'
 import { swatchBackground, gradientLuminance, isDarkLum } from '@/lib/bannerStyle'
 import { setProfileBanner } from '@/lib/profileBanner'
 import {
   Check, RotateCcw, Save, Palette, Image as ImageIcon, Type, LogIn, Layout, Upload, X, Plus, Trash2, Loader2,
-  Building2, Brush, Sparkles, Droplet, MapPin, Stamp, ListChecks, MousePointerClick, PanelLeft, Images,
+  Building2, Brush, ChevronLeft, Sparkles, Droplet, MapPin, Stamp, ListChecks, MousePointerClick, PanelLeft, Images,
 } from 'lucide-react'
 import { SchoolProfile, SCHOOL_PROFILE_DEFAULTS, fetchSchoolProfile, saveSchoolProfile } from '@/lib/schoolProfile'
-import { GlassSegments } from '@/components/transport/glass'
-import { AdminPage, AX, Field, Panel, PageLoading, SaveButton } from '@/components/admin/ui'
+import { AX, Field, Panel, PageLoading, SaveButton } from '@/components/admin/ui'
 
 type Tab = 'branding' | 'school-profile' | 'page-themes' | 'login' | 'banners'
 
@@ -87,7 +86,7 @@ function TextInput({ value, onChange, placeholder }: { value: string; onChange: 
 function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex items-center gap-2">
-      <label className="relative w-[38px] h-[38px] flex-shrink-0 rounded-[10px] overflow-hidden border border-[#DDD8CC] shadow-[inset_0_1px_2px_rgba(15,23,42,.06)] cursor-pointer" style={{ background: value }}>
+      <label className="relative w-[38px] h-[38px] flex-shrink-0 overflow-hidden border border-[#D4D4D8] shadow-[inset_0_1px_2px_rgba(15,23,42,.06)] cursor-pointer" style={{ background: value }}>
         <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Pick a colour" />
       </label>
       <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder="#000000" className={`${AX.field} font-mono !text-[12.5px] uppercase`} />
@@ -107,7 +106,7 @@ interface UploadFieldProps {
 }
 function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept = 'image/*', previewCircle }: UploadFieldProps) {
   const ref = useRef<HTMLInputElement>(null)
-  const shape = previewCircle ? 'rounded-full' : 'rounded-[14px]'
+  const shape = previewCircle ? '' : ''
   return (
     <div>
       {label && <p className={AX.label}>{label}</p>}
@@ -116,13 +115,13 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
           <div className="relative flex-shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={currentUrl} alt="" className={`w-14 h-14 object-cover border border-black/[.06] shadow-sm ${shape}`} />
-            <button onClick={onClear} aria-label="Remove image" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-slate-600 hover:text-[#B83A3A] ring-1 ring-black/10 shadow flex items-center justify-center transition-colors">
+            <button onClick={onClear} aria-label="Remove image" className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white text-[#52525B] hover:text-[#B8983C] ring-1 ring-black/10 shadow flex items-center justify-center transition-colors">
               <X size={11} />
             </button>
           </div>
         ) : (
-          <div className={`w-14 h-14 bg-[#F7F5F1] border border-dashed border-[#D9D3C6] flex items-center justify-center ${shape}`}>
-            <ImageIcon size={18} className="text-slate-300" />
+          <div className={`w-14 h-14 bg-[#F5F5F5] border border-dashed border-[#D4D4D8] flex items-center justify-center ${shape}`}>
+            <ImageIcon size={18} className="text-[#D4D4D8]" />
           </div>
         )}
         <div className="flex-1 min-w-0 space-y-1">
@@ -130,7 +129,7 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
             {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
             {uploading ? 'Uploading…' : currentUrl ? 'Replace' : 'Upload image'}
           </button>
-          {currentUrl && <p className="text-[11px] text-slate-400 truncate max-w-[220px]">{currentUrl.split('/').pop()}</p>}
+          {currentUrl && <p className="text-[11px] text-[#A1A1AA] truncate max-w-[220px]">{currentUrl.split('/').pop()}</p>}
         </div>
         <input ref={ref} type="file" accept={accept} className="hidden"
           onChange={async e => { const f = e.target.files?.[0]; if (f) await onUpload(f); e.target.value = '' }} />
@@ -141,7 +140,7 @@ function UploadField({ label, currentUrl, onUpload, onClear, uploading, accept =
 
 /** A gradient strip previewing two or three stops. */
 function GradientStrip({ stops }: { stops: string[] }) {
-  return <div className="mt-3 h-8 rounded-[10px] border border-black/[.06]" style={{ background: `linear-gradient(135deg, ${stops.join(', ')})` }} />
+  return <div className="mt-3 h-8 border border-black/[.06]" style={{ background: `linear-gradient(135deg, ${stops.join(', ')})` }} />
 }
 
 /** A list of pages to pick one from: a column beside the editor on a laptop, a scrolling row on a phone. */
@@ -159,13 +158,13 @@ function PagePicker({ items, value, onChange }: {
             key={it.key}
             onClick={() => onChange(it.key)}
             aria-pressed={on}
-            className={`flex items-center gap-2.5 h-9 px-2.5 rounded-[11px] text-[13px] text-left whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
-              on ? 'bg-[#3D3B40] text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,.14)]' : 'text-slate-600 hover:bg-[#F2EFE9] hover:text-slate-900 font-medium'
+            className={`flex items-center gap-2.5 h-9 px-2.5 border-l-2 text-[13px] text-left whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+              on ? 'border-[#B8983C] bg-[#F5F5F5] text-[#18181B] font-semibold' : 'border-transparent text-[#52525B] hover:bg-[#F5F5F5] hover:text-[#18181B] font-medium'
             }`}
           >
-            <span className="w-4 h-4 rounded-[5px] flex-shrink-0 ring-1 ring-black/10" style={{ background: it.swatch }} />
+            <span className="w-4 h-4 flex-shrink-0 ring-1 ring-black/10" style={{ background: it.swatch }} />
             <span className="truncate flex-1">{it.label}</span>
-            {it.marked && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${on ? 'bg-[#D9BE6C]' : 'bg-[#B8983C]'}`} aria-label="Customised" />}
+            {it.marked && <span className="w-1.5 h-1.5 flex-shrink-0 bg-[#B8983C]" aria-label="Customised" />}
           </button>
         )
       })}
@@ -409,19 +408,19 @@ function DesignInner() {
         {/* Preview — beside the form on a laptop, so a change is seen as it is made. */}
         <div className="lg:sticky lg:top-6">
           <Panel icon={Sparkles} title="Preview" description="How the navigation bar reads.">
-            <div className="rounded-[16px] p-4 bg-[#F7F5F1] border border-black/[.04]">
-              <div className="flex items-center gap-3 p-3 rounded-[12px] bg-white shadow-[0_1px_2px_rgba(15,23,42,.06),0_10px_20px_-16px_rgba(15,23,42,.5)]">
+            <div className=" p-4 bg-[#F5F5F5] border border-black/[.04]">
+              <div className="flex items-center gap-3 p-3 bg-white shadow-[0_1px_2px_rgba(15,23,42,.06),0_10px_20px_-16px_rgba(15,23,42,.5)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={draftBranding.logoUrl || '/logo.png'} alt="" className="w-10 h-10 object-cover rounded-full ring-1 ring-black/10"
+                <img src={draftBranding.logoUrl || '/logo.png'} alt="" className="w-10 h-10 object-cover ring-1 ring-black/10"
                   onError={e => { (e.target as HTMLImageElement).src = '/logo.png' }} />
                 <div className="min-w-0">
                   <p className="text-[14px] font-bold truncate" style={{ backgroundImage: `linear-gradient(135deg, ${draftBranding.primaryColor}, ${draftBranding.secondaryColor})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                     {draftBranding.appTitle || 'App title'}
                   </p>
-                  <p className="text-[12px] text-slate-500 truncate">{draftBranding.appSubtitle || 'School name'}</p>
+                  <p className="text-[12px] text-[#71717A] truncate">{draftBranding.appSubtitle || 'School name'}</p>
                 </div>
               </div>
-              <div className="mt-3 h-2 rounded-full" style={{ background: `linear-gradient(90deg, ${draftBranding.primaryColor}, ${draftBranding.secondaryColor})` }} />
+              <div className="mt-3 h-2" style={{ background: `linear-gradient(90deg, ${draftBranding.primaryColor}, ${draftBranding.secondaryColor})` }} />
             </div>
           </Panel>
         </div>
@@ -453,7 +452,7 @@ function DesignInner() {
 
         <div className="flex-1 min-w-0 md:border-l md:border-black/[.06] md:pl-5 py-1">
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h2 className="text-[15px] font-semibold text-slate-900">{PAGE_THEME_LABELS[t] ?? t}</h2>
+            <h2 className="text-[15px] font-semibold text-[#18181B]">{PAGE_THEME_LABELS[t] ?? t}</h2>
             {current && (
               <button onClick={() => setDraftThemes(prev => { const n = { ...prev }; delete n[t]; return n })} className={AX.ghost}>
                 <RotateCcw size={12} /> Use default
@@ -464,7 +463,7 @@ function DesignInner() {
 
           {(['light', 'dark'] as const).map(variant => (
             <div key={variant} className="mb-5">
-              <p className="text-[12.5px] font-medium text-slate-600 mb-2">{variant === 'light' ? 'Light palettes' : 'Dark palettes'}</p>
+              <p className="text-[12.5px] font-medium text-[#52525B] mb-2">{variant === 'light' ? 'Light palettes' : 'Dark palettes'}</p>
               <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
                 {THEME_PALETTES.filter(p => p.variant === variant).map(({ id, label, theme }) => {
                   const isSelected = current?.primary === theme.primary
@@ -472,24 +471,24 @@ function DesignInner() {
                     <button key={id}
                       onClick={() => setDraftThemes(prev => ({ ...prev, [t]: theme }))}
                       aria-pressed={isSelected}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
-                        isSelected ? 'bg-white ring-2 ring-[#3D3B40] shadow-sm' : 'bg-[#F7F5F1] ring-1 ring-black/[.04] hover:bg-white hover:ring-black/10'
+                      className={`flex items-center gap-3 px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+                        isSelected ? 'bg-white ring-2 ring-[#B8983C] shadow-sm' : 'bg-[#F5F5F5] ring-1 ring-black/[.04] hover:bg-white hover:ring-black/10'
                       }`}>
                       <div className="flex flex-col gap-0.5 flex-shrink-0">
-                        <div className="w-9 h-5 rounded-t-[7px]"
+                        <div className="w-9 h-5"
                           style={{ backgroundImage: swatchBackground(theme.gradFrom, theme.gradTo), backgroundSize: '120px, auto', backgroundBlendMode: 'soft-light' }} />
-                        <div className="w-9 h-3 rounded-b-[7px] ring-1 ring-black/[.06]"
+                        <div className="w-9 h-3 ring-1 ring-black/[.06]"
                           style={{ background: `linear-gradient(135deg, ${theme.bgFrom}, ${theme.bgMid}, ${theme.bgTo})` }} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[12.5px] font-semibold text-slate-800 truncate">{label}</p>
+                        <p className="text-[12.5px] font-semibold text-[#27272A] truncate">{label}</p>
                         <div className="flex gap-1 mt-1">
                           {[theme.primary, theme.accent, theme.bgFrom].map(c => (
-                            <span key={c} className="w-3 h-3 rounded-full ring-1 ring-black/10" style={{ background: c }} />
+                            <span key={c} className="w-3 h-3 ring-1 ring-black/10" style={{ background: c }} />
                           ))}
                         </div>
                       </div>
-                      {isSelected && <Check size={14} className="ml-auto text-slate-700 flex-shrink-0" />}
+                      {isSelected && <Check size={14} className="ml-auto text-[#3F3F46] flex-shrink-0" />}
                     </button>
                   )
                 })}
@@ -499,7 +498,7 @@ function DesignInner() {
 
           {current && (
             <div className="pt-4 border-t border-black/[.06]">
-              <p className="text-[13.5px] font-semibold text-slate-900 mb-3">Fine-tune</p>
+              <p className="text-[13.5px] font-semibold text-[#18181B] mb-3">Fine-tune</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ColorField label="Primary" value={current.primary} onChange={v => setTheme({ primary: v })} />
                 <ColorField label="Accent" value={current.accent} onChange={v => setTheme({ accent: v })} />
@@ -509,7 +508,7 @@ function DesignInner() {
                 <ColorField label="Background middle" value={current.bgMid ?? '#f1f5f9'} onChange={v => setTheme({ bgMid: v })} />
                 <ColorField label="Background end" value={current.bgTo ?? '#f9fafb'} onChange={v => setTheme({ bgTo: v })} />
               </div>
-              <p className="text-[12px] text-slate-500 mt-4">Background</p>
+              <p className="text-[12px] text-[#71717A] mt-4">Background</p>
               <GradientStrip stops={[current.bgFrom ?? '#f8fafc', current.bgMid ?? '#f1f5f9', current.bgTo ?? '#f9fafb']} />
             </div>
           )}
@@ -573,9 +572,9 @@ function DesignInner() {
               <ColorField label="Button" value={draftLogin.buttonColor ?? draftLogin.gradientFrom} onChange={v => updateLogin({ buttonColor: v })} />
               <ColorField label="Button text" value={draftLogin.buttonTextColor ?? '#ffffff'} onChange={v => updateLogin({ buttonTextColor: v })} />
             </div>
-            <div className="mt-4 flex items-center justify-center rounded-[16px] py-6"
+            <div className="mt-4 flex items-center justify-center py-6"
               style={{ background: `linear-gradient(135deg, ${draftLogin.pageBgFrom ?? '#f0f9ff'}, ${draftLogin.pageBgMid ?? '#f5f3ff'}, ${draftLogin.pageBgTo ?? '#f0fdf4'})` }}>
-              <div className="flex items-center justify-center px-8 py-2.5 rounded-[10px] text-[14px] font-semibold shadow-sm"
+              <div className="flex items-center justify-center px-8 py-2.5 text-[14px] font-semibold shadow-sm"
                 style={{ background: draftLogin.buttonColor ?? draftLogin.gradientFrom, color: draftLogin.buttonTextColor ?? '#ffffff' }}>
                 Sign in
               </div>
@@ -643,7 +642,7 @@ function DesignInner() {
             <div className="flex-1 min-w-0 md:border-l md:border-black/[.06] md:pl-5 py-1 space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[15px] font-semibold text-slate-900">{selected.label}</h2>
+                  <h2 className="text-[15px] font-semibold text-[#18181B]">{selected.label}</h2>
                   <p className={AX.hint}>The banner across the top of this page. Saved changes show for everyone at once.</p>
                 </div>
                 <button onClick={() => updateBannerDraft(selectedBannerKey, selected.default)} className={AX.ghost}>
@@ -652,18 +651,18 @@ function DesignInner() {
               </div>
 
               {/* Live preview — text colour mirrors the live banner */}
-              <div className="h-20 rounded-[16px] overflow-hidden flex items-center px-5 gap-3 shadow-[inset_0_1px_0_rgba(255,255,255,.18)]" style={previewStyle}>
-                <div className={`w-10 h-10 rounded-[12px] flex items-center justify-center ${previewDark ? 'bg-white/20' : 'bg-black/10'}`}>
-                  <Layout size={18} className={previewDark ? 'text-white' : 'text-slate-800'} />
+              <div className="h-20 overflow-hidden flex items-center px-5 gap-3 shadow-[inset_0_1px_0_rgba(255,255,255,.18)]" style={previewStyle}>
+                <div className={`w-10 h-10 flex items-center justify-center ${previewDark ? 'bg-white/20' : 'bg-black/10'}`}>
+                  <Layout size={18} className={previewDark ? 'text-white' : 'text-[#27272A]'} />
                 </div>
                 <div>
-                  <p className={`text-[15px] font-bold leading-tight ${previewDark ? 'text-white' : 'text-slate-900'}`}>{selected.label}</p>
-                  <p className={`text-[12px] leading-tight ${previewDark ? 'text-white/70' : 'text-slate-600'}`}>Banner preview</p>
+                  <p className={`text-[15px] font-bold leading-tight ${previewDark ? 'text-white' : 'text-[#18181B]'}`}>{selected.label}</p>
+                  <p className={`text-[12px] leading-tight ${previewDark ? 'text-white/70' : 'text-[#52525B]'}`}>Banner preview</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-[12.5px] font-medium text-slate-600 mb-2">Presets</p>
+                <p className="text-[12.5px] font-medium text-[#52525B] mb-2">Presets</p>
                 <div className="grid grid-cols-4 gap-2">
                   {BANNER_PRESETS.map(preset => {
                     const isActive = draft.gradFrom === preset.from && draft.gradTo === preset.to
@@ -672,11 +671,11 @@ function DesignInner() {
                         key={preset.label}
                         onClick={() => updateBannerDraft(selectedBannerKey, { gradFrom: preset.from, gradTo: preset.to, imageUrl: '' })}
                         aria-pressed={isActive}
-                        className={`relative flex flex-col overflow-hidden rounded-[12px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${isActive ? 'ring-2 ring-[#3D3B40] shadow-sm' : 'ring-1 ring-black/[.08] hover:ring-black/20'}`}
+                        className={`relative flex flex-col overflow-hidden transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${isActive ? 'ring-2 ring-[#B8983C] shadow-sm' : 'ring-1 ring-black/[.08] hover:ring-black/20'}`}
                       >
                         <div className="h-8" style={{ backgroundImage: swatchBackground(preset.from, preset.to), backgroundSize: '120px, auto', backgroundBlendMode: 'soft-light' }} />
-                        <span className="text-[11px] text-slate-600 py-1 bg-white text-center truncate px-1">{preset.label}</span>
-                        {isActive && <Check size={11} className={`absolute top-1.5 right-1.5 drop-shadow ${preset.variant === 'bright' ? 'text-slate-900' : 'text-white'}`} />}
+                        <span className="text-[11px] text-[#52525B] py-1 bg-white text-center truncate px-1">{preset.label}</span>
+                        {isActive && <Check size={11} className={`absolute top-1.5 right-1.5 drop-shadow ${preset.variant === 'bright' ? 'text-[#18181B]' : 'text-white'}`} />}
                       </button>
                     )
                   })}
@@ -684,7 +683,7 @@ function DesignInner() {
               </div>
 
               <div>
-                <p className="text-[12.5px] font-medium text-slate-600 mb-2">Custom colours</p>
+                <p className="text-[12.5px] font-medium text-[#52525B] mb-2">Custom colours</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <ColorField label="Gradient start" value={draft.gradFrom} onChange={v => updateBannerDraft(selectedBannerKey, { gradFrom: v })} />
                   <ColorField label="Gradient end" value={draft.gradTo} onChange={v => updateBannerDraft(selectedBannerKey, { gradTo: v })} />
@@ -709,41 +708,64 @@ function DesignInner() {
   const showGlobalSave = GLOBAL_SAVE_TABS.includes(tab)
 
   return (
-    <AdminPage
-      settingKey="design_banner"
-      defaultBanner={DESIGN_BANNER_DEFAULT}
-      icon={Brush}
-      backgroundIcon={Palette}
-      title="Design"
-      subtitle="Branding, themes, the login page and banners"
-      maxWidth="max-w-6xl"
-    >
-      {/* The section switch and the save that covers it, on one bar. */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 sm:mb-5">
-        <GlassSegments
-          layoutId="design-tab"
-          items={TABS}
-          value={tab}
-          onChange={setTab}
-          className="!bg-white ring-1 ring-black/[.06] shadow-[0_10px_24px_-14px_rgba(15,23,42,.5)]"
-        />
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-h-screen" data-page-theme="admin" style={{ backgroundColor: '#FDFCF9' }}>
+
+      {/* Header — the App Settings arrangement: mark, title, and the save that covers it. */}
+      <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/more/admin-space')} aria-label="Back to Admin Space"
+            className="w-9 h-9 bg-white border border-[#D4D4D8] flex items-center justify-center hover:bg-[#F5F5F5] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/70">
+            <ChevronLeft size={18} className="text-[#18181B]" />
+          </button>
+          <div className="w-9 h-9 bg-[#27272A] flex items-center justify-center flex-shrink-0">
+            <Brush className="text-[#B8983C]" size={18} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-[#18181B]">Design</h1>
+            <p className="text-xs text-[#71717A]">Branding, school profile, themes, the login page and banners</p>
+          </div>
+        </div>
         {showGlobalSave && (
           <button
             onClick={handleSave} disabled={saving}
-            className={`${AX.primary} sm:ml-auto ${saveError ? '!from-[#B83A3A] !to-[#962C2C]' : ''}`}
+            className={`${AX.primary} !h-10 !px-5 ${saveError ? '!bg-[#18181B]' : ''}`}
             title={saveError ? 'Could not save — check your connection and try again' : undefined}
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : saveError ? <X size={14} /> : saved ? <Check size={14} /> : <Save size={14} />}
-            {saving ? 'Saving…' : saveError ? 'Save failed, retry' : saved ? 'Saved' : 'Save changes'}
+            {saving ? 'Saving…' : saveError ? 'Save failed — retry' : saved ? 'Saved' : 'Save all changes'}
           </button>
         )}
       </div>
 
-      {tab === 'branding'       && renderBranding()}
-      {tab === 'school-profile' && renderSchoolProfile()}
-      {tab === 'page-themes'    && renderPageThemes()}
-      {tab === 'login'          && renderLogin()}
-      {tab === 'banners'        && renderBanners()}
-    </AdminPage>
+      {/* Layout: dark sidebar of sections + content pane. On a phone the
+          sidebar becomes a strip across the top. */}
+      <div className="flex flex-col md:flex-row border border-[#D4D4D8] bg-white md:min-h-[calc(100vh-11rem)]">
+        <nav className="md:w-48 bg-[#27272A] flex-shrink-0 flex md:flex-col overflow-x-auto scrollbar-none" aria-label="Design sections">
+          {TABS.map(t => {
+            const Icon = t.icon
+            const on = tab === t.key
+            return (
+              <button
+                key={t.key} onClick={() => setTab(t.key)} aria-current={on ? 'page' : undefined}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm text-left whitespace-nowrap flex-shrink-0 transition-colors border-b-2 md:border-b-0 md:border-l-2 focus-visible:outline-none focus-visible:bg-white/10 ${
+                  on ? 'border-[#B8983C] bg-white/10 text-[#F5F5F5] font-semibold' : 'border-transparent text-[#F5F5F5]/55 hover:text-[#F5F5F5] hover:bg-white/5'
+                }`}
+              >
+                <Icon size={14} className={on ? 'text-[#B8983C]' : ''} />
+                {t.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="flex-1 min-w-0 bg-[#F5F5F5] p-3 sm:p-5">
+          {tab === 'branding'       && renderBranding()}
+          {tab === 'school-profile' && renderSchoolProfile()}
+          {tab === 'page-themes'    && renderPageThemes()}
+          {tab === 'login'          && renderLogin()}
+          {tab === 'banners'        && renderBanners()}
+        </div>
+      </div>
+    </div>
   )
 }

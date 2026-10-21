@@ -143,15 +143,15 @@ function GeofencingBody() {
         >
           <div className={`${AX.row} mb-4`}>
             <div className="flex-1 min-w-0">
-              <p className="text-[13.5px] font-semibold text-slate-900">Check location on check-in</p>
-              <p className="text-[12px] text-slate-500">
+              <p className="text-[13.5px] font-semibold text-[#18181B]">Check location on check-in</p>
+              <p className="text-[12px] text-[#71717A]">
                 {draft.enabled ? 'On — a check-in outside the fence is refused' : 'Off — staff can check in from anywhere'}
               </p>
             </div>
             <Switch on={draft.enabled} label="Check location on check-in" onChange={() => setDraft(d => ({ ...d, enabled: !d.enabled }))} />
           </div>
 
-          <div className="rounded-[14px] overflow-hidden">
+          <div className=" overflow-hidden">
             <FenceEditor
               idPrefix="school-fence"
               value={{ shape: draft.shape, lat: draft.lat, lng: draft.lng, radius_m: draft.radius_m, polygon: draft.polygon }}
@@ -161,8 +161,8 @@ function GeofencingBody() {
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {hasCentre && (
-              <span className="inline-flex items-center gap-1.5 text-[12.5px] text-slate-600 tabular-nums">
-                <MapPin size={13} className="text-[#8B6F47]" />
+              <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#52525B] tabular-nums">
+                <MapPin size={13} className="text-[#B8983C]" />
                 {draft.shape === 'polygon'
                   ? `Campus outline, ${draft.polygon?.length ?? 0} corners, ${draft.radius_m} m buffer`
                   : `${draft.lat!.toFixed(6)}, ${draft.lng!.toFixed(6)} · ${draft.radius_m} m radius`}
@@ -193,10 +193,10 @@ function GeofencingBody() {
             <ul className="space-y-1.5">
               {zones.map(z => (
                 <li key={z.id} className={AX.row}>
-                  <MapPin size={14} className="text-[#8B6F47] flex-shrink-0" />
+                  <MapPin size={14} className="text-[#B8983C] flex-shrink-0" />
                   <button onClick={() => setShowZoneModal(true)} className="flex-1 min-w-0 text-left">
-                    <p className="text-[13.5px] font-semibold text-slate-900 truncate">{z.label}</p>
-                    <p className="text-[12px] text-slate-500 truncate tabular-nums">
+                    <p className="text-[13.5px] font-semibold text-[#18181B] truncate">{z.label}</p>
+                    <p className="text-[12px] text-[#71717A] truncate tabular-nums">
                       {z.radius_m} m · {z.staff_ids.length} {z.staff_ids.length === 1 ? 'person' : 'people'}
                     </p>
                   </button>
@@ -229,8 +229,8 @@ function GeofencingBody() {
             ) : filteredStaff.map(s => (
               <div key={s.id} className={AX.row}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13.5px] font-medium text-slate-900 truncate">{s.full_name}</p>
-                  <p className="text-[11.5px] text-slate-500 truncate"><span className="capitalize">{s.role}</span> · {s.email}</p>
+                  <p className="text-[13.5px] font-medium text-[#18181B] truncate">{s.full_name}</p>
+                  <p className="text-[11.5px] text-[#71717A] truncate"><span className="capitalize">{s.role}</span> · {s.email}</p>
                 </div>
                 <Switch
                   on={!!s.geofence_exempt}

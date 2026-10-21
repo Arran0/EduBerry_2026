@@ -26,8 +26,8 @@ const ICONS: Record<string, LucideIcon> = {
 }
 
 // Admin-space aesthetic: sharp corners, #27272A dark accents, #B8983C gold.
-const inputCls = 'border border-[#DDD8CC] bg-white rounded-[10px] px-3 py-2 text-sm shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition w-full'
-const labelCls = 'block text-[12.5px] font-medium text-slate-600 mb-1.5'
+const inputCls = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors w-full'
+const labelCls = 'block text-[12.5px] font-medium text-[#52525B] mb-1.5'
 
 function CertStudentTypeahead({ query, onQueryChange, matches, onSelect }: {
   query: string
@@ -43,7 +43,7 @@ function CertStudentTypeahead({ query, onQueryChange, matches, onSelect }: {
       onSelect={onSelect}
       getKey={(s: ProfileWithTeams) => s.id}
       placeholder="Search a student by name, email, or grade..."
-      className="flex items-center gap-2.5 border border-[#DDD8CC] bg-white rounded-full px-4 py-2.5 shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus-within:border-[#B8983C] focus-within:ring-2 focus-within:ring-[#B8983C]/20 transition"
+      className="flex items-center gap-2.5 border border-[#D4D4D8] bg-white px-4 py-2.5 shadow-[inset_0_1px_2px_rgba(15,23,42,.04)] focus-within:border-[#27272A] focus-within:ring-1 focus-within:ring-[#B8983C]/40 transition-colors"
       renderSuggestion={(s: ProfileWithTeams, active: boolean) => (
         <div className={`px-4 py-2.5 transition-colors border-b border-[#F4F4F5] last:border-b-0 ${active ? 'bg-[#F4F4F5]' : 'hover:bg-[#F4F4F5]'}`}>
           <p className="text-sm font-semibold text-[#18181B] truncate">{s.full_name || '(no name)'}</p>
@@ -149,33 +149,33 @@ export default function CertificateBuilderPage() {
         {/* Header — the Admin Space pattern: back capsule, then the title on the page. */}
         <div className="max-w-5xl mx-auto">
           <button onClick={() => router.back()}
-            className="lg-pill inline-flex items-center gap-1 h-8 pl-2 pr-3.5 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
+            className="bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] inline-flex items-center gap-1 h-8 pl-2 pr-3.5 text-[12.5px] font-semibold text-[#3F3F46] hover:text-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
             <ChevronLeft size={15} /> Back
           </button>
         </div>
         <div className="mt-4 sm:mt-5 mb-5 sm:mb-6 flex items-end justify-between flex-wrap gap-3 max-w-5xl mx-auto">
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-[14px] flex items-center justify-center flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.14),inset_0_-2px_0_#B8983C,0_12px_24px_-16px_rgba(15,23,42,.9)] [background:linear-gradient(155deg,#3D3B40_0%,#27272A_70%)]">
-              <FileBadge className="text-[#E9D7A1]" size={21} />
+            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
+              <FileBadge className="text-[#B8983C]" size={21} />
             </div>
             <div className="min-w-0">
-              <h1 className="font-display text-[1.45rem] sm:text-[1.75rem] font-bold leading-[1.15] tracking-[-0.015em] text-[#1F1E22]">Certificate Builder</h1>
-              <p className="text-[13px] text-slate-500 mt-0.5">Issue transfer, bonafide, study, no-due, promotion and custom certificates</p>
+              <h1 className="font-display text-[1.45rem] sm:text-[1.75rem] font-bold leading-[1.15] tracking-[-0.015em] text-[#18181B]">Certificate Builder</h1>
+              <p className="text-[13px] text-[#71717A] mt-0.5">Issue transfer, bonafide, study, no-due, promotion and custom certificates</p>
             </div>
           </div>
           <a href="/more/profiles/templates"
-            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white border border-[#E2DDD2] hover:border-[#CFC8B8] shadow-[0_1px_2px_rgba(15,23,42,.05)] active:scale-[0.97] transition h-9 px-4 text-[13px] font-semibold text-slate-800">
+            className="inline-flex items-center justify-center gap-1.5 bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors h-9 px-4 text-[13px] font-semibold text-[#27272A]">
             <Wand2 size={14} /> Manage templates
           </a>
         </div>
 
-        <div className="max-w-5xl mx-auto bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden">
+        <div className="max-w-5xl mx-auto bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden">
           {/* Smart search bar */}
-          <div className="border-b border-black/[.06] p-4 sm:p-5 bg-[#F7F5F1]">
+          <div className="border-b border-black/[.06] p-4 sm:p-5 bg-[#F5F5F5]">
             {selectedStudent ? (
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-[14px] flex items-center justify-center flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.14),inset_0_-2px_0_#B8983C,0_12px_24px_-16px_rgba(15,23,42,.9)] [background:linear-gradient(155deg,#3D3B40_0%,#27272A_70%)]">
-                  <User size={16} className="text-[#E9D7A1]" />
+                <div className="w-9 h-9 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
+                  <User size={16} className="text-[#B8983C]" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-[#18181B] truncate">{selectedStudent.full_name || selectedStudent.email}</p>
@@ -186,7 +186,7 @@ export default function CertificateBuilderPage() {
                 </div>
                 <button
                   onClick={() => { setSelectedStudent(null); setSelectedType(null); setIssuedNo(null) }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white border border-[#E2DDD2] hover:border-[#CFC8B8] shadow-[0_1px_2px_rgba(15,23,42,.05)] active:scale-[0.97] transition h-8 px-3.5 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900"
+                  className="inline-flex items-center justify-center gap-1.5 bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors h-8 px-3.5 text-[12.5px] font-semibold text-[#3F3F46] hover:text-[#18181B]"
                 >
                   <X size={13} /> Change
                 </button>
@@ -212,8 +212,8 @@ export default function CertificateBuilderPage() {
               </div>
             ) : issuedNo ? (
               <div className="text-center py-10">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.14),inset_0_-2px_0_#B8983C] [background:linear-gradient(155deg,#3D3B40_0%,#27272A_70%)] mx-auto mb-4">
-                  <Check size={28} className="text-[#E9D7A1]" />
+                <div className="w-14 h-14 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A] mx-auto mb-4">
+                  <Check size={28} className="text-[#B8983C]" />
                 </div>
                 <h3 className="font-bold text-lg text-[#18181B] mb-1">Certificate Issued</h3>
                 <p className="text-sm text-[#71717A]">The PDF has been downloaded.</p>
@@ -222,11 +222,11 @@ export default function CertificateBuilderPage() {
                 </p>
                 <div className="flex gap-3 justify-center mt-5">
                   <a href={`/verify/${encodeURIComponent(issuedNo)}`} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 h-9 px-4 rounded-full bg-white border border-[#E2DDD2] hover:border-[#CFC8B8] shadow-[0_1px_2px_rgba(15,23,42,.05)] active:scale-[0.97] transition text-sm font-semibold text-[#18181B]">
+                    className="flex items-center gap-1.5 h-9 px-4 bg-[#F5F5F5] border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors text-sm font-semibold text-[#18181B]">
                     Verify <ExternalLink size={13} />
                   </a>
                   <button onClick={() => { setSelectedType(null); setIssuedNo(null) }}
-                    className="h-9 px-4 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold">
+                    className="h-9 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold">
                     Another Certificate
                   </button>
                 </div>
@@ -238,9 +238,9 @@ export default function CertificateBuilderPage() {
                     const Icon = ICONS[c.icon] ?? FileQuestion
                     return (
                       <button key={c.type} onClick={() => pickType(c.type)}
-                        className="group flex items-start gap-3 p-3.5 rounded-[16px] bg-[#F7F5F1] border border-black/[.04] text-left hover:bg-white hover:border-black/10 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 transition">
-                        <div className="w-9 h-9 rounded-[11px] flex items-center justify-center flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.14),inset_0_-2px_0_#B8983C] [background:linear-gradient(155deg,#3D3B40_0%,#27272A_70%)]">
-                          <Icon size={17} className="text-[#E9D7A1]" />
+                        className="group flex items-start gap-3 p-3.5 bg-[#F5F5F5] border border-black/[.04] text-left hover:bg-white hover:border-black/10 hover:border-[#27272A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 transition-colors">
+                        <div className="w-9 h-9 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
+                          <Icon size={17} className="text-[#B8983C]" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-[#18181B]">{c.label}</p>
@@ -254,9 +254,9 @@ export default function CertificateBuilderPage() {
                 {recent.length > 0 && (
                   <div>
                     <p className={labelCls}>Recently Issued</p>
-                    <div className="rounded-[16px] overflow-hidden border border-black/[.06] divide-y divide-black/[.05]">
+                    <div className=" overflow-hidden border border-black/[.06] divide-y divide-black/[.05]">
                       {recent.slice(0, 5).map(r => (
-                        <div key={r.id} className="flex items-center justify-between gap-2 bg-[#F7F5F1] px-3.5 py-2.5">
+                        <div key={r.id} className="flex items-center justify-between gap-2 bg-[#F5F5F5] px-3.5 py-2.5">
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-[#18181B] truncate">
                               {CERT_TYPE_BY_KEY[r.cert_type as CertType]?.label ?? r.cert_type}
@@ -279,29 +279,29 @@ export default function CertificateBuilderPage() {
                 <div className="flex items-center gap-2">
                   <button onClick={() => { setSelectedType(null); setError(null) }}
                     aria-label="Back to certificate types"
-                    className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-white border border-[#E2DDD2] hover:border-[#CFC8B8] active:scale-95 transition">
+                    className="w-8 h-8 inline-flex items-center justify-center bg-white border border-[#D4D4D8] hover:border-[#A1A1AA] transition-colors">
                     <ChevronLeft size={16} className="text-[#27272A]" />
                   </button>
                   <span className="text-sm font-bold text-[#18181B]">{meta?.label}</span>
                 </div>
 
                 {error && (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm rounded-[14px]">{error}</div>
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 text-sm">{error}</div>
                 )}
 
                 {/* No-Due gate */}
                 {selectedType === 'no_due' && (
                   feesLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-[#71717A] px-4 py-3 bg-[#F7F5F1] border border-black/[.05] rounded-[14px]">
+                    <div className="flex items-center gap-2 text-sm text-[#71717A] px-4 py-3 bg-[#F5F5F5] border border-black/[.05]">
                       <Loader2 size={14} className="animate-spin" /> Checking dues…
                     </div>
                   ) : noDueBlocked ? (
-                    <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm rounded-[14px]">
+                    <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">
                       <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
                       <span>Outstanding dues for {year}. A No-Due certificate can only be issued once all fees are cleared.</span>
                     </div>
                   ) : (
-                    <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm rounded-[14px]">
+                    <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm">
                       <CheckCircle2 size={16} className="flex-shrink-0 mt-0.5" />
                       <span>All dues cleared for {year} — the No-Due certificate is available.</span>
                     </div>
@@ -349,7 +349,7 @@ export default function CertificateBuilderPage() {
                 ))}
 
                 <button onClick={handleGenerate} disabled={generating || noDueBlocked || feesLoading}
-                  className="w-full mt-2 h-11 px-4 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+                  className="w-full mt-2 h-11 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
                   {generating
                     ? <><Loader2 size={16} className="animate-spin" /> Generating…</>
                     : <><Download size={16} /> Generate &amp; Download</>

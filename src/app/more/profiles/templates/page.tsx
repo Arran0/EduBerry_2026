@@ -10,7 +10,7 @@ import {
 } from '@/lib/certificates'
 
 const input = 'border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
-const labelCls = 'block text-[12.5px] font-medium text-slate-600 mb-1.5'
+const labelCls = 'block text-[12.5px] font-medium text-[#52525B] mb-1.5'
 
 // Sample values so the editor preview reads like a real certificate without
 // needing a selected student.
@@ -92,22 +92,22 @@ export default function CertificateTemplatesPage() {
       <div data-page-theme="admin" style={{ minHeight: '100vh' }} className="px-4 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-14">
         <div className="max-w-6xl mx-auto">
           <button onClick={() => router.back()}
-            className="lg-pill inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 text-[12.5px] font-semibold text-slate-700 hover:text-slate-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
+            className="bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 text-[12.5px] font-semibold text-[#3F3F46] hover:text-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
             <ArrowLeft size={14} /> Back
           </button>
           <div className="flex items-center gap-3.5 mt-4 sm:mt-5 mb-5 sm:mb-6">
-            <div className="w-12 h-12 rounded-[14px] flex items-center justify-center flex-shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,.14),inset_0_-2px_0_#B8983C,0_12px_24px_-16px_rgba(15,23,42,.9)] [background:linear-gradient(155deg,#3D3B40_0%,#27272A_70%)]">
-              <Wand2 size={21} className="text-[#E9D7A1]" />
+            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
+              <Wand2 size={21} className="text-[#B8983C]" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-display text-[1.45rem] sm:text-[1.75rem] font-bold leading-[1.15] tracking-[-0.015em] text-[#1F1E22]">Certificate Templates</h1>
-              <p className="text-[13px] text-slate-500 mt-0.5">Write your own certificates, with placeholders filled from each student&apos;s record</p>
+              <h1 className="font-display text-[1.45rem] sm:text-[1.75rem] font-bold leading-[1.15] tracking-[-0.015em] text-[#18181B]">Certificate Templates</h1>
+              <p className="text-[13px] text-[#71717A] mt-0.5">Write your own certificates, with placeholders filled from each student&apos;s record</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5">
             {/* Template list */}
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-3 h-fit">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-3 h-fit">
               <button onClick={startNew}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 mb-2 bg-[#27272A] hover:bg-[#18181B] text-white text-sm font-medium rounded-lg transition-colors">
                 <Plus size={15} /> New Template
@@ -130,7 +130,7 @@ export default function CertificateTemplatesPage() {
 
             {/* Editor */}
             <div className="space-y-5">
-              <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-5 space-y-4">
+              <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>Template Name</label>
@@ -176,7 +176,7 @@ export default function CertificateTemplatesPage() {
               </div>
 
               {/* Live preview */}
-              <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-5">
+              <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252] mb-3 flex items-center gap-1.5">
                   <Eye size={12} /> Live Preview (sample values)
                 </p>

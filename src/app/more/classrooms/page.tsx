@@ -299,7 +299,7 @@ export default function ClassroomManagerPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 <Plus size={15} />
                 New classroom
@@ -307,7 +307,7 @@ export default function ClassroomManagerPage() {
               <button
                 onClick={() => setShowCreateForm(true)}
                 aria-label="New classroom"
-                className="sm:hidden w-10 h-10 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 <Plus size={18} />
               </button>
@@ -328,27 +328,27 @@ export default function ClassroomManagerPage() {
 
           {/* List */}
           {loading ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] py-16 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] py-16 text-center">
               <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
               <p className="text-sm text-[#71717A]">Loading classrooms…</p>
             </div>
           ) : total === 0 && !debouncedSearch ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-12 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-12 text-center">
               <BookOpen size={36} className="text-[#D4D4D8] mx-auto mb-3" />
               <p className="text-sm font-semibold text-[#18181B] mb-1">No classrooms yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first classroom to get started.</p>
               {isAdmin && (
-                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold mx-auto">
+                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                   <Plus size={14} /> New classroom
                 </button>
               )}
             </div>
           ) : total === 0 ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-10 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-10 text-center">
               <p className="text-sm text-[#71717A]">No classrooms match &ldquo;{classroomSearch}&rdquo;</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden">
               {/* Column headers */}
               <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3 text-[11.5px] font-semibold text-[#C9C9CF]">
                 <span className="w-2 flex-shrink-0" aria-hidden />
