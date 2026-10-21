@@ -92,8 +92,8 @@ export function WhatsAppPanel() {
     <div className="space-y-4 max-w-2xl">
       <div className={`${ADMIN.card} p-4 space-y-4`}>
         <div>
-          <p className="text-sm font-semibold text-[#27272A]">Meta WhatsApp Cloud API</p>
-          <p className="text-[11px] text-[#71717A] mt-1">
+          <p className="text-sm font-semibold text-[#13306B]">Meta WhatsApp Cloud API</p>
+          <p className="text-[11px] text-[#5B6676] mt-1">
             WhatsApp is used only for the messages where a missed push has real
             consequence: a child who didn&apos;t board, a child not dropped off, a
             serious delay, a trip change, and an emergency. Everything else goes
@@ -128,8 +128,8 @@ export function WhatsAppPanel() {
       </div>
 
       <div className={`${ADMIN.card} p-4`}>
-        <p className="text-sm font-semibold text-[#27272A]">Before messages will send</p>
-        <ol className="text-[11px] text-[#71717A] mt-2 space-y-1.5 list-decimal list-inside">
+        <p className="text-sm font-semibold text-[#13306B]">Before messages will send</p>
+        <ol className="text-[11px] text-[#5B6676] mt-2 space-y-1.5 list-decimal list-inside">
           <li>
             Meta requires every business-initiated message to use a template they have
             approved. The six templates EdZee sends are seeded with suggested copy —
@@ -202,8 +202,8 @@ export function DevicesPanel() {
   return (
     <div className="space-y-4">
       <div className={`${ADMIN.card} p-4`}>
-        <p className="text-sm font-semibold text-[#27272A]">Using the school&apos;s existing GPS</p>
-        <p className="text-[11px] text-[#71717A] mt-1.5">
+        <p className="text-sm font-semibold text-[#13306B]">Using the school&apos;s existing GPS</p>
+        <p className="text-[11px] text-[#5B6676] mt-1.5">
           AIS-140 units push over a raw TCP socket, which this app cannot accept
           directly. The standard requires devices to report to two servers at once,
           so point the <strong>second</strong> slot at a Traccar or flespi channel and
@@ -211,10 +211,10 @@ export function DevicesPanel() {
           backend keeps working untouched, and nothing has to be reconfigured away
           from compliance.
         </p>
-        <code className="block mt-2 text-[11px] bg-[#FAFAFA] border border-[#E4E4E7] rounded-lg px-2.5 py-2 text-[#52525B] break-all">
+        <code className="block mt-2 text-[11px] bg-[#F7F9FB] border border-[#E2E7EE] rounded-lg px-2.5 py-2 text-[#475264] break-all">
           POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/transport/ingest
         </code>
-        <p className="text-[11px] text-[#A1A1AA] mt-1.5">
+        <p className="text-[11px] text-[#94A0B1] mt-1.5">
           Each device gets a <strong>key id</strong> and a <strong>secret</strong>. Send the key id
           in <code>x-transport-key-id</code>, a unix time in <code>x-transport-timestamp</code>, and
           in <code>x-transport-signature</code> the value
@@ -249,7 +249,7 @@ export function DevicesPanel() {
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#71717A]">
+        <p className="text-xs text-[#5B6676]">
           {loading ? 'Loading…' : `${sources.length} source${sources.length === 1 ? '' : 's'}`}
         </p>
         <button className={ADMIN.darkBtn} onClick={() => setAdding(a => !a)}>
@@ -296,7 +296,7 @@ export function DevicesPanel() {
         }
       >
         {loading ? (
-          <div className="px-4 py-8 text-center text-xs text-[#A1A1AA]">Loading…</div>
+          <div className="px-4 py-8 text-center text-xs text-[#94A0B1]">Loading…</div>
         ) : sources.length === 0 ? (
           <EmptyRow
             icon={<Radio size={22} />}
@@ -314,8 +314,8 @@ export function DevicesPanel() {
                 }`} />
                 <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-[#27272A] truncate">{s.label}</p>
-                    <p className="text-[11px] text-[#71717A] truncate">
+                    <p className="text-sm font-semibold text-[#13306B] truncate">{s.label}</p>
+                    <p className="text-[11px] text-[#5B6676] truncate">
                       {s.vendor} · {s.external_id}
                       {s.ingest_key_prefix && ` · key ${s.ingest_key_prefix}`}
                     </p>
@@ -323,7 +323,7 @@ export function DevicesPanel() {
                       <p className="text-[11px] text-rose-600 truncate">{s.last_error}</p>
                     )}
                   </div>
-                  <span className="w-36 text-xs text-[#52525B] hidden sm:block truncate">
+                  <span className="w-36 text-xs text-[#475264] hidden sm:block truncate">
                     {vehicle ? vehicleLabel(vehicle) : 'Not assigned'}
                   </span>
                   <span className={`w-32 text-xs hidden sm:block ${
@@ -341,7 +341,7 @@ export function DevicesPanel() {
                         }
                         load()
                       }}
-                      className="p-1.5 rounded-md text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] transition-colors"
+                      className="p-1.5 rounded-md text-[#94A0B1] hover:text-[#13306B] hover:bg-[#F1F4F8] transition-colors"
                       aria-label="Rotate key" title="Rotate key"
                     >
                       <KeyRound size={14} />
@@ -349,7 +349,7 @@ export function DevicesPanel() {
                     <button
                       onClick={async () => { await updateSource(s.id, { active: !s.active }); load() }}
                       className={`p-1.5 rounded-md transition-colors ${
-                        s.active ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[#A1A1AA] hover:bg-[#F4F4F5]'
+                        s.active ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[#94A0B1] hover:bg-[#F1F4F8]'
                       }`}
                       aria-label={s.active ? 'Disable' : 'Enable'}
                       title={s.active ? 'Disable' : 'Enable'}
@@ -361,7 +361,7 @@ export function DevicesPanel() {
                         if (!confirm(`Remove “${s.label}”? Its stored history stays.`)) return
                         await deleteSource(s.id); load()
                       }}
-                      className="p-1.5 rounded-md text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      className="p-1.5 rounded-md text-[#94A0B1] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                       aria-label="Remove"
                     >
                       <Trash2 size={14} />
@@ -381,7 +381,7 @@ function SecretRow({ secret }: { secret: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <div className="flex items-center gap-2">
-      <code className="flex-1 min-w-0 text-[11px] bg-white border border-amber-200 rounded-lg px-2.5 py-2 text-[#27272A] break-all">
+      <code className="flex-1 min-w-0 text-[11px] bg-white border border-amber-200 rounded-lg px-2.5 py-2 text-[#13306B] break-all">
         {secret}
       </code>
       <button
@@ -484,8 +484,8 @@ export function CardsPanel() {
   return (
     <div className="space-y-4">
       <div className={`${ADMIN.card} p-4`}>
-        <p className="text-sm font-semibold text-[#27272A]">How a card boards a child</p>
-        <p className="text-[11px] text-[#71717A] mt-1 max-w-3xl">
+        <p className="text-sm font-semibold text-[#13306B]">How a card boards a child</p>
+        <p className="text-[11px] text-[#5B6676] mt-1 max-w-3xl">
           A scan resolves the card to a student and then boards them exactly as a tap
           would — it cannot do anything the attendant could not. The attendant still sees
           the name that comes back, which is what catches a child carrying a friend&apos;s
@@ -571,7 +571,7 @@ export function CardsPanel() {
 
       <div className="flex items-center justify-between gap-2">
         <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A0B1]" />
           <input className={ADMIN.input} value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Find a student or a label" />
         </div>
@@ -587,7 +587,7 @@ export function CardsPanel() {
         <span className={`${SHEET.headCell} w-28 text-right`}>Actions</span>
       </>}>
         {loading ? (
-          <div className="px-4 py-8 text-center text-xs text-[#A1A1AA]">Loading cards…</div>
+          <div className="px-4 py-8 text-center text-xs text-[#94A0B1]">Loading cards…</div>
         ) : filtered.length === 0 ? (
           <EmptyRow
             icon={<CreditCard size={22} />}
@@ -596,22 +596,22 @@ export function CardsPanel() {
           />
         ) : filtered.map(c => (
           <div key={c.id} className={SHEET.row}>
-            <div className={`${SHEET.bar} ${c.active ? 'bg-emerald-400' : 'bg-[#E4E4E7]'}`} />
+            <div className={`${SHEET.bar} ${c.active ? 'bg-emerald-400' : 'bg-[#E2E7EE]'}`} />
             <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#27272A] truncate">
+                <p className="text-sm font-semibold text-[#13306B] truncate">
                   {c.student?.full_name ?? 'Unknown student'}
                 </p>
-                <p className="text-[11px] text-[#71717A] truncate">
+                <p className="text-[11px] text-[#5B6676] truncate">
                   {c.label || 'No label'}
                   {c.student?.grade ? ` · ${c.student.grade}${c.student.section ?? ''}` : ''}
                 </p>
               </div>
-              <span className="w-32 text-xs text-[#52525B] hidden sm:block truncate">
+              <span className="w-32 text-xs text-[#475264] hidden sm:block truncate">
                 {CREDENTIAL_LABELS[c.method]}
               </span>
-              <span className="w-36 text-xs hidden sm:block truncate text-[#71717A]">
-                {!c.active ? <span className="text-[#A1A1AA]">Revoked</span>
+              <span className="w-36 text-xs hidden sm:block truncate text-[#5B6676]">
+                {!c.active ? <span className="text-[#94A0B1]">Revoked</span>
                   : c.last_used_at
                     ? new Date(c.last_used_at).toLocaleDateString([], { dateStyle: 'medium' })
                     : 'Never'}
@@ -624,7 +624,7 @@ export function CardsPanel() {
                       await revokeCredential(c.id)
                       load()
                     }}
-                    className="p-1.5 rounded-md text-[#A1A1AA] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="p-1.5 rounded-md text-[#94A0B1] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                     aria-label="Revoke card" title="Revoke card"
                   >
                     <Ban size={14} />
@@ -676,14 +676,14 @@ export function GtfsPanel() {
   return (
     <div className="space-y-4">
       <div className={`${ADMIN.card} p-4`}>
-        <p className="text-sm font-semibold text-[#27272A]">GTFS — the open timetable format</p>
-        <p className="text-[11px] text-[#71717A] mt-1 max-w-3xl">
+        <p className="text-sm font-semibold text-[#13306B]">GTFS — the open timetable format</p>
+        <p className="text-[11px] text-[#5B6676] mt-1 max-w-3xl">
           GTFS is what transport authorities and map apps read. Routes, stops, running
           days and stop times come straight out of what you have already set up here —
           no separate entry, and no reformatting. Declared holidays are exported as
           service exceptions, so a consumer knows not to expect a bus on Deepavali.
         </p>
-        <p className="text-[11px] text-[#71717A] mt-2 max-w-3xl">
+        <p className="text-[11px] text-[#5B6676] mt-2 max-w-3xl">
           Live positions are available too, as GTFS-Realtime. A bus whose GPS is not
           currently reporting is left out of that feed rather than published at its last
           known position, because a consumer cannot tell a stale position from a fresh
@@ -694,7 +694,7 @@ export function GtfsPanel() {
       {error && <FormError message={error} />}
 
       {loading ? (
-        <div className="px-4 py-10 text-center text-xs text-[#A1A1AA]">
+        <div className="px-4 py-10 text-center text-xs text-[#94A0B1]">
           <Loader2 size={16} className="animate-spin mx-auto mb-2" /> Building the feed…
         </div>
       ) : feed ? (
@@ -702,8 +702,8 @@ export function GtfsPanel() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4">
             {gtfsSummary(feed).map(s => (
               <div key={s.label} className={`${ADMIN.card} px-3 py-2.5`}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">{s.label}</p>
-                <p className="text-xl font-bold text-[#27272A] tabular-nums mt-0.5">{s.count}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#94A0B1]">{s.label}</p>
+                <p className="text-xl font-bold text-[#13306B] tabular-nums mt-0.5">{s.count}</p>
               </div>
             ))}
           </div>
@@ -733,13 +733,13 @@ export function GtfsPanel() {
               <RefreshCw size={13} /> Rebuild
             </button>
             {feed.routes.length === 0 && (
-              <span className="text-[11px] text-[#A1A1AA]">
+              <span className="text-[11px] text-[#94A0B1]">
                 Nothing to export yet — create a route and a schedule first.
               </span>
             )}
           </div>
 
-          <p className="text-[11px] text-[#A1A1AA]">
+          <p className="text-[11px] text-[#94A0B1]">
             Built {new Date(feed.generated_at).toLocaleString()}. The live snapshot is a
             single moment; a consumer wanting a continuous feed should poll it.
           </p>

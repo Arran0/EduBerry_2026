@@ -87,7 +87,7 @@ export default function BusModal({
           // the backdrop or the sheet: blurred layers animating in over the
           // page's own glass make Chrome flash black frames. The sheet keeps
           // its glass look from the fill, rim and highlight instead.
-          className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center sm:p-5 bg-[#1c1a1e]/45"
+          className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center sm:p-5 bg-[#0B2150]/45"
           onClick={onClose}
           data-page-theme="bus"
         >
@@ -123,7 +123,7 @@ export default function BusModal({
                   <button
                     onClick={confirm.onClick}
                     disabled={confirm.disabled || confirm.busy}
-                    className="inline-flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-full text-[13px] font-semibold text-white bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition disabled:opacity-45"
+                    className="inline-flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-full text-[13px] font-semibold text-white bg-gradient-to-b from-[#1B3F8A] to-[#13306B] shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition disabled:opacity-45"
                   >
                     {confirm.busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} />}
                     {confirm.busy ? 'Saving' : confirm.label ?? 'Save'}

@@ -201,7 +201,7 @@ export default function ScheduleEditor({
                   onClick={() => toggleDay(d.value)}
                   aria-pressed={on}
                   className={`h-8 min-w-[3rem] px-3 rounded-full text-xs font-semibold transition ${
-                    on ? 'bg-gradient-to-b from-[#3D3B40] to-[#27272A] text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-800'
+                    on ? 'bg-gradient-to-b from-[#1B3F8A] to-[#13306B] text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   {d.short}
@@ -235,14 +235,14 @@ export default function ScheduleEditor({
 
         <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-6">
           <label className="flex items-start gap-2 text-[12.5px] text-slate-700">
-            <input type="checkbox" className="mt-0.5 accent-[#3D3B40]" checked={form.auto_start} onChange={e => set('auto_start', e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 accent-[#1B3F8A]" checked={form.auto_start} onChange={e => set('auto_start', e.target.checked)} />
             <span>
               Start the trip automatically when the bus moves
               <span className="block text-[11px] text-slate-500">Otherwise the driver taps Start.</span>
             </span>
           </label>
           <label className="flex items-start gap-2 text-[12.5px] text-slate-700">
-            <input type="checkbox" className="mt-0.5 accent-[#3D3B40]" checked={form.active} onChange={e => set('active', e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 accent-[#1B3F8A]" checked={form.active} onChange={e => set('active', e.target.checked)} />
             <span>
               Running
               <span className="block text-[11px] text-slate-500">Untick to stop this route making trips for a while — a bus in for repairs, a holiday week.</span>

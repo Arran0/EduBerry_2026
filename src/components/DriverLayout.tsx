@@ -73,7 +73,7 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
             </p>
             <button
               onClick={() => router.push('/login')}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-semibold py-3 px-6 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-md"
+              className="w-full flex items-center justify-center gap-2 bg-[#13306B] text-white font-semibold py-3 px-6 rounded-2xl hover:bg-[#0B2150] active:scale-95 transition-all shadow-md"
             >
               <LogIn size={18} />
               Sign in again
@@ -91,26 +91,29 @@ export default function DriverLayout({ children }: DriverLayoutProps) {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
-      {/* Slim driver header (no app Navbar) */}
-      <header className={`sticky top-0 z-30 backdrop-blur-xl border-b border-slate-200 shadow-sm transition-colors duration-300 ${scrolled ? 'bg-white/60' : 'bg-white'}`}>
+    // The bus theme: yellow, navy and grey, the same as the family and admin
+    // screens, with the page wash from globals.css behind the glass.
+    <div data-page-theme="bus" className="flex min-h-[100dvh] flex-col">
+      {/* Slim driver header (no app Navbar): navy glass, so it reads as the
+          bus app's chrome over whatever scrolls beneath it. */}
+      <header className={`sticky top-0 z-30 backdrop-blur-xl text-white transition-colors duration-300 shadow-[inset_0_-1px_0_rgba(255,255,255,.08),0_10px_24px_-18px_rgba(11,33,80,.8)] ${scrolled ? 'bg-[#13306B]/85' : 'bg-[#13306B]'}`}>
         <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-gradient-to-br from-orange-500 to-amber-600 flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-[#FFC72C] shadow-[inset_0_1px_0_rgba(255,255,255,.6)] flex-shrink-0">
               {branding.logoUrl
                 ? <img src={branding.logoUrl} alt="Logo" className="object-cover w-full h-full" />
-                : <Bus size={18} className="text-white" />}
+                : <Bus size={18} className="text-[#13306B]" />}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate leading-tight">
+              <p className="text-sm font-semibold text-white truncate leading-tight">
                 {profile?.full_name ?? 'Driver'}
               </p>
-              <p className="text-[11px] text-slate-400 leading-tight">Bus Driver</p>
+              <p className="text-[11px] text-white/60 leading-tight">Bus driver</p>
             </div>
           </div>
           <button
             onClick={() => signOut()}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-white/75 hover:text-white px-2.5 py-1.5 rounded-full hover:bg-white/10 transition-colors"
           >
             <LogOut size={15} /> Sign out
           </button>

@@ -30,21 +30,21 @@ export default function DriverBaseSalariesSection() {
     <>
       <div className="flex items-center gap-2 mb-3">
         <h2 className={ADMIN.label}>Base salaries</h2>
-        <span className="text-[10px] text-[#A1A1AA]">· set monthly base per driver</span>
+        <span className="text-[10px] text-[#94A0B1]">· set monthly base per driver</span>
       </div>
 
       {loading ? (
         <div className="text-center py-8"><div className="spinner mx-auto mb-3" /></div>
       ) : drivers.length === 0 ? (
-        <div className={`${ADMIN.card} p-6 text-center text-sm text-[#71717A]`}>
+        <div className={`${ADMIN.card} p-6 text-center text-sm text-[#5B6676]`}>
           No driver accounts yet.
         </div>
       ) : (
         <Sheet
           columns={
             <>
-              <span className="flex-1 ml-11 text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA]">Driver</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A1AA] text-right pr-2">Monthly base / Active</span>
+              <span className="flex-1 ml-11 text-[10px] font-bold uppercase tracking-widest text-[#94A0B1]">Driver</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#94A0B1] text-right pr-2">Monthly base / Active</span>
             </>
           }
         >
@@ -82,25 +82,25 @@ function BaseRow({ person, existing, onSaved }: {
 
   return (
     <div className={SHEET.row}>
-      <div className={`${SHEET.bar} ${active && existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
+      <div className={`${SHEET.bar} ${active && existing ? 'bg-[#F5B800]' : 'bg-transparent'}`} />
       <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5">
         <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={32} userId={person.id} />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
-          <p className="text-[11px] text-[#A1A1AA]">{getDisplayRole(person)}</p>
+          <p className="font-semibold text-[#0B2150] text-sm truncate">{person.full_name}</p>
+          <p className="text-[11px] text-[#94A0B1]">{getDisplayRole(person)}</p>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="relative">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] text-xs">₹</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A0B1] text-xs">₹</span>
             <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-24 bg-white border border-[#E4E4E7] rounded-lg pl-5 pr-2 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
+              className="w-24 bg-white border border-[#E2E7EE] rounded-lg pl-5 pr-2 py-1.5 text-xs tabular-nums text-[#13306B] focus:outline-none focus:border-[#13306B] transition-colors" />
           </div>
           <label className="hidden sm:flex items-center gap-1 cursor-pointer select-none" title="Include in pay cycles">
             <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}
-              className="w-3.5 h-3.5 accent-[#27272A]" />
-            <span className="text-[11px] text-[#71717A]">Active</span>
+              className="w-3.5 h-3.5 accent-[#13306B]" />
+            <span className="text-[11px] text-[#5B6676]">Active</span>
           </label>
           <button onClick={save} disabled={saving || !dirty}
             className={`${ADMIN.darkBtn} text-[11px] px-2.5 py-1.5 disabled:opacity-40`}>

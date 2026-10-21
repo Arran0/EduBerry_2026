@@ -23,7 +23,7 @@ import type { RouteFeeMode, TransportAssignment, TransportRoute, TransportStop }
 import { BUS, EmptyNote, GBTN, GlassSegments } from './glass'
 
 const MONEY =
-  'w-full h-7 rounded-md bg-slate-50 hover:bg-slate-100 border border-transparent pl-5 pr-2 text-[13px] text-right tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
+  'w-full h-7 rounded-md bg-slate-50 hover:bg-slate-100 border border-transparent pl-5 pr-2 text-[13px] text-right tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#F5B800] focus:ring-2 focus:ring-[#F5B800]/20 transition'
 
 const toNum = (s: string): number | null => {
   const t = s.trim()
@@ -286,14 +286,14 @@ function ModeCard({ icon: Icon, title, detail, onClick }: { icon: React.ElementT
   return (
     <button
       onClick={onClick}
-      className="group text-left rounded-2xl border border-slate-200/80 bg-white/80 p-4 transition hover:bg-white hover:border-[#B8983C]/60 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-18px_rgba(15,23,42,.5)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+      className="group text-left rounded-2xl border border-slate-200/80 bg-white/80 p-4 transition hover:bg-white hover:border-[#F5B800]/60 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-18px_rgba(15,23,42,.5)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B800]/60"
     >
       <span className="icon-chip w-10 h-10" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
         <Icon size={17} className="relative z-10 text-white" />
       </span>
       <span className="mt-3 block text-sm font-bold text-slate-900">{title}</span>
       <span className="mt-1 block text-[12px] leading-snug text-slate-500">{detail}</span>
-      <span className="mt-3 inline-flex text-[12px] font-semibold text-[#8B6F47] group-hover:underline underline-offset-2">Use this →</span>
+      <span className="mt-3 inline-flex text-[12px] font-semibold text-[#2E6BE6] group-hover:underline underline-offset-2">Use this →</span>
     </button>
   )
 }

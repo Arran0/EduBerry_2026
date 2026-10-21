@@ -496,7 +496,7 @@ function RouteChips({ items, onPick }: {
         <button
           key={route.id}
           onClick={() => onPick(route.id)}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-1.5 py-px text-[10.5px] font-semibold text-slate-700 hover:bg-white hover:border-[#B8983C]/60 transition truncate max-w-[9rem]"
+          className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-1.5 py-px text-[10.5px] font-semibold text-slate-700 hover:bg-white hover:border-[#F5B800]/60 transition truncate max-w-[9rem]"
           title={`Open ${route.name} above`}
         >
           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: route.color }} />

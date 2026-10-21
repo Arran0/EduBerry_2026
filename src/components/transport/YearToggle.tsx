@@ -30,8 +30,8 @@ export default function YearToggle() {
   // beside the title on the narrowest phone instead of pushing past the edge.
   return (
     <div className="flex items-center gap-1">
-      <label className={`relative inline-flex items-center gap-1 h-[30px] pl-2.5 pr-6 rounded-full ring-1 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] cursor-pointer focus-within:ring-2 focus-within:ring-[#B8983C] ${tone}`}>
-        <CalendarRange size={12} className={`flex-shrink-0 ${isViewingPastYear ? 'text-amber-700' : 'text-[#8B6F47]'}`} />
+      <label className={`relative inline-flex items-center gap-1 h-[30px] pl-2.5 pr-6 rounded-full ring-1 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] cursor-pointer focus-within:ring-2 focus-within:ring-[color:var(--bus-accent,#B8983C)] ${tone}`}>
+        <CalendarRange size={12} className={`flex-shrink-0 ${isViewingPastYear ? 'text-amber-700' : 'text-[color:var(--bus-year-icon,#8B6F47)]'}`} />
         <span className="text-[12px] font-bold tabular-nums leading-none">{year.code}</span>
         {/* The real control, invisible over the capsule: the capsule keeps the
             width of the code alone, and the option list still names the

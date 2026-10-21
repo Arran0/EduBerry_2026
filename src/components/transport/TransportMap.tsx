@@ -41,7 +41,7 @@ const BUS_ICON = makeIcon(
  * only swaps the DOM when the HTML actually changes.
  */
 function fleetBusIcon(color: string, opts: { selected?: boolean; live?: boolean; late?: boolean }) {
-  const ring = opts.selected ? '#18181B' : '#fff'
+  const ring = opts.selected ? '#0B2150' : '#fff'
   const size = opts.selected ? 46 : 40
   const pulse = opts.live
     ? `<span style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:busPulse 1.8s ease-out infinite;"></span>`
@@ -81,12 +81,14 @@ function stopIcon(seq: number, opts: { selected?: boolean; school?: boolean } = 
   const bg = opts.school
     ? 'linear-gradient(135deg,#34d399,#059669)'
     : opts.selected
-      ? 'linear-gradient(135deg,#27272A,#18181B)'
-      : 'linear-gradient(135deg,#fbbf24,#B8983C)'
+      ? 'linear-gradient(135deg,#13306B,#0B2150)'
+      : 'linear-gradient(135deg,#FFD54F,#F5B800)'
+  // Navy on the yellow pin: white on yellow is unreadable at 12px.
+  const ink = opts.school || opts.selected ? '#fff' : '#13306B'
   const label = opts.school ? '🏫' : String(seq)
   const size = opts.selected ? 32 : 28
   return makeIcon(
-    `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:${opts.school ? 13 : 12}px;font-weight:700;font-family:system-ui,sans-serif;">${label}</div>`,
+    `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:${ink};font-size:${opts.school ? 13 : 12}px;font-weight:700;font-family:system-ui,sans-serif;">${label}</div>`,
     size,
   )
 }
@@ -282,7 +284,7 @@ export default function TransportMap({
   onMapClick,
   onStopDragEnd,
   path,
-  pathColor = '#B8983C',
+  pathColor = '#F5B800',
   bus = null,
   buses,
   selectedBusId = null,
@@ -356,13 +358,13 @@ export default function TransportMap({
             {showFences && s.shape === 'polygon' && s.polygon?.length ? (
               <Polygon
                 positions={s.polygon.map(p => [p.lat, p.lng] as [number, number])}
-                pathOptions={{ color: '#B8983C', weight: 1, fillOpacity: 0.1 }}
+                pathOptions={{ color: '#F5B800', weight: 1, fillOpacity: 0.1 }}
               />
             ) : showFences ? (
               <Circle
                 center={[s.lat, s.lng]}
                 radius={s.radius_m}
-                pathOptions={{ color: '#B8983C', weight: 1, fillOpacity: 0.08 }}
+                pathOptions={{ color: '#F5B800', weight: 1, fillOpacity: 0.08 }}
               />
             ) : null}
             <Marker
@@ -402,7 +404,7 @@ export default function TransportMap({
           <Marker
             key={b.id}
             position={[b.lat, b.lng]}
-            icon={fleetBusIcon(b.color ?? '#B8983C', { selected: b.id === selectedBusId, live: b.live, late: b.late })}
+            icon={fleetBusIcon(b.color ?? '#F5B800', { selected: b.id === selectedBusId, live: b.live, late: b.late })}
             zIndexOffset={b.id === selectedBusId ? 1000 : 0}
             eventHandlers={{ click: () => onBusClick?.(b.id) }}
           >

@@ -77,14 +77,14 @@ export default function FeeCollectionSummary({ summary, activeKey, onSelect, tod
         const clickable = c.filterKey && onSelect
         const base =
           c.tone === 'dark'
-            ? 'bg-[#27272A] border-[#27272A]'
+            ? 'bg-[#13306B] border-[#13306B]'
             : c.tone === 'muted'
-            ? 'bg-[#F4F2EC] border-[#E7E2D8]'
-            : 'bg-white border-[#E4E4E7]'
-        const labelCls = c.tone === 'dark' ? 'text-[#A1A1AA]' : 'text-[#71717A]'
-        const valueCls = c.tone === 'dark' ? 'text-white' : 'text-[#18181B]'
-        const subCls = c.tone === 'dark' ? 'text-[#8A8A93]' : 'text-[#A1A1AA]'
-        const iconCls = c.tone === 'dark' ? 'text-[#B8983C]' : c.tone === 'muted' ? 'text-[#A8896B]' : 'text-[#A1A1AA]'
+            ? 'bg-[#F1F4F8] border-[#E2E7EE]'
+            : 'bg-white border-[#E2E7EE]'
+        const labelCls = c.tone === 'dark' ? 'text-[#94A0B1]' : 'text-[#5B6676]'
+        const valueCls = c.tone === 'dark' ? 'text-white' : 'text-[#0B2150]'
+        const subCls = c.tone === 'dark' ? 'text-[#7A8597]' : 'text-[#94A0B1]'
+        const iconCls = c.tone === 'dark' ? 'text-[#8A6100]' : c.tone === 'muted' ? 'text-[#5B6676]' : 'text-[#94A0B1]'
         const Tag = clickable ? 'button' : 'div'
         return (
           <Tag
@@ -92,7 +92,7 @@ export default function FeeCollectionSummary({ summary, activeKey, onSelect, tod
             onClick={clickable ? () => onSelect!(c.filterKey!) : undefined}
             className={`text-left rounded-xl border p-3.5 sm:p-4 shadow-sm transition-all flex flex-col justify-between min-h-[88px] ${base} ${
               clickable ? 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer' : ''
-            } ${active ? 'ring-2 ring-[#B8983C] ring-offset-1 ring-offset-[#FDFCF9]' : ''}`}
+            } ${active ? 'ring-2 ring-[#F5B800] ring-offset-1 ring-offset-[#F5F7FA]' : ''}`}
           >
             <div className="flex items-center justify-between mb-1.5 sm:mb-2">
               <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${labelCls}`}>{c.label}</span>

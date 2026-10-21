@@ -5,8 +5,8 @@
  *
  * The same material system the admin home's School Overview uses (globals.css:
  * .lg-deck / .lg-content / .lg-pill / .lg-tooltip), in the bus page's own
- * palette — charcoal and bronze from the banner, honey gold for the active
- * state. The rule carried over from home: glass is the chrome (the sheet a
+ * palette — route navy and signal blue for the chrome, school-bus yellow for
+ * the active state. The rule carried over from home: glass is the chrome (the sheet a
  * section sits on, the pill a control lives in); what people read sits on a
  * solid `.lg-content` card on top of it. Two layers, never more.
  */
@@ -17,18 +17,28 @@ import type { LucideIcon } from 'lucide-react'
 
 export const EASE = [0.16, 1, 0.3, 1] as const
 
-/** The bus palette, in one place. */
+/**
+ * The bus palette, in one place: school-bus yellow, route navy, asphalt grey.
+ *
+ * Yellow is the signal — what is moving, what is selected, what needs a tap —
+ * so it is spent sparingly. Navy is the ink and the dark surfaces. Grey is
+ * everything that should recede. Yellow is never used for text on white
+ * (it fails contrast); `goldText` is its legible ink.
+ *
+ * The keys keep their old names so every caller keeps working.
+ */
 export const BUS = {
-  ink: '#27272A',
-  charcoal: '#3D3B40',
-  bronze: '#8B6F47',
-  taupe: '#A8896B',
-  gold: '#B8983C',
-  goldSoft: '#E9DDBB',
+  ink: '#13306B',
+  charcoal: '#1B3F8A',
+  bronze: '#2E6BE6',
+  taupe: '#5B6676',
+  gold: '#FFC72C',
+  goldSoft: '#FFE7A0',
+  goldText: '#8A6100',
   /** Riders: dropped off / aboard / neither — shared by every rider bar. */
   dropped: '#10b981',
-  aboard: '#B8983C',
-  pending: '#D4D4D8',
+  aboard: '#FFC72C',
+  pending: '#CBD3DD',
 }
 
 /**
@@ -148,7 +158,7 @@ export function GlassButtonGroup({ items, className = '', compact = false }: {
           <button
             key={it.key}
             onClick={it.onClick}
-            className={`relative inline-flex items-center gap-1.5 h-8 rounded-full font-semibold whitespace-nowrap ${compact ? 'px-2 sm:px-3 text-[11.5px] sm:text-[12.5px]' : 'px-3 text-[12.5px]'} text-slate-700 hover:bg-white hover:text-slate-900 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60`}
+            className={`relative inline-flex items-center gap-1.5 h-8 rounded-full font-semibold whitespace-nowrap ${compact ? 'px-2 sm:px-3 text-[11.5px] sm:text-[12.5px]' : 'px-3 text-[12.5px]'} text-slate-700 hover:bg-white hover:text-slate-900 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))]`}
           >
             {Icon && <Icon size={14} className={compact ? 'hidden sm:block' : ''} />}
             <span className={it.hideLabelOnMobile ? 'hidden sm:inline' : ''}>{it.label}</span>
@@ -165,8 +175,9 @@ export function GlassButtonGroup({ items, className = '', compact = false }: {
 }
 
 /**
- * Segmented control in glass, with a sliding honey-gold thumb — the iOS
- * segmented control, in the bus palette.
+ * Segmented control in glass, with a sliding thumb — the iOS segmented
+ * control. Its colours come from CSS variables (`--seg-*`, globals.css) so the
+ * fee and salary apps that borrow it keep their own palette.
  */
 export function GlassSegments<T extends string>({ items, value, onChange, className = '', size = 'md', layoutId, stretch = false }: {
   items: { key: T; label: string; icon?: LucideIcon; count?: number | null }[]
@@ -191,7 +202,7 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
             role="tab"
             aria-selected={active}
             onClick={() => onChange(it.key)}
-            className={`relative inline-flex ${stretch ? 'flex-1 sm:flex-none !px-2 sm:!px-3.5' : 'flex-shrink-0'} items-center justify-center gap-1.5 rounded-full font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${h} ${
+            className={`relative inline-flex ${stretch ? 'flex-1 sm:flex-none !px-2 sm:!px-3.5' : 'flex-shrink-0'} items-center justify-center gap-1.5 rounded-full font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))] ${h} ${
               active ? 'text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -199,12 +210,12 @@ export function GlassSegments<T extends string>({ items, value, onChange, classN
               <motion.span
                 layoutId={layoutId}
                 className="absolute inset-0 rounded-full"
-                style={{ background: `linear-gradient(150deg, ${BUS.charcoal}, ${BUS.ink})`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18), 0 4px 10px -4px rgba(15,23,42,.45)' }}
+                style={{ background: 'linear-gradient(150deg, var(--seg-from, #3D3B40), var(--seg-to, #27272A))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18), 0 4px 10px -4px rgba(15,23,42,.45)' }}
                 transition={{ type: 'spring', stiffness: 420, damping: 34 }}
               />
             )}
             <span className="relative z-10 inline-flex items-center gap-1.5">
-              {Icon && <Icon size={size === 'sm' ? 13 : 14} className={`${active ? 'text-[#E9DDBB]' : ''} ${stretch ? 'hidden sm:block' : ''}`} />}
+              {Icon && <Icon size={size === 'sm' ? 13 : 14} className={`${active ? 'text-[color:var(--seg-icon,#E9DDBB)]' : ''} ${stretch ? 'hidden sm:block' : ''}`} />}
               {it.label}
               {it.count != null && (
                 <span className={`tabular-nums text-[10.5px] font-bold ${active ? 'text-white/70' : 'text-slate-400'}`}>{it.count}</span>
@@ -234,7 +245,7 @@ export function GlassTileButton({ icon: Icon, label, detail, onClick, status }: 
     <button
       onClick={onClick}
       title={detail}
-      className="group lg-content relative w-full flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 px-1.5 py-2.5 sm:p-3 text-center sm:text-left transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+      className="group lg-content relative w-full flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 px-1.5 py-2.5 sm:p-3 text-center sm:text-left transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))]"
     >
       <span className="icon-chip w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0" style={{ background: `linear-gradient(135deg, ${BUS.charcoal}, ${BUS.bronze})` }}>
         <Icon size={15} className="relative z-10 text-white" />
@@ -275,16 +286,16 @@ export function LiveDot({ label = 'Live', tone = 'live', hideLabelOnMobile = fal
 /** Primary / secondary buttons in the glass language. */
 export const GBTN = {
   primary:
-    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] hover:from-[#46444A] hover:to-[#2E2E31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-b from-[color:var(--gbtn-from,#3D3B40)] to-[color:var(--gbtn-to,#27272A)] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] hover:from-[color:var(--gbtn-hover-from,#46444A)] hover:to-[color:var(--gbtn-hover-to,#2E2E31)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))]',
   secondary:
-    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-slate-700 bg-white/80 border border-white shadow-[0_1px_2px_rgba(15,23,42,.06),0_6px_14px_-10px_rgba(15,23,42,.35)] hover:bg-white hover:text-slate-900 transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-slate-700 bg-white/80 border border-white shadow-[0_1px_2px_rgba(15,23,42,.06),0_6px_14px_-10px_rgba(15,23,42,.35)] hover:bg-white hover:text-slate-900 transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))]',
   icon:
-    'inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white transition active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60',
+    'inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white transition active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--bus-ring,rgba(184,152,60,0.6))]',
 }
 
 /** A soft, rounded input to match the glass controls. */
 export const GINPUT =
-  'w-full h-9 rounded-xl bg-white/90 border border-slate-200/80 px-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
+  'w-full h-9 rounded-xl bg-white/90 border border-slate-200/80 px-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[color:var(--bus-accent,#B8983C)] focus:ring-2 focus:ring-[color:var(--bus-ring-soft,rgba(184,152,60,0.2))] transition'
 
 /** An empty state on a content card. */
 export function EmptyNote({ icon: Icon, title, detail, action }: {

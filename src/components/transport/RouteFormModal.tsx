@@ -137,7 +137,7 @@ export default function RouteFormModal({
                       aria-label={`Colour ${c}`}
                       aria-pressed={form.color === c}
                       className={`w-6 h-6 rounded-full transition-transform ${
-                        form.color === c ? 'ring-2 ring-offset-2 ring-[#3D3B40] scale-110' : 'hover:scale-110'
+                        form.color === c ? 'ring-2 ring-offset-2 ring-[#1B3F8A] scale-110' : 'hover:scale-110'
                       }`}
                       style={{ background: c }}
                     />

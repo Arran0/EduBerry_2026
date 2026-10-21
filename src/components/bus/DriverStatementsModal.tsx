@@ -159,21 +159,21 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
       >
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E4E4E7] flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E2E7EE] flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             {slipMode && (
               <button onClick={() => setSlipMode(false)} title="Back"
-                className="p-1.5 -ml-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
+                className="p-1.5 -ml-1.5 text-[#94A0B1] hover:text-[#13306B] hover:bg-[#F1F4F8] rounded-lg flex-shrink-0">
                 <ChevronLeft size={18} />
               </button>
             )}
             <Avatar avatarUrl={driver.avatar_url} name={driver.full_name} size={36} userId={driver.id} />
             <div className="min-w-0">
-              <p className="font-bold text-[#18181B] text-sm truncate">{driver.full_name}</p>
-              <p className="text-[11px] text-[#71717A]">{getDisplayRole(driver)}</p>
+              <p className="font-bold text-[#0B2150] text-sm truncate">{driver.full_name}</p>
+              <p className="text-[11px] text-[#5B6676]">{getDisplayRole(driver)}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-[#A1A1AA] hover:text-[#27272A] hover:bg-[#F4F4F5] rounded-lg flex-shrink-0">
+          <button onClick={onClose} className="p-1.5 text-[#94A0B1] hover:text-[#13306B] hover:bg-[#F1F4F8] rounded-lg flex-shrink-0">
             <X size={16} />
           </button>
         </div>
@@ -181,11 +181,11 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
         {slipMode ? (
           /* ── Salary slip picker ── */
           <div className="p-4 overflow-y-auto">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A] mb-3">Salary Slips</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#5B6676] mb-3">Salary Slips</p>
             {records.length === 0 ? (
               <div className="py-10 text-center">
-                <Receipt size={28} className="mx-auto mb-3 text-[#D4D4D8]" />
-                <p className="text-sm text-[#71717A]">No payslips yet.</p>
+                <Receipt size={28} className="mx-auto mb-3 text-[#CBD3DD]" />
+                <p className="text-sm text-[#5B6676]">No payslips yet.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -193,20 +193,20 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
                   const period = r.cycle ? formatPeriod(r.cycle.period_month, r.cycle.period_year) : 'Salary'
                   return (
                     <button key={r.id} onClick={() => openSlip(r)} disabled={busy === r.id}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-[#E4E4E7] bg-white hover:border-[#A8896B] hover:bg-[#FBFAF7] transition-all text-left disabled:opacity-50">
-                      <div className="w-9 h-9 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
-                        <Banknote size={16} className="text-[#B8983C]" />
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-[#E2E7EE] bg-white hover:border-[#5B6676] hover:bg-[#F7F9FB] transition-all text-left disabled:opacity-50">
+                      <div className="w-9 h-9 rounded-lg bg-[#13306B] flex items-center justify-center flex-shrink-0">
+                        <Banknote size={16} className="text-[#8A6100]" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#18181B] truncate">{period}</p>
-                        <p className="text-[11px] text-[#71717A] truncate">Net pay {formatINR(driverSalaryNet(r))}</p>
+                        <p className="text-sm font-semibold text-[#0B2150] truncate">{period}</p>
+                        <p className="text-[11px] text-[#5B6676] truncate">Net pay {formatINR(driverSalaryNet(r))}</p>
                       </div>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_CHIP[r.status] ?? 'bg-slate-100 text-slate-500'}`}>
                         {r.status[0].toUpperCase() + r.status.slice(1)}
                       </span>
                       {busy === r.id
-                        ? <Loader2 size={16} className="animate-spin text-[#A8896B] flex-shrink-0" />
-                        : <Download size={16} className="text-[#A8896B] flex-shrink-0" />}
+                        ? <Loader2 size={16} className="animate-spin text-[#5B6676] flex-shrink-0" />
+                        : <Download size={16} className="text-[#5B6676] flex-shrink-0" />}
                     </button>
                   )
                 })}
@@ -217,16 +217,16 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
           /* ── Document buttons ── */
           <div className="p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#71717A]">Salary Documents</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#5B6676]">Salary Documents</p>
               {availableYears.length > 0 && (
                 <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
-                  className="text-[11px] text-[#52525B] bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg px-2 py-1 focus:outline-none focus:border-[#27272A] cursor-pointer">
+                  className="text-[11px] text-[#475264] bg-[#F1F4F8] border border-[#E2E7EE] rounded-lg px-2 py-1 focus:outline-none focus:border-[#13306B] cursor-pointer">
                   {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               )}
             </div>
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-[#A1A1AA]">
+              <div className="flex items-center justify-center gap-2 py-8 text-[#94A0B1]">
                 <Loader2 size={18} className="animate-spin" />
                 <span className="text-sm">Loading…</span>
               </div>
@@ -239,19 +239,19 @@ export default function DriverStatementsModal({ driver, onClose }: Props) {
                     disabled={busy === doc.key || doc.disabled}
                     className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all ${
                       doc.disabled
-                        ? 'bg-[#FAFAFA] border-[#E4E4E7] text-[#C4C4C8] cursor-not-allowed'
-                        : 'bg-white border-[#E4E4E7] text-[#27272A] hover:border-[#A8896B] hover:bg-[#FBFAF7] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
+                        ? 'bg-[#F7F9FB] border-[#E2E7EE] text-[#BCC5D1] cursor-not-allowed'
+                        : 'bg-white border-[#E2E7EE] text-[#13306B] hover:border-[#5B6676] hover:bg-[#F7F9FB] hover:-translate-y-0.5 shadow-sm disabled:opacity-50'
                     }`}
                   >
-                    <span className={doc.disabled ? 'text-[#C4C4C8]' : 'text-[#A8896B]'}>{doc.icon}</span>
+                    <span className={doc.disabled ? 'text-[#BCC5D1]' : 'text-[#5B6676]'}>{doc.icon}</span>
                     <span className="text-[11px] font-semibold leading-tight text-center">{busy === doc.key ? '…' : doc.label}</span>
-                    <span className={`text-[9px] font-normal leading-none ${doc.disabled ? 'text-[#D4D4D8]' : 'text-[#A1A1AA]'}`}>{doc.sub}</span>
+                    <span className={`text-[9px] font-normal leading-none ${doc.disabled ? 'text-[#CBD3DD]' : 'text-[#94A0B1]'}`}>{doc.sub}</span>
                   </button>
                 ))}
               </div>
             )}
             {!loading && records.length === 0 && (
-              <p className="text-[11px] text-[#A1A1AA] mt-2.5">
+              <p className="text-[11px] text-[#94A0B1] mt-2.5">
                 Salary documents unlock once the office runs the driver&apos;s first pay cycle.
               </p>
             )}

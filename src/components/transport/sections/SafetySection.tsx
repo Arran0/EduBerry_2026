@@ -60,7 +60,7 @@ export default function SafetySection() {
         </div>
 
         {loading ? (
-          <div className="h-24 rounded-xl bg-[#F4F4F5] animate-pulse" />
+          <div className="h-24 rounded-xl bg-[#F1F4F8] animate-pulse" />
         ) : open.length === 0 ? (
           <div className="flex items-start gap-3 rounded-xl bg-emerald-50/70 border border-emerald-100 px-3.5 py-3">
             <ShieldCheck size={18} className="text-emerald-600 flex-shrink-0 mt-0.5" />
@@ -133,15 +133,15 @@ function IncidentCard({
   const onboard = snap.onboard ?? []
 
   return (
-    <div className={`rounded-xl border overflow-hidden ${live ? 'border-rose-200 bg-rose-50' : 'border-[#E4E4E7] bg-white'}`}>
+    <div className={`rounded-xl border overflow-hidden ${live ? 'border-rose-200 bg-rose-50' : 'border-[#E2E7EE] bg-white'}`}>
       <button onClick={onToggle} className="w-full flex items-center gap-3 px-3 sm:px-3.5 py-2.5 sm:py-3 text-left">
-        <AlertOctagon size={16} className={live ? 'text-rose-600 flex-shrink-0' : 'text-[#A1A1AA] flex-shrink-0'} />
+        <AlertOctagon size={16} className={live ? 'text-rose-600 flex-shrink-0' : 'text-[#94A0B1] flex-shrink-0'} />
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold truncate ${live ? 'text-rose-900' : 'text-[#27272A]'}`}>
+          <p className={`text-sm font-semibold truncate ${live ? 'text-rose-900' : 'text-[#13306B]'}`}>
             {INCIDENT_LABELS[incident.type]}
             {snap.route?.name ? ` · ${snap.route.name}` : ''}
           </p>
-          <p className={`text-[11px] truncate ${live ? 'text-rose-700' : 'text-[#71717A]'}`}>
+          <p className={`text-[11px] truncate ${live ? 'text-rose-700' : 'text-[#5B6676]'}`}>
             {new Date(incident.occurred_at).toLocaleString()}
             {onboard.length > 0 && ` · ${onboard.length} on board`}
             {incident.status === 'false_alarm' && ' · false alarm'}
@@ -150,26 +150,26 @@ function IncidentCard({
         </div>
         <ChevronDown
           size={16}
-          className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`text-[#94A0B1] flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
 
       {expanded && (
         <div className="border-t border-black/5 px-3.5 py-3 space-y-3 bg-white">
           {incident.description && (
-            <p className="text-sm text-[#52525B]">{incident.description}</p>
+            <p className="text-sm text-[#475264]">{incident.description}</p>
           )}
 
           <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs">
             <Detail label="Crew">
               {snap.driver?.name ?? 'Unknown driver'}
-              {snap.driver?.phone && <span className="block text-[#A1A1AA]">{snap.driver.phone}</span>}
+              {snap.driver?.phone && <span className="block text-[#94A0B1]">{snap.driver.phone}</span>}
               {snap.attendant?.name && <span className="block">{snap.attendant.name} (attendant)</span>}
             </Detail>
             <Detail label="Vehicle">
               {snap.vehicle?.display_name ?? snap.vehicle?.registration_no ?? 'Unknown'}
               {snap.vehicle?.registration_no && (
-                <span className="block text-[#A1A1AA]">{snap.vehicle.registration_no}</span>
+                <span className="block text-[#94A0B1]">{snap.vehicle.registration_no}</span>
               )}
             </Detail>
             <Detail label="Position when raised">
@@ -185,9 +185,9 @@ function IncidentCard({
             </Detail>
             <Detail label="Trip context">
               {snap.current_stop?.name ? `At ${snap.current_stop.name}` : 'Between stops'}
-              {snap.next_stop?.name && <span className="block text-[#A1A1AA]">Next: {snap.next_stop.name}</span>}
+              {snap.next_stop?.name && <span className="block text-[#94A0B1]">Next: {snap.next_stop.name}</span>}
               {snap.last_fix?.at && (
-                <span className="block text-[#A1A1AA] inline-flex items-center gap-1">
+                <span className="block text-[#94A0B1] inline-flex items-center gap-1">
                   <Clock size={10} /> last fix {formatClock(snap.last_fix.at)}
                 </span>
               )}
@@ -199,13 +199,13 @@ function IncidentCard({
               <Users size={11} /> On board at that moment ({onboard.length})
             </p>
             {onboard.length === 0 ? (
-              <p className="text-[11px] text-[#A1A1AA] mt-1">Nobody was marked on board.</p>
+              <p className="text-[11px] text-[#94A0B1] mt-1">Nobody was marked on board.</p>
             ) : (
-              <div className="mt-1.5 border border-[#F4F4F5] rounded-lg divide-y divide-[#F4F4F5]">
+              <div className="mt-1.5 border border-[#F1F4F8] rounded-lg divide-y divide-[#F1F4F8]">
                 {onboard.map(s => (
                   <div key={s.student_id} className="flex items-center gap-2 px-2.5 py-1.5">
-                    <span className="flex-1 min-w-0 text-xs text-[#27272A] truncate">{s.name}</span>
-                    <span className="text-[11px] text-[#A1A1AA]">
+                    <span className="flex-1 min-w-0 text-xs text-[#13306B] truncate">{s.name}</span>
+                    <span className="text-[11px] text-[#94A0B1]">
                       {s.grade ? `Grade ${s.grade}${s.section ? ` ${s.section}` : ''}` : ''}
                     </span>
                     {s.guardian_phone && (
@@ -221,7 +221,7 @@ function IncidentCard({
           </div>
 
           {incident.resolution_note && (
-            <p className="text-xs text-[#52525B] bg-[#FAFAFA] border border-[#F4F4F5] rounded-lg px-2.5 py-2">
+            <p className="text-xs text-[#475264] bg-[#F7F9FB] border border-[#F1F4F8] rounded-lg px-2.5 py-2">
               {incident.resolution_note}
             </p>
           )}
@@ -247,7 +247,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   return (
     <div>
       <p className={ADMIN.label}>{label}</p>
-      <div className="text-[#52525B] mt-0.5">{children}</div>
+      <div className="text-[#475264] mt-0.5">{children}</div>
     </div>
   )
 }

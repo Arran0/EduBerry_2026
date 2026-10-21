@@ -283,7 +283,7 @@ export default function ReportsSection() {
               }))}
             />
             {gps.length > 5 && (
-              <p className="text-[11px] text-[#A1A1AA] mt-2">
+              <p className="text-[11px] text-[#94A0B1] mt-2">
                 Weakest five of {gps.length} vehicles. Full list under GPS health.
               </p>
             )}
@@ -300,7 +300,7 @@ export default function ReportsSection() {
             onClick={() => setTab(t.key)}
             className={`flex flex-shrink-0 items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-semibold whitespace-nowrap transition ${
               tab === t.key
-                ? 'bg-[#27272A] text-white [&_svg]:text-[#E9DDBB]'
+                ? 'bg-[#13306B] text-white [&_svg]:text-[#FFE7A0]'
                 : 'bg-white text-slate-600 ring-1 ring-slate-200/80 hover:text-slate-900'
             }`}
           >
@@ -417,7 +417,7 @@ export default function ReportsSection() {
         </Sheet>
       ) : (
         <div className="space-y-2">
-          <p className="text-[11px] text-[#71717A] max-w-2xl">
+          <p className="text-[11px] text-[#5B6676] max-w-2xl">
             Children who boarded the morning bus and were then marked absent in class,
             with approved leave already excluded. A row here is a child worth finding —
             and a question no standalone bus tracker can ask, because it does not hold
@@ -447,7 +447,7 @@ export default function ReportsSection() {
         </div>
       )}
 
-      <p className="text-[11px] leading-snug text-[#A1A1AA] flex items-start gap-1.5">
+      <p className="text-[11px] leading-snug text-[#94A0B1] flex items-start gap-1.5">
         <Gauge size={11} className="mt-0.5 flex-shrink-0" />
         Figures are rolled up nightly, so today&apos;s trips are not included until tomorrow.
       </p>
@@ -456,10 +456,10 @@ export default function ReportsSection() {
 }
 
 const TONE_BAR: Record<string, string> = {
-  good: 'bg-emerald-400', warn: 'bg-amber-400', bad: 'bg-rose-400', flat: 'bg-[#E4E4E7]',
+  good: 'bg-emerald-400', warn: 'bg-amber-400', bad: 'bg-rose-400', flat: 'bg-[#E2E7EE]',
 }
 const TONE_TEXT: Record<string, string> = {
-  good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-rose-600', flat: 'text-[#52525B]',
+  good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-rose-600', flat: 'text-[#475264]',
 }
 
 /**
@@ -482,9 +482,9 @@ function Panel({ icon, title, caption, empty, emptyNote, onOpen, children }: {
   children: React.ReactNode
 }) {
   const heading = (
-    <span className="text-[11px] font-bold uppercase tracking-widest text-[#A1A1AA] flex items-center gap-1.5">
+    <span className="text-[11px] font-bold uppercase tracking-widest text-[#94A0B1] flex items-center gap-1.5">
       {icon} {title}
-      {onOpen && <ChevronRight size={12} className="text-[#D4D4D8] group-hover:text-[#71717A] transition-colors" />}
+      {onOpen && <ChevronRight size={12} className="text-[#CBD3DD] group-hover:text-[#5B6676] transition-colors" />}
     </span>
   )
   return (
@@ -493,15 +493,15 @@ function Panel({ icon, title, caption, empty, emptyNote, onOpen, children }: {
         {onOpen ? (
           <button
             onClick={onOpen}
-            className="group text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]"
+            className="group text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B800]"
           >
             {heading}
           </button>
         ) : heading}
       </h3>
-      <p className="text-xs text-[#71717A] mt-1 mb-4">{caption}</p>
+      <p className="text-xs text-[#5B6676] mt-1 mb-4">{caption}</p>
       {empty ? (
-        <p className="flex-1 flex items-center justify-center text-xs text-[#A1A1AA] text-center">
+        <p className="flex-1 flex items-center justify-center text-xs text-[#94A0B1] text-center">
           {emptyNote ?? 'Nothing rolled up yet.'}
         </p>
       ) : (
@@ -537,17 +537,17 @@ function Row({ tone, title, subtitle, cells }: {
       <div className={`${SHEET.bar} ${TONE_BAR[tone]}`} />
       <div className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] sm:text-sm font-semibold text-[#27272A] truncate">{title}</p>
-          <p className="text-[11px] text-[#71717A] truncate">{subtitle}</p>
+          <p className="text-[13px] sm:text-sm font-semibold text-[#13306B] truncate">{title}</p>
+          <p className="text-[11px] text-[#5B6676] truncate">{subtitle}</p>
         </div>
         {/* A phone has room for one figure: the column the report is about. */}
         {cells.filter(c => c.bold).slice(0, 1).map((c, i) => (
-          <span key={`m${i}`} className="sm:hidden flex-shrink-0 text-right text-[13px] font-bold tabular-nums text-[#27272A]">{c.text}</span>
+          <span key={`m${i}`} className="sm:hidden flex-shrink-0 text-right text-[13px] font-bold tabular-nums text-[#13306B]">{c.text}</span>
         ))}
         {cells.map((c, i) => (
           <span key={i}
             className={`${c.w} ${c.align} hidden sm:block text-xs tabular-nums truncate ${
-              c.bold ? 'font-bold text-[#27272A]' : 'text-[#52525B]'
+              c.bold ? 'font-bold text-[#13306B]' : 'text-[#475264]'
             }`}>
             {c.text}
           </span>

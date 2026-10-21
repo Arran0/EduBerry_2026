@@ -299,17 +299,96 @@ body:has([data-page-theme="academics"]) { background: linear-gradient(135deg, #e
 }
 body:has([data-page-theme="more"]) { background: linear-gradient(135deg, #fdf4ff, #fce7f3, #f3e8ff); }
 
-/* Bus: EdZee Special (admin space palette) — shared by admin & non-admin */
+/* Bus: school-bus yellow, route navy, asphalt grey — one palette for the
+   admin hub, the family screen and the driver app.
+     Yellow  #FFC72C  the signal: what is moving, selected, or needs a tap.
+                      Never text on white; #8A6100 is its legible ink.
+     Navy    #13306B  ink and dark surfaces; #2E6BE6 ends its gradients.
+     Grey    #5B6676  everything that should recede, on cool #EEF1F5.
+   The --seg / --gbtn / --bus-* variables recolour the shared glass controls
+   (transport/glass.tsx) only inside the bus app; the fee and salary apps that
+   borrow those controls fall back to their own gold. */
 [data-page-theme="bus"] {
-  --page-primary: #3D3B40;
-  --page-primary-light: #F3F0EB;
-  --page-primary-dark: #2B292E;
-  --page-accent: #A8896B;
-  --page-accent-light: #EDE9E2;
-  --page-gradient-from: #3D3B40;
-  --page-gradient-to: #A8896B;
+  --page-primary: #13306B;
+  --page-primary-light: #E8EEF9;
+  --page-primary-dark: #0B2150;
+  --page-accent: #FFC72C;
+  --page-accent-light: #FFF4CC;
+  --page-gradient-from: #13306B;
+  --page-gradient-to: #2E6BE6;
+
+  --bus-yellow: #FFC72C;
+  --bus-yellow-ink: #8A6100;
+  --bus-navy: #13306B;
+  --bus-blue: #2E6BE6;
+  --bus-grey: #5B6676;
+
+  --bus-accent: #F5B800;
+  --bus-ring: rgba(255, 199, 44, 0.75);
+  --bus-ring-soft: rgba(255, 199, 44, 0.3);
+  --bus-year-icon: #2E6BE6;
+  --seg-from: #1B3F8A;
+  --seg-to: #13306B;
+  --seg-icon: #FFC72C;
+  --gbtn-from: #1B3F8A;
+  --gbtn-to: #13306B;
+  --gbtn-hover-from: #24509F;
+  --gbtn-hover-to: #16387A;
 }
-body:has([data-page-theme="bus"]) { background: #EDE9E3; }
+/* Light pooled where the glass sits: a warm yellow wash top-left, a blue one
+   top-right, on cool asphalt grey — so the glass has colour to bend. */
+body:has([data-page-theme="bus"]) {
+  background:
+    radial-gradient(60rem 34rem at 0% 0%, rgba(255, 199, 44, 0.20), transparent 62%),
+    radial-gradient(52rem 34rem at 100% 8%, rgba(46, 107, 230, 0.14), transparent 64%),
+    #EEF1F5;
+  background-attachment: fixed;
+}
+
+/* The bus app's own glass pieces, used by the family and driver screens. */
+.bus-glass {
+  position: relative;
+  isolation: isolate;
+  border-radius: 24px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.62) 55%, rgba(255, 255, 255, 0.78) 100%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(19, 48, 107, 0.05),
+    0 24px 48px -28px rgba(19, 48, 107, 0.42);
+}
+/* The navy slab: the bus body, with the yellow stripe along its foot. */
+.bus-slab {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 28px;
+  color: #fff;
+  background:
+    radial-gradient(28rem 16rem at 100% 0%, rgba(46, 107, 230, 0.55), transparent 70%),
+    linear-gradient(155deg, #1B3F8A 0%, #13306B 55%, #0B2150 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -6px 0 #FFC72C,
+    0 26px 50px -26px rgba(11, 33, 80, 0.75);
+}
+.bus-slab::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 38%);
+  pointer-events: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bus-glass {
+    background: rgba(255, 255, 255, 0.97);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 
 /* Fees: the bus app's charcoal, bronze and honey gold, on warm stone with
    light pooled where the glass sits. */

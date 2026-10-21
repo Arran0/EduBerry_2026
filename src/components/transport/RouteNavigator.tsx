@@ -183,7 +183,7 @@ export default function RouteNavigator({
             aria-controls="route-search-results"
             aria-activedescendant={hits[active] ? `rs-${active}` : undefined}
             placeholder="Search routes, stops, buses, drivers, students…"
-            className="w-full h-10 rounded-full bg-white/90 border border-white pl-10 pr-16 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.06),0_6px_16px_-12px_rgba(15,23,42,.4)] focus:outline-none focus:ring-2 focus:ring-[#B8983C]/40 transition"
+            className="w-full h-10 rounded-full bg-white/90 border border-white pl-10 pr-16 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.06),0_6px_16px_-12px_rgba(15,23,42,.4)] focus:outline-none focus:ring-2 focus:ring-[#F5B800]/40 transition"
           />
           {query ? (
             <button onClick={() => { setQuery(''); inputRef.current?.focus() }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-800" aria-label="Clear search">
@@ -216,7 +216,7 @@ export default function RouteNavigator({
                       onClick={() => pick(h)}
                       className={`w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${i === active ? 'bg-slate-100/80' : ''}`}
                     >
-                      <span className="w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center text-white" style={{ background: r?.color ?? '#A1A1AA' }}>
+                      <span className="w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center text-white" style={{ background: r?.color ?? '#94A0B1' }}>
                         <Icon size={13} />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -289,7 +289,7 @@ function RoutePicker({ routes, selectedId, riders, onSelect }: {
         onKeyDown={onKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="lg-pill w-full sm:w-[19rem] h-10 inline-flex items-center gap-2 pl-3.5 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+        className="lg-pill w-full sm:w-[19rem] h-10 inline-flex items-center gap-2 pl-3.5 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B800]/60"
       >
         {current ? (
           <>
@@ -346,7 +346,7 @@ function RoutePicker({ routes, selectedId, riders, onSelect }: {
                   <span className={`flex-shrink-0 text-[11px] font-semibold tabular-nums ${cap && n > cap ? 'text-rose-600' : 'text-slate-500'}`}>
                     {n}{cap ? `/${cap}` : ''}
                   </span>
-                  {on && <Check size={14} className="flex-shrink-0 text-[#8B6F47]" />}
+                  {on && <Check size={14} className="flex-shrink-0 text-[#2E6BE6]" />}
                 </button>
               </React.Fragment>
             )

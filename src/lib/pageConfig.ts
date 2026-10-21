@@ -490,7 +490,7 @@ export const SALARY_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#047857', gradTo: '#0f766e', imageUrl: '',
 }
 export const BUS_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#3D3B40', gradTo: '#8B6F47', imageUrl: '',
+  gradFrom: '#13306B', gradTo: '#2E6BE6', imageUrl: '',
 }
 export const EXAM_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#27272A', gradTo: '#3D3B40', imageUrl: '',

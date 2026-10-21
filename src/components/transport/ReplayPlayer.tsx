@@ -26,8 +26,8 @@ import { positionAt, replayWindow, type RunReplay } from '@/lib/transport/replay
 const TransportMap = dynamic(() => import('./TransportMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[420px] rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] flex items-center justify-center">
-      <Loader2 className="animate-spin text-[#A1A1AA]" size={20} />
+    <div className="h-[420px] rounded-xl border border-[#E2E7EE] bg-[#F7F9FB] flex items-center justify-center">
+      <Loader2 className="animate-spin text-[#94A0B1]" size={20} />
     </div>
   ),
 })
@@ -140,14 +140,14 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
           bus={bus ? { lat: bus.lat, lng: bus.lng, label: clock(atMs) } : null}
           showFences
           heightClass="h-[380px] md:h-[460px] lg:h-[min(60vh,42rem)]"
-          className="rounded-xl overflow-hidden border border-[#E4E4E7]"
+          className="rounded-xl overflow-hidden border border-[#E2E7EE]"
         />
 
         {!hasTrack ? (
-          <div className="border border-dashed border-[#E4E4E7] rounded-xl px-4 py-6 text-center">
-            <MapPin size={20} className="mx-auto text-[#A1A1AA] mb-1.5" />
-            <p className="text-sm font-semibold text-[#52525B]">No track recorded</p>
-            <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+          <div className="border border-dashed border-[#E2E7EE] rounded-xl px-4 py-6 text-center">
+            <MapPin size={20} className="mx-auto text-[#94A0B1] mb-1.5" />
+            <p className="text-sm font-semibold text-[#475264]">No track recorded</p>
+            <p className="text-[11px] text-[#94A0B1] mt-0.5">
               The bus reported no position on this trip, so there is nothing to replay.
               The stop times below are still what was recorded.
             </p>
@@ -157,7 +157,7 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPlaying(p => !p)}
-                className="w-9 h-9 rounded-lg bg-[#27272A] hover:bg-[#18181B] text-white flex items-center justify-center transition-colors flex-shrink-0"
+                className="w-9 h-9 rounded-lg bg-[#13306B] hover:bg-[#0B2150] text-white flex items-center justify-center transition-colors flex-shrink-0"
                 aria-label={playing ? 'Pause' : 'Play'}
               >
                 {playing ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
@@ -174,13 +174,13 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
 
               <div className="flex-1" />
 
-              <div className="flex items-center rounded-lg border border-[#E4E4E7] overflow-hidden">
+              <div className="flex items-center rounded-lg border border-[#E2E7EE] overflow-hidden">
                 {SPEEDS.map(s => (
                   <button
                     key={s}
                     onClick={() => setSpeed(s)}
                     className={`px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                      speed === s ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:bg-[#FAFAFA]'
+                      speed === s ? 'bg-[#13306B] text-white' : 'text-[#5B6676] hover:bg-[#F7F9FB]'
                     }`}
                   >
                     {s}×
@@ -196,18 +196,18 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
               value={atMs}
               step={1000}
               onChange={e => { setPlaying(false); setAtMs(Number(e.target.value)) }}
-              className="w-full accent-[#B8983C]"
+              className="w-full accent-[#F5B800]"
               aria-label="Trip timeline"
             />
 
-            <div className="flex items-center justify-between text-[11px] text-[#71717A]">
+            <div className="flex items-center justify-between text-[11px] text-[#5B6676]">
               <span>{clock(startMs)}</span>
-              <span className="font-bold text-[#27272A] tabular-nums inline-flex items-center gap-1.5">
-                <Clock size={11} className="text-[#A1A1AA]" />
+              <span className="font-bold text-[#13306B] tabular-nums inline-flex items-center gap-1.5">
+                <Clock size={11} className="text-[#94A0B1]" />
                 {clock(atMs)}
                 {coarse && (
                   <span
-                    className="text-[10px] font-semibold text-[#A1A1AA]"
+                    className="text-[10px] font-semibold text-[#94A0B1]"
                     title="Older trips are stored at one position every 30 seconds"
                   >
                     · 30s archive
@@ -224,25 +224,25 @@ export default function ReplayPlayer({ replay }: { replay: RunReplay }) {
           moving through the trip rather than as a static list beside a map. */}
       <div className="space-y-2">
         <p className={ADMIN.label}>What happened</p>
-        <div className={`${ADMIN.card} divide-y divide-[#F4F4F5] overflow-hidden max-h-[30rem] overflow-y-auto`}>
+        <div className={`${ADMIN.card} divide-y divide-[#F1F4F8] overflow-hidden max-h-[30rem] overflow-y-auto`}>
           {timeline.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-[#A1A1AA]">
+            <p className="px-4 py-8 text-center text-xs text-[#94A0B1]">
               No stop arrivals or boardings were recorded.
             </p>
           ) : timeline.map((row, i) => (
             <button
               key={`${row.kind}-${row.at}-${i}`}
               onClick={() => { setPlaying(false); setAtMs(row.at) }}
-              className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-opacity hover:bg-[#FAFAFA] ${
+              className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-opacity hover:bg-[#F7F9FB] ${
                 row.passed ? 'opacity-100' : 'opacity-40'
               }`}
             >
-              <span className={`mt-0.5 flex-shrink-0 ${row.kind === 'stop' ? 'text-[#B8983C]' : 'text-emerald-600'}`}>
+              <span className={`mt-0.5 flex-shrink-0 ${row.kind === 'stop' ? 'text-[#8A6100]' : 'text-emerald-600'}`}>
                 {row.kind === 'stop' ? <MapPin size={13} /> : <Users size={13} />}
               </span>
               <span className="flex-1 min-w-0">
-                <span className="block text-xs font-semibold text-[#27272A] truncate">{row.label}</span>
-                <span className="block text-[11px] text-[#71717A] truncate">{row.detail}</span>
+                <span className="block text-xs font-semibold text-[#13306B] truncate">{row.label}</span>
+                <span className="block text-[11px] text-[#5B6676] truncate">{row.detail}</span>
               </span>
             </button>
           ))}

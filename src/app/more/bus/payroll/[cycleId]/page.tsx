@@ -51,7 +51,7 @@ import { buildBankDisbursementCsv, downloadCsv } from '@/components/salary/state
 const StatementPreviewModal = dynamic(() => import('@/components/salary/statements/StatementPreviewModal'))
 const DriverStatementsModal = dynamic(() => import('@/components/bus/DriverStatementsModal'))
 
-const ADMIN_GOLD = '#B8983C'
+const ADMIN_GOLD = '#F5B800'
 
 // ── Adapters: reuse the staff Salary statement/CSV builders for drivers ──────
 // Driver records/banks mirror the staff shapes; mapping them lets the driver
@@ -454,25 +454,25 @@ export default function DriverCycleDetailPage() {
 
   return (
     <ProtectedLayout adminOnly>
-      <div data-page-theme="bus" className="bg-[#FAFAFA]" style={{ minHeight: '100vh' }}>
+      <div data-page-theme="bus" className="bg-[#F7F9FB]" style={{ minHeight: '100vh' }}>
         <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link href="/more/bus?tab=payroll" className="inline-flex items-center gap-1.5 text-sm text-[#71717A] hover:text-[#27272A] mb-4 transition-colors">
+          <Link href="/more/bus?tab=payroll" className="inline-flex items-center gap-1.5 text-sm text-[#5B6676] hover:text-[#13306B] mb-4 transition-colors">
             <ArrowLeft size={16} /> Driver Payroll
           </Link>
 
           {loading ? (
-            <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#71717A]">Loading cycle…</p></div>
+            <div className="text-center py-12"><div className="spinner mx-auto mb-3" /><p className="text-sm text-[#5B6676]">Loading cycle…</p></div>
           ) : !cycle ? (
-            <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>Cycle not found.</div>
+            <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#5B6676]`}>Cycle not found.</div>
           ) : (
             <>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-11 h-11 rounded-xl bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <div className="w-11 h-11 rounded-xl bg-[#13306B] flex items-center justify-center flex-shrink-0">
                   <CalendarRange style={{ color: ADMIN_GOLD }} size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="font-display text-2xl font-bold text-[#18181B]">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
+                    <h1 className="font-display text-2xl font-bold text-[#0B2150]">{formatPeriod(cycle.period_month, cycle.period_year)}</h1>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${CYCLE_CHIP[cycle.status]}`}>
                       {CYCLE_STATUS_LABEL[cycle.status]}
                     </span>
@@ -482,7 +482,7 @@ export default function DriverCycleDetailPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#71717A]">Driver pay cycle</p>
+                  <p className="text-xs text-[#5B6676]">Driver pay cycle</p>
                 </div>
                 <button
                   onClick={() => setShowSettings(true)}
@@ -516,7 +516,7 @@ export default function DriverCycleDetailPage() {
                   <Stat label="Total net" value={formatINR(totalNet)} />
                 </div>
                 {closed ? (
-                  <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-3 border-t border-[#E4E4E7]">
+                  <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-3 border-t border-[#E2E7EE]">
                     <button onClick={disburse} disabled={busy}
                       className={`${ADMIN.darkBtn} flex-1 !py-2.5 !text-sm`}>
                       <Send size={15} /> {busy ? 'Disbursing…' : autoProvider
@@ -535,7 +535,7 @@ export default function DriverCycleDetailPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#A1A1AA] mt-4 pt-3 border-t border-[#E4E4E7] text-center">
+                  <p className="text-xs text-[#94A0B1] mt-4 pt-3 border-t border-[#E2E7EE] text-center">
                     Lock the cycle (padlock above) to fix PF/ESI/LOP/bonus and enable disbursement.
                   </p>
                 )}
@@ -543,18 +543,18 @@ export default function DriverCycleDetailPage() {
               </div>
 
               {records.length === 0 ? (
-                <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#71717A]`}>
+                <div className={`${ADMIN.card} shadow-sm p-8 text-center text-sm text-[#5B6676]`}>
                   No eligible drivers found for this cycle.
                 </div>
               ) : (
                 <>
                   <div className="relative mb-3 max-w-xs">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A0B1]" />
                     <input
                       value={search}
                       onChange={e => setSearch(e.target.value)}
                       placeholder="Search drivers…"
-                      className="w-full bg-white border border-[#E4E4E7] rounded-lg pl-8 pr-3 py-2 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors"
+                      className="w-full bg-white border border-[#E2E7EE] rounded-lg pl-8 pr-3 py-2 text-xs text-[#13306B] placeholder:text-[#94A0B1] focus:outline-none focus:border-[#13306B] transition-colors"
                     />
                   </div>
 
@@ -562,7 +562,7 @@ export default function DriverCycleDetailPage() {
                     <div className="min-w-[1080px]">
                       <Sheet>
                         {/* Header — shares the GRID template with every data row, so labels always sit above their column. */}
-                        <div className="hidden sm:flex items-stretch bg-[#27272A]">
+                        <div className="hidden sm:flex items-stretch bg-[#13306B]">
                           <div className="w-1 flex-shrink-0" />
                           <div className={`${GRID} flex-1 min-w-0 px-3 py-2.5`} style={{ gridTemplateColumns: GRID_COLS }}>
                             <span className={`${SHEET.headCell} pl-[46px]`}>Driver</span>
@@ -582,7 +582,7 @@ export default function DriverCycleDetailPage() {
                         </div>
 
                         {visibleRecords.length === 0 ? (
-                          <div className="px-4 py-8 text-center text-sm text-[#A1A1AA]">No drivers match &quot;{search}&quot;.</div>
+                          <div className="px-4 py-8 text-center text-sm text-[#94A0B1]">No drivers match &quot;{search}&quot;.</div>
                         ) : visibleRecords.map((r, idx) => {
                           const key = `payslip-${r.id}`
                           const open = expanded.has(r.id)
@@ -599,31 +599,31 @@ export default function DriverCycleDetailPage() {
                               : !(Number(pfCfg?.pf_basic) > 0)
                                 ? 'No PF Basic wage set for this person — add one in Base Salaries'
                                 : 'Computed from PF Basic x the PF rate'
-                          const bar = r.status === 'paid' ? 'bg-[#27272A]' : r.status === 'approved' ? 'bg-[#B8983C]' : 'bg-[#D4D4D8]'
+                          const bar = r.status === 'paid' ? 'bg-[#13306B]' : r.status === 'approved' ? 'bg-[#F5B800]' : 'bg-[#CBD3DD]'
                           return (
-                            <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F4F4F5]' : ''}>
+                            <div key={r.id} className={idx < visibleRecords.length - 1 ? 'border-b border-[#F1F4F8]' : ''}>
                               <div
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => toggleExpanded(r.id)}
                                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(r.id) } }}
-                                className="flex items-stretch hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+                                className="flex items-stretch hover:bg-[#F7F9FB] transition-colors cursor-pointer"
                               >
                                 <div className={`${SHEET.bar} ${bar}`} />
                                 <div className={`${GRID} flex-1 min-w-0 px-3 py-2`} style={{ gridTemplateColumns: GRID_COLS }}>
                                   <div className="flex items-center gap-1.5 min-w-0">
-                                    <ChevronRight size={14} className={`text-[#A1A1AA] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                    <ChevronRight size={14} className={`text-[#94A0B1] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
                                     <Avatar avatarUrl={r.driver?.avatar_url} name={r.driver?.full_name ?? '?'} size={24} userId={r.driver_id} />
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-semibold text-[#18181B] truncate">{r.driver?.full_name ?? 'Driver'}</p>
-                                      <p className="text-[10px] text-[#71717A] truncate">{r.driver ? getDisplayRole(r.driver) : ''}</p>
+                                      <p className="text-xs font-semibold text-[#0B2150] truncate">{r.driver?.full_name ?? 'Driver'}</p>
+                                      <p className="text-[10px] text-[#5B6676] truncate">{r.driver ? getDisplayRole(r.driver) : ''}</p>
                                     </div>
                                     <button
                                       type="button"
                                       onClick={e => { e.stopPropagation(); r.driver && setDocsDriver(r.driver) }}
                                       disabled={!r.driver}
                                       title="Financial statements"
-                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                      className="flex-shrink-0 flex items-center justify-center text-[#94A0B1] hover:text-[#13306B] disabled:opacity-30 transition-colors"
                                     >
                                       <FileText size={12} />
                                     </button>
@@ -632,7 +632,7 @@ export default function DriverCycleDetailPage() {
                                       onClick={e => { e.stopPropagation(); r.driver && setCalendarPerson(r.driver) }}
                                       disabled={!r.driver}
                                       title="Attendance calendar"
-                                      className="flex-shrink-0 flex items-center justify-center text-[#A1A1AA] hover:text-[#27272A] disabled:opacity-30 transition-colors"
+                                      className="flex-shrink-0 flex items-center justify-center text-[#94A0B1] hover:text-[#13306B] disabled:opacity-30 transition-colors"
                                     >
                                       <CalendarDays size={12} />
                                     </button>
@@ -658,10 +658,10 @@ export default function DriverCycleDetailPage() {
                                     align="center" format={n => String(n)} title="Late arrivals — clear to use attendance"
                                     onSave={v => saveOverride(r.id, { late_override: v })}
                                   />
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]" title={`${c?.lopFromLate ?? 0} day(s)`}>{formatINR(lopLateRs)}</span>
-                                  <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#71717A]'}`}>{formatINR(lopTotalRs)}</span>
-                                  <span className="text-right text-[11px] tabular-nums text-[#71717A]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#5B6676]" title={`${c?.lopFromLeave ?? 0} day(s)`}>{formatINR(lopLeaveRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#5B6676]" title={`${c?.lopFromLate ?? 0} day(s)`}>{formatINR(lopLateRs)}</span>
+                                  <span className={`text-right text-[11px] font-semibold tabular-nums ${lopTotalRs > 0 ? 'text-rose-600' : 'text-[#5B6676]'}`}>{formatINR(lopTotalRs)}</span>
+                                  <span className="text-right text-[11px] tabular-nums text-[#5B6676]">{formatINR(Math.round(c?.salaryPerDay ?? 0))}</span>
                                   <EditableCell
                                     value={pf} derived={r.pf_amount_override == null} editable={!closed}
                                     format={formatINR} title={pfWhy}
@@ -672,17 +672,17 @@ export default function DriverCycleDetailPage() {
                                     format={formatINR} title="ESI — clear to use the computed figure"
                                     onSave={v => saveOverride(r.id, { esi_amount_override: v })}
                                   />
-                                  <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-emerald-600' : 'text-[#71717A]'}`}>{c?.bonusPoints ?? 0}</span>
-                                  <span className="text-right text-sm font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+                                  <span className={`text-center text-[11px] tabular-nums ${(c?.bonusPoints ?? 0) > 0 ? 'text-emerald-600' : 'text-[#5B6676]'}`}>{c?.bonusPoints ?? 0}</span>
+                                  <span className="text-right text-sm font-bold text-[#0B2150] tabular-nums">{formatINR(net)}</span>
                                 </div>
                               </div>
                               {open && (
-                                <div className="px-4 sm:px-5 py-4 bg-[#FAFAFA] border-t border-[#F4F4F5]">
+                                <div className="px-4 sm:px-5 py-4 bg-[#F7F9FB] border-t border-[#F1F4F8]">
                                   <div className="flex items-center justify-end gap-2 mb-3">
                                     <button
                                       disabled={pdfBusy === key}
                                       onClick={() => openPdf(key, `Payslip — ${r.driver?.full_name ?? 'Driver'}`, () => buildPayslip(toSalaryRecord(r), r.driver ? { full_name: r.driver.full_name, email: r.driver.email, role: r.driver.role } : undefined, bankMap[r.driver_id]))}
-                                      className="flex items-center gap-1 text-[11px] font-semibold text-[#71717A] hover:text-[#27272A] border border-[#E4E4E7] hover:border-[#D4D4D8] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                      className="flex items-center gap-1 text-[11px] font-semibold text-[#5B6676] hover:text-[#13306B] border border-[#E2E7EE] hover:border-[#CBD3DD] px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
                                     >
                                       <Receipt size={12} /> {pdfBusy === key ? '…' : 'Payslip'}
                                     </button>
@@ -695,11 +695,11 @@ export default function DriverCycleDetailPage() {
                                     net={net}
                                   />
                                   {r.payout_status && (
-                                    <span className="inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FBF6E9] text-[#8A6D1F] border border-[#EFE3C4] mt-2">
+                                    <span className="inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-[#FFF8E0] text-[#8A6100] border border-[#FFE7A0] mt-2">
                                       payout: {r.payout_status}
                                     </span>
                                   )}
-                                  {r.notes && <p className="text-[11px] text-[#A1A1AA] mt-2.5 italic">{r.notes}</p>}
+                                  {r.notes && <p className="text-[11px] text-[#94A0B1] mt-2.5 italic">{r.notes}</p>}
                                 </div>
                               )}
                             </div>
@@ -784,10 +784,10 @@ export default function DriverCycleDetailPage() {
 function Stat({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
   return (
     <div>
-      <p className="text-base font-bold text-[#18181B] tabular-nums flex items-center justify-center gap-1">
-        {icon && <span className="text-[#A1A1AA]">{icon}</span>}{value}
+      <p className="text-base font-bold text-[#0B2150] tabular-nums flex items-center justify-center gap-1">
+        {icon && <span className="text-[#94A0B1]">{icon}</span>}{value}
       </p>
-      <p className="text-[10px] text-[#71717A] uppercase tracking-widest font-bold mt-0.5">{label}</p>
+      <p className="text-[10px] text-[#5B6676] uppercase tracking-widest font-bold mt-0.5">{label}</p>
     </div>
   )
 }

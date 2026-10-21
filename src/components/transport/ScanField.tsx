@@ -121,10 +121,10 @@ export default function ScanField({
   }, [camera, submit])
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
+    <div className="bus-glass p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <ScanLine size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <ScanLine size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A0B1]" />
           <input
             ref={inputRef}
             value={value}
@@ -136,7 +136,7 @@ export default function ScanField({
             }}
             placeholder="Tap a card or scan a code"
             aria-label="Card number or QR code"
-            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-3 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 transition-colors disabled:opacity-60"
+            className="w-full bg-white border border-[#E2E7EE] rounded-2xl pl-9 pr-3 py-3 text-base text-[#13306B] placeholder:text-[#94A0B1] focus:outline-none focus:border-[#F5B800] focus:ring-2 focus:ring-[#FFC72C]/40 transition disabled:opacity-60"
             autoComplete="off"
             // Keeps a hardware reader's keystrokes landing here without the
             // on-screen keyboard covering half the roster.
@@ -148,7 +148,7 @@ export default function ScanField({
             onClick={() => { setCameraError(null); setCamera(c => !c) }}
             disabled={disabled}
             className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 ${
-              camera ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              camera ? 'bg-[#13306B] text-white' : 'bg-[#F1F4F8] text-[#475264] hover:bg-[#E2E7EE]'
             }`}
             aria-label={camera ? 'Stop the camera' : 'Scan with the camera'}
           >
@@ -158,7 +158,7 @@ export default function ScanField({
         <button
           onClick={() => void submit(value, 'rfid')}
           disabled={disabled || busy || !value.trim()}
-          className="px-4 h-12 rounded-xl bg-slate-900 text-white text-sm font-bold disabled:opacity-40 flex-shrink-0"
+          className="px-4 h-12 rounded-xl bg-[#FFC72C] text-[#13306B] text-sm font-bold shadow-[inset_0_1px_0_rgba(255,255,255,.6)] disabled:opacity-40 flex-shrink-0"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : 'Board'}
         </button>

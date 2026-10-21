@@ -17,8 +17,8 @@ import { ALERT_TYPE_LABELS, DIRECTION_LABELS } from '@/lib/transport/types'
 const TransportMap = dynamic(() => import('./TransportMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-[300px] rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
-      <Loader2 className="animate-spin text-slate-300" size={20} />
+    <div className="h-[300px] rounded-[24px] bg-white/60 flex items-center justify-center">
+      <Loader2 className="animate-spin text-[#94A0B1]" size={20} />
     </div>
   ),
 })
@@ -56,15 +56,17 @@ export default function ChildTransportView({
   const hero = useMemo(() => heroLine(state, firstName), [state, firstName])
 
   if (loading) {
-    return <div className="h-64 rounded-2xl bg-slate-100 animate-pulse" />
+    return <div className="h-64 rounded-[28px] bg-white/60 animate-pulse" />
   }
 
   if (!assignment) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center">
-        <Bus size={30} className="mx-auto text-slate-300 mb-3" strokeWidth={1.5} />
-        <p className="text-base font-semibold text-slate-700">{firstName} isn&apos;t on a bus route</p>
-        <p className="text-sm text-slate-500 mt-1">
+      <div className="bus-glass px-5 py-10 text-center">
+        <span className="mx-auto mb-3 w-14 h-14 rounded-2xl bg-[#FFC72C] text-[#13306B] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,.6)]">
+          <Bus size={26} strokeWidth={1.8} />
+        </span>
+        <p className="text-base font-bold text-[#13306B]">{firstName} isn&apos;t on a bus route</p>
+        <p className="text-sm text-[#5B6676] mt-1">
           If that&apos;s wrong, the school office can add them to one.
         </p>
       </div>
@@ -81,14 +83,25 @@ export default function ChildTransportView({
 
   return (
     <div className="space-y-4">
-      {/* Hero */}
-      <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 text-white px-5 py-5">
-        <div className="flex items-center gap-3">
-          <Avatar avatarUrl={avatarUrl ?? undefined} name={studentName} size={40} userId={studentId} />
+      {/* Hero: the bus body — navy, with the yellow stripe along its foot.
+          One sentence answers the question for the parent who only glances. */}
+      <div className="bus-slab px-5 pt-5 pb-7 sm:px-6 sm:pt-6 sm:pb-8">
+        <div className="relative z-[1] flex items-center gap-3.5">
+          <span className="rounded-full ring-2 ring-[#FFC72C] ring-offset-2 ring-offset-[#13306B] flex-shrink-0">
+            <Avatar avatarUrl={avatarUrl ?? undefined} name={studentName} size={44} userId={studentId} />
+          </span>
           <div className="min-w-0">
-            <p className="text-lg font-bold leading-tight">{hero.title}</p>
-            {hero.detail && <p className="text-sm opacity-80 mt-0.5">{hero.detail}</p>}
+            <p className="text-xl sm:text-2xl font-bold leading-tight tracking-[-0.01em]">{hero.title}</p>
+            {hero.detail && <p className="text-sm text-white/75 mt-1">{hero.detail}</p>}
           </div>
+          {activeRun && (
+            <span className={`ml-auto self-start inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] font-semibold flex-shrink-0 ${
+              stale ? 'bg-white/10 text-white/70' : 'bg-[#FFC72C] text-[#13306B]'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${stale ? 'bg-white/50' : 'bg-[#13306B] animate-pulse'}`} />
+              {stale ? 'Waiting' : 'Live'}
+            </span>
+          )}
         </div>
       </div>
 
@@ -98,17 +111,17 @@ export default function ChildTransportView({
           {alerts.map(a => (
             <div
               key={a.id}
-              className={`rounded-xl px-3.5 py-3 border ${
+              className={`rounded-2xl px-4 py-3 border ${
                 a.severity === 'critical'
-                  ? 'bg-rose-50 border-rose-200 text-rose-800'
-                  : 'bg-amber-50 border-amber-200 text-amber-800'
+                  ? 'bg-rose-50/90 border-rose-200 text-rose-800'
+                  : 'bg-[#FFF4CC]/90 border-[#FFC72C]/60 text-[#5C4100]'
               }`}
             >
               <p className="text-sm font-semibold flex items-center gap-1.5">
                 <AlertTriangle size={14} /> {a.title}
               </p>
               {a.detail && <p className="text-xs mt-0.5 opacity-90">{a.detail}</p>}
-              <p className="text-[10px] uppercase tracking-wider opacity-60 mt-1">
+              <p className="text-[11px] font-medium opacity-70 mt-1">
                 {ALERT_TYPE_LABELS[a.type]}
               </p>
             </div>
@@ -133,11 +146,11 @@ export default function ChildTransportView({
             }
             showFences={false}
             heightClass="h-[300px] lg:h-[32rem]"
-            className="rounded-2xl overflow-hidden border border-slate-200"
+            className="rounded-[24px] overflow-hidden ring-1 ring-white shadow-[0_24px_48px_-28px_rgba(19,48,107,.5)]"
           />
 
           {stale && (
-            <p className="text-xs text-amber-600 flex items-center gap-1.5">
+            <p className="text-xs text-[#8A6100] flex items-center gap-1.5 px-1">
               <WifiOff size={13} />
               {ageSec == null
                 ? 'The bus hasn’t reported its position yet.'
@@ -149,12 +162,12 @@ export default function ChildTransportView({
         <div className="space-y-4">
           {/* My stop — the ETA that actually matters. */}
           {myStop && (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <div className="bus-glass px-4 py-4 sm:px-5">
+              <p className="text-[12.5px] font-semibold text-[#5B6676]">
                 {activeRun.direction === 'inbound' ? 'Pickup stop' : 'Drop-off stop'}
               </p>
-              <p className="text-base font-bold text-slate-900 mt-1 flex items-center gap-1.5">
-                <MapPin size={15} className="text-slate-400" /> {myStop.stop?.name ?? 'Your stop'}
+              <p className="text-base font-bold text-[#13306B] mt-0.5 flex items-center gap-1.5">
+                <MapPin size={15} className="text-[#2E6BE6]" /> {myStop.stop?.name ?? 'Your stop'}
               </p>
               <div className="flex items-baseline gap-3 mt-2">
                 {myStop.arrived_at ? (
@@ -163,15 +176,15 @@ export default function ChildTransportView({
                   </span>
                 ) : myStop.eta_at ? (
                   <>
-                    <span className="text-2xl font-bold text-slate-900">
+                    <span className="text-[2rem] leading-none font-bold tracking-[-0.02em] text-[#13306B] tabular-nums">
                       {relativeMinutes(myStop.eta_at)}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-[#5B6676]">
                       about {formatClock(myStop.eta_at)}
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-slate-500">
+                  <span className="text-sm text-[#5B6676]">
                     {myStop.scheduled_arrival_at
                       ? `Scheduled ${formatClock(myStop.scheduled_arrival_at)}`
                       : 'No time set'}
@@ -179,7 +192,7 @@ export default function ChildTransportView({
                 )}
               </div>
               {myStop.scheduled_arrival_at && myStop.eta_at && !myStop.arrived_at && (
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-[#5B6676] mt-1">
                   Scheduled {formatClock(myStop.scheduled_arrival_at)}
                   {typeof activeRun.delay_seconds === 'number' && activeRun.delay_seconds > 60
                     ? ` · running ${Math.round(activeRun.delay_seconds / 60)} min late`
@@ -190,34 +203,34 @@ export default function ChildTransportView({
           )}
 
           {/* Journey so far */}
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5">
+          <div className="bus-glass px-4 py-4 sm:px-5">
+            <p className="text-[12.5px] font-semibold text-[#5B6676] mb-2.5">
               {firstName}&apos;s journey
             </p>
             <Timeline me={me} direction={activeRun.direction} />
           </div>
 
           {/* Progress */}
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+          <div className="bus-glass px-4 py-4 sm:px-5">
+            <p className="text-[12.5px] font-semibold text-[#5B6676] mb-2">
               Where the bus is
             </p>
             {stops.filter(s => !s.skipped).map(s => {
               const isNext = activeRun.next_stop_id === s.stop_id
               const isMine = myStop?.stop_id === s.stop_id
               return (
-                <div key={s.id} className="flex items-center gap-2.5 py-1">
+                <div key={s.id} className={`flex items-center gap-2.5 py-1.5 ${isMine ? '-mx-2 px-2 rounded-xl bg-[#FFF4CC]' : ''}`}>
                   <span
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      s.arrived_at ? 'bg-emerald-500' : isNext ? 'bg-orange-500 animate-pulse' : 'bg-slate-200'
+                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                      s.arrived_at ? 'bg-[#13306B]' : isNext ? 'bg-[#FFC72C] ring-4 ring-[#FFC72C]/30 animate-pulse' : 'bg-[#CBD3DD]'
                     }`}
                   />
                   <span className={`flex-1 min-w-0 text-sm truncate ${
-                    isMine ? 'font-bold text-slate-900' : s.arrived_at ? 'text-slate-400' : 'text-slate-600'
+                    isMine ? 'font-bold text-[#13306B]' : s.arrived_at ? 'text-[#94A0B1]' : 'text-[#475264]'
                   }`}>
                     {s.stop?.name ?? 'Stop'}{isMine ? ' · your stop' : ''}
                   </span>
-                  <span className="text-xs text-slate-400 flex-shrink-0">
+                  <span className="text-xs text-[#5B6676] tabular-nums flex-shrink-0">
                     {s.arrived_at ? formatClock(s.arrived_at)
                       : s.eta_at ? relativeMinutes(s.eta_at)
                         : formatClock(s.scheduled_arrival_at) ?? ''}
@@ -229,8 +242,8 @@ export default function ChildTransportView({
 
           {/* Crew */}
           {(activeRun.driver || activeRun.attendant) && (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5">
+            <div className="bus-glass px-4 py-4 sm:px-5">
+              <p className="text-[12.5px] font-semibold text-[#5B6676] mb-2.5">
                 Today&apos;s crew
               </p>
               <div className="space-y-2.5">
@@ -242,12 +255,12 @@ export default function ChildTransportView({
                 )}
               </div>
               {activeRun.vehicle && (
-                <p className="text-xs text-slate-500 mt-3 flex items-center gap-1.5">
-                  <Bus size={13} /> {vehicleLabel(activeRun.vehicle)} · {activeRun.vehicle.registration_no}
+                <p className="text-xs text-[#5B6676] mt-3 flex items-center gap-1.5">
+                  <Bus size={13} className="text-[#2E6BE6]" /> {vehicleLabel(activeRun.vehicle)} · {activeRun.vehicle.registration_no}
                 </p>
               )}
               {activeRun.change_note && (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mt-3">
+                <p className="text-xs text-[#5C4100] bg-[#FFF4CC] border border-[#FFC72C]/50 rounded-xl px-2.5 py-2 mt-3">
                   {activeRun.change_note}
                 </p>
               )}
@@ -331,14 +344,14 @@ function CrewRow({
     <div className="flex items-center gap-2.5">
       <Avatar avatarUrl={person.avatar_url ?? undefined} name={person.full_name} size={30} userId={person.id} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-900 truncate">{person.full_name}</p>
-        <p className="text-[11px] text-slate-500">{role}</p>
+        <p className="text-sm font-semibold text-[#13306B] truncate">{person.full_name}</p>
+        <p className="text-[11px] text-[#5B6676]">{role}</p>
       </div>
       {digits && (
         <div className="flex items-center gap-1 flex-shrink-0">
           <a
             href={`tel:${digits}`}
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center bg-[#13306B] text-white hover:bg-[#0B2150] transition-colors"
             aria-label={`Call ${person.full_name}`}
           >
             <Phone size={15} />
@@ -347,7 +360,7 @@ function CrewRow({
             href={`https://wa.me/${digits}`}
             target="_blank"
             rel="noreferrer"
-            className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center bg-white text-emerald-600 ring-1 ring-emerald-200 hover:bg-emerald-50 transition-colors"
             aria-label={`WhatsApp ${person.full_name}`}
           >
             <MessageCircle size={15} />
@@ -388,11 +401,11 @@ function Timeline({
         <div key={step.label} className="flex items-center gap-2.5">
           {step.done
             ? <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
-            : <Clock size={16} className="text-slate-300 flex-shrink-0" />}
-          <span className={`flex-1 text-sm ${step.done ? 'text-slate-900' : 'text-slate-400'}`}>
+            : <Clock size={16} className="text-[#CBD3DD] flex-shrink-0" />}
+          <span className={`flex-1 text-sm ${step.done ? 'text-[#13306B] font-medium' : 'text-[#94A0B1]'}`}>
             {step.label}
           </span>
-          {step.at && <span className="text-xs text-slate-500">{formatClock(step.at)}</span>}
+          {step.at && <span className="text-xs text-[#5B6676] tabular-nums">{formatClock(step.at)}</span>}
         </div>
       ))}
     </div>

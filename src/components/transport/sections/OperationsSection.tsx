@@ -690,7 +690,7 @@ function TripRow({ run: r, tally, selected, focused, onHover, onClick }: {
           selected ? 'bg-slate-100 ring-1 ring-slate-300' : focused ? 'bg-slate-100/70' : 'hover:bg-slate-50'
         } ${done ? 'opacity-70' : ''}`}
       >
-        <span className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ background: r.route?.color ?? '#A1A1AA' }} />
+        <span className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ background: r.route?.color ?? '#94A0B1' }} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 min-w-0">
             <span className="truncate text-sm font-semibold text-slate-900">{r.route?.name ?? 'Route'}</span>
@@ -754,7 +754,7 @@ interface AttentionItem {
 const TONE_RAIL: Record<'critical' | 'warning' | 'info', string> = {
   critical: '#DC2626',
   warning: '#D97706',
-  info: '#A1A1AA',
+  info: '#94A0B1',
 }
 const TONE_BG: Record<'critical' | 'warning' | 'info', string> = {
   critical: 'bg-rose-50/80',
@@ -789,7 +789,7 @@ function AttentionShell({ tone, kind, title, detail, children }: {
 const CHIP_BTN =
   'inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-semibold bg-white/90 border border-slate-200/80 text-slate-700 hover:bg-white hover:text-slate-900 transition active:scale-95'
 const CHIP_DARK =
-  'inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-semibold text-white bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] transition active:scale-95'
+  'inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-semibold text-white bg-gradient-to-b from-[#1B3F8A] to-[#13306B] hover:from-[#24509F] transition active:scale-95'
 
 function AttentionCard({ item, onShowBus, onHide }: { item: AttentionItem; onShowBus?: () => void; onHide: () => void }) {
   return (

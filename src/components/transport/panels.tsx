@@ -40,14 +40,14 @@ export function ScanPanel() {
     <div className="space-y-4">
       <div className={`${ADMIN.card} p-4`}>
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#F4F4F5] text-[#52525B]">
+          <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#475264]">
             <ScanLine size={17} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[#27272A]">
+            <p className="text-sm font-semibold text-[#13306B]">
               Do you want to scan children onto the bus?
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#71717A]">
+            <p className="mt-1 text-[11px] leading-relaxed text-[#5B6676]">
               Optional. Boarding already works by tapping a name on the attendant&apos;s
               phone, and a scan is only a faster tap — it can do nothing the attendant
               could not, and the attendant still sees the name and photo that comes
@@ -86,25 +86,25 @@ export function ReplayPanel() {
           onClick={() => setShowExport(v => !v)}
           className="flex w-full items-start gap-3 text-left"
         >
-          <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#F4F4F5] text-[#52525B]">
+          <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#475264]">
             <Globe size={17} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-[#27272A]">
+            <span className="block text-sm font-semibold text-[#13306B]">
               Open data export
             </span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-[#71717A]">
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#5B6676]">
               GTFS and GTFS-Realtime — the formats a transport authority or a
               third-party map app reads. The difference between data the school
               owns and data that happens to live in EdZee.
             </span>
           </span>
           {showExport
-            ? <ChevronDown size={16} className="mt-1 flex-shrink-0 text-[#A1A1AA]" />
-            : <ChevronRight size={16} className="mt-1 flex-shrink-0 text-[#A1A1AA]" />}
+            ? <ChevronDown size={16} className="mt-1 flex-shrink-0 text-[#94A0B1]" />
+            : <ChevronRight size={16} className="mt-1 flex-shrink-0 text-[#94A0B1]" />}
         </button>
 
-        {showExport && <div className="mt-4 border-t border-[#F4F4F5] pt-4"><GtfsPanel /></div>}
+        {showExport && <div className="mt-4 border-t border-[#F1F4F8] pt-4"><GtfsPanel /></div>}
       </div>
     </div>
   )

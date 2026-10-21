@@ -47,13 +47,13 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged, previ
       {/* Base + items tally — always reflects Net pay exactly */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-[#71717A]">Base salary</span>
-          <span className="text-[#27272A] tabular-nums">{formatINR(Number(record.base_amount))}</span>
+          <span className="text-[#5B6676]">Base salary</span>
+          <span className="text-[#13306B] tabular-nums">{formatINR(Number(record.base_amount))}</span>
         </div>
         {previewItems?.map(it => (
           <div key={it.label} className="flex items-center gap-2 text-sm">
-            <span className="flex-1 text-[#A1A1AA] truncate italic">{it.label}</span>
-            <span className={`tabular-nums ${it.amount < 0 ? 'text-rose-500' : it.amount > 0 ? 'text-emerald-500' : 'text-[#A1A1AA]'}`}>
+            <span className="flex-1 text-[#94A0B1] truncate italic">{it.label}</span>
+            <span className={`tabular-nums ${it.amount < 0 ? 'text-rose-500' : it.amount > 0 ? 'text-emerald-500' : 'text-[#94A0B1]'}`}>
               {it.amount < 0 ? '-' : it.amount > 0 ? '+' : ''}{formatINR(Math.abs(it.amount))}
             </span>
             <span className="w-[13px] flex-shrink-0" />
@@ -61,19 +61,19 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged, previ
         ))}
         {items.map(it => (
           <div key={it.id} className="flex items-center gap-2 text-sm">
-            <span className="flex-1 text-[#71717A] truncate">{it.label}</span>
+            <span className="flex-1 text-[#5B6676] truncate">{it.label}</span>
             <span className={`tabular-nums ${Number(it.amount) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
               {Number(it.amount) < 0 ? '-' : '+'}{formatINR(Math.abs(Number(it.amount)))}
             </span>
             <button onClick={() => remove(it.id)} disabled={busy}
-              className="p-1 text-[#D4D4D8] hover:text-rose-500 rounded transition-colors">
+              className="p-1 text-[#CBD3DD] hover:text-rose-500 rounded transition-colors">
               <Trash2 size={13} />
             </button>
           </div>
         ))}
-        <div className="flex items-center justify-between pt-2 border-t border-[#E4E4E7]">
-          <span className="text-sm font-semibold text-[#27272A]">Net pay</span>
-          <span className="text-base font-bold text-[#18181B] tabular-nums">{formatINR(net)}</span>
+        <div className="flex items-center justify-between pt-2 border-t border-[#E2E7EE]">
+          <span className="text-sm font-semibold text-[#13306B]">Net pay</span>
+          <span className="text-base font-bold text-[#0B2150] tabular-nums">{formatINR(net)}</span>
         </div>
       </div>
 
@@ -81,12 +81,12 @@ export default function DriverSalaryRecordItemsEditor({ record, onChanged, previ
       <div className="space-y-1.5">
         <div className="flex gap-1.5">
           <select value={kind} onChange={e => setKind(e.target.value as 'bonus' | 'deduction')}
-            className="border border-[#E4E4E7] rounded-lg px-2 py-1.5 text-xs bg-white text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors">
+            className="border border-[#E2E7EE] rounded-lg px-2 py-1.5 text-xs bg-white text-[#13306B] focus:outline-none focus:border-[#13306B] transition-colors">
             <option value="bonus">+ Bonus</option>
             <option value="deduction">− Deduction</option>
           </select>
           <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount"
-            className="flex-1 bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs tabular-nums text-[#27272A] focus:outline-none focus:border-[#27272A] transition-colors" />
+            className="flex-1 bg-white border border-[#E2E7EE] rounded-lg px-3 py-1.5 text-xs tabular-nums text-[#13306B] focus:outline-none focus:border-[#13306B] transition-colors" />
           <button onClick={add} disabled={busy || !label.trim() || !amount} className={ADMIN.darkBtn}>
             <Plus size={13} /> Add
           </button>

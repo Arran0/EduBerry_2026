@@ -29,7 +29,7 @@ import { ADMIN } from './glassAdmin'
 const DENSE_INPUT =
   'w-full bg-white/90 border border-slate-200/80 rounded-xl px-2.5 py-1.5 text-sm text-slate-900 ' +
   'shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] placeholder:text-slate-400 focus:outline-none ' +
-  'focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition'
+  'focus:border-[#F5B800] focus:ring-2 focus:ring-[#F5B800]/20 transition'
 
 export function Field({
   label, hint, children, className = '', span,
@@ -183,12 +183,12 @@ export function Row({ label, required, hint, stacked = false, children, as: Tag 
   as?: 'label' | 'div'
 }) {
   return (
-    <Tag className={`${ROW_RULE} block px-4 py-1.5 transition-colors focus-within:bg-[#FBF8F1]`}>
+    <Tag className={`${ROW_RULE} block px-4 py-1.5 transition-colors focus-within:bg-[#F7F9FB]`}>
       <span className={stacked ? 'block' : 'flex items-center gap-3 min-h-[34px]'}>
         <span className={stacked
           ? 'block pt-1 text-[12.5px] font-medium text-slate-500'
           : 'w-[6.75rem] sm:w-[8.5rem] flex-shrink-0 text-[13.5px] text-slate-800'}>
-          {label}{required && <span className="text-[#B8983C]"> *</span>}
+          {label}{required && <span className="text-[#8A6100]"> *</span>}
         </span>
         <span className={stacked ? 'block pt-1 pb-1' : 'flex-1 min-w-0'}>{children}</span>
       </span>
@@ -228,7 +228,7 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex w-[46px] h-[28px] flex-shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+      className={`relative inline-flex w-[46px] h-[28px] flex-shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B800]/60 ${
         checked ? 'bg-[#34A853]' : 'bg-slate-200'
       }`}
     >

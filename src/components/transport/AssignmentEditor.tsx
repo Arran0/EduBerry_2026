@@ -16,7 +16,7 @@ interface Candidate { id: string; full_name: string; avatar_url?: string | null;
 
 /** The stop picker inside a rider row: borderless until it needs attention. */
 const SELECT =
-  'w-full h-7 appearance-none rounded-md bg-slate-50 hover:bg-slate-100 pl-2 pr-6 text-[12px] text-slate-800 truncate focus:outline-none focus:ring-2 focus:ring-[#B8983C]/30 cursor-pointer'
+  'w-full h-7 appearance-none rounded-md bg-slate-50 hover:bg-slate-100 pl-2 pr-6 text-[12px] text-slate-800 truncate focus:outline-none focus:ring-2 focus:ring-[#F5B800]/30 cursor-pointer'
 
 const directionNote = (o: AssignedRoute) =>
   o.rides_inbound && !o.rides_outbound ? ' (to school)' : !o.rides_inbound && o.rides_outbound ? ' (from school)' : ''
@@ -261,7 +261,7 @@ function Chip({ on, onClick, label, n, warn }: { on: boolean; onClick: () => voi
       onClick={onClick}
       aria-pressed={on}
       className={`inline-flex flex-shrink-0 items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition ${
-        on ? 'bg-[#27272A] text-white'
+        on ? 'bg-[#13306B] text-white'
           : warn ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
           : 'bg-white/80 text-slate-700 ring-1 ring-slate-200/80 hover:bg-white'
       }`}

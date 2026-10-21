@@ -97,7 +97,7 @@ export default function DriverRunPage() {
   if (loading) {
     return (
       <DriverLayout>
-        <div className="h-40 rounded-2xl bg-slate-100 animate-pulse" />
+        <div className="h-48 rounded-[28px] bg-white/60 animate-pulse" />
       </DriverLayout>
     )
   }
@@ -105,7 +105,7 @@ export default function DriverRunPage() {
   if (!run) {
     return (
       <DriverLayout>
-        <p className="text-sm text-slate-500">This trip could not be found.</p>
+        <p className="text-sm text-[#5B6676]">This trip could not be found.</p>
       </DriverLayout>
     )
   }
@@ -115,7 +115,7 @@ export default function DriverRunPage() {
       <div className="space-y-4">
         <Link
           href="/driver"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800"
+          className="inline-flex items-center gap-1.5 h-9 pl-2.5 pr-3.5 rounded-full bg-white/70 text-sm font-semibold text-[#13306B] shadow-[inset_0_1px_0_rgba(255,255,255,.9),0_6px_14px_-10px_rgba(19,48,107,.5)] hover:bg-white transition-colors"
         >
           <ArrowLeft size={15} /> Today
         </Link>
@@ -128,52 +128,57 @@ export default function DriverRunPage() {
         <div className="space-y-4 lg:sticky lg:top-5">
 
         {/* Hero: one glance answers "where am I and how many are with me". */}
-        <div
-          className="rounded-2xl px-4 py-4 text-white"
-          style={{ background: `linear-gradient(135deg, ${run.route?.color ?? '#F97316'}, #18181B)` }}
-        >
-          <p className="text-xs uppercase tracking-widest opacity-70">
-            {DIRECTION_LABELS[run.direction]}
-          </p>
-          <h1 className="text-xl font-bold truncate">{run.route?.name ?? 'Route'}</h1>
-          <div className="flex items-end justify-between mt-3">
-            <div>
-              <p className="text-3xl font-bold leading-none">{onboard}</p>
-              <p className="text-xs opacity-80 mt-1">on board now</p>
+        <div className="bus-slab px-5 pt-4 pb-6">
+          <div className="relative z-[1]">
+            <p className="flex items-center gap-2 text-[13px] font-semibold text-white/75">
+              <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/30" style={{ background: run.route?.color ?? '#FFC72C' }} />
+              {DIRECTION_LABELS[run.direction]}
+            </p>
+            <h1 className="text-[1.5rem] font-bold leading-tight tracking-[-0.015em] truncate mt-0.5">{run.route?.name ?? 'Route'}</h1>
+            <div className="flex items-end justify-between mt-4">
+              <div>
+                <p className="text-[3rem] font-bold leading-none tracking-[-0.03em] tabular-nums text-[#FFC72C]">{onboard}</p>
+                <p className="text-[13px] text-white/75 mt-1">on board now</p>
+              </div>
+              <div className="text-right text-[13px] text-white/75 tabular-nums">
+                <p><span className="font-bold text-white">{settled}</span> of {passengers.length} accounted for</p>
+                <p className="mt-0.5">Departs {formatClock(run.scheduled_start_at)}</p>
+              </div>
             </div>
-            <div className="text-right text-xs opacity-80">
-              <p>{settled} of {passengers.length} accounted for</p>
-              <p className="mt-0.5">Departs {formatClock(run.scheduled_start_at)}</p>
-            </div>
+            {passengers.length > 0 && (
+              <div className="mt-3 h-1.5 rounded-full bg-white/15 overflow-hidden">
+                <div className="h-full rounded-full bg-[#FFC72C] transition-all" style={{ width: `${(settled / passengers.length) * 100}%` }} />
+              </div>
+            )}
           </div>
         </div>
 
         {/* GPS state, said plainly. A driver needs to know whether parents can
             see them, not what a wake lock is. */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs px-1">
           {stream.sharing ? (
             <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold">
               <Wifi size={14} /> Parents can see the bus
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-slate-500">
+            <span className="inline-flex items-center gap-1.5 text-[#5B6676]">
               <WifiOff size={14} /> Not sharing location
             </span>
           )}
           {stream.pending > 0 && (
-            <span className="inline-flex items-center gap-1 text-amber-600">
+            <span className="inline-flex items-center gap-1 text-[#8A6100]">
               <CloudOff size={13} /> {stream.pending} saved to send
             </span>
           )}
           {stream.lastSentAt && (
-            <span className="text-slate-400">
+            <span className="text-[#94A0B1]">
               · updated {new Date(stream.lastSentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
         </div>
-        {stream.error && <p className="text-xs text-amber-600">{stream.error}</p>}
+        {stream.error && <p className="text-xs text-[#8A6100] px-1">{stream.error}</p>}
         {notice && (
-          <p className="text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2.5">
+          <p className="text-sm text-rose-700 bg-rose-50/90 border border-rose-100 rounded-2xl px-3.5 py-2.5">
             {notice}
           </p>
         )}
@@ -190,7 +195,7 @@ export default function DriverRunPage() {
           <button
             onClick={onStart}
             disabled={working}
-            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-base font-bold py-4 rounded-2xl transition-colors disabled:opacity-60"
+            className="w-full h-16 flex items-center justify-center gap-2 bg-[#FFC72C] hover:bg-[#FFD452] text-[#13306B] text-lg font-bold rounded-[20px] shadow-[inset_0_1px_0_rgba(255,255,255,.65),0_12px_26px_-14px_rgba(245,184,0,.9)] active:scale-[0.98] transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#13306B]/30"
           >
             {working ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
             Start trip
@@ -199,13 +204,13 @@ export default function DriverRunPage() {
           <button
             onClick={onEnd}
             disabled={working}
-            className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white text-base font-bold py-4 rounded-2xl transition-colors disabled:opacity-60"
+            className="w-full h-16 flex items-center justify-center gap-2 bg-[#13306B] hover:bg-[#0B2150] text-white text-lg font-bold rounded-[20px] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_12px_26px_-14px_rgba(11,33,80,.9)] active:scale-[0.98] transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#FFC72C]/60"
           >
             {working ? <Loader2 size={18} className="animate-spin" /> : <Square size={18} />}
             End trip
           </button>
         ) : (
-          <p className="text-center text-sm text-slate-500 py-2">
+          <p className="bus-glass text-center text-sm font-semibold text-[#13306B] py-3.5">
             <CheckCircle2 size={15} className="inline mr-1 text-emerald-500" />
             This trip is finished.
           </p>
@@ -238,11 +243,11 @@ export default function DriverRunPage() {
             />
           ))}
           {byStop.get('none')?.length ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 md:col-span-2 lg:col-span-1 xl:col-span-2">
-              <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+            <div className="rounded-[24px] border border-[#FFC72C]/60 bg-[#FFF4CC]/90 px-4 py-3 md:col-span-2 lg:col-span-1 xl:col-span-2">
+              <p className="text-sm font-semibold text-[#5C4100] flex items-center gap-1.5">
                 <AlertTriangle size={15} /> No stop set
               </p>
-              <p className="text-xs text-amber-700 mt-0.5 mb-2">
+              <p className="text-xs text-[#5C4100]/85 mt-0.5 mb-2">
                 These children have no stop on this route. Mark them as you see them and
                 ask the office to fix their assignment.
               </p>
@@ -260,7 +265,7 @@ export default function DriverRunPage() {
         </div>
 
         {profile && (
-          <p className="text-[11px] text-slate-400 text-center pt-2">
+          <p className="text-[11px] text-[#5B6676] text-center pt-2">
             Boarding is recorded against you, {profile.full_name}. Tap a child again to undo.
           </p>
         )}
@@ -286,25 +291,24 @@ function StopBlock({
 
   return (
     <div
-      className={`rounded-2xl border overflow-hidden ${
-        isCurrent ? 'border-orange-300 bg-white shadow-md' : 'border-slate-200 bg-white'
-      }`}
+      className={`bus-glass overflow-hidden ${isCurrent ? 'ring-2 ring-[#FFC72C]' : ''}`}
     >
-      <div className={`px-4 py-3 flex items-center gap-3 ${isCurrent ? 'bg-orange-50' : ''}`}>
+      <div className={`px-4 py-3 flex items-center gap-3 ${isCurrent ? 'bg-[#FFF4CC]/80' : ''}`}>
         <span
-          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-            left ? 'bg-slate-200 text-slate-500'
+          className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold tabular-nums flex-shrink-0 ${
+            left ? 'bg-[#E2E7EE] text-[#5B6676]'
               : arrived ? 'bg-emerald-500 text-white'
-              : 'bg-slate-900 text-white'
+              : isCurrent ? 'bg-[#FFC72C] text-[#13306B]'
+              : 'bg-[#13306B] text-white'
           }`}
         >
           {stop.seq}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-slate-900 truncate">
+          <p className="text-[15px] font-bold text-[#13306B] truncate">
             {stop.stop?.name ?? 'Stop'}
           </p>
-          <p className="text-xs text-slate-500 truncate">
+          <p className="text-xs text-[#5B6676] truncate">
             {arrived
               ? `Arrived ${formatClock(stop.arrived_at)}${left ? ` · left ${formatClock(stop.departed_at)}` : ''}`
               : eta
@@ -314,7 +318,7 @@ function StopBlock({
                   : 'Not timed'}
           </p>
         </div>
-        <span className="text-xs text-slate-400 flex items-center gap-1 flex-shrink-0">
+        <span className="text-xs font-semibold text-[#5B6676] flex items-center gap-1 tabular-nums flex-shrink-0">
           <Users size={12} /> {passengers.length}
         </span>
       </div>
@@ -334,9 +338,9 @@ function StopBlock({
 }
 
 const STATE_STYLE: Record<string, { label: string; chip: string }> = {
-  expected: { label: 'Waiting', chip: 'bg-slate-100 text-slate-600' },
-  boarded:  { label: 'On board', chip: 'bg-emerald-100 text-emerald-700' },
-  dropped:  { label: 'Dropped off', chip: 'bg-sky-100 text-sky-700' },
+  expected: { label: 'Waiting', chip: 'bg-[#F1F4F8] text-[#5B6676]' },
+  boarded:  { label: 'On board', chip: 'bg-[#FFF4CC] text-[#5C4100]' },
+  dropped:  { label: 'Dropped off', chip: 'bg-emerald-100 text-emerald-700' },
   absent:   { label: 'Absent', chip: 'bg-rose-100 text-rose-700' },
   no_show:  { label: 'Did not board', chip: 'bg-rose-100 text-rose-700' },
   excused:  { label: 'On leave', chip: 'bg-violet-100 text-violet-700' },
@@ -363,8 +367,8 @@ function PassengerRow({
 
   return (
     <div
-      className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 ${
-        excused ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200'
+      className={`flex items-center gap-2.5 rounded-2xl px-2.5 py-2 ${
+        excused ? 'bg-[#F1F4F8]/70 opacity-60' : 'bg-white shadow-[0_1px_2px_rgba(19,48,107,.06)]'
       }`}
     >
       <Avatar
@@ -374,16 +378,16 @@ function PassengerRow({
         userId={p.student_id}
       />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-900 truncate">
+        <p className="text-sm font-semibold text-[#13306B] truncate">
           {p.student?.full_name ?? 'Student'}
         </p>
-        <p className="text-[11px] text-slate-500 truncate">
+        <p className="text-[11px] text-[#5B6676] truncate">
           {p.student?.grade ? `Grade ${p.student.grade}${p.student.section ? ` · ${p.student.section}` : ''}` : ''}
           {excused && p.excuse_reason === 'leave' ? ' · on approved leave' : ''}
         </p>
       </div>
 
-      <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full ${style.chip}`}>
+      <span className={`text-[11px] font-semibold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${style.chip}`}>
         {style.label}
       </span>
 
@@ -392,10 +396,10 @@ function PassengerRow({
           <button
             onClick={() => onAct(p, primary)}
             disabled={disabled || busy}
-            className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-40 ${
-              primary === 'board' ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : primary === 'alight' ? 'bg-sky-600 text-white hover:bg-sky-700'
-                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            className={`min-w-[5.5rem] h-11 px-3.5 rounded-xl text-[13px] font-bold inline-flex items-center justify-center active:scale-[0.97] transition disabled:opacity-40 ${
+              primary === 'board' ? 'bg-[#FFC72C] text-[#13306B] hover:bg-[#FFD452] shadow-[inset_0_1px_0_rgba(255,255,255,.6)]'
+                : primary === 'alight' ? 'bg-[#13306B] text-white hover:bg-[#0B2150]'
+                  : 'bg-[#E2E7EE] text-[#475264] hover:bg-[#CBD3DD]'
             }`}
           >
             {busy ? <Loader2 size={13} className="animate-spin" />
@@ -407,7 +411,7 @@ function PassengerRow({
             <button
               onClick={() => onAct(p, 'mark_absent')}
               disabled={disabled || busy}
-              className="px-2 py-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40"
+              className="w-11 h-11 inline-flex items-center justify-center rounded-xl text-[#94A0B1] hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40"
               aria-label="Mark absent"
               title="Not here"
             >

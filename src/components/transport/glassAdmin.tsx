@@ -15,18 +15,18 @@ import { motion } from 'framer-motion'
 import type { TabDef } from '@/components/bus/adminUI'
 
 export const ADMIN = {
-  pageBg: '#EDE9E3',
+  pageBg: '#EEF1F5',
   shell: 'w-full mx-auto max-w-7xl 2xl:max-w-[1600px]',
   shellWidth: 'max-w-7xl 2xl:max-w-[1600px]',
   card: 'bg-white/90 border border-slate-200/70 rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,.04)]',
   cardHover: 'bg-white/90 border border-slate-200/70 rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,.04)] hover:shadow-[0_12px_26px_-16px_rgba(15,23,42,.4)] transition-shadow',
   input:
-    'w-full h-10 bg-white/90 border border-slate-200/80 rounded-xl pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition',
+    'w-full h-10 bg-white/90 border border-slate-200/80 rounded-xl pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[#F5B800] focus:ring-2 focus:ring-[#F5B800]/20 transition',
   inputPlain:
-    'w-full h-10 bg-white/90 border border-slate-200/80 rounded-xl px-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition',
+    'w-full h-10 bg-white/90 border border-slate-200/80 rounded-xl px-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,.05)] focus:outline-none focus:border-[#F5B800] focus:ring-2 focus:ring-[#F5B800]/20 transition',
   label: 'text-[10px] font-bold uppercase tracking-wider text-slate-500',
   darkBtn:
-    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-white bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] hover:from-[#46444A] hover:to-[#2E2E31] active:scale-[0.97] transition disabled:opacity-50 disabled:pointer-events-none',
+    'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-white bg-gradient-to-b from-[#1B3F8A] to-[#13306B] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] hover:from-[#24509F] hover:to-[#16387A] active:scale-[0.97] transition disabled:opacity-50 disabled:pointer-events-none',
   ghostBtn:
     'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-slate-700 bg-white/85 border border-white shadow-[0_1px_2px_rgba(15,23,42,.06),0_6px_14px_-10px_rgba(15,23,42,.35)] hover:bg-white hover:text-slate-900 active:scale-[0.97] transition disabled:opacity-50 disabled:pointer-events-none',
 }
@@ -93,7 +93,7 @@ export function SegTabs<T extends string>({ tabs, value, onChange, className = '
             {active && (
               <motion.span
                 layoutId={`seg-${id}`}
-                className="absolute inset-0 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] shadow-[inset_0_1px_0_rgba(255,255,255,.16)]"
+                className="absolute inset-0 rounded-full bg-gradient-to-b from-[#1B3F8A] to-[#13306B] shadow-[inset_0_1px_0_rgba(255,255,255,.16)]"
                 transition={{ type: 'spring', stiffness: 420, damping: 34 }}
               />
             )}

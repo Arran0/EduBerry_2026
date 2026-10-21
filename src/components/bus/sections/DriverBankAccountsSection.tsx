@@ -37,14 +37,14 @@ export default function DriverBankAccountsSection() {
     <>
       <div className="flex items-center gap-2 mb-3">
         <h2 className={ADMIN.label}>Bank accounts</h2>
-        <Info size={11} className="text-[#B8983C]" />
-        <span className="text-[10px] text-[#A1A1AA]">admin-managed · drivers view only</span>
+        <Info size={11} className="text-[#8A6100]" />
+        <span className="text-[10px] text-[#94A0B1]">admin-managed · drivers view only</span>
       </div>
 
       {loading ? (
         <div className="text-center py-12"><div className="spinner mx-auto mb-3" /></div>
       ) : drivers.length === 0 ? (
-        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#71717A]`}>
+        <div className={`${ADMIN.card} p-8 text-center text-sm text-[#5B6676]`}>
           No driver accounts yet.
         </div>
       ) : (
@@ -95,19 +95,19 @@ function BankRow({ person, existing, onSaved }: {
     setSaved(true); setTimeout(() => setSaved(false), 1800); onSaved()
   }
 
-  const inputCls = 'w-full bg-white border border-[#E4E4E7] rounded-lg px-3 py-1.5 text-xs text-[#27272A] placeholder:text-[#A1A1AA] focus:outline-none focus:border-[#27272A] transition-colors'
+  const inputCls = 'w-full bg-white border border-[#E2E7EE] rounded-lg px-3 py-1.5 text-xs text-[#13306B] placeholder:text-[#94A0B1] focus:outline-none focus:border-[#13306B] transition-colors'
 
   return (
     <div className={`${SHEET.row} items-stretch`}>
-      <div className={`${SHEET.bar} ${existing ? 'bg-[#B8983C]' : 'bg-transparent'}`} />
+      <div className={`${SHEET.bar} ${existing ? 'bg-[#F5B800]' : 'bg-transparent'}`} />
       <div className="flex-1 min-w-0 px-3 py-3">
         <div className="flex items-center gap-2.5 mb-2.5">
           <Avatar avatarUrl={person.avatar_url} name={person.full_name} size={30} userId={person.id} />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-[#18181B] text-sm truncate">{person.full_name}</p>
-            <p className="text-[11px] text-[#A1A1AA]">{getDisplayRole(person)}</p>
+            <p className="font-semibold text-[#0B2150] text-sm truncate">{person.full_name}</p>
+            <p className="text-[11px] text-[#94A0B1]">{getDisplayRole(person)}</p>
           </div>
-          {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#27272A] text-white">On file</span>}
+          {existing && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#13306B] text-white">On file</span>}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">

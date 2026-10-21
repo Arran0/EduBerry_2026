@@ -179,7 +179,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
               <div
                 key={s.id}
                 className={`border rounded-xl px-2.5 py-2 cursor-pointer transition ${
-                  s.id === selectedId ? 'border-[#B8983C]/60 bg-white shadow-[0_8px_18px_-12px_rgba(15,23,42,.4)]' : 'border-slate-200/80 bg-white/70 hover:bg-white'
+                  s.id === selectedId ? 'border-[#F5B800]/60 bg-white shadow-[0_8px_18px_-12px_rgba(15,23,42,.4)]' : 'border-slate-200/80 bg-white/70 hover:bg-white'
                 }`}
                 onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
               >
@@ -231,7 +231,7 @@ export default function StopEditor({ route }: { route: TransportRoute }) {
                         step={5}
                         value={s.radius_m}
                         onChange={e => patchStop(s.id, { radius_m: Number(e.target.value) })}
-                        className="w-full mt-1.5 accent-[#B8983C]"
+                        className="w-full mt-1.5 accent-[#F5B800]"
                       />
                       <p className="text-[11px] text-slate-500">
                         Too tight and a busy road makes the bus miss its own stop; too wide
