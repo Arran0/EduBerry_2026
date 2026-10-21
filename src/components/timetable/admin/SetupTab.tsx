@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import {
   createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
-  fetchPeriodSlots, createPeriodSlot, deletePeriodSlot, clearPeriodSlotTimes,
+  fetchPeriodSlots, createPeriodSlot, deletePeriodSlot,
   createSlotGroup, updateSlotGroup, deleteSlotGroup, assignHomeroomsToSlotGroup,
 } from '@/lib/timetable'
 import { WEEKDAYS, WEEKDAY_LABELS } from '@/lib/timetable'
@@ -16,7 +16,7 @@ import { useTimetableDraftOptional } from '../draft/TimetableDraftContext'
 import type { Homeroom } from '@/lib/homerooms'
 import {
   INPUT, BTN_PRIMARY, BTN_NEUTRAL, BTN_QUIET, Section, Field, ICON_BTN, ICON_BTN_DANGER,
-  CHECK, Switch, Notice, Chip, Loading, askConfirm, choice,
+  CHECK, Switch, Chip, Loading, askConfirm, choice,
 } from '../ui'
 
 const _cy = new Date().getFullYear()
@@ -379,7 +379,6 @@ function PeriodGroupsSection({ config, onChanged }: { config: TimetableConfig; o
         <PeriodSlotsSection
           config={config}
           group={selectedGroup}
-          multiGroup={groups.length > 0}
           onChanged={reload}
         />
         <GroupClassesSection config={config} group={selectedGroup} onChanged={reload} />
@@ -453,25 +452,17 @@ function WorkingDaysSection({
 // ── Period slots ─────────────────────────────────────────────
 
 function PeriodSlotsSection({
-  config, group, multiGroup, onChanged,
+  config, group, onChanged,
 }: {
   config: TimetableConfig
   group: SlotGroup | null
-  /**
-   * True once the config has at least one period group beside the base
-   * schedule, which is when clock times start costing more than they give.
-   */
-  multiGroup: boolean
   onChanged: () => void
 }) {
   const [slots, setSlots] = useState<PeriodSlot[]>([])
   const [loading, setLoading] = useState(true)
-  const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
   const [label, setLabel] = useState('')
   const [isBreak, setIsBreak] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [clearing, setClearing] = useState(false)
 
   const groupId = group?.id ?? null
 
@@ -488,22 +479,7 @@ function PeriodSlotsSection({
     load()
   }, [load])
 
-  const timedSlots = slots.filter((s) => s.start_time || s.end_time)
-
-  // A slot that ends before it starts, or overlaps the slot above it, would
-  // quietly corrupt every grid built on it — refuse it at the form.
-  const slotProblem = ((): string | null => {
-    if (multiGroup || !start || !end) return null
-    if (end <= start) return 'The end time has to be after the start time.'
-    const prev = [...slots].reverse().find((s) => s.end_time)
-    if (prev?.end_time && start < prev.end_time.slice(0, 5)) {
-      return `This overlaps “${prev.label}”, which runs until ${prev.end_time.slice(0, 5)}.`
-    }
-    return null
-  })()
-
   const handleAdd = async () => {
-    if (slotProblem) return
     setAdding(true)
     const position = slots.length > 0 ? Math.max(...slots.map((s) => s.position)) + 1 : 1
     // The default "Period N" label should count teaching slots only — a
@@ -514,18 +490,11 @@ function PeriodSlotsSection({
       config_id: config.id,
       group_id: groupId,
       position,
-      // Timings are optional — a slot can be just "Period N".
-      // Timings are optional always, and unavailable once a second period
-      // group exists — see the note in the section below.
-      start_time: multiGroup ? null : start || null,
-      end_time: multiGroup ? null : end || null,
       label: label.trim() || (isBreak ? 'Break' : `Period ${teachingCount + 1}`),
       is_break: isBreak,
     })
     setAdding(false)
     if (created) {
-      setStart('')
-      setEnd('')
       setLabel('')
       setIsBreak(false)
       load()
@@ -539,29 +508,6 @@ function PeriodSlotsSection({
       hint={`The rows of the grid${
         group ? ` for ${group.name}` : ''
       }. Mark lunch or recess as a break and nothing is scheduled in it.`}
-      right={
-        multiGroup && timedSlots.length > 0 ? (
-          <button
-            onClick={async () => {
-              const ok = await askConfirm({
-                title: 'Remove the clock times?',
-                body: `${timedSlots.length} period${timedSlots.length === 1 ? ' keeps its' : 's keep their'} place in the grid. Only the times go.`,
-                confirmLabel: 'Remove times',
-              })
-              if (!ok) return
-              setClearing(true)
-              await clearPeriodSlotTimes(config.id, groupId)
-              setClearing(false)
-              load()
-              onChanged()
-            }}
-            className={BTN_NEUTRAL}
-          >
-            {clearing ? <Loader2 className="animate-spin" size={14} /> : <Clock size={14} />}
-            Remove times
-          </button>
-        ) : undefined
-      }
     >
       {loading ? (
         <Loading className="py-6" />
@@ -587,11 +533,6 @@ function PeriodSlotsSection({
                     <Clock size={14} className="text-slate-400 flex-shrink-0" />
                   )}
                   <span className="text-[13.5px] font-medium text-slate-900 flex-1 min-w-0 break-words">{s.label}</span>
-                  {s.start_time && s.end_time && (
-                    <span className="text-[12.5px] text-slate-500 tabular-nums flex-shrink-0">
-                      {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}
-                    </span>
-                  )}
                   <button
                     onClick={async () => {
                       await deletePeriodSlot(s.id)
@@ -611,34 +552,13 @@ function PeriodSlotsSection({
         </div>
       )}
 
-      {/* Why the time fields are not here. This is a real trade, not a
-          simplification: with two bells running different clocks, period 3 of
-          one band overlaps periods 2 AND 3 of the other, so a teacher who
-          works across both is marked busy twice over and becomes near
-          impossible to place. Untimed periods collide position-for-position —
-          a clean 1:1 — and staff can be shared freely. */}
-      {multiGroup && (
-        <Notice tone="info" icon={Clock} className="mt-3">
-          Periods are numbered, not timed, while there is more than one period group. Bells on
-          different clocks overlap, and a teacher who works across both cannot be placed.
-          Numbered periods line up one for one, so staff can be shared.
-        </Notice>
-      )}
-
+      {/* Periods are numbered, not timed. Bells on different clocks overlap
+          unevenly — period 3 of one band touches periods 2 and 3 of another —
+          so a teacher who works across both would be marked busy twice over.
+          Numbered periods line up one for one, and staff can be shared across
+          period groups. See buildSchedules in lib/timetable/generator.ts. */}
       {/* Add slot */}
-      <div className={`mt-3 grid grid-cols-2 gap-2 items-end ${
-        multiGroup ? 'sm:grid-cols-[minmax(0,1fr)_auto_auto]' : 'sm:grid-cols-[8rem_8rem_minmax(0,1fr)_auto_auto]'
-      }`}>
-        {!multiGroup && (
-          <>
-            <Field label="Starts">
-              <input type="time" className={INPUT} value={start} onChange={(e) => setStart(e.target.value)} />
-            </Field>
-            <Field label="Ends">
-              <input type="time" className={INPUT} value={end} onChange={(e) => setEnd(e.target.value)} />
-            </Field>
-          </>
-        )}
+      <div className="mt-3 grid grid-cols-2 gap-2 items-end sm:grid-cols-[minmax(0,1fr)_auto_auto]">
         <div className="col-span-2 sm:col-span-1">
           <Field label="Name">
             <input className={INPUT} placeholder={isBreak ? 'Break' : 'Next period number'} value={label} onChange={(e) => setLabel(e.target.value)} />
@@ -648,13 +568,11 @@ function PeriodSlotsSection({
           <input type="checkbox" checked={isBreak} onChange={(e) => setIsBreak(e.target.checked)} className={CHECK} />
           Break
         </label>
-        <button onClick={handleAdd} disabled={adding || slotProblem !== null} className={BTN_PRIMARY}>
+        <button onClick={handleAdd} disabled={adding} className={BTN_PRIMARY}>
           {adding ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
           Add period
         </button>
       </div>
-      {!multiGroup && <p className="mt-1.5 text-[11.5px] text-slate-400">Times are optional.</p>}
-      {slotProblem && <Notice tone="error" className="mt-2">{slotProblem}</Notice>}
     </Section>
   )
 }

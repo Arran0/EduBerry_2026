@@ -142,25 +142,26 @@ describe('teacher workload', () => {
     expect(w.over).toBe(1)
   })
 
-  it('gives a teacher who works across bands the union of their weeks', () => {
-    // Primary runs mornings, Secondary runs afternoons — no overlap, so the
-    // teacher really does have both.
+  it('gives a teacher who works across bands one week of period numbers', () => {
+    // Periods are numbered, not timed: period 1 of Primary and period 1 of
+    // Secondary are one period, whatever clock times the slots still carry.
+    // A teacher in both has the longer band's day — 3 periods, 5 days.
     const primary: SlotGroup = {
       id: 'g1', config_id: 'cfg', name: 'Primary', working_days: DAYS,
       position: 1, color: null, created_by: null, created_at: '', updated_at: '',
     }
     const secondary: SlotGroup = { ...primary, id: 'g2', name: 'Secondary', position: 2 }
     const [w] = load({
-      slots: [...slots(2, 'g1', 9), ...slots(2, 'g2', 14)],
+      slots: [...slots(2, 'g1', 9), ...slots(3, 'g2', 14)],
       slotGroups: [primary, secondary],
       homeroomGroupIds: { hrP: 'g1', hrS: 'g2' },
       requirements: [
-        req({ id: 'r1', homeroom_id: 'hrP', subject_id: 'eng', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 5 }),
-        req({ id: 'r2', homeroom_id: 'hrS', subject_id: 'mus', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 5 }),
+        req({ id: 'r1', homeroom_id: 'hrP', subject_id: 'eng', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 8 }),
+        req({ id: 'r2', homeroom_id: 'hrS', subject_id: 'mus', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 8 }),
       ],
     })
-    expect(w.capacity).toBe(20)
-    expect(w.over).toBe(0)
+    expect(w.capacity).toBe(15)
+    expect(w.over).toBe(1)
   })
 
   it('reports the most over-booked teacher first', () => {

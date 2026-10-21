@@ -26,7 +26,7 @@ interface Props {
   unavailability: TeacherUnavailability[]
   constraints: TimetableConstraint[]
   homeroomsLite: HomeroomLite[]
-  // Periods of other bell schedules that share a wall-clock hour, so a teacher
+  // Periods of other bell schedules with the same period number, so a teacher
   // booked across two bands highlights as the clash it is.
   slotClash?: Map<string, string[]>
   onMove: (entry: PlacedEntry, day: Weekday, slotId: string) => boolean

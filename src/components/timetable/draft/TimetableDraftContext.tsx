@@ -332,7 +332,7 @@ export function TimetableDraftProvider({
   const workloadOf = useCallback((id: string) => workloadById.get(id), [workloadById])
   const overloaded = useMemo(() => overloadedTeachers(workloads), [workloads])
 
-  // Which periods of different bell schedules share a wall-clock hour. Without
+  // Which periods of different bell schedules share a period number. Without
   // it a teacher booked in two overlapping bands reads as free.
   const slotClash = useMemo(
     () => buildSchedules(config, slots, slotGroups, slotGroupIds).clash,

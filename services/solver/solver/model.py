@@ -399,8 +399,9 @@ class Builder:
     def build_teacher_occupancy(self) -> None:
         """A teacher is in one period at a time, across every bell schedule.
 
-        Keyed on the config-wide clock rather than the slot id, which is what
-        makes two overlapping periods of different schedules one booking.
+        Keyed on the config-wide clock (the period number, shared by every
+        schedule) rather than the slot id, which is what makes period 3 of two
+        schedules one booking.
         """
         busy: dict[tuple[str, str, int], list[Any]] = defaultdict(list)
         for lesson in self.p.lessons:

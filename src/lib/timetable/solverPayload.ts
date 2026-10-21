@@ -97,7 +97,7 @@ export interface SolverPayload {
   schedules: WireSchedule[]
   /** slotId -> a config-wide chronological ordinal, for max-in-a-row. */
   clock: Record<string, number>
-  /** slotId -> every slot sharing its wall-clock hour, its own id included. */
+  /** slotId -> every slot sharing its period number, its own id included. */
   clash: Record<string, string[]>
   lessons: WireLesson[]
   /** Entity id (or '*' for all) -> the cell keys it is unavailable for. */

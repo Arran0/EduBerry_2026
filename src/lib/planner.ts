@@ -1,12 +1,12 @@
 // Weekly/monthly teacher planner: template generation, xlsx parsing, and
 // bulk task creation. Mirrors the school's existing "DAY WISE & PERIOD WISE
 // PLANNER" spreadsheet format (DATE | DAY | PERIOD-1 | PERIOD-2 | ...).
-// Period count and timings come from the teacher's real Timetable (see
-// fetchTeacherPeriodSlots in taskPeriods.ts) — not a manual input.
+// The period count comes from the teacher's published timetable (see
+// fetchTeacherTimetable in taskTimetable.ts) — not a manual input.
 'use client'
 
 import * as XLSX from 'xlsx'
-import { TaskSlot } from './taskSlots'
+import { TaskPeriod } from './taskSlots'
 import { createTask, NewTaskInput, Task } from './tasks'
 
 export type PlannerMode = 'week' | 'month'
@@ -78,9 +78,9 @@ export function emptyPlannerRows(mode: PlannerMode, anchorISO: string, periodCou
   }))
 }
 
-/** Column headers for a period slot list, e.g. "Period 1 (9:10–9:50)". */
-export function periodColumnLabels(slots: TaskSlot[]): string[] {
-  return slots.map(s => `${s.label} (${s.start}–${s.end})`)
+/** Column headers for a period list, e.g. "Period 1". */
+export function periodColumnLabels(periods: TaskPeriod[]): string[] {
+  return periods.map(p => p.label)
 }
 
 // ── Template / export ───────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ function buildPlannerWorkbook({ periodLabels, rows }: PlannerSheetOptions): XLSX
 export function downloadPlannerTemplate(opts: {
   mode: PlannerMode
   anchor: string
-  periodSlots: TaskSlot[]
+  periodSlots: TaskPeriod[]
   fileName?: string
 }): void {
   const { mode, anchor, periodSlots, fileName } = opts
@@ -216,7 +216,7 @@ export function parsePlannerWorkbook(workbook: XLSX.WorkBook): ParsedPlanner | {
 
 export function buildTaskInputsFromPlanner(opts: {
   rows: PlannerRow[]
-  periodSlots: (TaskSlot | undefined)[]
+  periodSlots: (TaskPeriod | undefined)[]
   assigneeId: string
 }): NewTaskInput[] {
   const { rows, periodSlots, assigneeId } = opts
@@ -230,8 +230,7 @@ export function buildTaskInputsFromPlanner(opts: {
       inputs.push({
         title,
         due_date: row.date,
-        timing: slot?.start,
-        end_time: slot?.end,
+        period: slot?.n,
         assignee_ids: [assigneeId],
       })
     })

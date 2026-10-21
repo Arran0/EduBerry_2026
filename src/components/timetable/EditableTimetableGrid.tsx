@@ -24,7 +24,7 @@ interface Props {
   rooms: Room[]
   constraints?: TimetableConstraint[]
   homerooms?: HomeroomLite[]
-  // Periods of other bell schedules sharing a wall-clock hour (Round 9).
+  // Periods of other bell schedules with the same period number (Round 9).
   slotClash?: Map<string, string[]>
   /** Marks a cell a date change amends. */
   hasOverride?: (homeroomId: string, day: Weekday, slotId: string) => boolean

@@ -7,8 +7,8 @@ import {
   PlannerMode, PlannerRow, ParsedPlanner, emptyPlannerRows, periodColumnLabels, toISODate, generatePlannerDates,
   downloadPlannerTemplate, downloadPlannerRows, parsePlannerWorkbook, buildTaskInputsFromPlanner, importPlannerTasks,
 } from '@/lib/planner'
-import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
-import { TaskSlot, TASK_SLOTS, formatSlotTime } from '@/lib/taskSlots'
+import { fetchTeacherTimetable } from '@/lib/taskTimetable'
+import { TaskPeriod, taskPeriods } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import { Btn, Seg, Stepper, Notice, TaskSheet } from './ui'
 
@@ -65,10 +65,10 @@ export default function PlannerModal({
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [result, setResult] = useState<{ created: number; failed: number } | null>(null)
 
-  // Real school periods from the active Timetable: count, labels and timings.
-  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>([])
+  // As many periods as the planned-for teacher's day has in the timetable.
+  const [periodSlots, setPeriodSlots] = useState<TaskPeriod[]>([])
   const [periodsLoading, setPeriodsLoading] = useState(true)
-  const usingFallbackPeriods = periodSlots === TASK_SLOTS
+  const [fromTimetable, setFromTimetable] = useState(false)
 
   // On phones one period column is wide and the rest shrink to a number; tap a
   // number (or focus a cell) to bring that column forward.
@@ -90,19 +90,21 @@ export default function PlannerModal({
   useEffect(() => {
     let cancelled = false
     setPeriodsLoading(true)
-    fetchActiveTimetablePeriodSlots()
-      .then(slots => { if (!cancelled) setPeriodSlots(slots) })
-      .catch(() => { if (!cancelled) setPeriodSlots(TASK_SLOTS) })
-      .finally(() => { if (!cancelled) setPeriodsLoading(false) })
+    fetchTeacherTimetable(assigneeId).then(tt => {
+      if (cancelled) return
+      setPeriodSlots(taskPeriods(tt.periodCount))
+      setFromTimetable(tt.periodOf.size > 0)
+      setPeriodsLoading(false)
+    })
     return () => { cancelled = true }
-  }, [])
+  }, [assigneeId])
 
   // ── Upload ────────────────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState('')
   const [parsed, setParsed] = useState<ParsedPlanner | null>(null)
   const [parseError, setParseError] = useState('')
-  const [uploadSlotMapping, setUploadSlotMapping] = useState<(TaskSlot | undefined)[]>([])
+  const [uploadSlotMapping, setUploadSlotMapping] = useState<(TaskPeriod | undefined)[]>([])
   const [showTemplatePanel, setShowTemplatePanel] = useState(false)
   const [tplMode, setTplMode] = useState<PlannerMode>('week')
   const [tplAnchor, setTplAnchor] = useState(todayISO)
@@ -137,7 +139,7 @@ export default function PlannerModal({
 
   const uploadFilledCount = parsed ? parsed.rows.reduce((sum, r) => sum + r.periods.filter(p => p.trim()).length, 0) : 0
 
-  const runImport = async (rows: PlannerRow[], slots: (TaskSlot | undefined)[]) => {
+  const runImport = async (rows: PlannerRow[], slots: (TaskPeriod | undefined)[]) => {
     setSubmitting(true)
     setResult(null)
     const inputs = buildTaskInputsFromPlanner({ rows, periodSlots: slots, assigneeId })
@@ -172,9 +174,9 @@ export default function PlannerModal({
 
   const periodsNote = periodsLoading
     ? 'Loading periods from the Timetable app…'
-    : usingFallbackPeriods
-      ? `No active timetable found, so ${periodSlots.length} default periods are used.`
-      : `${periodSlots.length} periods from the active Timetable.`
+    : fromTimetable
+      ? `${periodSlots.length} periods, from the timetable.`
+      : `No timetable found, so ${periodSlots.length} periods are used.`
 
   const assigneePicker = canAssignToOthers && availableAssignees.length > 0 && (
     <label className="flex items-center gap-2 min-w-0">
@@ -306,7 +308,7 @@ export default function PlannerModal({
                             }}
                             className="tk-input cursor-pointer"
                           >
-                            {periodSlots.map((s, si) => <option key={si} value={si}>{s.label}, {formatSlotTime(s.start)} – {formatSlotTime(s.end)}</option>)}
+                            {periodSlots.map((s, si) => <option key={si} value={si}>{s.label}</option>)}
                           </select>
                         </label>
                       ))}

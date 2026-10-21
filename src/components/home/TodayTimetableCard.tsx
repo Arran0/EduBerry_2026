@@ -18,6 +18,8 @@ import { useReportContent } from './useReportContent'
 
 interface Period {
   slot: PeriodSlot
+  /** Period number within the slot's own period group. */
+  n: number
   entry: TimetableEntry | null
   /** True when a per-date change put this lesson here, or moved it away. */
   changed: boolean
@@ -65,9 +67,12 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
         const teaching = [...view.slots]
           .filter(s => !s.is_break)
           .sort((a, b) => a.position - b.position)
+        const counted = new Map<string, number>()
         const list: Period[] = teaching.map(slot => {
+          const n = (counted.get(slot.group_id ?? '') ?? 0) + 1
+          counted.set(slot.group_id ?? '', n)
           const entry = resolved.find(e => e.day === today && e.slot_id === slot.id) ?? null
-          return { slot, entry, changed: !!entry?.override }
+          return { slot, n, entry, changed: !!entry?.override }
         })
         setPeriods(list)
       })
@@ -103,10 +108,10 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
-            {periods!.filter(p => p.entry?.subject_id).map(({ slot, entry, changed }) => (
+            {periods!.filter(p => p.entry?.subject_id).map(({ slot, n, entry, changed }) => (
               <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 py-2.5">
                 <span className="text-[11px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0">
-                  {formatTime(slot.start_time)}
+                  {formatTime(slot.start_time) || `P${n}`}
                 </span>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-slate-800 text-sm truncate">

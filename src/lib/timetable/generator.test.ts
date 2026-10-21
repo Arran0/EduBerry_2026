@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  generateTimetable, buildSchedules, teacherDayPenalty, PREFERRED_RUN,
+  generateTimetable, buildSchedules, teacherDayPenalty, PREFERRED_RUN, detectConflicts,
 } from './generator'
 import { computeHealth } from './health'
 import { teacherIdsOf } from './types'
@@ -215,8 +215,25 @@ describe('slot groups', () => {
     expect(satHomerooms.has('hrP')).toBe(false)
   })
 
-  it('never books one teacher into two groups at the same hour', () => {
-    // Both bands start at 09:00, so period 1 of each is the same wall-clock hour.
+  /** Every teacher booking as teacher|day|period number; throws on a repeat. */
+  const assertNoTeacherClash = (entries: PlacedEntry[], all: PeriodSlot[]) => {
+    const numberOf = new Map<string, number>()
+    for (const g of new Set(all.map((s) => s.group_id))) {
+      all.filter((s) => s.group_id === g && !s.is_break)
+        .sort((a, b) => a.position - b.position)
+        .forEach((s, i) => numberOf.set(s.id, i + 1))
+    }
+    const seen = new Set<string>()
+    for (const e of entries) {
+      for (const t of teacherIdsOf(e)) {
+        const stamp = `${t}|${e.day}|${numberOf.get(e.slotId)}`
+        expect(seen.has(stamp), `${stamp} booked twice`).toBe(false)
+        seen.add(stamp)
+      }
+    }
+  }
+
+  it('never books one teacher into the same period number of two groups', () => {
     const all = [...slots(3, 'g-primary', 9), ...slots(3, 'g-secondary', 9)]
     const result = generateTimetable({
       config: config(),
@@ -230,15 +247,83 @@ describe('slot groups', () => {
       unavailability: [], rooms: [], seed: 3,
     })
 
-    // One teacher, two bands: every placement must sit at a distinct hour.
-    const hourOf = (slotId: string) => all.find((s) => s.id === slotId)!.start_time
-    const seen = new Set<string>()
-    for (const e of result.entries) {
-      const stamp = `${e.day}|${hourOf(e.slotId)}`
-      expect(seen.has(stamp)).toBe(false)
-      seen.add(stamp)
-    }
+    expect(result.unplacedCount).toBe(0)
+    assertNoTeacherClash(result.entries, all)
     expect(result.conflicts.filter((c) => c.kind === 'teacher_double_booked')).toHaveLength(0)
+  })
+
+  it('lines periods up by number, not by row or by clock time', () => {
+    // Primary has its break after period 2, Secondary after period 3, and the
+    // two bands keep different (stale) clock times. Period 3 is still period 3.
+    const brk = (id: string, groupId: string, position: number): PeriodSlot => ({
+      id, config_id: 'cfg', group_id: groupId, position, label: 'Break',
+      start_time: null, end_time: null, is_break: true, created_at: '', updated_at: '',
+    })
+    const p = slots(5, 'g-primary', 8)
+    const s = slots(5, 'g-secondary', 9)
+    const all = [
+      p[0], p[1], brk('p-brk', 'g-primary', 3), ...p.slice(2).map((x, i) => ({ ...x, position: i + 4 })),
+      s[0], s[1], s[2], brk('s-brk', 'g-secondary', 4), ...s.slice(3).map((x, i) => ({ ...x, position: i + 5 })),
+    ]
+    const sched = buildSchedules(config(), all, [primary, secondary], { hrP: 'g-primary', hrS: 'g-secondary' })
+    // Period 3 of each: Primary's row 4, Secondary's row 3.
+    expect(sched.clash.get('g-primary-s3')).toEqual(['g-primary-s3', 'g-secondary-s3'])
+    expect(sched.clock.get('g-primary-s3')).toBe(sched.clock.get('g-secondary-s3'))
+    // Nothing collides with a break.
+    expect(sched.clash.has('p-brk')).toBe(false)
+
+    // A teacher who fills every period of the week across both bands.
+    const result = generateTimetable({
+      config: config(),
+      slots: all,
+      slotGroups: [primary, { ...secondary, working_days: DAYS }],
+      homeroomGroupIds: { hrP: 'g-primary', hrS: 'g-secondary' },
+      requirements: [
+        requirement({ id: 'r1', homeroom_id: 'hrP', subject_id: 'eng', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 12, max_per_day: 5 }),
+        requirement({ id: 'r2', homeroom_id: 'hrS', subject_id: 'mus', teacher_id: 't1', teacher_ids: ['t1'], periods_per_week: 13, max_per_day: 5 }),
+      ],
+      unavailability: [], rooms: [], seed: 9,
+    })
+    expect(result.unplacedCount).toBe(0)
+    assertNoTeacherClash(result.entries, all)
+    expect(result.conflicts).toHaveLength(0)
+  })
+
+  it('shares several teachers across groups of different lengths', () => {
+    // Primary runs 6 periods on 5 days, Secondary 8 on 6. Four teachers each
+    // teach in both, and in two classes per band.
+    const all = [...slots(6, 'g-primary'), ...slots(8, 'g-secondary')]
+    const teachers = ['t1', 't2', 't3', 't4']
+    const homerooms = { p1: 'g-primary', p2: 'g-primary', s1: 'g-secondary', s2: 'g-secondary' }
+    const requirements: Requirement[] = []
+    let n = 0
+    for (const hr of Object.keys(homerooms)) {
+      const perTeacher = hr.startsWith('p') ? 6 : 10
+      for (const t of teachers) {
+        requirements.push(requirement({
+          id: `r${++n}`, homeroom_id: hr, subject_id: `sub-${t}`, teacher_id: t, teacher_ids: [t],
+          periods_per_week: perTeacher, max_per_day: 3,
+        }))
+      }
+    }
+    const result = generateTimetable({
+      config: config(),
+      slots: all,
+      slotGroups: [primary, secondary],
+      homeroomGroupIds: homerooms,
+      requirements,
+      unavailability: [], rooms: [], seed: 21,
+    })
+    // 2 x 24 + 2 x 40 = 128 periods for 4 teachers, 32 each, against a week
+    // of 6 x 5 + 8 = 38 period numbers in which a teacher can be anywhere.
+    expect(result.unplacedCount).toBe(0)
+    assertNoTeacherClash(result.entries, all)
+    expect(result.conflicts.filter((c) => c.kind === 'teacher_double_booked')).toHaveLength(0)
+    // The same reading the editor's live check uses.
+    const sched = buildSchedules(config(), all, [primary, secondary], homerooms)
+    expect(
+      detectConflicts(result.entries, [], [], [], sched.clash).filter((c) => c.kind === 'teacher_double_booked'),
+    ).toHaveLength(0)
   })
 
   it('falls back to the base schedule for unassigned homerooms', () => {

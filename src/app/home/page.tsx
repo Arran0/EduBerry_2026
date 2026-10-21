@@ -49,6 +49,7 @@ import {
   StaffAttendanceRecord,
 } from '@/lib/attendance'
 import { fetchCalendarData, isTaskCompleted } from '@/lib/tasks'
+import { taskDisplayTitle } from '@/lib/taskClasses'
 import { fetchMyTeamRosters, mergeTeamRosters } from '@/lib/teams'
 import {
   UnreadAnnouncement,
@@ -1038,7 +1039,7 @@ export default function HomePage() {
         for (const t of week) {
           if (!t.due_date) continue
           if (!map.has(t.due_date)) map.set(t.due_date, [])
-          map.get(t.due_date)!.push({ id: t.id, title: t.title, done: isTaskCompleted(t) })
+          map.get(t.due_date)!.push({ id: t.id, title: taskDisplayTitle(t), done: isTaskCompleted(t) })
         }
         setTaskItemsByDay(map)
       })

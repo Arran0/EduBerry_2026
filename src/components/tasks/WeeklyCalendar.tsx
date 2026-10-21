@@ -6,15 +6,16 @@ import { AnimatePresence } from 'framer-motion'
 import { Plus, AlertTriangle, Star, HelpCircle, FileSpreadsheet, Maximize2, ChevronDown, ChevronLeft, ChevronRight, CalendarDays, Loader2 } from 'lucide-react'
 import TeamMemberSelector from './TeamMemberSelector'
 import {
-  fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, createTask, Task, TaskWithDetails, TaskStatus,
-  getNextStatus, canVerifyTask, updateTaskStatus, needsSubmissionFirst, isTaskCompleted,
+  fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, createTask, createTimetableTasks, Task, TaskWithDetails,
+  TaskStatus, getNextStatus, canVerifyTask, updateTaskStatus, needsSubmissionFirst, isTaskCompleted,
 } from '@/lib/tasks'
 import { fetchSubtasksForCalendar, Subtask, SubtaskWithProject, updateSubtaskStatus } from '@/lib/projects'
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMediaQuerySync } from '@/hooks/useMediaQuery'
-import { TASK_SLOTS, TaskSlot, formatSlotTime } from '@/lib/taskSlots'
-import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
+import { TaskPeriod, taskPeriods, DEFAULT_PERIOD_COUNT, periodRangeLabel, formatSlotTime } from '@/lib/taskSlots'
+import { fetchTeacherTimetable, periodsForDates, TeacherTimetable, SuggestedPeriod } from '@/lib/taskTimetable'
+import { taskDisplayTitle } from '@/lib/taskClasses'
 import { Btn, IconBtn, IconChip, Seg, StatusMark, shortDate } from './ui'
 
 // Every popup loads the first time it opens, not with the page. The loaders
@@ -25,6 +26,7 @@ const NewTaskForm = dynamic(loadNewTaskForm)
 const TaskDetailSheet = dynamic(loadTaskDetail)
 const SubtaskCard = dynamic(() => import('./SubtaskCard'))
 const PlannerModal = dynamic(() => import('./PlannerModal'))
+const TimetableSuggestSheet = dynamic(() => import('./TimetableSuggestSheet'))
 
 interface WeeklyCalendarProps {
   userId: string
@@ -132,8 +134,16 @@ export default function WeeklyCalendar({
   // The chip that flashes so the person sees where the task sits first.
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
 
-  // Real school periods from the active Timetable; the generic set until then.
-  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
+  // The viewed teacher's published timetable: their day's length, and the
+  // lessons an empty week can be filled from.
+  const [timetable, setTimetable] = useState<TeacherTimetable | null>(null)
+  // Which person and week `tasks` holds, so an empty list is never read as
+  // the next week's before that week has loaded.
+  const [tasksKey, setTasksKey] = useState('')
+  const [suggestion, setSuggestion] = useState<{ key: string; periods: SuggestedPeriod[]; fromToday: boolean } | null>(null)
+  const [suggestBusy, setSuggestBusy] = useState(false)
+  const [suggestError, setSuggestError] = useState<string | null>(null)
+  const askedWeeks = useRef(new Set<string>())
 
   const { user } = useAuth()
   // Phones default to one day at a time; the week grid is a tap away.
@@ -168,6 +178,7 @@ export default function WeeklyCalendar({
     const calendarData = await fetchCalendarData(targetUserId, weekStart)
     taskRenderKeys.current.clear()
     setTasks(calendarData.week)
+    setTasksKey(`${targetUserId}|${formatDate(weekStart)}`)
     setLoading(false)
     initialLoadDone.current = true
   }, [targetUserId, weekStart])
@@ -233,14 +244,14 @@ export default function WeeklyCalendar({
 
   useEffect(() => { loadSubtasks() }, [loadSubtasks])
 
-  // The periods come from the school's timetable, not the viewed person.
+  // The rows follow the viewed person's own timetable: a Primary teacher's day
+  // can be shorter than a Secondary teacher's.
   useEffect(() => {
     let cancelled = false
-    fetchActiveTimetablePeriodSlots()
-      .then(slots => { if (!cancelled) setPeriodSlots(slots) })
-      .catch(() => { if (!cancelled) setPeriodSlots(TASK_SLOTS) })
+    setTimetable(null)
+    fetchTeacherTimetable(targetUserId).then(tt => { if (!cancelled) setTimetable(tt) })
     return () => { cancelled = true }
-  }, [])
+  }, [targetUserId])
 
   // With the week on screen, fetch the task popup's code in the background so
   // the first tap on a chip opens it without a wait.
@@ -311,14 +322,14 @@ export default function WeeklyCalendar({
       if (bucket) bucket.push(task)
       else map.set(task.due_date, [task])
     }
-    // Timed tasks first in clock order, untimed after in creation order.
+    // Period order, then custom times in clock order, then the rest in
+    // creation order.
+    const rank = (t: Task) => t.period ?? (t.timing ? 1000 : 2000)
     for (const bucket of map.values()) {
-      bucket.sort((a, b) => {
-        if (!a.timing && !b.timing) return a.created_at.localeCompare(b.created_at)
-        if (!a.timing) return 1
-        if (!b.timing) return -1
-        return a.timing.localeCompare(b.timing)
-      })
+      bucket.sort((a, b) =>
+        rank(a) - rank(b) ||
+        (a.timing ?? '').localeCompare(b.timing ?? '') ||
+        a.created_at.localeCompare(b.created_at))
     }
     return map
   }, [tasks])
@@ -334,7 +345,11 @@ export default function WeeklyCalendar({
     return map
   }, [subtasks])
 
-  const periodStarts = useMemo(() => new Set(periodSlots.map(p => p.start)), [periodSlots])
+  // A task filed in a later period than the timetable has still gets its row.
+  const periodSlots = useMemo(() => {
+    const latest = tasks.reduce((m, t) => Math.max(m, t.period_end ?? 0, t.period ?? 0), 0)
+    return taskPeriods(Math.max(timetable?.periodCount ?? DEFAULT_PERIOD_COUNT, latest))
+  }, [tasks, timetable])
   const EMPTY_TASKS = useMemo<TaskWithDetails[]>(() => [], [])
   const EMPTY_SUBTASKS = useMemo<SubtaskWithProject[]>(() => [], [])
   const getTasksForDay = (d: string) => tasksByDay.get(d) ?? EMPTY_TASKS
@@ -351,6 +366,13 @@ export default function WeeklyCalendar({
     setBonusTasksList(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t))
     setOpenTask(prev => prev?.id === taskId ? { ...prev, status: newStatus } : prev)
     onTaskActivity?.()
+  }
+
+  const handleTaskDetailsChange = (taskId: string, patch: { title: string; classes: string[] }) => {
+    const apply = <T extends Task>(list: T[]) => list.map(t => t.id === taskId ? { ...t, ...patch } : t)
+    setTasks(apply)
+    setOverdueUndated(apply)
+    setBonusTasksList(apply)
   }
 
   const handleTaskDeleted = (taskId: string) => {
@@ -395,16 +417,59 @@ export default function WeeklyCalendar({
   const handleInlineCreate = useCallback(async (title: string, date: string, slotIndex: number | null) => {
     const t = title.trim()
     if (!t) return
-    const period = slotIndex !== null ? periodSlots[slotIndex] : null
     const created = await createTask({
       title: t,
       due_date: date,
-      timing: period?.start,
-      end_time: period?.end,
+      period: slotIndex !== null ? slotIndex + 1 : undefined,
       assignee_ids: [targetUserId],
     }, userId)
     if (created) handleNewTaskCreated(created)
-  }, [periodSlots, targetUserId, userId, handleNewTaskCreated])
+  }, [targetUserId, userId, handleNewTaskCreated])
+
+  // ── Suggestions from the published timetable ──────────────────────────────
+  // An empty week of someone with lessons in the timetable offers, once per
+  // visit, to put those lessons in as unnamed tasks. A week that is over is
+  // left alone; one under way is offered from today.
+  const canSuggest = ['teacher', 'coordinator', 'principal', 'admin'].includes(profile.role)
+  const weekKey = `${targetUserId}|${formatDate(weekStart)}`
+  const dismissKey = `tasks_tt_suggest_skip_${weekKey}`
+  useEffect(() => {
+    if (!canSuggest || loading || !timetable || tasksKey !== weekKey || tasks.length > 0) return
+    if (askedWeeks.current.has(weekKey)) return
+    askedWeeks.current.add(weekKey)
+    try { if (localStorage.getItem(dismissKey)) return } catch { /* private mode: ask anyway */ }
+    const dates = weekDays.map(d => d.full).filter(d => d >= todayStr)
+    if (dates.length === 0) return
+    const periods = periodsForDates(timetable, targetUserId, dates)
+    if (periods.length > 0) setSuggestion({ key: weekKey, periods, fromToday: dates.length < 7 })
+  }, [canSuggest, loading, timetable, tasksKey, weekKey, tasks.length, dismissKey, weekDays, todayStr, targetUserId])
+
+  // Moving to another week or person drops a question about the last one.
+  useEffect(() => { setSuggestion(s => (s && s.key !== weekKey ? null : s)) }, [weekKey])
+
+  const dismissSuggestion = () => {
+    if (suggestBusy) return
+    try { localStorage.setItem(dismissKey, '1') } catch { /* nothing to remember it in */ }
+    setSuggestion(null)
+    setSuggestError(null)
+  }
+
+  const acceptSuggestion = async () => {
+    if (!suggestion) return
+    setSuggestBusy(true)
+    setSuggestError(null)
+    const created = await createTimetableTasks(suggestion.periods, targetUserId, userId)
+    setSuggestBusy(false)
+    if (!created) {
+      setSuggestError('The periods were not added. Check your connection and try again.')
+      return
+    }
+    setSuggestion(null)
+    setTasks(prev => [...prev, ...created.map(t => ({ ...t, assignees: [], checklist: [], comments: [] }))])
+    refreshTasks()
+  }
+  const viewedFirstName = teamMembers?.find(m => m.id === targetUserId)?.full_name?.split(' ')[0]
+  const viewedName = targetUserId === userId ? 'your' : viewedFirstName ? `${viewedFirstName}’s` : 'their'
 
   const weekLabel = weekDays[0].month === weekDays[6].month
     ? `${weekDays[0].date} – ${weekDays[6].date} ${weekDays[6].month}`
@@ -515,11 +580,11 @@ export default function WeeklyCalendar({
           </button>
         </div>
 
-        {/* Phone: the tools and the day/week choice on the left, the person on the right. */}
-        <div className="sm:hidden flex items-center gap-2">
-          {tools('left')}
+        {/* Phone: the tools on the left, day/week in the middle, the person on the right. */}
+        <div className="sm:hidden grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">{tools('left')}</div>
           <Seg value={mode} onChange={setMode} options={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]} />
-          {picker && <div className="ml-auto">{picker}</div>}
+          <div className="flex justify-end min-w-0">{picker}</div>
         </div>
       </div>
 
@@ -543,7 +608,6 @@ export default function WeeklyCalendar({
             periods={periodSlots}
             tasks={getTasksForDay(expandedDay)}
             subtasks={getSubtasksForDay(expandedDay)}
-            periodStarts={periodStarts}
             composeSlot={composeCell?.date === expandedDay ? composeCell.slot : undefined}
             renderChip={t => chip(t, false, true)}
             renderSubChip={sb => subChip(sb, true)}
@@ -588,7 +652,7 @@ export default function WeeklyCalendar({
                 Any
               </div>
               {weekDays.map((day, i) => {
-                const unscheduled = getTasksForDay(day.full).filter(t => !t.timing || !periodStarts.has(t.timing))
+                const unscheduled = getTasksForDay(day.full).filter(t => !t.period)
                 const daySubs = getSubtasksForDay(day.full)
                 return (
                   <div key={day.full} className={`p-1 space-y-1 border-b border-amber-900/[0.07] ${i < 6 ? 'border-r' : ''} min-w-0 ${cellBg(day.full, todayStr, expandedDay)}`}>
@@ -602,12 +666,12 @@ export default function WeeklyCalendar({
                 <React.Fragment key={pIdx}>
                   <div
                     className="sticky left-0 z-10 flex flex-col items-center justify-center bg-[#fffaf2] border-r border-b border-amber-900/[0.07] leading-none gap-0.5"
-                    title={`${period.label}, ${formatSlotTime(period.start)} – ${formatSlotTime(period.end)}`}
+                    title={period.label}
                   >
-                    <span className="text-[12px] font-bold text-slate-500 tabular-nums">{pIdx + 1}</span>
+                    <span className="text-[12px] font-bold text-slate-500 tabular-nums">{period.n}</span>
                   </div>
                   {weekDays.map((day, i) => {
-                    const cellTasks = getTasksForDay(day.full).filter(t => t.timing === period.start)
+                    const cellTasks = getTasksForDay(day.full).filter(t => t.period === period.n)
                     const isComposing = composeCell?.date === day.full && composeCell?.slot === pIdx
                     return (
                       <div key={day.full} className={`p-1 border-b border-amber-900/[0.07] ${i < 6 ? 'border-r' : ''} min-h-[36px] min-w-0 flex flex-col gap-1 ${cellBg(day.full, todayStr, expandedDay)}`}>
@@ -675,6 +739,7 @@ export default function WeeklyCalendar({
             onStatusChange={handleTaskStatusChange}
             onTaskDeleted={handleTaskDeleted}
             onTaskUpdated={refreshTasks}
+            onDetailsChange={handleTaskDetailsChange}
           />
         )}
       </AnimatePresence>
@@ -703,6 +768,7 @@ export default function WeeklyCalendar({
             defaultDate={newTaskDate}
             defaultTitle={newTaskTitle}
             defaultSlotRange={newTaskSlot}
+            periodCount={periodSlots.length}
             availableAssignees={availableAssignees}
             canAssignToOthers={canAssignToOthers}
           />
@@ -718,6 +784,20 @@ export default function WeeklyCalendar({
             availableAssignees={availableAssignees}
             canAssignToOthers={canAssignToOthers}
             onImported={loadTasks}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {suggestion && (
+          <TimetableSuggestSheet
+            periods={suggestion.periods}
+            whose={viewedName}
+            fromToday={suggestion.fromToday}
+            busy={suggestBusy}
+            error={suggestError}
+            onAccept={acceptSuggestion}
+            onClose={dismissSuggestion}
           />
         )}
       </AnimatePresence>
@@ -841,12 +921,11 @@ function DaySwitch({ days, value, today, countFor, onChange }: {
 }
 
 function DayList({
-  periods, tasks, subtasks, periodStarts, composeSlot, renderChip, renderSubChip, onCompose, onCancelCompose, onCreate, onExpand,
+  periods, tasks, subtasks, composeSlot, renderChip, renderSubChip, onCompose, onCancelCompose, onCreate, onExpand,
 }: {
-  periods: TaskSlot[]
+  periods: TaskPeriod[]
   tasks: TaskWithDetails[]
   subtasks: SubtaskWithProject[]
-  periodStarts: Set<string>
   /** undefined: nothing being typed; null: the "any time" row; n: period n. */
   composeSlot: number | null | undefined
   renderChip: (t: TaskWithDetails) => React.ReactNode
@@ -856,12 +935,11 @@ function DayList({
   onCreate: (title: string, slot: number | null) => void
   onExpand: (title: string, slot: number | null) => void
 }) {
-  const unscheduled = tasks.filter(t => !t.timing || !periodStarts.has(t.timing))
-  const row = (key: string, label: React.ReactNode, time: React.ReactNode, slot: number | null, items: React.ReactNode[]) => (
+  const unscheduled = tasks.filter(t => !t.period)
+  const row = (key: string, label: React.ReactNode, slot: number | null, items: React.ReactNode[]) => (
     <div key={key} className="flex items-stretch gap-2.5 px-2.5 py-1.5 min-h-[44px]">
-      <div className="w-12 flex-shrink-0 flex flex-col justify-center leading-tight">
+      <div className="w-9 flex-shrink-0 flex flex-col justify-center leading-tight">
         <span className="text-[12.5px] font-bold text-slate-600 tabular-nums">{label}</span>
-        {time && <span className="text-[10.5px] text-slate-400 tabular-nums">{time}</span>}
       </div>
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
         {items}
@@ -881,9 +959,9 @@ function DayList({
   return (
     <div className="divide-y divide-amber-900/[0.06]">
       {(unscheduled.length > 0 || subtasks.length > 0 || composeSlot === null) &&
-        row('any', 'Any', 'time', null, [...unscheduled.map(renderChip), ...subtasks.map(renderSubChip)])}
+        row('any', 'Any', null, [...unscheduled.map(renderChip), ...subtasks.map(renderSubChip)])}
       {periods.map((p, i) =>
-        row(String(i), `P${i + 1}`, formatSlotTime(p.start), i, tasks.filter(t => t.timing === p.start).map(renderChip)),
+        row(String(i), p.shortLabel, i, tasks.filter(t => t.period === p.n).map(renderChip)),
       )}
     </div>
   )
@@ -1137,10 +1215,15 @@ function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, roomy,
         >
           <StatusMark status={task.status} requireCheck={!!task.require_check} />
         </button>
-        <button onClick={onOpen} title={roomy ? undefined : task.title} className="min-w-0 flex-1 text-left py-px">
+        <button onClick={onOpen} title={roomy ? undefined : taskDisplayTitle(task)} className="min-w-0 flex-1 text-left py-px">
           <span className={`block font-medium leading-snug ${roomy ? 'break-words' : 'truncate'} ${completed || isDismissed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-            {task.title}
+            <ChipTitle task={task} muted={completed || isDismissed} />
           </span>
+          {roomy && (task.period_end || (!task.period && task.timing)) && (
+            <span className="block text-[10.5px] text-slate-400 leading-tight tabular-nums">
+              {task.period ? periodRangeLabel(task.period, task.period_end) : formatSlotTime(task.timing!)}
+            </span>
+          )}
           {showDate && task.due_date && (
             <span className="block text-[10.5px] text-red-500 font-medium leading-tight">{shortDate(task.due_date)}</span>
           )}
@@ -1153,6 +1236,17 @@ function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, roomy,
       )}
     </div>
   )
+}
+
+/** The task's name, then its classes in amber: "Fractions recap · 7B". */
+function ChipTitle({ task, muted }: { task: Task; muted: boolean }) {
+  const name = task.title.trim()
+  const classes = (task.classes ?? []).join(', ')
+  if (!classes) return <>{name || 'Untitled task'}</>
+  const tone = muted ? '' : 'text-amber-800'
+  return name
+    ? <>{name}<span className={`font-semibold ${tone}`}> · {classes}</span></>
+    : <span className={`font-semibold ${tone}`}>{classes}</span>
 }
 
 function SubtaskGridChip({ subtask, roomy, onStatusTap, onOpen }: {

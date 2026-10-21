@@ -3,11 +3,14 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Loader2, X, Search } from 'lucide-react'
 import Avatar from '@/components/Avatar'
-import { createTask, Task, checkDuplicateTaskTitle, checkTaskSlotConflict, NewTaskInput, TaskRecurrence, RECURRENCE_LABELS } from '@/lib/tasks'
-import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
-import { TaskSlot, TASK_SLOTS, formatSlotTime as fmt } from '@/lib/taskSlots'
+import {
+  createTask, Task, checkDuplicateTaskTitle, checkTaskSlotConflict, checkTaskPeriodConflict, NewTaskInput, TaskRecurrence,
+  RECURRENCE_LABELS,
+} from '@/lib/tasks'
+import { taskPeriods, periodRangeLongLabel, DEFAULT_PERIOD_COUNT } from '@/lib/taskSlots'
 import { UserProfile } from '@/lib/supabase'
 import { Btn, IconBtn, FormCard, FormRow, Toggle, Notice, Seg, TaskSheet, Field } from './ui'
+import ClassPicker from './ClassPicker'
 
 function toISODateLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -27,17 +30,20 @@ interface NewTaskFormProps {
   defaultDate?: string
   defaultTitle?: string
   defaultSlotRange?: [number, number] | null
+  /** The assignee's periods per day, from their timetable. */
+  periodCount?: number
   availableAssignees?: UserProfile[]
   canAssignToOthers: boolean
 }
 
 export default function NewTaskForm({
   onClose, onTaskCreated, currentUserId, defaultAssigneeId, defaultDate, defaultTitle, defaultSlotRange,
-  availableAssignees = [], canAssignToOthers,
+  periodCount = DEFAULT_PERIOD_COUNT, availableAssignees = [], canAssignToOthers,
 }: NewTaskFormProps) {
   const todayStr = toISODateLocal(new Date())
 
   const [title, setTitle] = useState(defaultTitle || '')
+  const [classes, setClasses] = useState<string[]>([])
   const [dueDate, setDueDate] = useState(defaultDate || todayStr)
   const [slotRange, setSlotRange] = useState<[number, number] | null>(defaultSlotRange ?? null)
   const [timeMode, setTimeMode] = useState<'periods' | 'custom'>('periods')
@@ -55,15 +61,7 @@ export default function NewTaskForm({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<{ field: 'title' | 'time' | 'save'; text: string } | null>(null)
 
-  // Real periods from the active Timetable; the generic set until they load.
-  const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
-  useEffect(() => {
-    let cancelled = false
-    fetchActiveTimetablePeriodSlots()
-      .then(slots => { if (!cancelled) setPeriodSlots(slots) })
-      .catch(() => { if (!cancelled) setPeriodSlots(TASK_SLOTS) })
-    return () => { cancelled = true }
-  }, [])
+  const periodSlots = useMemo(() => taskPeriods(periodCount), [periodCount])
 
   // A time error clears as soon as the date or time changes.
   useEffect(() => { setError(e => (e?.field === 'time' ? null : e)) }, [dueDate, slotRange, timeMode, customStart, customEnd])
@@ -84,8 +82,11 @@ export default function NewTaskForm({
 
   const custom = timeMode === 'custom'
   const validRange = slotRange && slotRange[1] < periodSlots.length ? slotRange : null
-  const derivedStart = custom ? customStart : (validRange ? periodSlots[validRange[0]].start : '')
-  const derivedEnd = custom ? customEnd : (validRange ? periodSlots[validRange[1]].end : '')
+  const firstPeriod = !custom && validRange ? validRange[0] + 1 : null
+  const lastPeriod = !custom && validRange ? validRange[1] + 1 : null
+  const customTimed = custom && !!customStart
+  // A task needs a name, or a class to be named by.
+  const named = title.trim().length > 0 || classes.length > 0
 
   const addCheckItem = () => {
     const t = newCheckItem.trim()
@@ -106,18 +107,18 @@ export default function NewTaskForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const name = title.trim()
-    if (!name || submitting) return
+    if (!named || submitting) return
     setError(null)
     const assignees = selectedAssignees.length > 0 ? selectedAssignees : [defaultAssigneeId || currentUserId]
     const date = dueDate || todayStr
 
     // Coordinators and above may leave a task untimed; everyone else maps each
     // task onto a period or a time range.
-    if (!canAssignToOthers && !derivedStart) {
+    if (!canAssignToOthers && !firstPeriod && !customTimed) {
       setError({ field: 'time', text: 'Pick a period, or switch to Custom and set a time.' })
       return
     }
-    if (custom && derivedStart && derivedEnd && derivedEnd <= derivedStart) {
+    if (custom && customStart && customEnd && customEnd <= customStart) {
       setError({ field: 'time', text: 'The end time is before the start time.' })
       return
     }
@@ -125,25 +126,34 @@ export default function NewTaskForm({
     setSubmitting(true)
     // The two checks are independent, so they go out together.
     const [isDuplicate, hasConflict] = await Promise.all([
-      checkDuplicateTaskTitle(name, date, assignees),
-      derivedStart && derivedEnd ? checkTaskSlotConflict(date, derivedStart, derivedEnd, assignees) : Promise.resolve(false),
+      name ? checkDuplicateTaskTitle(name, date, assignees, classes) : Promise.resolve(false),
+      firstPeriod && lastPeriod
+        ? checkTaskPeriodConflict(date, firstPeriod, lastPeriod, assignees)
+        : custom && customStart && customEnd
+          ? checkTaskSlotConflict(date, customStart, customEnd, assignees)
+          : Promise.resolve(false),
     ])
     if (isDuplicate) {
       setSubmitting(false)
-      setError({ field: 'title', text: 'A task with this name already exists on that day.' })
+      setError({ field: 'title', text: 'A task with this name and class already exists on that day.' })
       return
     }
     if (hasConflict) {
       setSubmitting(false)
-      setError({ field: 'time', text: 'This assignee already has a task in that time slot. Pick a different one.' })
+      setError({ field: 'time', text: custom
+        ? 'This assignee already has a task at that time. Pick a different one.'
+        : 'This assignee already has a task in that period. Pick a different one.' })
       return
     }
 
     const input: NewTaskInput = {
       title: name,
+      classes,
       due_date: date,
-      timing: derivedStart || undefined,
-      end_time: derivedEnd || undefined,
+      period: firstPeriod ?? undefined,
+      period_end: lastPeriod ?? undefined,
+      timing: custom ? customStart || undefined : undefined,
+      end_time: custom ? customEnd || undefined : undefined,
       require_check: requireCheck,
       requires_submission: requiresSubmission,
       tag: null,
@@ -164,9 +174,7 @@ export default function NewTaskForm({
       : dueDate === shiftDate(todayStr, -1) ? 'Yesterday'
         : new Date(dueDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
-  const rangeText = validRange
-    ? `${validRange[0] === validRange[1] ? periodSlots[validRange[0]].label : `${periodSlots[validRange[0]].label} to ${periodSlots[validRange[1]].label}`}, ${fmt(derivedStart)} – ${fmt(derivedEnd)}`
-    : null
+  const rangeText = firstPeriod ? periodRangeLongLabel(firstPeriod, lastPeriod) : null
 
   const optionCount = [recurrence !== 'none', bonusPoints !== 0, requireCheck, requiresSubmission, checklistItems.length > 0, selectedAssignees.length > 1].filter(Boolean).length
   const arrow = 'w-8 h-8 inline-flex items-center justify-center rounded-full text-slate-500 hover:text-amber-700 hover:bg-amber-50 transition'
@@ -179,7 +187,7 @@ export default function NewTaskForm({
       footer={
         <div className="flex items-center justify-end gap-2">
           <Btn onClick={onClose} disabled={submitting}>Cancel</Btn>
-          <Btn tone="primary" type="submit" form="new-task-form" disabled={submitting || !title.trim()}>
+          <Btn tone="primary" type="submit" form="new-task-form" disabled={submitting || !named}>
             {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
             {submitting ? 'Creating…' : 'Create task'}
           </Btn>
@@ -191,10 +199,9 @@ export default function NewTaskForm({
           <input
             value={title}
             onChange={e => { setTitle(e.target.value); if (error?.field === 'title') setError(null) }}
-            placeholder="Task name"
+            placeholder={classes.length ? `Task name (or just ${classes.join(', ')})` : 'Task name'}
             aria-label="Task name"
             className={`tk-input !h-11 !text-[15px] font-medium ${error?.field === 'title' ? '!border-red-400' : ''}`}
-            required
             autoFocus
             maxLength={200}
           />
@@ -202,6 +209,9 @@ export default function NewTaskForm({
         </div>
 
         <FormCard>
+          <FormRow label="Classes" hint="Shown after the task name" stack>
+            <ClassPicker value={classes} onChange={v => { setClasses(v); if (error?.field === 'title') setError(null) }} />
+          </FormRow>
           <FormRow label="Due date">
             <span className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-amber-50 border border-amber-100">
               <button type="button" onClick={() => setDueDate(d => shiftDate(d, -1))} aria-label="Previous day" className={arrow}><ChevronLeft size={15} /></button>
@@ -232,7 +242,7 @@ export default function NewTaskForm({
                         type="button"
                         onClick={() => handleSlotClick(i)}
                         aria-pressed={on}
-                        title={`${slot.label}, ${fmt(slot.start)} – ${fmt(slot.end)}`}
+                        title={slot.label}
                         className={`h-10 sm:h-9 rounded-[10px] text-[13px] font-semibold tabular-nums border transition active:scale-95 ${
                           on
                             ? 'text-white border-transparent bg-gradient-to-br from-amber-500 to-orange-500 shadow-[0_6px_14px_-8px_rgba(234,88,12,.8)]'

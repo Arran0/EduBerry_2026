@@ -138,15 +138,22 @@ export interface SlotGeometry {
 
 /**
  * Every schedule in play, plus the cross-schedule bookkeeping that only matters
- * once more than one exists:
+ * once more than one exists.
  *
- *  - `clock` is a config-wide chronological ordinal per slot. A teacher's
- *    max-in-a-row and idle-gap scoring compare periods across schedules, so
- *    they need one shared number line rather than per-schedule indices.
- *  - `clash` maps a slot to every slot (its own included) that occupies the
- *    same wall-clock time in another schedule. A teacher or room booked in
- *    Primary period 3 is unavailable for an overlapping Secondary period, and
- *    only this map can see that — the two are different slot rows.
+ * Periods are numbered, not timed: period N of one schedule runs against
+ * period N of every other, whatever clock times a slot may still carry. Bells
+ * on different clocks overlap unevenly (period 3 of one band touches periods 2
+ * and 3 of the other), which would mark a teacher shared across bands busy
+ * twice over; numbered periods line up one for one.
+ *
+ *  - `clock` is a slot's period number (0-based, breaks skipped), shared by
+ *    every schedule. A teacher's max-in-a-row and idle-gap scoring compare
+ *    periods across schedules, and the CP-SAT service books teachers and rooms
+ *    on it, so period 3 of every band must land on the same number.
+ *  - `clash` maps a slot to every slot (its own included) with the same period
+ *    number in another schedule. A teacher or room booked in Primary period 3
+ *    is unavailable for Secondary period 3, and only this map can see that —
+ *    the two are different slot rows.
  */
 export interface Schedules {
   geoms: Map<string, SlotGeometry>
@@ -160,15 +167,9 @@ export interface Schedules {
    * a forgotten class on a timetable instead of silently emptying it.
    */
   fallbackKey: string
-  clock: Map<string, number> // slotId -> chronological ordinal
-  clash: Map<string, string[]> // slotId -> overlapping slotIds, itself first
+  clock: Map<string, number> // slotId -> period number, shared across schedules
+  clash: Map<string, string[]> // slotId -> same-numbered slotIds, itself first
   multi: boolean // more than one schedule is in play
-}
-
-const minutes = (t: string | null): number | null => {
-  if (!t) return null
-  const m = t.match(/^(\d{1,2}):(\d{2})/)
-  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null
 }
 
 function geometryOf(key: string, name: string, days: Weekday[], slots: PeriodSlot[]): SlotGeometry {
@@ -180,22 +181,6 @@ function geometryOf(key: string, name: string, days: Weekday[], slots: PeriodSlo
     adjacentNext.push(teachingSlots[i + 1].position === teachingSlots[i].position + 1)
   }
   return { key, name, days, teachingSlots, slotIds, slotOrder, adjacentNext }
-}
-
-/**
- * Two slots from different schedules collide when their clock times overlap.
- * Schedules built without timings fall back to the period number: "period 3"
- * of one band is assumed to run against "period 3" of another.
- */
-function slotsCollide(a: PeriodSlot, b: PeriodSlot): boolean {
-  const aStart = minutes(a.start_time)
-  const aEnd = minutes(a.end_time)
-  const bStart = minutes(b.start_time)
-  const bEnd = minutes(b.end_time)
-  if (aStart != null && aEnd != null && bStart != null && bEnd != null) {
-    return aStart < bEnd && bStart < aEnd
-  }
-  return a.position === b.position
 }
 
 export function buildSchedules(
@@ -242,31 +227,23 @@ export function buildSchedules(
     (g) => g.teachingSlots.length > 0,
   )
 
-  const all = [...geoms.values()].flatMap((g) => g.teachingSlots)
-  const positionIn = new Map<string, number>()
-  for (const g of geoms.values()) g.teachingSlots.forEach((s, i) => positionIn.set(s.id, i))
-  const sorted = [...all].sort((a, b) => {
-    const am = minutes(a.start_time)
-    const bm = minutes(b.start_time)
-    if (am != null && bm != null && am !== bm) return am - bm
-    return (positionIn.get(a.id) ?? 0) - (positionIn.get(b.id) ?? 0)
-  })
+  // A break has no number, so the period after lunch is the next number on,
+  // whichever row it sits in.
   const clock = new Map<string, number>()
-  sorted.forEach((s, i) => clock.set(s.id, i))
+  const byNumber = new Map<number, string[]>()
+  for (const g of geoms.values()) {
+    g.teachingSlots.forEach((s, i) => {
+      clock.set(s.id, i)
+      const list = byNumber.get(i)
+      if (list) list.push(s.id)
+      else byNumber.set(i, [s.id])
+    })
+  }
 
   const clash = new Map<string, string[]>()
   const multi = order.length > 1
-  for (const s of all) {
-    if (!multi) {
-      clash.set(s.id, [s.id])
-      continue
-    }
-    const hits = [s.id]
-    for (const o of all) {
-      if (o.id === s.id || o.group_id === s.group_id) continue
-      if (slotsCollide(s, o)) hits.push(o.id)
-    }
-    clash.set(s.id, hits)
+  for (const [id, n] of clock) {
+    clash.set(id, multi ? [id, ...byNumber.get(n)!.filter((o) => o !== id)] : [id])
   }
 
   return { geoms, order, byHomeroom, fallbackKey, clock, clash, multi }
@@ -1870,9 +1847,9 @@ function push<T>(map: Map<string, T[]>, key: string, value: T) {
 }
 
 /**
- * One stable id per wall-clock period across every bell schedule. Slots that
- * overlap in time all resolve to the same id (the smallest of the group), so
- * a teacher double-booked across two bands collides on a plain map lookup.
+ * One stable id per period number across every bell schedule. Slots with the
+ * same number all resolve to the same id (the smallest of the group), so a
+ * teacher double-booked across two bands collides on a plain map lookup.
  * With one schedule, or no clash map, a slot is its own canonical id.
  */
 function canonicalSlot(clash: Map<string, string[]> | undefined, slotId: string): string {
@@ -1900,8 +1877,8 @@ export function detectConflicts(
   unavailability: TeacherUnavailability[],
   constraints: TimetableConstraint[] = [],
   homerooms: HomeroomLite[] = [],
-  // Round 9: slotId -> the slots of other bell schedules it overlaps in time.
-  // Without it, two bands running at the same hour look like different cells
+  // Round 9: slotId -> the slots of other bell schedules with its period number.
+  // Without it, period 3 of two bands looks like two different cells
   // and a teacher booked in both reads as free. Omit it for a single schedule.
   slotClash?: Map<string, string[]>,
 ): GeneratorConflict[] {
@@ -1909,7 +1886,7 @@ export function detectConflicts(
   const teacherAt = new Map<string, PlacedEntry[]>()
   const roomAt = new Map<string, PlacedEntry[]>()
   const homeroomAt = new Map<string, PlacedEntry[]>()
-  // Everything that shares a wall-clock slot is filed under one canonical key,
+  // Everything that shares a period number is filed under one canonical key,
   // so an overlap across bands lands in the same bucket as a plain clash.
   const timeKey = (day: Weekday, slotId: string) => cellKey(day, canonicalSlot(slotClash, slotId))
 

@@ -1,6 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
 import { attachmentProblem, isImageAttachment, normalizeLinkUrl } from './attachmentPolicy'
+import { taskDisplayTitle } from './taskClasses'
 
 // ============================================
 // Types
@@ -17,8 +18,11 @@ export interface Task {
   status: TaskStatus
   is_overdue: boolean
   due_date: string | null
-  timing: string | null       // legacy / start_time alias
-  end_time: string | null     // new end-time field
+  timing: string | null       // custom start time; period tasks leave it null
+  end_time: string | null     // custom end time
+  period: number | null       // 1-based period number
+  period_end: number | null   // last period of a run of several; null = one period
+  classes: string[]           // grade + section labels, e.g. ['7B', '7C']
   require_check: boolean      // false = not_done>partial>done(completed); true = not_done>partial>done(await)>checked(completed)
   tag: TaskTag
   bonus_points: number
@@ -85,8 +89,11 @@ export interface NewTaskInput {
   title: string
   description?: string
   due_date?: string
-  timing?: string      // start time
-  end_time?: string    // end time
+  timing?: string      // custom start time
+  end_time?: string    // custom end time
+  period?: number
+  period_end?: number
+  classes?: string[]
   require_check?: boolean
   requires_submission?: boolean
   tag?: TaskTag
@@ -239,22 +246,53 @@ export function getNextStatus(current: TaskStatus, canCheck: boolean, requireChe
 // Task CRUD
 // ============================================
 
-export async function checkDuplicateTaskTitle(title: string, dueDate: string, assigneeIds: string[]): Promise<boolean> {
+/** Same name, same classes, same day, same person. The same name for another class is a different task. */
+export async function checkDuplicateTaskTitle(title: string, dueDate: string, assigneeIds: string[], classes: string[] = []): Promise<boolean> {
   const { data } = await supabase
     .from('tasks')
-    .select('id, task_assignees!inner(user_id)')
+    .select('id, classes, task_assignees!inner(user_id)')
     .eq('title', title)
     .eq('due_date', dueDate)
     .in('task_assignees.user_id', assigneeIds)
-    .limit(1)
-  return (data?.length ?? 0) > 0
+  const want = [...classes].sort().join('|')
+  return (data ?? []).some(t => [...((t as { classes: string[] | null }).classes ?? [])].sort().join('|') === want)
 }
 
 /**
- * Whether any of `assigneeIds` already has another task overlapping
- * [timing, endTime) on `dueDate` — stops a staff member being double-booked
- * into the same period. Pass `excludeTaskId` when editing an existing task
- * so it doesn't conflict with itself. Dismissed tasks don't count.
+ * Whether any of `assigneeIds` already has a task in periods [period,
+ * periodEnd] on `dueDate`, so nobody is double-booked into one period. Pass
+ * `excludeTaskId` when editing a task so it doesn't conflict with itself.
+ * Dismissed tasks don't count.
+ */
+export async function checkTaskPeriodConflict(
+  dueDate: string,
+  period: number,
+  periodEnd: number,
+  assigneeIds: string[],
+  excludeTaskId?: string
+): Promise<boolean> {
+  if (!dueDate || !period || assigneeIds.length === 0) return false
+
+  let query = supabase
+    .from('tasks')
+    .select('id, period, period_end, task_assignees!inner(user_id)')
+    .eq('due_date', dueDate)
+    .in('task_assignees.user_id', assigneeIds)
+    .not('period', 'is', null)
+    .lte('period', periodEnd)
+    .neq('status', 'dismissed')
+
+  if (excludeTaskId) query = query.neq('id', excludeTaskId)
+
+  const { data } = await query
+  return (data as { period: number; period_end: number | null }[] | null ?? []).some(
+    t => (t.period_end ?? t.period) >= period
+  )
+}
+
+/**
+ * The same check for a task given a custom time: another custom-time task
+ * overlapping [timing, endTime). Period tasks have no clock time to compare.
  */
 export async function checkTaskSlotConflict(
   dueDate: string,
@@ -270,6 +308,7 @@ export async function checkTaskSlotConflict(
     .select('id, timing, end_time, task_assignees!inner(user_id)')
     .eq('due_date', dueDate)
     .in('task_assignees.user_id', assigneeIds)
+    .is('period', null)
     .not('timing', 'is', null)
     .not('end_time', 'is', null)
     .neq('status', 'dismissed')
@@ -300,8 +339,11 @@ export async function createTask(input: NewTaskInput, createdBy: string): Promis
     title: input.title,
     description: input.description || null,
     due_date: input.due_date || null,
-    timing: input.timing || null,
-    end_time: input.end_time || null,
+    timing: input.period ? null : input.timing || null,
+    end_time: input.period ? null : input.end_time || null,
+    period: input.period ?? null,
+    period_end: input.period && input.period_end && input.period_end > input.period ? input.period_end : null,
+    classes: input.classes ?? [],
     require_check: input.require_check ?? false,
     requires_submission: input.requires_submission ?? false,
     tag: input.tag || null,
@@ -462,6 +504,9 @@ async function _spawnNextRecurrence(taskId: string): Promise<void> {
       due_date: nextDate,
       timing: task.timing,
       end_time: task.end_time || null,
+      period: task.period ?? null,
+      period_end: task.period_end ?? null,
+      classes: task.classes ?? [],
       require_check: task.require_check ?? false,
       requires_submission: task.requires_submission ?? false,
       tag: task.tag,
@@ -507,6 +552,56 @@ export async function deleteTask(taskId: string): Promise<boolean> {
     return false
   }
   return true
+}
+
+/** Renames a task, or changes the classes it is for. */
+export async function updateTaskDetails(
+  taskId: string,
+  patch: { title?: string; classes?: string[] },
+): Promise<boolean> {
+  const { error } = await supabase.from('tasks').update(patch).eq('id', taskId)
+  if (error) {
+    console.error('Error updating task:', error)
+    return false
+  }
+  return true
+}
+
+/**
+ * One unnamed task per period the timetable gives the teacher, named by its
+ * classes until the teacher names it. One insert for the tasks and one for
+ * their assignee, however many periods the week has.
+ */
+export async function createTimetableTasks(
+  periods: { date: string; period: number; classes: string[] }[],
+  assigneeId: string,
+  createdBy: string,
+): Promise<Task[] | null> {
+  if (periods.length === 0) return []
+  const { data: tasks, error } = await supabase
+    .from('tasks')
+    .insert(periods.map(p => ({
+      title: '',
+      due_date: p.date,
+      period: p.period,
+      classes: p.classes,
+      created_by: createdBy,
+    })))
+    .select()
+  if (error || !tasks) {
+    console.error('Error creating timetable tasks:', error)
+    return null
+  }
+  const { error: aErr } = await supabase
+    .from('task_assignees')
+    .insert(tasks.map(t => ({ task_id: t.id, user_id: assigneeId })))
+  if (aErr) {
+    // Unassigned tasks would be invisible to everyone, so they don't stay.
+    console.error('Error assigning timetable tasks:', aErr)
+    await supabase.from('tasks').delete().in('id', tasks.map(t => t.id))
+    return null
+  }
+  return tasks as Task[]
 }
 
 // ============================================
@@ -708,7 +803,7 @@ export interface TaskAwaitingVerification {
 export async function fetchTasksAwaitingVerification(userId: string): Promise<TaskAwaitingVerification[]> {
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, title, due_date, task_assignees(user_id, user:profiles(id, full_name, avatar_url))')
+    .select('id, title, classes, due_date, task_assignees(user_id, user:profiles(id, full_name, avatar_url))')
     .eq('created_by', userId)
     .eq('status', 'done')
     .eq('require_check', true)
@@ -722,7 +817,7 @@ export async function fetchTasksAwaitingVerification(userId: string): Promise<Ta
       if (a.user_id === userId) continue // skip self-assigned — only alert about others
       result.push({
         taskId: task.id,
-        title: task.title,
+        title: taskDisplayTitle(task),
         dueDate: task.due_date,
         assigneeId: a.user_id,
         assigneeName: a.user?.full_name || 'Unknown',

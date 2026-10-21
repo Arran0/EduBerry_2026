@@ -1,26 +1,40 @@
-// Shared school period/slot times used by the Task Manager's "New Task" form,
-// the Weekly Calendar's quick-add picker, and the Planner import/draft feature.
-// Keeping one definition avoids the three call sites drifting out of sync.
+// The periods a task can sit in, shared by the Task Manager's "New task" form,
+// the Weekly Calendar's grid and the Planner import.
+//
+// Periods are numbered, not timed: the Timetable app keeps no clock times, so a
+// task records its period number (tasks.period, plus tasks.period_end for a run
+// of several). Only a task given a custom time carries one (tasks.timing and
+// tasks.end_time).
 
-export interface TaskSlot {
+export interface TaskPeriod {
+  /** 1-based period number. */
+  n: number
   label: string
   shortLabel: string
-  start: string
-  end: string
 }
 
-export const TASK_SLOTS: TaskSlot[] = [
-  { label: 'Slot 1',  shortLabel: 'S1',  start: '09:10', end: '09:50' },
-  { label: 'Slot 2',  shortLabel: 'S2',  start: '09:50', end: '10:30' },
-  { label: 'Slot 3',  shortLabel: 'S3',  start: '10:30', end: '11:20' },
-  { label: 'Slot 4',  shortLabel: 'S4',  start: '11:20', end: '12:00' },
-  { label: 'Slot 5',  shortLabel: 'S5',  start: '12:00', end: '12:40' },
-  { label: 'Slot 6',  shortLabel: 'S6',  start: '13:10', end: '13:50' },
-  { label: 'Slot 7',  shortLabel: 'S7',  start: '13:50', end: '14:30' },
-  { label: 'Slot 8',  shortLabel: 'S8',  start: '14:30', end: '15:20' },
-  { label: 'Slot 9',  shortLabel: 'S9',  start: '15:20', end: '16:00' },
-  { label: 'Slot 10', shortLabel: 'S10', start: '16:00', end: '17:30' },
-]
+/** The grid's rows until the timetable has loaded, or when it has no periods. */
+export const DEFAULT_PERIOD_COUNT = 8
+
+export function taskPeriods(count: number): TaskPeriod[] {
+  return Array.from({ length: Math.max(1, count) }, (_, i) => ({
+    n: i + 1,
+    label: `Period ${i + 1}`,
+    shortLabel: `P${i + 1}`,
+  }))
+}
+
+export const TASK_PERIODS = taskPeriods(DEFAULT_PERIOD_COUNT)
+
+/** "P3", or "P3–P5" for a run. */
+export function periodRangeLabel(start: number, end?: number | null): string {
+  return end && end > start ? `P${start}–P${end}` : `P${start}`
+}
+
+/** "Period 3", or "Periods 3–5" for a run. */
+export function periodRangeLongLabel(start: number, end?: number | null): string {
+  return end && end > start ? `Periods ${start}–${end}` : `Period ${start}`
+}
 
 export function formatSlotTime(t: string): string {
   const [h, m] = t.split(':').map(Number)

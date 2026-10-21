@@ -3,16 +3,18 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Star, Repeat, ShieldCheck, Send, CheckSquare, Square, MessageSquare, Paperclip, Link2, FileText, ExternalLink,
-  Ban, RotateCcw, Trash2, Lock, ClipboardList, ChevronRight, Loader2, Plus,
+  Ban, RotateCcw, Trash2, Lock, ClipboardList, ChevronRight, Loader2, Plus, Pencil,
 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import {
   TaskWithDetails, TaskDetails, TaskStatus, TaskChecklistItem, TaskComment, RECURRENCE_LABELS,
   fetchTaskDetails, getDynamicStatusLabel, getDynamicStatusColors, getDynamicDotColor, getNextStatus,
   canVerifyTask, updateTaskStatus, submitTaskWork, needsSubmissionFirst, toggleChecklistItem,
-  addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime,
+  addChecklistItem, addComment, deleteTask, uploadTaskAttachment, isTaskCompleted, formatDateTime, updateTaskDetails,
 } from '@/lib/tasks'
-import { formatSlotTime } from '@/lib/taskSlots'
+import { formatSlotTime, periodRangeLongLabel } from '@/lib/taskSlots'
+import { taskDisplayTitle } from '@/lib/taskClasses'
+import ClassPicker from './ClassPicker'
 import { ATTACHMENT_ACCEPT, attachmentProblem, normalizeLinkUrl } from '@/lib/attachmentPolicy'
 import { safeHref, safeSrc } from '@/lib/safeUrl'
 import { Btn, IconBtn, ConfirmSheet, Notice, TaskSheet, Fact, SubHead } from './ui'
@@ -32,7 +34,7 @@ function dateLabel(iso: string): string {
 }
 
 export default function TaskDetailSheet({
-  task, canCheck, userId, userRole, onClose, onStatusChange, onTaskDeleted, onTaskUpdated,
+  task, canCheck, userId, userRole, onClose, onStatusChange, onTaskDeleted, onTaskUpdated, onDetailsChange,
 }: {
   task: TaskWithDetails
   canCheck: boolean
@@ -42,6 +44,8 @@ export default function TaskDetailSheet({
   onStatusChange: (id: string, status: TaskStatus) => void
   onTaskDeleted: (id: string) => void
   onTaskUpdated: () => void
+  /** A new name or classes, for the calendar to show at once. */
+  onDetailsChange?: (id: string, patch: { title: string; classes: string[] }) => void
 }) {
   const requireCheck = task.require_check ?? false
 
@@ -71,6 +75,15 @@ export default function TaskDetailSheet({
   const [submissionDraft, setSubmissionDraft] = useState('')
   const [submittingWork, setSubmittingWork] = useState(false)
   const needsSubmission = task.requires_submission && !task.submission_note
+
+  // Name and classes. A period brought in from the timetable arrives with no
+  // name, so it opens ready to be named.
+  const [shown, setShown] = useState({ title: task.title, classes: task.classes ?? [] })
+  const [editing, setEditing] = useState(() => !task.title.trim() && !isTaskCompleted(task))
+  const [draftTitle, setDraftTitle] = useState(task.title)
+  const [draftClasses, setDraftClasses] = useState<string[]>(task.classes ?? [])
+  const [savingDetails, setSavingDetails] = useState(false)
+  const [detailsError, setDetailsError] = useState<string | null>(null)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -174,6 +187,26 @@ export default function TaskDetailSheet({
     onTaskUpdated()
   }
 
+  const startEditing = () => {
+    setDraftTitle(shown.title)
+    setDraftClasses(shown.classes)
+    setDetailsError(null)
+    setEditing(true)
+  }
+
+  const handleSaveDetails = async () => {
+    const title = draftTitle.trim()
+    if (!title && draftClasses.length === 0) { setDetailsError('Give the task a name or a class.'); return }
+    setSavingDetails(true)
+    setDetailsError(null)
+    const ok = await updateTaskDetails(task.id, { title, classes: draftClasses })
+    setSavingDetails(false)
+    if (!ok) { setDetailsError('The change was not saved. Try again.'); return }
+    setShown({ title, classes: draftClasses })
+    setEditing(false)
+    onDetailsChange?.(task.id, { title, classes: draftClasses })
+  }
+
   const handleDelete = async () => {
     setDeleting(true)
     setDeleteError(null)
@@ -186,17 +219,24 @@ export default function TaskDetailSheet({
   }
 
   const done = checklist.filter(c => c.is_completed).length
-  const timeText = task.timing ? `${formatSlotTime(task.timing)}${task.end_time ? ` – ${formatSlotTime(task.end_time)}` : ''}` : null
+  const timeText = task.period
+    ? periodRangeLongLabel(task.period, task.period_end)
+    : task.timing ? `${formatSlotTime(task.timing)}${task.end_time ? ` – ${formatSlotTime(task.end_time)}` : ''}` : null
 
   return (
     <>
       <TaskSheet
         onClose={onClose}
-        title={task.title}
+        title={taskDisplayTitle(shown)}
         subtitle={[task.due_date ? dateLabel(task.due_date) : 'No date', timeText].filter(Boolean).join(', ')}
         icon={ClipboardList}
         headerActions={
           <div className="flex items-center gap-0.5 flex-shrink-0">
+            {!locked && !editing && (
+              <IconBtn quiet label="Rename, or change the classes" onClick={startEditing}>
+                <Pencil size={15} />
+              </IconBtn>
+            )}
             {canDismiss && (
               <IconBtn quiet label={task.status === 'dismissed' ? 'Restore task' : 'Dismiss: leave out of the statistics'} onClick={handleDismissToggle}>
                 {task.status === 'dismissed' ? <RotateCcw size={15} /> : <Ban size={15} />}
@@ -216,6 +256,30 @@ export default function TaskDetailSheet({
         }
       >
         <div className="space-y-4">
+          {editing && (
+            <section className="tk-well p-3 space-y-2.5">
+              <input
+                value={draftTitle}
+                onChange={e => setDraftTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSaveDetails() } }}
+                placeholder={draftClasses.length ? `Task name for ${draftClasses.join(', ')}` : 'Task name'}
+                aria-label="Task name"
+                maxLength={200}
+                autoFocus
+                className="tk-input !h-10 !text-[14.5px] font-medium"
+              />
+              <ClassPicker value={draftClasses} onChange={setDraftClasses} />
+              {detailsError && <Notice>{detailsError}</Notice>}
+              <div className="flex items-center justify-end gap-2">
+                <Btn onClick={() => setEditing(false)} disabled={savingDetails}>Cancel</Btn>
+                <Btn tone="primary" onClick={handleSaveDetails} disabled={savingDetails}>
+                  {savingDetails && <Loader2 size={13} className="animate-spin" />}
+                  Save
+                </Btn>
+              </div>
+            </section>
+          )}
+
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={handleStatusClick}
@@ -383,7 +447,7 @@ export default function TaskDetailSheet({
           onConfirm={handleDelete}
           onClose={() => setConfirmDelete(false)}
         >
-          <p><span className="font-semibold text-slate-800 break-words">{task.title}</span> will be removed, with its checklist and comments.</p>
+          <p><span className="font-semibold text-slate-800 break-words">{taskDisplayTitle(shown)}</span> will be removed, with its checklist and comments.</p>
         </ConfirmSheet>
       )}
     </>

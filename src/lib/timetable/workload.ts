@@ -44,8 +44,8 @@ export interface TeacherWorkload {
 }
 
 /**
- * One id per wall-clock period, so two bell schedules that run at the same hour
- * count as one slot a teacher can be in rather than two.
+ * One id per period number, so period 3 of two bell schedules counts as one
+ * slot a teacher can be in rather than two.
  */
 function canonical(clash: Map<string, string[]>, slotId: string): string {
   const ids = clash.get(slotId)
@@ -69,9 +69,9 @@ export interface WorkloadInput {
  * Every teacher who has work assigned, with what they are asked for against
  * what their week holds.
  *
- * Capacity is the distinct wall-clock periods of the schedules they actually
+ * Capacity is the distinct period numbers of the schedules they actually
  * teach in — a teacher working across two period groups gets the union, not
- * the sum, because overlapping periods are one slot they can only be in once.
+ * the sum, because period 3 of each is one slot they can only be in once.
  */
 export function teacherWorkloads(input: WorkloadInput): TeacherWorkload[] {
   const sched = buildSchedules(
@@ -116,7 +116,7 @@ export function teacherWorkloads(input: WorkloadInput): TeacherWorkload[] {
     const assigned = list.reduce((n, i) => n + i.periods, 0)
 
     // The cells this teacher could occupy: every period of every schedule they
-    // teach in, folded onto wall-clock time so overlapping bands count once.
+    // teach in, folded onto period numbers so the same period of two bands counts once.
     const cells = new Set<string>()
     const perDay = new Map<Weekday, Set<string>>()
     for (const hr of homeroomsOf.get(teacherId) ?? []) {
