@@ -198,14 +198,14 @@ export default function TeacherTeamsPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'Create Team'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -240,11 +240,11 @@ export default function TeacherTeamsPage() {
                 <form onSubmit={handleCreateTeam} className="p-5 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Team Name *</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Team Name *</label>
                       <input type="text" value={newTeam.name} onChange={e => setNewTeam({ ...newTeam, name: e.target.value })} className={ai} placeholder="e.g., Science Department" required />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Coordinator Email</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Coordinator Email</label>
                       <UserEmailSuggest
                         value={newTeam.coordinator_email} onChange={v => setNewTeam({ ...newTeam, coordinator_email: v })}
                         roles={['coordinator', 'principal', 'admin']} placeholder="coordinator@school.com" className={ai}
@@ -252,16 +252,16 @@ export default function TeacherTeamsPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Description</label>
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Description</label>
                     <textarea value={newTeam.description} onChange={e => setNewTeam({ ...newTeam, description: e.target.value })} className={`${ai} resize-none`} rows={2} placeholder="Brief description…" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Start Date</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Start Date</label>
                       <input type="date" value={newTeam.start_date} onChange={e => setNewTeam({ ...newTeam, start_date: e.target.value })} className={ai} />
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">End Date</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">End Date</label>
                       <input type="date" value={newTeam.end_date} onChange={e => setNewTeam({ ...newTeam, end_date: e.target.value })} className={ai} />
                     </div>
                   </div>
@@ -279,29 +279,29 @@ export default function TeacherTeamsPage() {
 
           {/* List */}
           {loading ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] py-16 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] py-16 text-center">
               <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
               <p className="text-sm text-[#71717A]">Loading teams…</p>
             </div>
           ) : teams.length === 0 ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-12 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-12 text-center">
               <Users size={36} className="text-[#D4D4D8] mx-auto mb-3" />
               <p className="text-sm font-semibold text-[#18181B] mb-1">No Teams Yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first teacher team to get started.</p>
               {isAdmin && (
-                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold mx-auto">
+                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                   <Plus size={14} /> Create Team
                 </button>
               )}
             </div>
           ) : filteredTeams.length === 0 && activeTeams.length > 0 ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-10 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-10 text-center">
               <p className="text-sm text-[#71717A]">No teams match &ldquo;{teamSearch}&rdquo;</p>
             </div>
           ) : (
             <>
               {(filteredTeams.length > 0 || (activeTeams.length === 0 && expiredTeams.length > 0)) && filteredTeams.length > 0 && (
-                <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden mb-3">
+                <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden mb-3">
                   {/* Column headers */}
                   <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
                     <span className="w-8 flex-shrink-0" />
@@ -346,7 +346,7 @@ export default function TeacherTeamsPage() {
 
               {/* Expired Teams section */}
               {expiredTeams.length > 0 && (
-                <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden">
+                <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowExpiredSection(v => !v)}
@@ -440,7 +440,7 @@ export default function TeacherTeamsPage() {
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
               transition={{ duration: 0.18 }}
-              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-[24px] overflow-hidden"
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
               <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
@@ -451,20 +451,20 @@ export default function TeacherTeamsPage() {
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Team Name *</label>
+                  <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Team Name *</label>
                   <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className={ai} placeholder="e.g., Science Department" />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Description</label>
+                  <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Description</label>
                   <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className={`${ai} resize-none`} rows={2} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Start Date</label>
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Start Date</label>
                     <input type="date" value={editForm.start_date} onChange={e => setEditForm({ ...editForm, start_date: e.target.value })} className={ai} />
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">End Date</label>
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">End Date</label>
                     <input type="date" value={editForm.end_date} onChange={e => setEditForm({ ...editForm, end_date: e.target.value })} className={ai} />
                   </div>
                 </div>

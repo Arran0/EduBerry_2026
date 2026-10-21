@@ -414,14 +414,14 @@ export default function HomeroomsPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Homeroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -499,14 +499,14 @@ export default function HomeroomsPage() {
                 <form onSubmit={handleCreate} className="p-5 space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Grade</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Grade</label>
                       <select value={newGrade} onChange={e => { setNewGrade(e.target.value ? Number(e.target.value) : ''); setNameManual(false) }} className={ai}>
                         <option value="">— optional —</option>
                         {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Section</label>
+                      <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Section</label>
                       <select value={newSection} onChange={e => { setNewSection(e.target.value); setNameManual(false) }} className={ai}>
                         <option value="">— optional —</option>
                         {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -514,7 +514,7 @@ export default function HomeroomsPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">
                       Homeroom Name *
                       {!nameManual && newName && <span className="ml-2 text-[#71717A] font-normal normal-case">auto-filled</span>}
                     </label>
@@ -527,7 +527,7 @@ export default function HomeroomsPage() {
                     {createError && <p className="text-xs text-rose-600 mt-1">{createError}</p>}
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">
                       Academic Year *
                     </label>
                     <select value={newAcademicYear} onChange={e => setNewAcademicYear(e.target.value)} className={ai}>
@@ -538,7 +538,7 @@ export default function HomeroomsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">
                       Expiry Date *
                     </label>
                     <input type="date" value={newExpiryDate} onChange={e => setNewExpiryDate(e.target.value)} className={ai} />
@@ -559,25 +559,25 @@ export default function HomeroomsPage() {
 
           {/* List */}
           {loading ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] py-16 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] py-16 text-center">
               <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
               <p className="text-sm text-[#71717A]">Loading homerooms…</p>
             </div>
           ) : homerooms.length === 0 ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-12 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-12 text-center">
               <Home size={36} className="text-[#D4D4D8] mx-auto mb-3" />
               <p className="text-sm font-semibold text-[#18181B] mb-1">No homerooms yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first homeroom to start tracking attendance.</p>
-              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition text-white text-sm font-semibold mx-auto">
+              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                 <Plus size={14} /> Create Homeroom
               </button>
             </div>
           ) : filteredHomerooms.length === 0 ? (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-10 text-center">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-10 text-center">
               <p className="text-sm text-[#71717A]">No homerooms match &ldquo;{search}&rdquo;</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden">
+            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden">
               {/* Column headers */}
               <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3">
                 <span className="flex-1 text-[11.5px] font-semibold text-[#C9C9CF]">Name</span>
@@ -650,7 +650,7 @@ export default function HomeroomsPage() {
                                 belongs to, so it leads the panel. */}
                             <div>
                               <div className="flex items-center justify-between mb-2">
-                                <p className="text-[12.5px] font-semibold text-slate-600 flex items-center gap-1.5">
+                                <p className="text-[12.5px] font-semibold text-[#52525B] flex items-center gap-1.5">
                                   <UserCog size={12} className="text-indigo-500" /> Class Teacher
                                 </p>
                                 {/* The search box is a tool, not a permanent
@@ -724,7 +724,7 @@ export default function HomeroomsPage() {
                                 own accounts, above the student roll. */}
                             <div className="pt-3 border-t border-[#E4E4E7]">
                               <div className="flex items-center justify-between mb-2">
-                                <p className="text-[12.5px] font-semibold text-slate-600 flex items-center gap-1.5">
+                                <p className="text-[12.5px] font-semibold text-[#52525B] flex items-center gap-1.5">
                                   <MonitorPlay size={12} className="text-indigo-500" /> Smart Board Account
                                 </p>
                                 {smartboard && (
@@ -771,7 +771,7 @@ export default function HomeroomsPage() {
                                     <input
                                       type="email" value={sbEmail} onChange={e => setSbEmail(e.target.value)}
                                       placeholder="board.grade9a@school.com"
-                                      className="w-full border border-[#DDD8CC] bg-white pl-8 pr-3 py-2 text-sm rounded-full focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   <input
@@ -784,7 +784,7 @@ export default function HomeroomsPage() {
                                     <input
                                       type="text" value={sbPassword} onChange={e => setSbPassword(e.target.value)}
                                       placeholder="Password (min 6 chars)"
-                                      className="w-full border border-[#DDD8CC] bg-white pl-8 pr-3 py-2 text-sm rounded-full focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
@@ -809,7 +809,7 @@ export default function HomeroomsPage() {
                                       onChange={e => setSbLinkEmail(e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLinkSmartboard() } }}
                                       placeholder="Existing smart board email"
-                                      className="w-full border border-[#DDD8CC] bg-white pl-8 pr-3 py-2 text-sm rounded-full focus:outline-none focus:border-[#B8983C] focus:ring-2 focus:ring-[#B8983C]/20 transition"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
@@ -851,7 +851,7 @@ export default function HomeroomsPage() {
                                 than pushing the sections above off screen. */}
                             <div className="pt-3 border-t border-[#E4E4E7]">
                               <div className="flex items-center justify-between mb-2">
-                                <p className="text-[12.5px] font-semibold text-slate-600 flex items-center gap-1.5">
+                                <p className="text-[12.5px] font-semibold text-[#52525B] flex items-center gap-1.5">
                                   <Users size={12} /> Students
                                   {!loadingExpanded && (
                                     <span className="font-normal normal-case text-[#71717A]">({expandedData?.members.length ?? 0})</span>
@@ -977,7 +977,7 @@ export default function HomeroomsPage() {
             <motion.div
               initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
               transition={{ duration: 0.18 }}
-              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-[24px] overflow-hidden"
+              className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
               <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
@@ -989,14 +989,14 @@ export default function HomeroomsPage() {
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Grade</label>
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Grade</label>
                     <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value ? Number(e.target.value) : '' }))} className={ai}>
                       <option value="">No grade</option>
                       {GRADES.map(g => <option key={g} value={g}>Grade {g}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Section</label>
+                    <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Section</label>
                     <select value={editForm.section} onChange={e => setEditForm(f => ({ ...f, section: e.target.value }))} className={ai}>
                       <option value="">No section</option>
                       {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
@@ -1004,7 +1004,7 @@ export default function HomeroomsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Homeroom Name *</label>
+                  <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Homeroom Name *</label>
                   <input
                     type="text" value={editForm.name}
                     onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
@@ -1013,7 +1013,7 @@ export default function HomeroomsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Academic Year</label>
+                  <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Academic Year</label>
                   <select value={editForm.academic_year} onChange={e => setEditForm(f => ({ ...f, academic_year: e.target.value }))} className={ai}>
                     <option value="">Select academic year…</option>
                     {Array.from({ length: 21 }, (_, i) => { const y = 2020 + i; return `${y}-${String(y + 1).slice(-2)}` }).map(ay => (
@@ -1022,7 +1022,7 @@ export default function HomeroomsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-medium text-slate-600 mb-1.5">Expiry Date</label>
+                  <label className="block text-[12.5px] font-medium text-[#52525B] mb-1.5">Expiry Date</label>
                   <input type="date" value={editForm.expiry_date} onChange={e => setEditForm(f => ({ ...f, expiry_date: e.target.value }))} className={ai} />
                 </div>
               </div>

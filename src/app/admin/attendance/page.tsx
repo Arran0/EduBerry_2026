@@ -190,7 +190,7 @@ function AttendanceBody() {
       <Panel
         icon={Clock3}
         title="Timing"
-        description={<>A check-in after the late cutoff is marked <strong className="font-semibold text-slate-700">Late</strong>; a checkout before the checkout cutoff is a <strong className="font-semibold text-slate-700">Half day</strong>. The cutoff minute itself is on time, by the server&apos;s clock.</>}
+        description={<>A check-in after the late cutoff is marked <strong className="font-semibold text-[#3F3F46]">Late</strong>; a checkout before the checkout cutoff is a <strong className="font-semibold text-[#3F3F46]">Half day</strong>. The cutoff minute itself is on time, by the server&apos;s clock.</>}
       >
         <div className="flex flex-wrap items-end gap-3">
           <TimeField
@@ -278,7 +278,7 @@ function AttendanceBody() {
           onClear={scope => handleClear('nonworking', scope)}
         />
       </div>
-      <p className="text-[12px] text-slate-500 px-1">
+      <p className="text-[12px] text-[#71717A] px-1">
         The same three controls sit next to each date on the Staff Attendance page.
       </p>
 
@@ -297,10 +297,10 @@ function AttendanceBody() {
           ) : filteredHide.map(s => (
             <div key={s.id} className={AX.row}>
               <div className="flex-1 min-w-0">
-                <p className="text-[13.5px] font-medium text-slate-900 truncate">{s.full_name}</p>
-                <p className="text-[11.5px] text-slate-500 truncate"><span className="capitalize">{s.role}</span> · {s.email}</p>
+                <p className="text-[13.5px] font-medium text-[#18181B] truncate">{s.full_name}</p>
+                <p className="text-[11.5px] text-[#71717A] truncate"><span className="capitalize">{s.role}</span> · {s.email}</p>
               </div>
-              {s.attendance_hidden && <span className="text-[11px] font-semibold text-[#B83A3A] flex-shrink-0">Hidden</span>}
+              {s.attendance_hidden && <span className="text-[11px] font-semibold text-[#B8983C] flex-shrink-0">Hidden</span>}
               <Switch
                 on={!!s.attendance_hidden}
                 disabled={hideSaving === s.id}
@@ -358,7 +358,7 @@ function TimeField({ label, value, onChange }: { label: string; value: string | 
           className={`${AX.field} !w-36 tabular-nums`}
         />
         {value && (
-          <button onClick={() => onChange(null)} className="text-[12px] font-medium text-slate-500 hover:text-slate-900 px-1.5 transition-colors">
+          <button onClick={() => onChange(null)} className="text-[12px] font-medium text-[#71717A] hover:text-[#18181B] px-1.5 transition-colors">
             Clear
           </button>
         )}
@@ -398,12 +398,12 @@ function RulePanel({
             const clearing = clearingKey === `${kind}:${g.key}`
             return (
               <li key={g.key} className={`${AX.row} !items-start`}>
-                <span className="mt-0.5 text-[#8B6F47] flex-shrink-0">
+                <span className="mt-0.5 text-[#B8983C] flex-shrink-0">
                   {g.scope.type === 'weekday' ? <Repeat size={14} /> : <DateIcon size={14} />}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13.5px] font-semibold text-slate-900">{g.label}</p>
-                  <p className="text-[12px] text-slate-500 leading-snug break-words">{g.detail}</p>
+                  <p className="text-[13.5px] font-semibold text-[#18181B]">{g.label}</p>
+                  <p className="text-[12px] text-[#71717A] leading-snug break-words">{g.detail}</p>
                 </div>
                 <div className="flex items-center -my-1 -mr-1.5">
                   <button onClick={() => onEdit(g.scope)} aria-label={`Edit ${g.label}`} className={AX.icon}>
@@ -420,7 +420,7 @@ function RulePanel({
       )}
       <button
         onClick={onAdd}
-        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-[14px] text-[13px] font-semibold text-[#6B5536] hover:bg-[#F7F5F1] active:scale-[0.99] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-[13px] font-semibold text-[#27272A] hover:bg-[#F5F5F5] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
       >
         <Plus size={14} /> {addLabel}
       </button>

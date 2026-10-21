@@ -467,15 +467,12 @@ export const FEEDBACK_BANNER_DEFAULT: AnnouncementBannerConfig = {
 export const HOMEROOMS_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#0d9488', gradTo: '#0891b2', imageUrl: '',
 }
-// Admin Space pages: Volcanic Glass into the bronze the admin palette ends on.
+// Admin Space pages: the admin palette's dark greys.
 export const GEOFENCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#27272A', gradTo: '#4B5E54', imageUrl: '',
+  gradFrom: '#18181B', gradTo: '#3F3F46', imageUrl: '',
 }
 export const ATTENDANCE_RULES_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#3D3B40', gradTo: '#7A5C3E', imageUrl: '',
-}
-export const DESIGN_BANNER_DEFAULT: AnnouncementBannerConfig = {
-  gradFrom: '#2B292E', gradTo: '#6B5A7A', imageUrl: '',
+  gradFrom: '#18181B', gradTo: '#3F3F46', imageUrl: '',
 }
 export const ATTENDANCE_BANNER_DEFAULT: AnnouncementBannerConfig = {
   gradFrom: '#7c3aed', gradTo: '#6d28d9', imageUrl: '',

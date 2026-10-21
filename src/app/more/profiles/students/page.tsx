@@ -268,7 +268,7 @@ export default function StudentProfileManagerPage() {
   if (!user || !profile) return null
 
   const inp = 'border border-[#D4D4D8] bg-white px-4 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full rounded-lg'
-  const lbl = 'block text-[12.5px] font-medium text-slate-600 mb-1.5'
+  const lbl = 'block text-[12.5px] font-medium text-[#52525B] mb-1.5'
 
   return (
     <ProtectedLayout adminOnly>
@@ -288,20 +288,20 @@ export default function StudentProfileManagerPage() {
               <span className="text-sm text-white/70 hidden sm:block">{total} students</span>
               <button
                 onClick={openBulkImport} disabled={preparingImport}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-full bg-white/95 hover:bg-white text-slate-900 ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] active:scale-[0.97] transition text-sm font-semibold disabled:opacity-60"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold disabled:opacity-60"
               >
                 {preparingImport ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />} Import CSV
               </button>
-              <button onClick={openBulkImport} disabled={preparingImport} className="sm:hidden w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-900 ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] active:scale-[0.97] transition flex items-center justify-center disabled:opacity-60" title="Import CSV">
+              <button onClick={openBulkImport} disabled={preparingImport} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center disabled:opacity-60" title="Import CSV">
                 {preparingImport ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-full bg-white/95 hover:bg-white text-slate-900 ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] active:scale-[0.97] transition text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold"
               >
                 <Plus size={15} /> Add Student
               </button>
-              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-900 ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] active:scale-[0.97] transition flex items-center justify-center">
+              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center">
                 <Plus size={18} />
               </button>
             </div>
@@ -357,18 +357,18 @@ export default function StudentProfileManagerPage() {
 
             {/* List */}
             {loading ? (
-              <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] py-16 text-center">
+              <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] py-16 text-center">
                 <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
                 <p className="text-sm text-[#71717A]">Loading students…</p>
               </div>
             ) : total === 0 ? (
-              <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] p-12 text-center">
+              <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-12 text-center">
                 <GraduationCap size={36} className="text-[#D4D4D8] mx-auto mb-3" />
                 <p className="text-sm font-semibold text-[#18181B] mb-1">No Students Found</p>
                 <p className="text-sm text-[#71717A]">{searchQuery ? 'Try a different search term.' : 'No student profiles exist yet.'}</p>
               </div>
             ) : (
-              <div className="bg-white rounded-[22px] border border-black/[.06] shadow-[0_1px_2px_rgba(15,23,42,.04),0_18px_36px_-26px_rgba(15,23,42,.45)] overflow-hidden">
+              <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] overflow-hidden">
                 {/* Column headers */}
                 <div className="bg-[#27272A] pl-1 pr-3 py-1.5 hidden sm:flex items-center gap-3">
                   <span className="w-9 flex-shrink-0" />
@@ -444,7 +444,7 @@ export default function StudentProfileManagerPage() {
               <>
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowCreateModal(false)} className="fixed inset-0 bg-black/60 z-40" />
                 <motion.div initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                  <div className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] rounded-[24px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="bg-white shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="bg-[#27272A] px-6 py-4 flex items-center justify-between flex-shrink-0">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white/10 rounded-lg"><UserPlus size={18} className="text-white" /></div>
@@ -493,7 +493,7 @@ export default function StudentProfileManagerPage() {
                           </div>
 
                           {/* Student Details */}
-                          <div className="border border-black/[.06] bg-white p-4 rounded-[18px] space-y-3 shadow-[0_1px_2px_rgba(15,23,42,.04)]">
+                          <div className="border border-black/[.06] bg-white p-4 space-y-3 ">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-[#525252]">Student Details <span className="font-normal normal-case text-[#A1A1AA]">(optional)</span></p>
                             <div className="grid grid-cols-2 gap-3">
                               {[
@@ -545,7 +545,7 @@ export default function StudentProfileManagerPage() {
                           </div>
 
                           {/* Auto-confirm */}
-                          <div className="border border-black/[.06] bg-white p-3.5 rounded-[18px] space-y-3 shadow-[0_1px_2px_rgba(15,23,42,.04)]">
+                          <div className="border border-black/[.06] bg-white p-3.5 space-y-3 ">
                             <label className="flex items-start gap-2.5 cursor-pointer">
                               <input type="checkbox" checked={createAutoConfirm} onChange={e => setCreateAutoConfirm(e.target.checked)} disabled={creating} className="mt-0.5 h-4 w-4 border-[#D4D4D8] accent-[#27272A]" />
                               <span className="text-sm">
@@ -660,14 +660,14 @@ export default function StudentProfileManagerPage() {
                   <button
                     onClick={() => setSetPwTarget(null)}
                     disabled={setPwLoading}
-                    className="flex-1 h-10 px-4 text-sm font-semibold text-[#18181B] border border-[#E2DDD2] rounded-full hover:border-[#CFC8B8] active:scale-[0.97] transition"
+                    className="flex-1 h-10 px-4 rounded-lg text-sm font-semibold text-[#18181B] border border-[#D4D4D8] hover:border-[#A1A1AA] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSetPassword}
                     disabled={setPwLoading || setPwValue.trim().length < MIN_PASSWORD_LENGTH}
-                    className="flex-1 h-10 px-4 text-sm font-semibold rounded-full bg-gradient-to-b from-[#3D3B40] to-[#27272A] hover:from-[#46444A] hover:to-[#2E2E31] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_6px_14px_-8px_rgba(15,23,42,.6)] active:scale-[0.97] transition disabled:opacity-50 text-white flex items-center justify-center gap-2"
+                    className="flex-1 h-10 px-4 text-sm font-semibold rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors disabled:opacity-50 text-white flex items-center justify-center gap-2"
                   >
                     {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Setting…</> : 'Set Password'}
                   </button>
