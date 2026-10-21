@@ -34,6 +34,19 @@ function formatTime(t: string | null): string {
   return `${h12}:${m}${ampm}`
 }
 
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(':')
+  return parseInt(h, 10) * 60 + parseInt(m, 10)
+}
+
+/** Whether the clock is inside this slot right now. */
+function isNow(slot: PeriodSlot): boolean {
+  if (!slot.start_time || !slot.end_time) return false
+  const d = new Date()
+  const mins = d.getHours() * 60 + d.getMinutes()
+  return mins >= toMinutes(slot.start_time) && mins < toMinutes(slot.end_time)
+}
+
 interface TodayTimetableCardProps {
   /** Reports, once loaded, whether the card has anything to show. */
   onContent?: (has: boolean) => void
@@ -64,8 +77,12 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
           (view.overrides ?? []) as EntryOverride[],
           todayISO(),
         )
+        // Free periods are listed too, but only from the period group(s) this
+        // class actually follows — another group's P1 is not this class's.
+        const slotGroup = new Map(view.slots.map(s => [s.id, s.group_id ?? '']))
+        const ownGroups = new Set(view.entries.map(e => slotGroup.get(e.slot_id)))
         const teaching = [...view.slots]
-          .filter(s => !s.is_break)
+          .filter(s => !s.is_break && ownGroups.has(s.group_id ?? ''))
           .sort((a, b) => a.position - b.position)
         const counted = new Map<string, number>()
         const list: Period[] = teaching.map(slot => {
@@ -88,7 +105,7 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
   useReportContent(loading, !!hasAny, onContent)
 
   return (
-    <Link href="/more/timetable">
+    <Link href="/more/timetable" className="block h-full">
       {/* No title row: the section heading above the card already names it. */}
       <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer">
         {loading ? (
@@ -101,32 +118,59 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
             <p className="text-sm font-medium text-slate-400">No periods today</p>
           </div>
         ) : (
-          // One line per period, 20px tall, so a 12-period day fits the 260px
-          // card without scrolling (12 × 20 + 11 dividers + 6 padding = 257).
-          <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25 py-[3px]">
-            {periods!.filter(p => p.entry?.subject_id).map(({ slot, n, entry, changed }) => (
-              <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 h-5">
-                <span className="text-[10.5px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0 leading-none">
-                  {formatTime(slot.start_time) || `P${n}`}
-                </span>
-                <p className="flex-1 min-w-0 truncate text-[12.5px] leading-none">
-                  <span className="font-semibold text-slate-800">
-                    {entry?.subject?.name || slot.label || 'Period'}
+          // Every period of the day, free ones included, sharing the card's
+          // height: rows grow to fill a tall deck card (capped so a short day
+          // doesn't balloon) and shrink to 20px, so 12 periods fit the 260px
+          // card without scrolling.
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide flex flex-col px-2 py-2">
+            {periods!.map(({ slot, n, entry, changed }) => {
+              const subj = entry?.subject_id ? entry.subject : null
+              const teacher = subj && entry ? entryTeacherLabel(entry) : null
+              const now = isNow(slot)
+              return (
+                <div
+                  key={slot.id}
+                  className={`flex-1 min-h-[20px] max-h-[52px] flex items-center gap-2.5 px-3 rounded-xl ${now ? 'bg-indigo-50 ring-1 ring-indigo-200' : ''}`}
+                >
+                  <span className={`w-8 flex-shrink-0 text-[11px] font-semibold tabular-nums leading-none ${now ? 'text-indigo-600' : 'text-slate-400'}`}>
+                    P{n}
                   </span>
-                  {entry && entryTeacherLabel(entry) && (
-                    <span className="text-[11px] text-slate-400"> · {entryTeacherLabel(entry)}</span>
+                  <span
+                    aria-hidden
+                    className="w-[3px] self-stretch my-1 rounded-full flex-shrink-0"
+                    style={{ background: subj ? (subj.color ?? '#6366F1') : 'transparent' }}
+                  />
+                  <p className="flex-1 min-w-0 truncate text-[13px] leading-tight">
+                    {subj ? (
+                      <>
+                        <span className="font-semibold text-slate-800">{subj.name}</span>
+                        {teacher && <span className="text-[11.5px] text-slate-400"> · {teacher}</span>}
+                      </>
+                    ) : (
+                      <span className="text-slate-300">Free</span>
+                    )}
+                  </p>
+                  {slot.start_time && (
+                    <span className="hidden min-[380px]:inline text-[10.5px] text-slate-400 tabular-nums flex-shrink-0 leading-none">
+                      {formatTime(slot.start_time)}
+                    </span>
                   )}
-                </p>
-                {changed && (
+                  {now && (
+                    <span className="text-[9px] leading-none font-bold uppercase tracking-wider text-white bg-indigo-500 rounded-full px-1.5 py-[3px] flex-shrink-0">
+                      Now
+                    </span>
+                  )}
+                  {changed && (
                   <span
                     className="text-[9px] leading-none font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1 py-[2px] flex-shrink-0"
                     title="Changed just for today"
                   >
                     Today
                   </span>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
