@@ -299,7 +299,7 @@ export default function ClassroomManagerPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 <Plus size={15} />
                 New classroom
@@ -307,7 +307,7 @@ export default function ClassroomManagerPage() {
               <button
                 onClick={() => setShowCreateForm(true)}
                 aria-label="New classroom"
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 <Plus size={18} />
               </button>
@@ -338,7 +338,7 @@ export default function ClassroomManagerPage() {
               <p className="text-sm font-semibold text-[#18181B] mb-1">No classrooms yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first classroom to get started.</p>
               {isAdmin && (
-                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
+                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                   <Plus size={14} /> New classroom
                 </button>
               )}

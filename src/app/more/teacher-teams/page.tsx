@@ -198,14 +198,14 @@ export default function TeacherTeamsPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'Create Team'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -289,7 +289,7 @@ export default function TeacherTeamsPage() {
               <p className="text-sm font-semibold text-[#18181B] mb-1">No Teams Yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first teacher team to get started.</p>
               {isAdmin && (
-                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
+                <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                   <Plus size={14} /> Create Team
                 </button>
               )}

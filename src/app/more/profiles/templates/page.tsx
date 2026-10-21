@@ -92,11 +92,11 @@ export default function CertificateTemplatesPage() {
       <div data-page-theme="admin" style={{ minHeight: '100vh' }} className="px-4 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-14">
         <div className="max-w-6xl mx-auto">
           <button onClick={() => router.back()}
-            className="bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 text-[12.5px] font-semibold text-[#3F3F46] hover:text-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
+            className="rounded-lg bg-white border border-[#D4D4D8] hover:bg-[#F5F5F5] inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3.5 text-[12.5px] font-semibold text-[#3F3F46] hover:text-[#18181B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60">
             <ArrowLeft size={14} /> Back
           </button>
           <div className="flex items-center gap-3.5 mt-4 sm:mt-5 mb-5 sm:mb-6">
-            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
+            <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 border-b-2 border-[#B8983C] bg-[#27272A]">
               <Wand2 size={21} className="text-[#B8983C]" />
             </div>
             <div className="min-w-0">

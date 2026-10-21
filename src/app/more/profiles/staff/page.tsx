@@ -486,16 +486,16 @@ export default function StaffProfileManagerPage() {
               <span className="text-sm text-white/70 hidden sm:block">
                 {profiles.length} staff{supportStaff.length > 0 ? ` · ${supportStaff.length} support` : ''}
               </span>
-              <button onClick={() => setShowBulkImport(true)} className="hidden sm:flex items-center gap-2 h-10 px-4 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold">
+              <button onClick={() => setShowBulkImport(true)} className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold">
                 <FileSpreadsheet size={15} /> Import CSV
               </button>
-              <button onClick={() => setShowBulkImport(true)} className="sm:hidden w-10 h-10 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center" title="Import CSV">
+              <button onClick={() => setShowBulkImport(true)} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center" title="Import CSV">
                 <FileSpreadsheet size={18} />
               </button>
-              <button onClick={() => setShowCreateModal(true)} className="hidden sm:flex items-center gap-2 h-10 px-4 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold">
+              <button onClick={() => setShowCreateModal(true)} className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold">
                 <Plus size={15} /> Add Staff
               </button>
-              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center">
+              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center">
                 <Plus size={18} />
               </button>
             </div>
@@ -970,7 +970,7 @@ export default function StaffProfileManagerPage() {
                     value={setPwValue}
                     onChange={e => { setSetPwValue(e.target.value); setSetPwMsg(null) }}
                     placeholder="New password (min 6 chars)"
-                    className="w-full pl-4 pr-10 py-3 text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
+                    className="w-full pl-4 pr-10 py-3 rounded-lg text-sm border border-[#D4D4D8] focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                     autoFocus
                   />
                   <button
@@ -992,14 +992,14 @@ export default function StaffProfileManagerPage() {
                   <button
                     onClick={() => setSetPwTarget(null)}
                     disabled={setPwLoading}
-                    className="flex-1 h-10 px-4 border border-[#D4D4D8] text-[#18181B] text-sm font-semibold hover:border-[#A1A1AA] transition-colors"
+                    className="flex-1 h-10 px-4 rounded-lg border border-[#D4D4D8] text-[#18181B] text-sm font-semibold hover:border-[#A1A1AA] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSetPassword}
                     disabled={setPwLoading || setPwValue.length < MIN_PASSWORD_LENGTH}
-                    className="flex-1 h-10 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="flex-1 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : 'Set Password'}
                   </button>

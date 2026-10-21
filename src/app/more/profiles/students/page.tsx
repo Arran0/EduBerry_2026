@@ -288,20 +288,20 @@ export default function StudentProfileManagerPage() {
               <span className="text-sm text-white/70 hidden sm:block">{total} students</span>
               <button
                 onClick={openBulkImport} disabled={preparingImport}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold disabled:opacity-60"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold disabled:opacity-60"
               >
                 {preparingImport ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />} Import CSV
               </button>
-              <button onClick={openBulkImport} disabled={preparingImport} className="sm:hidden w-10 h-10 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center disabled:opacity-60" title="Import CSV">
+              <button onClick={openBulkImport} disabled={preparingImport} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center disabled:opacity-60" title="Import CSV">
                 {preparingImport ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors text-sm font-semibold"
               >
                 <Plus size={15} /> Add Student
               </button>
-              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center">
+              <button onClick={() => setShowCreateModal(true)} className="sm:hidden w-10 h-10 rounded-lg bg-white/95 hover:bg-white text-[#18181B] ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(24,24,27,.55)] transition-colors flex items-center justify-center">
                 <Plus size={18} />
               </button>
             </div>
@@ -660,14 +660,14 @@ export default function StudentProfileManagerPage() {
                   <button
                     onClick={() => setSetPwTarget(null)}
                     disabled={setPwLoading}
-                    className="flex-1 h-10 px-4 text-sm font-semibold text-[#18181B] border border-[#D4D4D8] hover:border-[#A1A1AA] transition-colors"
+                    className="flex-1 h-10 px-4 rounded-lg text-sm font-semibold text-[#18181B] border border-[#D4D4D8] hover:border-[#A1A1AA] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSetPassword}
                     disabled={setPwLoading || setPwValue.trim().length < MIN_PASSWORD_LENGTH}
-                    className="flex-1 h-10 px-4 text-sm font-semibold bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors disabled:opacity-50 text-white flex items-center justify-center gap-2"
+                    className="flex-1 h-10 px-4 text-sm font-semibold rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors disabled:opacity-50 text-white flex items-center justify-center gap-2"
                   >
                     {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Setting…</> : 'Set Password'}
                   </button>

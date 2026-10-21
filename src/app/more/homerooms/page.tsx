@@ -414,14 +414,14 @@ export default function HomeroomsPage() {
             <>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="hidden sm:flex items-center gap-2 h-10 px-4 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
+                className="hidden sm:flex items-center gap-2 h-10 px-4 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold"
               >
                 {showCreateForm ? <X size={15} /> : <Plus size={15} />}
                 {showCreateForm ? 'Cancel' : 'New Homeroom'}
               </button>
               <button
                 onClick={() => setShowCreateForm(p => !p)}
-                className="sm:hidden w-10 h-10 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
+                className="sm:hidden w-10 h-10 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors flex items-center justify-center text-white"
               >
                 {showCreateForm ? <X size={16} /> : <Plus size={18} />}
               </button>
@@ -568,7 +568,7 @@ export default function HomeroomsPage() {
               <Home size={36} className="text-[#D4D4D8] mx-auto mb-3" />
               <p className="text-sm font-semibold text-[#18181B] mb-1">No homerooms yet</p>
               <p className="text-sm text-[#71717A] mb-5">Create your first homeroom to start tracking attendance.</p>
-              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
+              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2 h-10 px-5 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] transition-colors text-white text-sm font-semibold mx-auto">
                 <Plus size={14} /> Create Homeroom
               </button>
             </div>
@@ -771,7 +771,7 @@ export default function HomeroomsPage() {
                                     <input
                                       type="email" value={sbEmail} onChange={e => setSbEmail(e.target.value)}
                                       placeholder="board.grade9a@school.com"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   <input
@@ -784,7 +784,7 @@ export default function HomeroomsPage() {
                                     <input
                                       type="text" value={sbPassword} onChange={e => setSbPassword(e.target.value)}
                                       placeholder="Password (min 6 chars)"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}
@@ -809,7 +809,7 @@ export default function HomeroomsPage() {
                                       onChange={e => setSbLinkEmail(e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLinkSmartboard() } }}
                                       placeholder="Existing smart board email"
-                                      className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
+                                      className="w-full rounded-lg border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A] focus:ring-1 focus:ring-[#B8983C]/40 transition-colors"
                                     />
                                   </div>
                                   {sbError && <p className="text-xs text-rose-600">{sbError}</p>}

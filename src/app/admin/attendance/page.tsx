@@ -420,7 +420,7 @@ function RulePanel({
       )}
       <button
         onClick={onAdd}
-        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 h-9 text-[13px] font-semibold text-[#27272A] hover:bg-[#F5F5F5] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
+        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-[13px] font-semibold text-[#27272A] hover:bg-[#F5F5F5] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60"
       >
         <Plus size={14} /> {addLabel}
       </button>
