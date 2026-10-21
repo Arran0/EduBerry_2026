@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server'
 import crypto from 'crypto'
 import { getPaymentSecrets } from '@/lib/serverSecrets'
 import { settleSchoolFee } from '@/lib/fees/settleWebhook'
+import { failOnlineOrder, findOnlineOrder, settleOnlineOrder } from '@/lib/fees/onlineSettle'
 
 // Razorpay webhook for SCHOOL fees. Verifies the signature against the RAW
 // request body, then on a captured payment marks the matching
@@ -62,14 +63,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
   }
 
+  const entity = event.payload?.payment?.entity
+  const orderId = entity?.order_id
+  const paymentId = entity?.id
+
+  // A payment started from the student fee page (fee_online_orders) — the
+  // fee app's bills, settled into a numbered receipt by fee_collect.
+  if (orderId && (event.event === 'payment.captured' || event.event === 'payment.failed')) {
+    const online = await findOnlineOrder(admin, orderId)
+    if (online) {
+      if (event.event === 'payment.failed') {
+        await failOnlineOrder(admin, orderId, 'The payment did not go through')
+        return NextResponse.json({ ok: true, status: 'failed' })
+      }
+      const result = await settleOnlineOrder(admin, orderId, paymentId ?? '', (entity?.amount ?? 0) / 100)
+      return NextResponse.json({ ok: true, status: result.status })
+    }
+  }
+
   // Only act on a captured payment.
   if (event.event !== 'payment.captured') {
     return NextResponse.json({ ok: true, ignored: event.event })
   }
 
-  const entity = event.payload?.payment?.entity
-  const orderId = entity?.order_id
-  const paymentId = entity?.id
   if (!orderId) {
     return NextResponse.json({ ok: true, ignored: 'no order_id' })
   }

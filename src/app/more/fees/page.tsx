@@ -27,6 +27,7 @@ import PageBanner from '@/components/PageBanner'
 import { GlassSegments } from '@/components/transport/glass'
 import YearToggle from '@/components/transport/YearToggle'
 import { AcademicYearProvider } from '@/contexts/AcademicYearContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
 import { Loading, Notice, SHELL } from '@/components/fees/shell'
@@ -39,6 +40,7 @@ import { DEFAULT_BILL_FILTERS, type BillFilters } from '@/lib/fees/bills'
 const FeeGridSection     = dynamic(() => import('@/components/fees/grid/FeeGridSection'), { ssr: false, loading: () => <Loading /> })
 const LateFeeSettings    = dynamic(() => import('@/components/fees/sections/LateFeeSettingsSection'), { ssr: false, loading: () => <Loading /> })
 const ConcessionsSection = dynamic(() => import('@/components/fees/sections/ConcessionsSection'), { ssr: false, loading: () => <Loading /> })
+const StudentFees        = dynamic(() => import('@/components/fees/student/StudentFees'), { ssr: false, loading: () => <Loading /> })
 const FeeSettingsPanel   = dynamic(() => import('@/components/settings/FeeSettingsPanel'), { ssr: false, loading: () => <Loading /> })
 
 type Main = 'collection' | 'config'
@@ -234,6 +236,17 @@ function FeesInner() {
   )
 }
 
+/**
+ * Students get their own side of the module: what they owe, paying it, and
+ * their receipts. Everyone else gets the office's hub, gated by permission.
+ */
+function FeesGate() {
+  const { profile } = useAuth()
+  if (!profile) return <Loading />
+  if (profile.role === 'student') return <StudentFees />
+  return <FeesInner />
+}
+
 export default function FeesPage() {
   return (
     <ProtectedLayout>
@@ -241,7 +254,7 @@ export default function FeesPage() {
         {/* useSearchParams needs a Suspense boundary to stay out of the
             static-render bailout. */}
         <Suspense fallback={<Loading />}>
-          <FeesInner />
+          <FeesGate />
         </Suspense>
       </AcademicYearProvider>
     </ProtectedLayout>
