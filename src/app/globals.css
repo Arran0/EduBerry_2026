@@ -993,30 +993,6 @@ body {
     inset -1px -1px 0 rgba(255, 255, 255, 0.35);
 }
 
-/* The classroom's tab bar: a glass capsule switch that never clips a label —
-   on a phone the labels sit under their icons and may break onto two lines. */
-.cr-tabs {
-  isolation: isolate;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 2px;
-  padding: 3px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 0 1px rgba(15, 23, 42, 0.05),
-    0 10px 26px -18px rgba(15, 23, 42, 0.45);
-}
-.cr-tabs > button,
-.cr-tabs .lg-seg-thumb { border-radius: 9999px; }
-@media (max-width: 639.98px) {
-  .cr-tabs { border-radius: 18px; }
-  .cr-tabs > button,
-  .cr-tabs .lg-seg-thumb { border-radius: 15px; }
-}
-
 /* ============================================================ */
 /* Staff Attendance — glass page                                 */
 /* ============================================================ */
