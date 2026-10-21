@@ -28,11 +28,13 @@ export const SHELL = 'w-full mx-auto max-w-7xl 2xl:max-w-[1600px]'
  * width, a way back, and a title row whose title wraps instead of clipping.
  */
 export function FeeScreen({
-  title, subtitle, icon, back, actions, children,
+  title, subtitle, icon, lead, back, actions, children,
 }: {
   title: React.ReactNode
   subtitle?: React.ReactNode
   icon: React.ReactNode
+  /** Takes the icon chip's place when given — e.g. a person's clickable avatar. */
+  lead?: React.ReactNode
   /** Omitted on the hub, which is itself the top of the module. */
   back?: { href: string; label: string }
   actions?: React.ReactNode
@@ -51,10 +53,12 @@ export function FeeScreen({
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 mb-4 sm:mb-5">
           <div className="flex items-center gap-3 min-w-0 flex-1 basis-[220px]">
-            <div className="icon-chip w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0 text-white [&_svg]:!text-white"
-                 style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
-              <span className="relative z-10 flex">{icon}</span>
-            </div>
+            {lead ?? (
+              <div className="icon-chip w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0 text-white [&_svg]:!text-white"
+                   style={{ background: 'linear-gradient(135deg, #3D3B40, #8B6F47)' }}>
+                <span className="relative z-10 flex">{icon}</span>
+              </div>
+            )}
             <div className="min-w-0">
               <h1 className="font-display text-[1.3rem] sm:text-[1.6rem] font-bold leading-[1.15] text-slate-900 headline break-words">
                 {title}

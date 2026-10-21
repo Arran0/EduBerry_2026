@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import FeeStatusBadge from '@/components/bus/FeeStatusBadge'
 import { formatINR } from '@/components/bus/FeeCollectionSummary'
@@ -55,6 +54,7 @@ export default function BusPage() {
 
 function BusPageContent() {
   const { profile } = useAuth()
+  const router = useRouter()
   const isAdmin = profile ? isAdminRole(profile.role) : false
 
   return (
@@ -62,21 +62,7 @@ function BusPageContent() {
       <div data-page-theme="bus">
         {isAdmin
           ? <AcademicYearProvider><AdminBusHub /></AcademicYearProvider>
-          : (
-            /*
-             * Parents and students see an under-construction notice for now.
-             * PassengerBusView below is complete and working — the child-centric
-             * "where is my child" screen, the live map, the ETA to their own
-             * stop and the fee tab — and is deliberately left in the file
-             * rather than deleted: switching it back on is deleting this
-             * branch, not rebuilding a screen.
-             */
-            <UnderConstruction
-              title="Bus tracking"
-              description="Live bus tracking for families is nearly ready. The school office can tell you about today's trip in the meantime."
-              icon={<Bus size={30} className="text-white" />}
-            />
-          )}
+          : <PassengerBusView onBack={() => router.push('/home')} />}
       </div>
     </ProtectedLayout>
   )

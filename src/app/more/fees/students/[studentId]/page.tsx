@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { FileText, Loader2, Printer, ScrollText, Undo2, UserRound } from 'lucide-react'
 import ModalShell from '@/components/ui/ModalShell'
+import Avatar from '@/components/Avatar'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import YearToggle from '@/components/transport/YearToggle'
 import { AcademicYearProvider, useAcademicYear } from '@/contexts/AcademicYearContext'
@@ -45,7 +46,7 @@ const LEDGER_COLS = 'sm:grid-cols-[96px_minmax(0,1fr)_100px_100px_108px]'
 
 interface Student {
   id: string; full_name: string; grade: number | null; section: string | null
-  admission_no: string | null; guardian_phone: string | null
+  avatar_url: string | null; admission_no: string | null; guardian_phone: string | null
 }
 
 function ProfileInner() {
@@ -75,7 +76,7 @@ function ProfileInner() {
     setLoading(true)
     try {
       const [{ data: p }, { data: d }, prof, inv, pay, led] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, grade, section').eq('id', studentId).maybeSingle(),
+        supabase.from('profiles').select('id, full_name, grade, section, avatar_url').eq('id', studentId).maybeSingle(),
         supabase.from('student_details').select('admission_no, guardian_phone').eq('student_id', studentId).maybeSingle(),
         fetchProfile(studentId, year.id),
         fetchInvoices({ academicYearId: year.id, studentId }),
@@ -88,6 +89,7 @@ function ProfileInner() {
           full_name: p.full_name as string,
           grade: p.grade as number | null,
           section: p.section as string | null,
+          avatar_url: (p.avatar_url as string | null) ?? null,
           admission_no: (d?.admission_no as string) ?? null,
           guardian_phone: (d?.guardian_phone as string) ?? null,
         })
@@ -160,6 +162,12 @@ function ProfileInner() {
       subtitle={[cls, student?.admission_no ? `Adm. ${student.admission_no}` : null, student?.guardian_phone]
         .filter(Boolean).join(' · ') || undefined}
       icon={<UserRound size={19} />}
+      lead={student && (
+        <span className="flex-shrink-0" title="Open student profile">
+          <Avatar avatarUrl={student.avatar_url} name={student.full_name} size={44} userId={student.id}
+                  profileSeed={{ id: student.id, full_name: student.full_name, avatar_url: student.avatar_url ?? undefined }} />
+        </span>
+      )}
       back={{ href: '/more/fees?section=students', label: 'Students' }}
       actions={<>
         {ledger.length > 0 && (

@@ -20,11 +20,9 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { BadgePercent, IndianRupee, Landmark, Layers, Settings, Timer } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
-import UnderConstruction from '@/components/UnderConstruction'
 import PageBanner from '@/components/PageBanner'
 import { GlassSegments } from '@/components/transport/glass'
 import YearToggle from '@/components/transport/YearToggle'
-import { useAuth } from '@/contexts/AuthContext'
 import { AcademicYearProvider } from '@/contexts/AcademicYearContext'
 import { useFeePermissions } from '@/hooks/useFeePermissions'
 import { FEES_BANNER_DEFAULT } from '@/lib/pageConfig'
@@ -211,24 +209,6 @@ function FeesInner() {
   )
 }
 
-function FeesGate() {
-  const { profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
-  // Held back from everyone but admins while the module is finished. The
-  // parent-facing bill view (StudentFeeCard) is written and works; it is gated
-  // here rather than deleted, so turning it back on is deleting this branch.
-  if (!isAdmin) {
-    return (
-      <UnderConstruction
-        title="Fees"
-        description="Online fee bills and payments are almost ready. Until then, the school office has your statement."
-        icon={<IndianRupee size={30} className="text-white" />}
-      />
-    )
-  }
-  return <FeesInner />
-}
-
 export default function FeesPage() {
   return (
     <ProtectedLayout>
@@ -236,7 +216,7 @@ export default function FeesPage() {
         {/* useSearchParams needs a Suspense boundary to stay out of the
             static-render bailout. */}
         <Suspense fallback={<Loading />}>
-          <FeesGate />
+          <FeesInner />
         </Suspense>
       </AcademicYearProvider>
     </ProtectedLayout>
