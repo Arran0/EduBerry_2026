@@ -101,23 +101,25 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
             <p className="text-sm font-medium text-slate-400">No periods today</p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25">
+          // One line per period, 20px tall, so a 12-period day fits the 260px
+          // card without scrolling (12 × 20 + 11 dividers + 6 padding = 257).
+          <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-white/25 py-[3px]">
             {periods!.filter(p => p.entry?.subject_id).map(({ slot, n, entry, changed }) => (
-              <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 py-2.5">
-                <span className="text-[11px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0">
+              <div key={slot.id} className="home-card-row flex items-center gap-3 px-5 h-5">
+                <span className="text-[10.5px] font-semibold text-slate-400 tabular-nums w-14 flex-shrink-0 leading-none">
                   {formatTime(slot.start_time) || `P${n}`}
                 </span>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-slate-800 text-sm truncate">
+                <p className="flex-1 min-w-0 truncate text-[12.5px] leading-none">
+                  <span className="font-semibold text-slate-800">
                     {entry?.subject?.name || slot.label || 'Period'}
-                  </h4>
+                  </span>
                   {entry && entryTeacherLabel(entry) && (
-                    <p className="text-[11px] text-slate-400 truncate">{entryTeacherLabel(entry)}</p>
+                    <span className="text-[11px] text-slate-400"> · {entryTeacherLabel(entry)}</span>
                   )}
-                </div>
+                </p>
                 {changed && (
                   <span
-                    className="text-[9px] md:text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 flex-shrink-0"
+                    className="text-[9px] leading-none font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1 py-[2px] flex-shrink-0"
                     title="Changed just for today"
                   >
                     Today
