@@ -59,9 +59,9 @@ export default function TeamMemberSelector({
   }
 
   return (
-    // Positioned only from sm up: on a phone the menu hangs from the toolbar
-    // instead of this button, so it can't run off either edge.
-    <div ref={ref} className="sm:relative min-w-0">
+    // The picker always sits at the right of its row, so the menu opens from
+    // the button's own right edge and grows leftwards onto the screen.
+    <div ref={ref} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -80,7 +80,7 @@ export default function TeamMemberSelector({
       </button>
 
       {open && (
-        <div className="absolute right-2 sm:right-0 top-full mt-1.5 z-50 tk-card w-[min(16rem,calc(100vw-1rem))] overflow-hidden">
+        <div className="absolute right-0 top-full mt-1.5 z-50 tk-card w-[min(16rem,calc(100vw-2rem))] overflow-hidden">
           {/* Search box */}
           <div className="px-2 pt-2 pb-1">
             <div className="flex items-center gap-1.5 px-2.5 h-9 bg-white rounded-[12px] border border-amber-900/[0.14] focus-within:border-amber-400 focus-within:ring-[3px] focus-within:ring-amber-400/15 transition">

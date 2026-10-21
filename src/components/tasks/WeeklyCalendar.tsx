@@ -12,9 +12,10 @@ import {
 import { fetchSubtasksForCalendar, Subtask, SubtaskWithProject, updateSubtaskStatus } from '@/lib/projects'
 import { UserProfile } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMediaQuerySync } from '@/hooks/useMediaQuery'
 import { TASK_SLOTS, TaskSlot, formatSlotTime } from '@/lib/taskSlots'
 import { fetchActiveTimetablePeriodSlots } from '@/lib/taskPeriods'
-import { Btn, IconBtn, IconChip, StatusMark, shortDate } from './ui'
+import { Btn, IconBtn, IconChip, Seg, StatusMark, shortDate } from './ui'
 
 // Every popup loads the first time it opens, not with the page. The loaders
 // are kept so a hover on the button that opens one can start the download.
@@ -135,6 +136,10 @@ export default function WeeklyCalendar({
   const [periodSlots, setPeriodSlots] = useState<TaskSlot[]>(TASK_SLOTS)
 
   const { user } = useAuth()
+  // Phones default to one day at a time; the week grid is a tap away.
+  const narrow = useMediaQuerySync('(max-width: 639px)')
+  const [mode, setMode] = useState<'day' | 'week'>('day')
+  const showDay = narrow && mode === 'day'
   const targetUserId = viewingUserId || userId
   const todayStr = formatDate(new Date())
   const canEditSubtasks = ['coordinator', 'principal', 'admin'].includes(profile.role)
@@ -409,7 +414,7 @@ export default function WeeklyCalendar({
     .map(d => d.full === expandedDay ? 'minmax(176px, 3fr)' : 'minmax(76px, 1fr)')
     .join(' ')
 
-  const chip = (task: TaskWithDetails, showDate = false) => (
+  const chip = (task: TaskWithDetails, showDate = false, roomy = false) => (
     <div key={taskRenderKeys.current.get(task.id) ?? task.id}>
       <TaskGridChip
         task={task}
@@ -417,14 +422,15 @@ export default function WeeklyCalendar({
         onStatusChange={handleTaskStatusChange}
         onOpen={() => setOpenTask(task)}
         showDate={showDate}
+        roomy={roomy}
         currentUserId={userId}
         readAt={readAt}
         highlighted={task.id === highlightedTaskId}
       />
     </div>
   )
-  const subChip = (sub: SubtaskWithProject) => (
-    <SubtaskGridChip key={sub.id} subtask={sub} onStatusTap={handleSubtaskStatusTap} onOpen={() => setOpenSubtask(sub)} />
+  const subChip = (sub: SubtaskWithProject, roomy = false) => (
+    <SubtaskGridChip key={sub.id} subtask={sub} roomy={roomy} onStatusTap={handleSubtaskStatusTap} onOpen={() => setOpenSubtask(sub)} />
   )
 
   const picker = teamMembers && teamMembers.length > 0 && currentUserId && onViewingUserChange ? (
@@ -437,77 +443,115 @@ export default function WeeklyCalendar({
     />
   ) : null
 
+  // The legend and the planner. `side` is where the legend's card opens from:
+  // on a phone the buttons sit at the left of the screen, wider up at the right.
+  const tools = (side: 'left' | 'right') => (
+    <>
+      <div className="relative">
+        <IconBtn label="What the colours mean" aria-pressed={showGuide} onClick={() => setShowGuide(v => !v)}>
+          <HelpCircle size={15} />
+        </IconBtn>
+        {showGuide && <Legend side={side} onClose={() => setShowGuide(false)} />}
+      </div>
+      <IconBtn label="Planner: import or draft a week of tasks" onClick={() => setShowPlanner(true)}>
+        <FileSpreadsheet size={15} />
+      </IconBtn>
+    </>
+  )
+
   return (
     <div className="space-y-3 sm:space-y-4">
-      {/* ── Header, on the page: title and actions, then the week ───────────── */}
+      {/* ── Header, on the page ─────────────────────────────────────────────
+          Phone:   title + New task / the week / tools on the left, person on the right.
+          Wider:   title, tools, person, New task / the week. */}
       <div className="space-y-1.5">
-        {/* Each row is positioned, so on a phone the menus hang from the row. */}
-        <div className="relative flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-2">
           <h2 className="font-display text-[17px] sm:text-xl font-bold text-slate-800 flex items-center gap-2.5 mr-auto flex-shrink-0 whitespace-nowrap">
             <IconChip icon={CalendarDays} />
             Calendar
           </h2>
-          {picker && <div className="hidden sm:block">{picker}</div>}
-          <div className="sm:relative">
-            <IconBtn label="What the colours mean" aria-pressed={showGuide} onClick={() => setShowGuide(v => !v)} className="max-[359px]:!w-8 max-[359px]:!h-8">
-              <HelpCircle size={15} />
-            </IconBtn>
-            {showGuide && <Legend onClose={() => setShowGuide(false)} />}
+          <div className="hidden sm:flex items-center gap-2">
+            {tools('right')}
+            {picker}
           </div>
-          <IconBtn label="Planner: import or draft a week of tasks" onClick={() => setShowPlanner(true)} className="max-[359px]:!w-8 max-[359px]:!h-8">
-            <FileSpreadsheet size={15} />
-          </IconBtn>
           <Btn
             tone="primary"
-            onClick={() => openNewTask(todayStr)}
+            onClick={() => openNewTask(showDay ? expandedDay : todayStr)}
             onPointerEnter={() => { loadNewTaskForm() }}
             onFocus={() => { loadNewTaskForm() }}
           >
             <Plus size={15} />
-            {/* The narrowest phones get the short label so the title keeps its room. */}
-            <span className="min-[360px]:hidden">New</span>
-            <span className="hidden min-[360px]:inline">New task</span>
+            New task
           </Btn>
         </div>
 
-        <div className="relative flex items-center gap-2">
-          {picker && <div className="sm:hidden">{picker}</div>}
-          {/* The week switch: the whole row, straight on the page. */}
-          <div className="flex-1 min-w-0 flex items-center gap-1 border-y border-amber-900/[0.08] py-1">
-            <button
-              type="button"
-              onClick={() => shiftWeek(-1)}
-              aria-label="Previous week"
-              className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <div className="flex-1 min-w-0 text-center leading-tight">
-              <p className="font-display text-[15px] sm:text-[16px] font-bold text-slate-800 tabular-nums">{weekLabel}</p>
-              {isThisWeek ? (
-                <p className="text-[11.5px] font-medium text-amber-700/80">This week</p>
-              ) : (
-                <button type="button" onClick={goToThisWeek} className="text-[11.5px] font-semibold text-orange-600 hover:text-orange-700 underline-offset-2 hover:underline">
-                  Back to this week
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => shiftWeek(1)}
-              aria-label="Next week"
-              className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
-            >
-              <ChevronRight size={18} />
-            </button>
+        {/* The week switch: the whole row, straight on the page. */}
+        <div className="flex items-center gap-1 border-y border-amber-900/[0.08] py-1">
+          <button
+            type="button"
+            onClick={() => shiftWeek(-1)}
+            aria-label="Previous week"
+            className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0 text-center leading-tight">
+            <p className="font-display text-[15px] sm:text-[16px] font-bold text-slate-800 tabular-nums">{weekLabel}</p>
+            {isThisWeek ? (
+              <p className="text-[11.5px] font-medium text-amber-700/80">This week</p>
+            ) : (
+              <button type="button" onClick={goToThisWeek} className="text-[11.5px] font-semibold text-orange-600 hover:text-orange-700 underline-offset-2 hover:underline">
+                Back to this week
+              </button>
+            )}
           </div>
+          <button
+            type="button"
+            onClick={() => shiftWeek(1)}
+            aria-label="Next week"
+            className="w-9 h-9 flex-shrink-0 inline-flex items-center justify-center rounded-full text-amber-700 hover:bg-amber-100/70 active:scale-95 transition"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* Phone: the tools and the day/week choice on the left, the person on the right. */}
+        <div className="sm:hidden flex items-center gap-2">
+          {tools('left')}
+          <Seg value={mode} onChange={setMode} options={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }]} />
+          {picker && <div className="ml-auto">{picker}</div>}
         </div>
       </div>
+
+      {/* Day view: the seven days to pick from, then that day's periods. */}
+      {showDay && !loading && (
+        <DaySwitch
+          days={weekDays}
+          value={expandedDay}
+          today={todayStr}
+          countFor={d => getTasksForDay(d).length + getSubtasksForDay(d).length}
+          onChange={d => { setExpandedDay(d); setComposeCell(null) }}
+        />
+      )}
 
       <section className="tk-card overflow-hidden">
         {/* ── Period × day grid, from the active Timetable's periods ─────────── */}
         {loading ? (
           <CalendarSkeleton />
+        ) : showDay ? (
+          <DayList
+            periods={periodSlots}
+            tasks={getTasksForDay(expandedDay)}
+            subtasks={getSubtasksForDay(expandedDay)}
+            periodStarts={periodStarts}
+            composeSlot={composeCell?.date === expandedDay ? composeCell.slot : undefined}
+            renderChip={t => chip(t, false, true)}
+            renderSubChip={sb => subChip(sb, true)}
+            onCompose={slot => setComposeCell({ date: expandedDay, slot })}
+            onCancelCompose={() => setComposeCell(null)}
+            onCreate={(title, slot) => handleInlineCreate(title, expandedDay, slot)}
+            onExpand={(title, slot) => openNewTask(expandedDay, title, slot === null ? null : [slot, slot])}
+          />
         ) : (
           <div ref={gridScrollRef} className="overflow-x-auto overscroll-x-contain">
             <div
@@ -549,7 +593,7 @@ export default function WeeklyCalendar({
                 return (
                   <div key={day.full} className={`p-1 space-y-1 border-b border-amber-900/[0.07] ${i < 6 ? 'border-r' : ''} min-w-0 ${cellBg(day.full, todayStr, expandedDay)}`}>
                     {unscheduled.map(t => chip(t))}
-                    {daySubs.map(subChip)}
+                    {daySubs.map(sb => subChip(sb))}
                   </div>
                 )
               })}
@@ -604,8 +648,8 @@ export default function WeeklyCalendar({
           subtasks={overdueUndatedSubtasks}
           monthIdx={overdueMonthIdx}
           setMonthIdx={setOverdueMonthIdx}
-          renderChip={t => chip(t, true)}
-          renderSubChip={subChip}
+          renderChip={t => chip(t, true, true)}
+          renderSubChip={sb => subChip(sb, true)}
         />
         <BonusSection
           open={bonusOpen}
@@ -615,7 +659,7 @@ export default function WeeklyCalendar({
           tasks={bonusTasksList}
           monthIdx={bonusMonthIdx}
           setMonthIdx={setBonusMonthIdx}
-          renderChip={t => chip(t, true)}
+          renderChip={t => chip(t, true, true)}
         />
       </div>
 
@@ -689,7 +733,7 @@ function cellBg(day: string, today: string, expanded: string): string {
 
 // ─── Status legend ────────────────────────────────────────────────────────────
 
-function Legend({ onClose }: { onClose: () => void }) {
+function Legend({ side, onClose }: { side: 'left' | 'right'; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   // Closes on Escape or a press anywhere else; the button that opened it
   // toggles it itself, so presses there are left alone.
@@ -718,7 +762,7 @@ function Legend({ onClose }: { onClose: () => void }) {
     { mark: <span className="w-[3px] h-3.5 rounded-full bg-red-500" />, label: 'New comment' },
   ]
   return (
-    <div ref={ref} className="absolute right-2 sm:right-0 top-full mt-1.5 z-30 w-[min(15rem,calc(100vw-1rem))] tk-card p-3">
+    <div ref={ref} className={`absolute ${side === 'left' ? 'left-0' : 'right-0'} top-full mt-1.5 z-30 w-[min(15rem,calc(100vw-2rem))] tk-card p-3`}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         {rows.map(r => (
           <div key={r.label} className="flex items-center gap-2 text-[12px] text-slate-700">
@@ -756,6 +800,91 @@ function CalendarSkeleton() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─── Day view (phones) ────────────────────────────────────────────────────────
+
+function DaySwitch({ days, value, today, countFor, onChange }: {
+  days: { day: string; date: number; month: string; full: string }[]
+  value: string
+  today: string
+  countFor: (d: string) => number
+  onChange: (d: string) => void
+}) {
+  return (
+    <div className="grid grid-cols-7 gap-1" role="tablist" aria-label="Day">
+      {days.map(d => {
+        const on = d.full === value
+        const isToday = d.full === today
+        const n = countFor(d.full)
+        return (
+          <button
+            key={d.full}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(d.full)}
+            className={`relative min-w-0 flex flex-col items-center justify-center h-[50px] rounded-[12px] border transition active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-amber-400/40 ${
+              on
+                ? 'text-white border-transparent bg-gradient-to-br from-amber-500 to-orange-500 shadow-[0_6px_14px_-8px_rgba(234,88,12,.8)]'
+                : 'bg-white text-slate-700 border-amber-900/[0.1]'}`}
+          >
+            <span className={`text-[10.5px] font-semibold leading-none ${on ? 'text-white/85' : isToday ? 'text-orange-600' : 'text-slate-400'}`}>{isToday ? 'Today' : d.day}</span>
+            <span className="text-[15px] font-bold leading-tight tabular-nums mt-0.5">{d.date}</span>
+            {n > 0 && <span className={`absolute bottom-1 h-1 rounded-full ${on ? 'bg-white/80' : 'bg-amber-400'}`} style={{ width: Math.min(4 + n * 3, 18) }} />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function DayList({
+  periods, tasks, subtasks, periodStarts, composeSlot, renderChip, renderSubChip, onCompose, onCancelCompose, onCreate, onExpand,
+}: {
+  periods: TaskSlot[]
+  tasks: TaskWithDetails[]
+  subtasks: SubtaskWithProject[]
+  periodStarts: Set<string>
+  /** undefined: nothing being typed; null: the "any time" row; n: period n. */
+  composeSlot: number | null | undefined
+  renderChip: (t: TaskWithDetails) => React.ReactNode
+  renderSubChip: (s: SubtaskWithProject) => React.ReactNode
+  onCompose: (slot: number | null) => void
+  onCancelCompose: () => void
+  onCreate: (title: string, slot: number | null) => void
+  onExpand: (title: string, slot: number | null) => void
+}) {
+  const unscheduled = tasks.filter(t => !t.timing || !periodStarts.has(t.timing))
+  const row = (key: string, label: React.ReactNode, time: React.ReactNode, slot: number | null, items: React.ReactNode[]) => (
+    <div key={key} className="flex items-stretch gap-2.5 px-2.5 py-1.5 min-h-[44px]">
+      <div className="w-12 flex-shrink-0 flex flex-col justify-center leading-tight">
+        <span className="text-[12.5px] font-bold text-slate-600 tabular-nums">{label}</span>
+        {time && <span className="text-[10.5px] text-slate-400 tabular-nums">{time}</span>}
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
+        {items}
+        {composeSlot === slot ? (
+          <InlineTaskComposer onCreate={title => onCreate(title, slot)} onExpand={title => onExpand(title, slot)} onCancel={onCancelCompose} />
+        ) : items.length === 0 ? (
+          <button
+            onClick={() => onCompose(slot)}
+            className="h-8 w-full flex items-center gap-1.5 px-2.5 rounded-[9px] border border-dashed border-amber-900/[0.12] text-[12px] text-slate-400 hover:border-amber-400 hover:text-amber-600 active:bg-amber-50 transition-colors"
+          >
+            <Plus size={12} /> Add
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+  return (
+    <div className="divide-y divide-amber-900/[0.06]">
+      {(unscheduled.length > 0 || subtasks.length > 0 || composeSlot === null) &&
+        row('any', 'Any', 'time', null, [...unscheduled.map(renderChip), ...subtasks.map(renderSubChip)])}
+      {periods.map((p, i) =>
+        row(String(i), `P${i + 1}`, formatSlotTime(p.start), i, tasks.filter(t => t.timing === p.start).map(renderChip)),
+      )}
     </div>
   )
 }
@@ -961,12 +1090,14 @@ function InlineTaskComposer({ onCreate, onExpand, onCancel }: {
 
 // ─── Chips ────────────────────────────────────────────────────────────────────
 
-function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, currentUserId, readAt, highlighted }: {
+function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, roomy, currentUserId, readAt, highlighted }: {
   task: TaskWithDetails
   canCheck: boolean
   onStatusChange: (id: string, status: TaskStatus) => void
   onOpen: () => void
   showDate?: boolean
+  /** Lists (the day view, overdue, bonus): the name wraps. In the grid it stays on one line. */
+  roomy?: boolean
   currentUserId?: string
   readAt?: string
   highlighted?: boolean
@@ -1006,8 +1137,8 @@ function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, curren
         >
           <StatusMark status={task.status} requireCheck={!!task.require_check} />
         </button>
-        <button onClick={onOpen} className="min-w-0 flex-1 text-left py-px">
-          <span className={`block font-medium leading-snug break-words ${completed || isDismissed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+        <button onClick={onOpen} title={roomy ? undefined : task.title} className="min-w-0 flex-1 text-left py-px">
+          <span className={`block font-medium leading-snug ${roomy ? 'break-words' : 'truncate'} ${completed || isDismissed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
             {task.title}
           </span>
           {showDate && task.due_date && (
@@ -1024,8 +1155,9 @@ function TaskGridChip({ task, canCheck, onStatusChange, onOpen, showDate, curren
   )
 }
 
-function SubtaskGridChip({ subtask, onStatusTap, onOpen }: {
+function SubtaskGridChip({ subtask, roomy, onStatusTap, onOpen }: {
   subtask: SubtaskWithProject
+  roomy?: boolean
   onStatusTap: (s: SubtaskWithProject) => void
   onOpen: () => void
 }) {
@@ -1044,12 +1176,12 @@ function SubtaskGridChip({ subtask, onStatusTap, onOpen }: {
         >
           <StatusMark status={subtask.status} requireCheck={!!subtask.require_check} />
         </button>
-        <button onClick={onOpen} className="min-w-0 flex-1 text-left py-px">
-          <span className={`block font-medium leading-snug break-words ${struck ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+        <button onClick={onOpen} title={roomy ? undefined : `${subtask.title} (${subtask.project_title})`} className="min-w-0 flex-1 text-left py-px">
+          <span className={`block font-medium leading-snug ${roomy ? 'break-words' : 'truncate'} ${struck ? 'line-through text-slate-400' : 'text-slate-700'}`}>
             {subtask.title}
           </span>
           {/* The purple edge already says "project"; the name gets the room. */}
-          <span className="block mt-0.5 min-w-0 text-[10.5px] text-purple-600 leading-tight break-words">{subtask.project_title}</span>
+          <span className={`block mt-0.5 min-w-0 text-[10.5px] text-purple-600 leading-tight ${roomy ? 'break-words' : 'truncate'}`}>{subtask.project_title}</span>
         </button>
       </div>
     </div>
