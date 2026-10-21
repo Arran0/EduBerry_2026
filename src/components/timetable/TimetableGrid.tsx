@@ -77,10 +77,10 @@ export default function TimetableGrid({ days, slots, entries, secondary, overrid
             const time = timeOf(slot)
             if (slot.is_break) {
               return (
-                <div key={slot.id} className="flex items-center gap-3 px-4 py-2 bg-[#FBF6E9]">
-                  <span className="w-[4.5rem] flex-shrink-0 text-[12px] text-amber-700 tabular-nums">{time ?? ''}</span>
-                  <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-amber-700">
-                    <Coffee size={13} /> {slot.label || 'Break'}
+                <div key={slot.id} className="flex items-center gap-3 px-3 py-0.5 bg-[#FBF6E9]">
+                  <span className="w-[4.5rem] flex-shrink-0 text-[10.5px] text-amber-700/80 tabular-nums">{time ?? ''}</span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                    <Coffee size={11} /> {slot.label || 'Break'}
                   </span>
                 </div>
               )
@@ -88,7 +88,7 @@ export default function TimetableGrid({ days, slots, entries, secondary, overrid
             const cell = byCell.get(`${day}__${slot.id}`) ?? []
             const changes = amended.get(`${day}__${slot.id}`) ?? []
             return (
-              <div key={slot.id} className="flex items-stretch gap-3 px-4 py-2.5">
+              <div key={slot.id} className="flex items-stretch gap-3 px-3 py-2.5">
                 <div className="w-[4.5rem] flex-shrink-0">
                   <p className="text-[13px] font-semibold text-slate-700 leading-snug break-words">{slot.label}</p>
                   {time && <p className="text-[11.5px] text-slate-400 tabular-nums">{time}</p>}
@@ -146,22 +146,24 @@ export default function TimetableGrid({ days, slots, entries, secondary, overrid
             </tr>
           </thead>
           <tbody>
-            {slots.map((slot) => (
-              <tr key={slot.id} className={slot.is_break ? 'bg-[#FBF6E9]' : ''}>
+            {slots.map((slot) => slot.is_break ? (
+              // A break is a thin strip: label and time on one line, no cells.
+              <tr key={slot.id} className="bg-[#FBF6E9]">
+                <td colSpan={days.length + 1} className="px-2 py-0.5 border-t border-[#EEEAE1]">
+                  <div className="flex items-center gap-1.5 text-[10.5px] leading-4 text-amber-700">
+                    <Coffee size={11} className="flex-shrink-0" />
+                    <span className="font-semibold">{slot.label || 'Break'}</span>
+                    {timeOf(slot) && <span className="tabular-nums text-amber-700/70">{timeOf(slot)}</span>}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              <tr key={slot.id}>
                 <td className="p-2 align-top text-[11.5px] text-slate-500 border-t border-[#EEEAE1]">
                   <div className="font-semibold text-slate-700 leading-snug break-words">{slot.label}</div>
                   {timeOf(slot) && <div className="tabular-nums text-slate-400">{timeOf(slot)}</div>}
                 </td>
                 {days.map((d) => {
-                  if (slot.is_break) {
-                    return (
-                      <td key={d} className="p-1 border-t border-l border-[#EEEAE1]">
-                        <div className="h-12 flex items-center justify-center text-amber-500">
-                          <Coffee size={14} />
-                        </div>
-                      </td>
-                    )
-                  }
                   const cellKey = `${d}__${slot.id}`
                   const cellEntries = byCell.get(cellKey) ?? []
                   const changes = amended.get(cellKey) ?? []

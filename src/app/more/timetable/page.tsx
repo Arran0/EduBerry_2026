@@ -17,17 +17,15 @@ const AdminTimetableBuilder = dynamic(() => import('@/components/timetable/Admin
 const StaffTimetableView    = dynamic(() => import('@/components/timetable/StaffTimetableView'), { loading: () => <Loading /> })
 const StudentTimetableView  = dynamic(() => import('@/components/timetable/StudentTimetableView'), { loading: () => <Loading /> })
 
-// The admin builder hosts a dense master grid, so it gets a wider canvas than
-// the single-week student and staff views.
-const MAX_W_ADMIN = 'max-w-7xl 2xl:max-w-[1720px]'
-const MAX_W_VIEWER = 'max-w-5xl'
+// Every view gets the wide canvas: the admin's master grid needs it, and a
+// student or staff week reads better with its day columns given the room.
+const MAX_W = 'max-w-7xl 2xl:max-w-[1720px]'
 
 export default function TimetablePage() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isStaff = profile ? isStaffRole(profile.role) : false
   const [bannerEditing, setBannerEditing] = useState(false)
-  const MAX_W = isAdmin ? MAX_W_ADMIN : MAX_W_VIEWER
 
   return (
     <ProtectedLayout>
@@ -35,13 +33,14 @@ export default function TimetablePage() {
         <PageBanner
           settingKey="timetable_banner"
           defaultBanner={TIMETABLE_BANNER_DEFAULT}
-          icon={<CalendarRange size={24} className="text-white" />}
+          icon={<CalendarRange size={26} className="text-white" />}
           backgroundIcon={<CalendarRange size={150} className="text-white" />}
           title="Timetable"
           subtitle={isAdmin ? 'Periods, lessons and the published week' : isStaff ? 'The periods you teach' : 'Your class week'}
           isAdmin={isAdmin}
           maxWidth={MAX_W}
           onEditingChange={setBannerEditing}
+          announcementRhythm
         />
 
         <div className={`${MAX_W} mx-auto px-4 sm:px-6 lg:px-8 pb-14`}>
