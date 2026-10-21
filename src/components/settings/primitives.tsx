@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { Check, Copy, Info, Loader2, Save, ShieldCheck, Trash2, Plus } from 'lucide-react'
 
 // Shared form primitives for the admin settings screens, in the admin palette
-// (square corners, neutral greys). Extracted from src/app/admin/settings so the
+// (square corners, neutral greys). Extracted from the old App Settings page so the
 // bank connection forms render identically wherever they are embedded —
 // App Settings, Salary Payout Settings and Driver Payroll Settings all mount
 // the same components rather than keeping drifting copies of a credential form.

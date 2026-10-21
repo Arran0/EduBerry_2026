@@ -16,10 +16,9 @@ import {
  * Everything that shapes a pay cycle before one is opened, as a panel with no
  * page chrome of its own.
  *
- * It is a component rather than page markup because it is mounted twice: as
- * /admin/payroll-settings, and as the popup behind the Salary Manager's
- * settings button. "The same settings in both places" is a claim that only
- * stays true if there is one copy of them, so there is one.
+ * It is a component rather than page markup: it is the popup behind the
+ * Salary page's banner Settings button (/admin/payroll-settings redirects
+ * there), with no page chrome of its own.
  *
  * Two sections, and the split matters:
  *

@@ -123,7 +123,7 @@ export default function MorePage() {
     }] : []),
     ...( isAdmin ? [{
       title: 'Admin Space',
-      description: 'Manage profiles, classrooms, homerooms, teacher teams, and app settings',
+      description: 'Manage profiles, classrooms, homerooms, teacher teams, attendance rules and design',
       href: '/more/admin-space',
       icon: <Shield size={22} />,
       badge: 'Admin',

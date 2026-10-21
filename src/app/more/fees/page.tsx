@@ -8,7 +8,10 @@
 //
 //   Collection — the money: four figures, then Bills, Students and Reports.
 //   Pricing    — the price list, the late-fee rules and concessions.
-//   Settings   — permissions, policies, numbering, sessions, collection, WhatsApp.
+//
+// Settings (permissions, policies, numbering, sessions, collection, WhatsApp)
+// is not a place of its own: it opens as a popup from the banner's Settings
+// button, the way Salary opens its payroll settings.
 //
 // Tab state lives in the URL so a clerk can bookmark the one place they work,
 // and the routes and links from before still land where the thing they name
@@ -38,14 +41,17 @@ const LateFeeSettings    = dynamic(() => import('@/components/fees/sections/Late
 const ConcessionsSection = dynamic(() => import('@/components/fees/sections/ConcessionsSection'), { ssr: false, loading: () => <Loading /> })
 const FeeSettingsPanel   = dynamic(() => import('@/components/settings/FeeSettingsPanel'), { ssr: false, loading: () => <Loading /> })
 
-type Main = 'collection' | 'config' | 'settings'
-type Tool = 'reminders' | 'latefees' | 'concessions'
+type Main = 'collection' | 'config'
+type Tool = 'reminders' | 'latefees' | 'concessions' | 'settings'
 
 const MAIN_TABS = [
   { key: 'collection' as const, label: 'Collection', icon: Landmark },
   { key: 'config' as const,     label: 'Pricing',    icon: Layers },
-  { key: 'settings' as const,   label: 'Settings',   icon: Settings },
 ]
+
+/** Solid white on the banner: a translucent control over a photo cannot be read. */
+const BANNER_BTN =
+  'inline-flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-full bg-white text-slate-900 text-[12px] font-semibold ring-1 ring-black/5 shadow-[0_6px_16px_-8px_rgba(15,23,42,.55)] hover:bg-slate-50 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]'
 
 const SECTIONS: CenterSection[] = ['bills', 'students', 'reports']
 
@@ -91,6 +97,9 @@ function FeesInner() {
 
   // Concessions moved to Pricing: an old Collection link to them lands there.
   const toolTab: Main | undefined = rawTool === 'concessions' || rawTool === 'latefees' ? 'config' : undefined
+  // Settings was a tab; `?tab=settings` (and the old /admin/fee-settings route,
+  // which redirects here) now opens the settings popup over Collection.
+  const settingsLink = params.get('tab') === 'settings' || params.get('panel') === 'settings'
 
   const main = (MAIN_TABS.some(t => t.key === params.get('tab')) && !toolTab
     ? params.get('tab')
@@ -100,9 +109,9 @@ function FeesInner() {
     ? rawSection as CenterSection
     : SECTION_ALIAS[rawSection] ?? legacy.section ?? 'bills'
 
-  const tool: Tool | null = (['reminders', 'latefees', 'concessions'] as string[]).includes(rawTool ?? '')
+  const tool: Tool | null = (['reminders', 'latefees', 'concessions', 'settings'] as string[]).includes(rawTool ?? '')
     ? rawTool
-    : legacy.tool ?? null
+    : settingsLink ? 'settings' : legacy.tool ?? null
 
   const linkFilters = useMemo(() => filtersFromLink(params.get('filter')), [params])
 
@@ -121,6 +130,7 @@ function FeesInner() {
   const lateFeesOpen = main === 'config' && tool === 'latefees' && perms.can('fees.latefee.manage')
   const canConcede = perms.canAny('fees.discount.apply', 'fees.discount.approve', 'fees.scholarship.manage')
   const concessionsOpen = main === 'config' && tool === 'concessions' && canConcede
+  const settingsOpen = tool === 'settings'
 
   return (
     <div data-page-theme="fees" className="overflow-x-clip" style={{ minHeight: '100vh' }}>
@@ -129,9 +139,17 @@ function FeesInner() {
         defaultBanner={FEES_BANNER_DEFAULT}
         icon={<Landmark size={26} className="text-white" />}
         title="Fees"
-        subtitle="Bills, collection, pricing and settings"
+        subtitle="Bills, collection and pricing"
         isAdmin
-        actions={<YearToggle />}
+        actions={
+          <>
+            <YearToggle />
+            <button onClick={() => go({ tool: 'settings' })} aria-label="Fee settings" className={BANNER_BTN}>
+              <Settings size={13} className="text-[#8B6F47]" />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+          </>
+        }
         onEditingChange={setBannerEditing}
         maxWidth="max-w-7xl 2xl:max-w-[1600px]"
         backgroundIcon={<IndianRupee size={150} className="text-white" />}
@@ -167,19 +185,13 @@ function FeesInner() {
                 onReminders={open => go({ tool: open ? 'reminders' : null })}
                 initialFilters={linkFilters}
               />
-            ) : main === 'config' ? (
-              perms.canAny('fees.view', 'fees.config.manage') ? (
-                <FeeGridSection
-                  onLateFees={perms.can('fees.latefee.manage') ? () => go({ tool: 'latefees' }) : undefined}
-                  onConcessions={canConcede ? () => go({ tool: 'concessions' }) : undefined}
-                />
-              ) : (
-                <Notice>You do not have permission to see the price list.</Notice>
-              )
-            ) : perms.can('fees.settings.manage') ? (
-              <FeeSettingsPanel />
+            ) : perms.canAny('fees.view', 'fees.config.manage') ? (
+              <FeeGridSection
+                onLateFees={perms.can('fees.latefee.manage') ? () => go({ tool: 'latefees' }) : undefined}
+                onConcessions={canConcede ? () => go({ tool: 'concessions' }) : undefined}
+              />
             ) : (
-              <Notice>You do not have permission to change fee settings.</Notice>
+              <Notice>You do not have permission to see the price list.</Notice>
             )}
         </div>
       </div>
@@ -192,6 +204,19 @@ function FeesInner() {
           onClose={() => go({ tool: null })}
         >
           <LateFeeSettings />
+        </FeeToolModal>
+      )}
+
+      {settingsOpen && (
+        <FeeToolModal
+          title="Fee settings"
+          subtitle="Permissions, policies, numbering, sessions, collection and WhatsApp"
+          icon={<Settings size={16} />}
+          onClose={() => go({ tool: null })}
+        >
+          {perms.loading ? <Loading />
+            : perms.can('fees.settings.manage') ? <FeeSettingsPanel />
+            : <Notice>You do not have permission to change fee settings.</Notice>}
         </FeeToolModal>
       )}
 

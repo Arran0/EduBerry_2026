@@ -6,8 +6,7 @@ import { ArrowLeft, Info } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import BankCollectSettings from '@/components/settings/BankCollectSettings'
 
-// Bus fee settings. Mounts the same collection form as App Settings and the
-// school Fee Settings page — one form in the product rather than three that
+// Bus fee settings. Mounts the same collection form as the school Fee Settings — one form in the product rather than three that
 // drift apart — because a school links its bank account once and it receives
 // both school and bus fees.
 
@@ -15,8 +14,8 @@ export default function BusFeeSettingsPage() {
   return (
     <ProtectedLayout adminOnly>
       <div data-page-theme="bus" className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        <Link href="/admin/settings" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft size={16} /> App Settings
+        <Link href="/more/bus" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
+          <ArrowLeft size={16} /> Transport
         </Link>
 
         <h1 className="font-display text-2xl font-bold text-slate-800 mb-1">Bus Fee Settings</h1>

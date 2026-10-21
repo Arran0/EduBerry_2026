@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { CalendarClock, ChevronRight } from 'lucide-react'
+import { CalendarClock } from 'lucide-react'
 import {
   fetchTimetableForStudent,
   entryTeacherLabel,
@@ -89,14 +89,8 @@ export default function TodayTimetableCard({ userId, onContent }: TodayTimetable
 
   return (
     <Link href="/more/timetable">
-      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer group">
-        <div className="px-5 pt-4 pb-3 border-b border-white/25 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CalendarClock size={16} className="text-indigo-500" />
-            <span className="text-sm font-bold text-slate-700">Today&apos;s timetable</span>
-          </div>
-          <ChevronRight size={15} className="text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
-        </div>
+      {/* No title row: the section heading above the card already names it. */}
+      <div className="home-card glass-card rounded-[1.4rem] h-[260px] overflow-hidden flex flex-col cursor-pointer">
         {loading ? (
           <SkeletonRows rows={5} lead="time" />
         ) : !hasAny ? (

@@ -45,6 +45,9 @@ interface PageBannerProps {
   onBannerChange?: (cfg: AnnouncementBannerConfig) => void
   /** Called whenever the inline editor opens or closes */
   onEditingChange?: (editing: boolean) => void
+  /** Size the banner exactly like the Announcements banner: pt-5 pb-6, the
+   *  same display headline, and the subtitle kept on phones. */
+  announcementRhythm?: boolean
 }
 
 export default function PageBanner({
@@ -63,6 +66,7 @@ export default function PageBanner({
   backgroundIcon,
   onBannerChange,
   onEditingChange,
+  announcementRhythm = false,
 }: PageBannerProps) {
   const [bannerCfg, setBannerCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
   const [pendingCfg, setPendingCfg] = useState<AnnouncementBannerConfig>(defaultBanner)
@@ -202,7 +206,8 @@ export default function PageBanner({
           screens keep the height and step the actions in (see the actions
           wrapper below). */}
       <div className={`relative ${maxWidth} mx-auto px-4 sm:px-6 lg:px-8 ${
-        isAdmin && actions && !editingBanner ? `pt-10 sm:pt-7 ${elevated ? 'pb-8 sm:pb-9' : 'pb-10'}` : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
+        announcementRhythm ? 'pt-5 pb-6'
+          : isAdmin && actions && !editingBanner ? `pt-10 sm:pt-7 ${elevated ? 'pb-8 sm:pb-9' : 'pb-10'}` : elevated ? 'pt-6 pb-8 sm:pt-7 sm:pb-9' : 'pt-7 pb-10'
       }`}>
         {onBack && (
           <button
@@ -220,7 +225,7 @@ export default function PageBanner({
           transition={elevated ? { duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.15 } : undefined}
           className="flex flex-nowrap items-center gap-x-4 gap-y-3"
         >
-          <div className={`flex items-center ${compactMobileTitle ? 'gap-3 sm:gap-5' : 'gap-4 sm:gap-5'}`}>
+          <div className={`flex items-center ${announcementRhythm ? 'gap-3 sm:gap-4 min-w-0' : compactMobileTitle ? 'gap-3 sm:gap-5' : 'gap-4 sm:gap-5'}`}>
             {/* Frosted icon box — icon colour follows banner luminance. The
                 elevated variant uses the premium icon-chip material. */}
             {elevated ? (
@@ -233,7 +238,7 @@ export default function PageBanner({
               </div>
             )}
 
-            <div>
+            <div className={announcementRhythm ? 'min-w-0' : undefined}>
               {eyebrow && (
                 <p
                   className={`eyebrow mb-2 ${onDark ? 'text-white/75' : 'text-slate-500'}`}
@@ -243,14 +248,16 @@ export default function PageBanner({
                 </p>
               )}
               <h1
-                className={`font-display font-bold transition-colors duration-300 ${titleColor} ${elevated ? (compactMobileTitle ? 'text-[1.45rem] sm:text-[2.6rem] leading-[1.05] headline' : 'text-[1.9rem] sm:text-[2.6rem] leading-[1.05] headline') : 'text-2xl sm:text-3xl leading-tight'} ${compactMobileTitle ? 'whitespace-nowrap' : ''}`}
+                className={announcementRhythm
+                  ? `font-display text-[1.45rem] sm:text-[2.6rem] font-black leading-[1.04] tracking-tight truncate transition-colors duration-300 ${titleColor}`
+                  : `font-display font-bold transition-colors duration-300 ${titleColor} ${elevated ? (compactMobileTitle ? 'text-[1.45rem] sm:text-[2.6rem] leading-[1.05] headline' : 'text-[1.9rem] sm:text-[2.6rem] leading-[1.05] headline') : 'text-2xl sm:text-3xl leading-tight'} ${compactMobileTitle ? 'whitespace-nowrap' : ''}`}
                 style={onDark && elevated ? { textShadow: '0 2px 10px rgba(0,0,0,0.45)' } : undefined}
               >
                 {title}
               </h1>
               {subtitle && (
                 <p
-                  className={`hidden sm:block text-sm mt-1 transition-colors duration-300 ${subtitleColor}`}
+                  className={`${announcementRhythm ? 'truncate' : 'hidden sm:block'} text-sm mt-1 transition-colors duration-300 ${subtitleColor}`}
                   style={onDark && elevated ? { textShadow: '0 1px 3px rgba(0,0,0,0.4)' } : undefined}
                 >
                   {subtitle}
