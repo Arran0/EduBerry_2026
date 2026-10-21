@@ -405,7 +405,6 @@ export default function ClassroomManagerPage() {
             key="classroom-create"
             onClose={closeCreate}
             size="lg"
-            sharp
             title="New classroom"
             subtitle="Students of the grade and section join on their own"
             icon={<BookOpen size={16} />}
@@ -483,7 +482,6 @@ export default function ClassroomManagerPage() {
             key="classroom-edit"
             onClose={() => setEditingClassroom(null)}
             size="lg"
-            sharp
             title="Edit classroom"
             subtitle={editForm.title || undefined}
             icon={<Edit3 size={16} />}
@@ -595,7 +593,7 @@ function ClassroomRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`min-w-0 break-words text-[13px] font-semibold leading-tight ${closed ? 'text-[#71717A]' : 'text-[#18181B]'}`}>{classroom.title}</span>
-            {closed && <span className="text-[10.5px] font-semibold px-1.5 py-0.5 bg-[#27272A] text-[#D4D4D8]">Closed</span>}
+            {closed && <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md bg-[#27272A] text-[#D4D4D8]">Closed</span>}
           </div>
           {classroom.description && (
             <p className="hidden sm:block min-w-0 break-words text-[11px] leading-tight text-[#71717A] mt-0.5">{classroom.description}</p>
@@ -617,18 +615,18 @@ function ClassroomRow({
 
         {/* Actions */}
         <div className="flex items-center gap-0.5 sm:w-32 justify-end flex-shrink-0">
-          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Open classroom" aria-label="Open classroom">
+          <Link href={`/classrooms/${classroom.id}`} onClick={e => e.stopPropagation()} className="p-1.5 rounded-lg text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Open classroom" aria-label="Open classroom">
             <ExternalLink size={14} />
           </Link>
           {isAdmin && (
             <>
-              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`hidden sm:inline-flex p-1.5 transition-colors ${closed ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'} aria-label={closed ? 'Reopen classroom' : 'Close classroom'}>
+              <button onClick={e => { e.stopPropagation(); onToggleClose() }} className={`hidden sm:inline-flex p-1.5 rounded-lg transition-colors ${closed ? 'text-[#71717A] hover:text-emerald-600 hover:bg-emerald-50' : 'text-[#71717A] hover:text-amber-600 hover:bg-amber-50'}`} title={closed ? 'Reopen' : 'Close'} aria-label={closed ? 'Reopen classroom' : 'Close classroom'}>
                 {closed ? <Lock size={14} /> : <LockOpen size={14} />}
               </button>
-              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="hidden sm:inline-flex p-1.5 text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit" aria-label="Edit classroom">
+              <button onClick={e => { e.stopPropagation(); onStartEdit() }} className="hidden sm:inline-flex p-1.5 rounded-lg text-[#71717A] hover:text-[#27272A] hover:bg-[#E4E4E7] transition-colors" title="Edit" aria-label="Edit classroom">
                 <Edit3 size={14} />
               </button>
-              <button onClick={e => { e.stopPropagation(); onDelete() }} className="hidden sm:inline-flex p-1.5 text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete" aria-label="Delete classroom">
+              <button onClick={e => { e.stopPropagation(); onDelete() }} className="hidden sm:inline-flex p-1.5 rounded-lg text-[#71717A] hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete" aria-label="Delete classroom">
                 <Trash2 size={14} />
               </button>
             </>
@@ -648,13 +646,13 @@ function ClassroomRow({
               {/* On a phone the row has room for two icons only; the rest live here. */}
               {isAdmin && (
                 <div className="sm:hidden flex flex-wrap gap-2">
-                  <button onClick={onStartEdit} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
+                  <button onClick={onStartEdit} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
                     <Edit3 size={13} /> Edit
                   </button>
-                  <button onClick={onToggleClose} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
+                  <button onClick={onToggleClose} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white border border-[#D4D4D8] text-[13px] font-medium text-[#18181B]">
                     {closed ? <LockOpen size={13} /> : <Lock size={13} />} {closed ? 'Reopen' : 'Close'}
                   </button>
-                  <button onClick={onDelete} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-rose-200 text-[13px] font-medium text-rose-600">
+                  <button onClick={onDelete} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white border border-rose-200 text-[13px] font-medium text-rose-600">
                     <Trash2 size={13} /> Delete
                   </button>
                 </div>
@@ -667,10 +665,10 @@ function ClassroomRow({
                     <UserEmailSuggest
                       value={addMemberEmailInput} onChange={v => onAddMemberEmailChange(v)}
                       placeholder="Email to add"
-                      className="border border-[#D4D4D8] bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full"
+                      className="border border-[#D4D4D8] bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#27272A] transition-colors w-full"
                     />
                   </div>
-                  <button onClick={onAddMember} disabled={addingMember === classroom.id} className="px-4 py-2 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5">
+                  <button onClick={onAddMember} disabled={addingMember === classroom.id} className="px-4 py-2 rounded-full bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5">
                     {addingMember === classroom.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                     Add
                   </button>
@@ -682,7 +680,7 @@ function ClassroomRow({
               <button
                 type="button"
                 onClick={() => setShowMembers(v => !v)}
-                className="w-full flex items-center justify-between py-2 px-3 bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
+                className="w-full flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-[#D4D4D8] hover:bg-[#EBEBEB] transition-colors"
               >
                 <span className="flex items-center gap-2 text-[13px] font-semibold text-[#3F3F46]">
                   <Users size={13} /> Members
@@ -694,7 +692,7 @@ function ClassroomRow({
               <AnimatePresence>
                 {showMembers && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                    <div className="max-h-[480px] overflow-y-auto space-y-px mt-px">
+                    <div className="max-h-[480px] overflow-y-auto space-y-1 mt-1">
                       {!expandedDetails ? (
                         <div className="flex items-center gap-2 text-sm text-[#71717A] px-3 py-3">
                           <Loader2 size={14} className="animate-spin text-[#A1A1AA]" /> Loading members…
@@ -703,7 +701,7 @@ function ClassroomRow({
                         <p className="text-sm text-[#71717A] px-3 py-3">No members yet</p>
                       ) : (
                         expandedDetails.members.map(member => (
-                          <div key={member.id} className="flex items-center justify-between py-1.5 px-3 bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
+                          <div key={member.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white border border-[#E4E4E7] hover:bg-[#EBEBEB] transition-colors">
                             <div className="flex items-center gap-3 min-w-0">
                               <Avatar avatarUrl={member.user?.avatar_url} name={member.user?.full_name} size={26} userId={member.user?.id} profileSeed={member.user} />
                               <div className="min-w-0">
@@ -822,7 +820,7 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
             <input
               type="text" value={query} onChange={e => setQuery(e.target.value)}
               placeholder="Search homerooms (e.g. 9A)…"
-              className="w-full border border-[#D4D4D8] bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
+              className="w-full border border-[#D4D4D8] bg-white rounded-xl pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#27272A]"
             />
           </div>
 
@@ -867,7 +865,7 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
                   <button
                     onClick={() => handleImport(hr)}
                     disabled={importingId === hr.id}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#27272A] hover:bg-[#18181B] text-[#F5F5F5] text-xs font-medium transition-colors disabled:opacity-50 flex-shrink-0"
                   >
                     {importingId === hr.id ? <Loader2 size={12} className="animate-spin" /> : <DownloadCloud size={12} />}
                     Import

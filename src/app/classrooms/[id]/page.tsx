@@ -155,10 +155,10 @@ function ClassroomDetailPageContent() {
   const isSmartboard = profile.role === 'smartboard'
 
   const inner = (
-      // Everyone but a student sees the classroom as a working tool, so it takes
-      // the square-cornered pro chrome (see globals.css) — the same treatment
-      // the academics page it opens from uses.
-      <div data-page-theme="academics" className={isStudent ? undefined : 'pro-chrome'}>
+      // One soft-cornered look for every role. The square edges are kept for
+      // the few surfaces that run the full width — the banner and the tab
+      // strip — and for the marks sheet, where a grid sits flush.
+      <div data-page-theme="academics">
 
         {loading ? (
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -346,13 +346,13 @@ function ClassroomDetailPageContent() {
             </div>
 
             {/* ── Content area ──
-                Phones run edge-to-edge (no side gutters) so cards get the full
-                screen width; the bottom padding keeps the floating assistant
-                clear of the last card. */}
-            <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-24">
+                Cards sit inset from the screen edge with soft corners at every
+                width; the bottom padding keeps the floating assistant clear of
+                the last card. */}
+            <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-24">
               {/* Closed notice */}
               {closed && (
-                <div className="mx-3 sm:mx-0 mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl text-[13px] text-amber-800 flex items-start gap-2">
+                <div className="mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl text-[13px] text-amber-800 flex items-start gap-2">
                   <Lock size={14} className="mt-0.5 flex-shrink-0" />
                   This classroom has ended. You can read everything here but not change it.
                 </div>

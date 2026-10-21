@@ -123,7 +123,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
         as="div"
         value={folder}
         onDragEnd={onDragEnd}
-        className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05)] sm:shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]"
+        className="border rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]"
         whileDrag={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, scale: 1.01 }}
       >
         {children}
@@ -131,7 +131,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
     )
   }
   return (
-    <div className="border-y sm:border sm:rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05)] sm:shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]">
+    <div className="border rounded-2xl overflow-hidden border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)]">
       {children}
     </div>
   )
@@ -554,7 +554,7 @@ export default function FolderFileView({
   return (
     <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
+      <div className="flex items-center justify-between gap-3 ">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-xl bg-slate-100">
             <Folder size={16} className="text-slate-600" />
@@ -582,7 +582,7 @@ export default function FolderFileView({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreateFolder}
-            className="mx-2 sm:mx-0 rounded-2xl p-3 sm:p-4 space-y-2.5 overflow-hidden border bg-white border-slate-200"
+            className="rounded-2xl p-3 sm:p-4 space-y-2.5 overflow-hidden border bg-white border-slate-200"
           >
             <p className="text-xs font-semibold text-slate-600">New folder</p>
             <input
@@ -608,7 +608,7 @@ export default function FolderFileView({
 
       {/* Folders List */}
       {folders.length === 0 ? (
-        <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl p-10 text-center">
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-slate-100">
             <Folder size={26} className="text-slate-500" />
           </div>

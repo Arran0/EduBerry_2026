@@ -118,12 +118,12 @@ interface WorkWeekCalendarProps<T> {
    shared student/staff surface, so it holds its own shape rather than taking
    the page's. See the pro-chrome block in globals.css. */
 
-/** Full-bleed on phones, rounded card from `lg` up — for a page whose own
- *  container already drops its gutter on phones (the classroom tabs). */
-export const BLEED_CARD = 'bg-white border-y border-slate-200 lg:border lg:!rounded-2xl lg:shadow-sm overflow-hidden'
-/** Full-bleed on phones by cancelling a 1rem page gutter, rounded card from
- *  `sm` up — for a page that keeps its padding at every width (academics). */
-export const BLEED_CARD_INSET = 'bg-white border-y border-slate-200 -mx-4 sm:mx-0 sm:border sm:!rounded-2xl sm:shadow-sm overflow-hidden'
+/** The calendar's card: soft corners at every width, inset from the screen
+ *  edge on phones like every other card in Academics and Classrooms. (The
+ *  names are the ones the callers have always imported; neither bleeds any
+ *  more.) */
+export const BLEED_CARD = 'bg-white border border-slate-200 !rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)] overflow-hidden'
+export const BLEED_CARD_INSET = BLEED_CARD
 
 /** Below this width a column strip can't fit six readable columns beside an
  *  expanded one at 3x, so the expanded column takes 6x instead — the ratio the

@@ -206,7 +206,7 @@ function WorkListPanel<T>({
   if (entries.length === 0) return null
 
   return (
-    <div className={`-mx-4 sm:mx-0 border-y sm:border sm:rounded-2xl ${tone.border} bg-white overflow-hidden`}>
+    <div className={`border rounded-2xl ${tone.border} bg-white overflow-hidden`}>
       <button
         onClick={() => { setOpen(o => !o); setShown(page) }}
         aria-expanded={open}

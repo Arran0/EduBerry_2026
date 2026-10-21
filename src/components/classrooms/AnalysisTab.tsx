@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { TrendingUp, TrendingDown, Minus, Star, ClipboardList, BarChart3 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Star, ClipboardList, BarChart3, Trophy } from 'lucide-react'
 import {
   ClassroomWithDetails, ClassroomAssessment, AssessmentMark,
   fetchAssessments, fetchAssessmentMarks, fetchStudentMembers,
@@ -105,6 +105,16 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
     [monthlyRows],
   )
 
+  // The top earner across every month in this classroom.
+  const mostPoints = useMemo(() => {
+    let best: { name: string; total: number } | null = null
+    for (const [id, byMonth] of Object.entries(pointsByStudent)) {
+      const total = Object.values(byMonth).reduce((s, v) => s + v, 0)
+      if (total > 0 && (!best || total > best.total)) best = { name: studentName[id] || 'Student', total }
+    }
+    return best
+  }, [pointsByStudent, studentName])
+
   // Total class EduPoints per month (one line) + optional selected-student line.
   const monthlySeries = useMemo<ChartSeries[]>(() => {
     if (months.length === 0) return []
@@ -173,7 +183,7 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
   return (
     <div className="space-y-5">
       {/* Student focus selector (shared by both charts) */}
-      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap px-3 sm:px-0">
+      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap ">
         <label htmlFor="analysis-student" className="text-[13px] font-semibold text-slate-600">Show a student</label>
         <select
           id="analysis-student"
@@ -188,67 +198,93 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
         </select>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      {/* Side by side from lg, the two panels share one height: the right one
+          (a chart of fixed size) sets it, and the left one's table scrolls
+          inside it rather than stretching the row. */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
       {/* ── Monthly EduPoints trend ── */}
-      <div className="min-w-0 bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden sm:shadow-sm">
-        <div className="flex items-center gap-2 flex-wrap px-3 sm:px-4 py-2.5 border-b border-slate-100">
+      <div className="min-w-0 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-100">
           <Star size={15} className="text-amber-500" />
           <h3 className="text-sm font-bold text-slate-800">EduPoints by month</h3>
-          {mostImproved && (
-            <span className="ml-auto min-w-0 text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium flex items-center gap-1">
-              <TrendingUp size={11} /> Most improved: {mostImproved.name} (+{mostImproved.delta})
-            </span>
-          )}
         </div>
 
         {months.length === 0 ? (
-          <p className="text-sm text-slate-600 text-center py-10 px-4">
+          <p className="flex-1 flex items-center justify-center text-sm text-slate-600 text-center py-10 px-4">
             No EduPoints earned yet. They appear when students finish work that carries points.
           </p>
         ) : (
-          <div className="p-3 sm:p-4 space-y-4">
-            <LineChart labels={months.map(monthLabel)} series={monthlySeries} unit=" EP" />
+          <div className="lg:flex-1 lg:relative lg:min-h-[24rem]">
+            <div className="lg:absolute lg:inset-0 flex flex-col p-3 sm:p-4 gap-3">
+              {/* The two names worth knowing first */}
+              {(mostPoints || mostImproved) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0">
+                  <div className="min-w-0 flex items-center gap-2.5 rounded-xl bg-amber-50/80 border border-amber-100 px-3 py-2">
+                    <span className="keep-round w-8 h-8 flex-shrink-0 rounded-full bg-amber-100 text-amber-600 grid place-items-center"><Trophy size={15} /></span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-medium text-amber-800/80">Most EduPoints</span>
+                      <span className="block text-[13px] font-semibold text-slate-800 break-words leading-snug">
+                        {mostPoints ? <>{mostPoints.name} <span className="tabular-nums text-amber-700">{mostPoints.total}</span></> : 'None yet'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex items-center gap-2.5 rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-2">
+                    <span className="keep-round w-8 h-8 flex-shrink-0 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center"><TrendingUp size={15} /></span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-medium text-emerald-800/80">Most improved this month</span>
+                      <span className="block text-[13px] font-semibold text-slate-800 break-words leading-snug">
+                        {mostImproved ? <>{mostImproved.name} <span className="tabular-nums text-emerald-700">+{mostImproved.delta}</span></> : 'No rise yet'}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )}
 
-            {/* Per-student current month + delta */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left">
-                    <th className="py-2 px-2 text-[12px] font-semibold text-slate-600">Student</th>
-                    <th className="py-2 px-2 text-[12px] font-semibold text-slate-600 text-right">This month</th>
-                    <th className="py-2 px-2 text-[12px] font-semibold text-slate-600 text-right">Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthlyRows.map(r => (
-                    <tr
-                      key={r.id}
-                      onClick={() => setSelectedStudent(prev => prev === r.id ? '' : r.id)}
-                      className={`border-b border-slate-50 cursor-pointer transition-colors ${
-                        selectedStudent === r.id ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="py-2 px-2 font-medium text-slate-700">{r.name}</td>
-                      <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">{r.current}</td>
-                      <td className="py-2 px-2 text-right">
-                        <span className={`inline-flex items-center gap-1 font-semibold tabular-nums ${
-                          r.delta > 0 ? 'text-emerald-700' : r.delta < 0 ? 'text-rose-600' : 'text-slate-600'
-                        }`}>
-                          {r.delta > 0 ? <TrendingUp size={13} /> : r.delta < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
-                          {r.delta > 0 ? `+${r.delta}` : r.delta}
-                        </span>
-                      </td>
+              <div className="flex-shrink-0">
+                <LineChart labels={months.map(monthLabel)} series={monthlySeries} unit=" EP" height={160} />
+              </div>
+
+              {/* Per-student current month + delta; scrolls inside the panel */}
+              <div className="lg:flex-1 lg:min-h-0 overflow-auto -mx-1 px-1 lg:[mask-image:linear-gradient(to_bottom,#000_calc(100%-18px),transparent)]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-slate-200 text-left">
+                      <th className="py-2 px-2 text-[12px] font-semibold text-slate-600">Student</th>
+                      <th className="py-2 px-2 text-[12px] font-semibold text-slate-600 text-right">This month</th>
+                      <th className="py-2 px-2 text-[12px] font-semibold text-slate-600 text-right">Change</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {monthlyRows.map(r => (
+                      <tr
+                        key={r.id}
+                        onClick={() => setSelectedStudent(prev => prev === r.id ? '' : r.id)}
+                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                          selectedStudent === r.id ? 'bg-emerald-50/60' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="py-2 px-2 font-medium text-slate-700">{r.name}</td>
+                        <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">{r.current}</td>
+                        <td className="py-2 px-2 text-right">
+                          <span className={`inline-flex items-center gap-1 font-semibold tabular-nums ${
+                            r.delta > 0 ? 'text-emerald-700' : r.delta < 0 ? 'text-rose-600' : 'text-slate-600'
+                          }`}>
+                            {r.delta > 0 ? <TrendingUp size={13} /> : r.delta < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
+                            {r.delta > 0 ? `+${r.delta}` : r.delta}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
       </div>
 
       {/* ── Exam progress ── */}
-      <div className="min-w-0 bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden sm:shadow-sm">
+      <div className="min-w-0 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
         <div className="flex items-center gap-2 flex-wrap px-3 sm:px-4 py-2.5 border-b border-slate-100">
           <ClipboardList size={15} className="text-amber-600" />
           <h3 className="text-sm font-bold text-slate-800">Assessment scores (%)</h3>
@@ -258,10 +294,10 @@ export default function AnalysisTab({ classroomId, userRole }: AnalysisTabProps)
         </div>
 
         {assessments.length === 0 ? (
-          <p className="text-sm text-slate-600 text-center py-10">No assessments in this classroom yet.</p>
+          <p className="flex-1 flex items-center justify-center text-sm text-slate-600 text-center py-10 px-4">No assessments in this classroom yet.</p>
         ) : (
-          <div className="p-3 sm:p-4">
-            <LineChart labels={examLabels} series={examSeries} yMax={100} unit="%" />
+          <div className="flex-1 flex flex-col justify-center p-3 sm:p-4">
+            <LineChart labels={examLabels} series={examSeries} yMax={100} unit="%" height={280} />
           </div>
         )}
       </div>

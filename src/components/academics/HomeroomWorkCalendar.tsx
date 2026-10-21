@@ -279,7 +279,7 @@ export default function HomeroomWorkCalendar({
           />
 
           {undated.length > 0 && (
-            <div className="-mx-4 sm:mx-0 bg-white border-y sm:border sm:rounded-2xl border-slate-200 overflow-hidden">
+            <div className="bg-white border rounded-2xl border-slate-200 overflow-hidden">
               <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
                 <BookOpen size={13} className="text-slate-500" />
                 <h3 className="text-sm font-semibold text-slate-700">No due date</h3>

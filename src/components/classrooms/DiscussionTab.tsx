@@ -406,7 +406,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-2.5 mb-4 px-3 sm:px-0">
+      <div className="flex items-center gap-2.5 mb-4 ">
         <div className="p-2 bg-teal-100 rounded-xl">
           <MessageSquare size={16} className="text-teal-600" />
         </div>
@@ -419,7 +419,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
       </div>
 
       {/* ── Chat stream ── */}
-      <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl sm:shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
         <div className="px-2.5 sm:px-3 py-3">
 
           {/* Empty state */}

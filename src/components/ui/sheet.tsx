@@ -11,7 +11,7 @@ import ModalShell from '@/components/ui/ModalShell'
 // Every popup is ModalShell's glass sheet: header on the glass, what is read
 // on a solid card, actions in a footer on the glass, right-aligned, the
 // primary action last. Buttons are capsules filled from the page palette.
-// Staff pages square every corner through .pro-chrome; nothing here has to
+// Pages that still square their corners do it through .pro-chrome; nothing here has to
 // know which.
 // ──────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ interface Request {
 
 let raise: ((r: Request) => void) | null = null
 
-const SHARP_THEMES = new Set(['fees', 'salary', 'classrooms'])
+const SHARP_THEMES = new Set(['fees', 'salary'])
 
 function ask(r: Omit<Request, 'resolve'>): Promise<boolean> {
   if (!raise) {

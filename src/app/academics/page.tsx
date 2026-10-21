@@ -343,9 +343,9 @@ export default function AcademicsPage() {
 
   return (
     <ProtectedLayout>
-      {/* Staff work this page as a tool, so it takes the square-cornered pro
-          chrome (see globals.css); students keep the rounded look. */}
-      <div data-page-theme="academics" className={isStudent ? undefined : 'pro-chrome'}>
+      {/* One soft-cornered look for every role; the full-width banner is the
+          one square edge. */}
+      <div data-page-theme="academics">
 
         {/* ── Banner: a short strip, painted on the first frame ── */}
         <div

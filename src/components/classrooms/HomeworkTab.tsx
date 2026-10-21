@@ -441,7 +441,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
     <div className="space-y-4">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
+      <div className="flex items-center justify-between gap-3 ">
         <div className="flex items-center gap-2 min-w-0">
           <div className="p-2 rounded-xl bg-[var(--page-primary-light,#cffafe)]">
             <CalendarDays size={16} className="text-[var(--page-primary-dark,#0891b2)]" />
@@ -504,7 +504,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
 
       {/* ── Empty state ──────────────────────────────────────────────────────── */}
       {tasks.length === 0 && files.length === 0 && (
-        <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl p-10 text-center">
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--page-primary-light, #cffafe)' }}>
             <CalendarDays size={26} style={{ color: 'var(--page-primary, #06b6d4)' }} />
           </div>
@@ -519,7 +519,7 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
 
       {/* ── Undated items ────────────────────────────────────────────────────── */}
       {(undatedHw.length > 0 || undatedCw.length > 0) && (
-        <div className="bg-white border-y border-slate-200 sm:border sm:rounded-2xl overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-100">
             <BookOpen size={13} className="text-slate-500" />
             <h3 className="text-sm font-semibold text-slate-700">No due date</h3>

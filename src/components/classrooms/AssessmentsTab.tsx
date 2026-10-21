@@ -701,7 +701,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   return (
     <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-0">
+      <div className="flex items-center justify-between gap-3 ">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-amber-100 rounded-xl">
             <ClipboardList size={16} className="text-amber-600" />
@@ -729,7 +729,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleCreate}
-            className="glass mx-2 sm:mx-0 rounded-2xl p-4 space-y-3 border border-amber-100"
+            className="glass rounded-2xl p-4 space-y-3 border border-amber-100"
           >
             <div className="flex items-center gap-2 mb-1">
               <Plus size={14} className="text-amber-600" />
@@ -793,7 +793,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
 
       {/* Empty state */}
       {assessments.length === 0 && (
-        <div className="glass mx-2 sm:mx-0 rounded-2xl p-10 text-center">
+        <div className="glass rounded-2xl p-10 text-center">
           <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <ClipboardList size={28} className="text-amber-300" />
           </div>
@@ -840,9 +840,12 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       {/* Marksheet Modal */}
       <AnimatePresence>
         {showMarksheet && (
+          // Square, like a printed sheet: the one popup in Classrooms with straight
+          // edges, because the marks grid sits flush inside it.
           <ModalShell
             onClose={requestCloseMarksheet}
             size="2xl"
+            sharp
             title="Marksheet"
             subtitle={(() => {
               const a = assessments.find(a => a.id === showMarksheet)
@@ -1617,7 +1620,7 @@ function AssessmentCard({
 
   return (
     <div
-      className={`bg-white border-y sm:border sm:rounded-2xl border-slate-300 sm:shadow-sm transition-all ${
+      className={`bg-white border rounded-2xl border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,.05),0_10px_24px_-18px_rgba(15,23,42,.4)] transition-all ${
  isStaff && !isEditing ? 'cursor-pointer hover:shadow-md hover:border-slate-400' : ''
  }`}
       onClick={isStaff && !isEditing ? () => onMarksheet(assessment.id) : undefined}
