@@ -130,8 +130,8 @@ function AdminSalaryHub() {
         </div>
       </div>
 
-      {/* The same panel /admin/payroll-settings renders, opened where payroll is
-          actually run. One copy of the settings, two ways in. */}
+      {/* Payroll settings live here, opened where payroll is actually run
+          (/admin/payroll-settings and ?panel=settings land on it). */}
       {showSettings && (
         <ModalShell
           onClose={() => setShowSettings(false)}

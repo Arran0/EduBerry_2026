@@ -3,9 +3,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Fee Settings.
 //
-// A component rather than page markup because it is mounted twice: as
-// /admin/fee-settings, and as the Fee module's Settings tab. "The same settings
-// in both places" only stays true if there is one copy of them.
+// A component rather than page markup: it is the popup behind the Settings
+// button on the Fee page's banner (/admin/fee-settings and /more/fees/settings
+// redirect there), with no page chrome of its own.
 //
 // Six settings screens as six tiles, each opening as a popup: one thing at a
 // time, and the way back is the same gesture every time.
