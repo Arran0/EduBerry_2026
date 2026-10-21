@@ -15,7 +15,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Ban, CalendarOff, Clock, Clock3, EyeOff, Loader2, Pencil, Plus, Repeat, Trash2, Users, CalendarClock } from 'lucide-react'
+import { X, Ban, CalendarOff, Clock, Clock3, EyeOff, Loader2, Pencil, Plus, Repeat, Trash2, Users, CalendarClock } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -193,9 +193,10 @@ function AttendanceBody() {
           icon={Clock3}
           title="Timing"
           className="h-full"
-          description={<>After the late cutoff is <strong className="font-semibold text-[#3F3F46]">Late</strong>; leaving before the checkout cutoff is a <strong className="font-semibold text-[#3F3F46]">Half day</strong>. The cutoff minute itself is on time.</>}
+          description={<>Checking in after the first is <strong className="font-semibold text-[#3F3F46]">Late</strong>; leaving before the second is a <strong className="font-semibold text-[#3F3F46]">Half day</strong>. The cutoff minute itself is on time.</>}
         >
-          <div className="grid grid-cols-2 gap-3">
+          {/* One field per line: side by side, the labels wrap and the times crowd. */}
+          <div className="space-y-3">
             <TimeField
               label="Late after"
               value={draft.late_cutoff}
@@ -352,20 +353,18 @@ function AttendanceBody() {
 
 function TimeField({ label, value, onChange }: { label: string; value: string | null; onChange: (v: string | null) => void }) {
   return (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <label className={`${AX.label} !mb-0`}>{label}</label>
-        {value && (
-          <button onClick={() => onChange(null)} className="text-[11.5px] font-medium text-[#71717A] hover:text-[#18181B] transition-colors">
-            Clear
-          </button>
-        )}
-      </div>
+    <div className="flex items-center gap-3">
+      <p className="flex-1 min-w-0 text-[13px] font-semibold text-[#18181B] leading-tight">{label}</p>
       <input
         type="time" value={value ?? ''} onChange={e => onChange(e.target.value || null)}
         aria-label={label}
-        className={`${AX.field} tabular-nums`}
+        className={`${AX.field} !w-[8.5rem] flex-shrink-0 tabular-nums`}
       />
+      {value ? (
+        <button onClick={() => onChange(null)} aria-label={`Clear ${label}`} className={AX.icon}>
+          <X size={14} />
+        </button>
+      ) : <span className="w-8 flex-shrink-0" aria-hidden />}
     </div>
   )
 }

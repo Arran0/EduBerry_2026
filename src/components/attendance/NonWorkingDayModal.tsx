@@ -11,6 +11,7 @@ import {
 } from '@/lib/attendance'
 import { fetchTeamStaffById } from '@/lib/teams'
 import { SHEET_MOTION } from '@/lib/sheetMotion'
+import StaffAdder from '@/components/attendance/StaffAdder'
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] // index matches JS Date#getDay()
 
@@ -29,8 +30,8 @@ function nextDraftKey() {
 }
 
 const chipBase = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all'
-const chipActive = 'bg-slate-700 text-white'
-const chipInactive = 'bg-slate-100 text-slate-600 active:bg-slate-200'
+const chipActive = 'bg-[#3F3F46] text-white'
+const chipInactive = 'bg-[#F5F5F5] text-[#52525B] active:bg-[#E4E4E7]'
 
 interface Props {
   initialDate: string
@@ -185,6 +186,14 @@ export default function NonWorkingDayModal({
       : g))
   }
 
+  // A teacher picked by hand, on top of (or instead of) whole teams. Undoes an
+  // earlier removal of the same person, so the two never disagree.
+  const includeStaff = (groupKey: string, staffId: string) => {
+    setGroups(prev => prev.map(g => (g.key === groupKey
+      ? { ...g, manualIds: [...new Set([...g.manualIds, staffId])], excludedIds: g.excludedIds.filter(id => id !== staffId) }
+      : g)))
+  }
+
   const excludeStaff = (groupKey: string, staffId: string) => {
     setGroups(prev => prev.map(g => (g.key === groupKey
       ? { ...g, manualIds: g.manualIds.filter(id => id !== staffId), excludedIds: [...new Set([...g.excludedIds, staffId])] }
@@ -233,7 +242,7 @@ export default function NonWorkingDayModal({
         if (!g.name.trim()) { setError(`Give "${g.name || 'this group'}" a name.`); return }
         payload.push({ name: g.name.trim(), is_default: false, staff_ids: ids })
       }
-      if (payload.length === 0) { setError('Add at least one team, or switch to "Everyone".'); return }
+      if (payload.length === 0) { setError('Add at least one team or teacher, or switch to "Everyone".'); return }
     }
 
     setSaving(true)
@@ -269,61 +278,58 @@ export default function NonWorkingDayModal({
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-[#1c1a1e]/45"
+        className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-[#18181B]/50"
         onClick={onClose}
       >
         <motion.div
           {...SHEET_MOTION} // slides, never fades — see lib/sheetMotion
-          className="lg-sheet relative rounded-t-[28px] sm:rounded-[28px] w-full sm:max-w-xl flex flex-col overflow-hidden"
+          className="relative bg-white border border-[#D4D4D8] w-full sm:max-w-xl flex flex-col overflow-hidden shadow-[0_24px_60px_-20px_rgba(24,24,27,.55)]"
           style={{ maxHeight: '92dvh' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Drag handle — mobile only */}
           <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
-            <div className="w-10 h-1.5 rounded-full bg-slate-500/30" />
+            <div className="w-10 h-1.5 rounded-full bg-[#D4D4D8]" />
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 relative z-[3] px-4 sm:px-5 py-3 sm:py-4 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2 relative z-[3] px-4 sm:px-5 py-3 sm:py-4 flex-shrink-0 border-b border-[#E4E4E7]">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div
-                className="icon-chip w-9 h-9 sm:w-11 sm:h-11 flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #64748b, #475569)' }}
-              >
-                <Ban size={18} className="relative z-10 text-white drop-shadow-sm" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-[#27272A] flex items-center justify-center flex-shrink-0">
+                <Ban size={18} className="text-[#B8983C]" />
               </div>
               <div className="min-w-0">
-                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-slate-900 leading-tight headline truncate">Non-working Day</h2>
-                <p className="text-[11px] sm:text-xs text-slate-400 truncate">Whole school, or specific teams — unpaid</p>
+                <h2 className="font-display text-[1.05rem] sm:text-[1.15rem] font-bold text-[#18181B] leading-tight headline truncate">Non-working Day</h2>
+                <p className="text-[11px] sm:text-xs text-[#A1A1AA] truncate">Whole school, teams or individual teachers — unpaid</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="lg-control w-9 h-9 flex-shrink-0"
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-[#71717A] hover:text-[#18181B] hover:bg-[#F5F5F5] border border-[#E4E4E7] transition-colors"
             >
               <X size={18} />
             </button>
           </div>
 
           {/* Scrollable body */}
-          <div className="lg-sheet-card relative z-[3] mx-2 sm:mx-2.5 overflow-y-auto overscroll-contain flex-1 px-4 sm:px-5 py-3 sm:py-4 space-y-5">
+          <div className="relative z-[3] overflow-y-auto overscroll-contain flex-1 px-4 sm:px-5 py-4 space-y-5 bg-[#FDFCF9]">
             {/* When */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+              <label className="text-[12.5px] font-semibold text-[#52525B] flex items-center gap-1.5">
                 <Calendar size={12} /> When
               </label>
-              <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-0.5 text-xs font-semibold">
+              <div className="grid grid-cols-2 gap-1 bg-[#F5F5F5] rounded-lg p-0.5 text-xs font-semibold">
                 <button
                   type="button"
                   onClick={() => setScopeKind('date')}
-                  className={`py-1.5 rounded-md transition-all ${scopeKind === 'date' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                  className={`py-1.5 rounded-md transition-all ${scopeKind === 'date' ? 'bg-white text-[#3F3F46] shadow-sm' : 'text-[#A1A1AA]'}`}
                 >
                   This date
                 </button>
                 <button
                   type="button"
                   onClick={() => setScopeKind('weekday')}
-                  className={`py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${scopeKind === 'weekday' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                  className={`py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${scopeKind === 'weekday' ? 'bg-white text-[#3F3F46] shadow-sm' : 'text-[#A1A1AA]'}`}
                 >
                   <Repeat size={11} /> Every week
                 </button>
@@ -351,7 +357,7 @@ export default function NonWorkingDayModal({
                     type="date"
                     value={scopeDate}
                     onChange={e => setScopeDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/50 focus:border-slate-500 transition-colors"
+                    className="w-full border border-[#E4E4E7] rounded-lg px-4 py-3 text-base sm:text-sm bg-[#F5F5F5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#A1A1AA]/50 focus:border-[#71717A] transition-colors"
                   />
                 </>
               ) : (
@@ -364,10 +370,10 @@ export default function NonWorkingDayModal({
                           key={i}
                           type="button"
                           onClick={() => toggleWeekday(i)}
-                          className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                          className={`py-2 rounded-lg text-xs font-medium transition-all border ${
                             active
-                              ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
-                              : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                              ? 'bg-[#3F3F46] text-white border-[#3F3F46] shadow-sm'
+                              : 'bg-[#F5F5F5] text-[#52525B] border-[#E4E4E7] active:bg-[#F5F5F5]'
                           }`}
                         >
                           {label}
@@ -375,7 +381,7 @@ export default function NonWorkingDayModal({
                       )
                     })}
                   </div>
-                  <p className="text-[11px] text-slate-400 pl-0.5">
+                  <p className="text-[11px] text-[#A1A1AA] pl-0.5">
                     {scopeWeekdays.length === 0
                       ? 'Pick one or more days — the rule repeats on those days every week.'
                       : 'A specific date’s rule (if any) still wins over this repeating rule for that day.'}
@@ -386,28 +392,28 @@ export default function NonWorkingDayModal({
 
             {/* Apply to */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+              <label className="text-[12.5px] font-semibold text-[#52525B] flex items-center gap-1.5">
                 <Users size={12} /> Apply to
               </label>
-              <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-0.5 text-xs font-semibold">
+              <div className="grid grid-cols-2 gap-1 bg-[#F5F5F5] rounded-lg p-0.5 text-xs font-semibold">
                 <button
                   type="button"
                   onClick={() => setApplyMode('everyone')}
-                  className={`py-1.5 rounded-md transition-all ${applyMode === 'everyone' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                  className={`py-1.5 rounded-md transition-all ${applyMode === 'everyone' ? 'bg-white text-[#3F3F46] shadow-sm' : 'text-[#A1A1AA]'}`}
                 >
                   Everyone
                 </button>
                 <button
                   type="button"
                   onClick={() => setApplyMode('teams')}
-                  className={`py-1.5 rounded-md transition-all ${applyMode === 'teams' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+                  className={`py-1.5 rounded-md transition-all ${applyMode === 'teams' ? 'bg-white text-[#3F3F46] shadow-sm' : 'text-[#A1A1AA]'}`}
                 >
-                  Specific teams
+                  Teams &amp; teachers
                 </button>
               </div>
 
               {loadingExisting ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-xs text-slate-400">
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-[#A1A1AA]">
                   <Loader2 size={13} className="animate-spin" /> Checking existing rule…
                 </div>
               ) : applyMode === 'everyone' ? (
@@ -416,15 +422,15 @@ export default function NonWorkingDayModal({
                   onChange={e => setEveryoneName(e.target.value)}
                   placeholder="Reason — e.g. Semester break…"
                   autoFocus
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-base sm:text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/50 focus:border-slate-500 transition-colors"
+                  className="w-full border border-[#E4E4E7] rounded-lg px-4 py-3 text-base sm:text-sm bg-[#F5F5F5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#A1A1AA]/50 focus:border-[#71717A] transition-colors"
                 />
               ) : (
                 <div className="space-y-3">
                   {conflicts.length > 0 && (
-                    <div className="border border-red-200 bg-red-50 rounded-xl p-3 space-y-2">
+                    <div className="border border-[#B8983C]/50 border-l-4 border-l-[#B8983C] bg-white p-3 space-y-2">
                       <div className="flex items-center gap-1.5">
-                        <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
-                        <p className="text-xs font-semibold text-red-700">
+                        <AlertTriangle size={14} className="text-[#B8983C] flex-shrink-0" />
+                        <p className="text-xs font-semibold text-[#27272A]">
                           {conflicts.length} teacher{conflicts.length > 1 ? 's' : ''} landed in more than one group — choose one for each
                         </p>
                       </div>
@@ -432,8 +438,8 @@ export default function NonWorkingDayModal({
                         {conflicts.map(({ staffId, groupKeys }) => {
                           const staff = staffById.get(staffId)
                           return (
-                            <div key={staffId} className="flex items-center justify-between gap-2 bg-white border border-red-100 rounded-lg px-2.5 py-1.5">
-                              <span className="text-xs font-medium text-slate-700 truncate">{staff?.full_name ?? 'Unknown staff'}</span>
+                            <div key={staffId} className="flex items-center justify-between gap-2 bg-[#F5F5F5] border border-[#E4E4E7] rounded-lg px-2.5 py-1.5">
+                              <span className="text-xs font-medium text-[#3F3F46] truncate">{staff?.full_name ?? 'Unknown staff'}</span>
                               <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
                                 {groupKeys.map(gk => {
                                   const g = groups.find(x => x.key === gk)
@@ -441,7 +447,7 @@ export default function NonWorkingDayModal({
                                     <button
                                       key={gk}
                                       onClick={() => resolveConflict(staffId, gk, groupKeys)}
-                                      className="text-[10px] font-semibold px-2 py-1 border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-700 rounded-md transition-colors"
+                                      className="text-[10px] font-semibold px-2 py-1 border border-[#E4E4E7] text-[#52525B] hover:bg-[#F5F5F5] hover:border-[#D4D4D8] hover:text-[#3F3F46] rounded-md transition-colors"
                                     >
                                       Keep under &quot;{g?.name || 'Group'}&quot;
                                     </button>
@@ -456,32 +462,32 @@ export default function NonWorkingDayModal({
                   )}
 
                   {groups.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 border border-dashed border-slate-200 rounded-xl px-3 py-3 text-center">
+                    <p className="text-[11px] text-[#A1A1AA] border border-dashed border-[#E4E4E7] rounded-lg px-3 py-3 text-center">
                       No groups yet. Add one to make a specific set of teachers non-working.
                     </p>
                   ) : (
                     groups.map(g => {
                       const ids = [...effectiveIds(g)]
                       return (
-                        <div key={g.key} className="border border-slate-200 rounded-xl p-3 space-y-2.5">
+                        <div key={g.key} className="bg-white border border-[#E4E4E7] p-3 space-y-2.5">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Team override</p>
-                            <button onClick={() => removeGroup(g.key)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
+                            <p className="text-[11.5px] font-semibold text-[#71717A]">Group</p>
+                            <button onClick={() => removeGroup(g.key)} className="p-1 text-[#D4D4D8] hover:text-[#27272A] transition-colors">
                               <Trash2 size={14} />
                             </button>
                           </div>
                           <div>
-                            <p className="text-[11px] text-slate-400 mb-1">Reason</p>
+                            <p className="text-[11px] text-[#A1A1AA] mb-1">Reason</p>
                             <input
                               value={g.name}
                               onChange={e => updateGroup(g.key, { name: e.target.value })}
                               placeholder="e.g. Transport staff off-cycle"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/50 focus:border-slate-500 transition-colors"
+                              className="w-full border border-[#E4E4E7] rounded-lg px-3 py-2 text-sm font-medium bg-[#F5F5F5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#A1A1AA]/50 focus:border-[#71717A] transition-colors"
                             />
                           </div>
 
                           <div className="pl-1">
-                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                            <p className="text-[11.5px] font-semibold text-[#71717A] mb-1 flex items-center gap-1">
                               <Users size={10} /> Filter by team
                             </p>
                             <div className="flex flex-wrap gap-1.5">
@@ -492,7 +498,7 @@ export default function NonWorkingDayModal({
                                     key={t.id}
                                     onClick={() => toggleTeam(g.key, t.id)}
                                     className={`text-[11px] font-medium px-2 py-1 rounded-full border transition-colors ${
-                                      active ? 'bg-slate-700 text-white border-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                      active ? 'bg-[#3F3F46] text-white border-[#3F3F46]' : 'border-[#E4E4E7] text-[#52525B] hover:bg-[#F5F5F5]'
                                     }`}
                                   >
                                     {t.name}
@@ -502,9 +508,14 @@ export default function NonWorkingDayModal({
                             </div>
                           </div>
 
+                          <div className="pl-1">
+                            <p className="text-[10px] text-[#A1A1AA] mb-1">Add individual teachers</p>
+                            <StaffAdder allStaff={allStaff} selectedIds={new Set(ids)} onAdd={id => includeStaff(g.key, id)} />
+                          </div>
+
                           {ids.length > 0 && (
                             <div className="pl-1">
-                              <p className="text-[10px] text-slate-400 mb-1">
+                              <p className="text-[10px] text-[#A1A1AA] mb-1">
                                 {ids.length} teacher{ids.length === 1 ? '' : 's'}
                               </p>
                               <div className="flex flex-wrap gap-1.5">
@@ -515,11 +526,11 @@ export default function NonWorkingDayModal({
                                     <span
                                       key={id}
                                       className={`flex items-center gap-1 text-[11px] pl-2 pr-1 py-0.5 rounded-full border ${
-                                        conflicted ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                                        conflicted ? 'bg-[#FDFCF9] border-[#B8983C] text-[#27272A]' : 'bg-[#F5F5F5] border-[#E4E4E7] text-[#52525B]'
                                       }`}
                                     >
                                       {staff?.full_name ?? 'Unknown'}
-                                      <button onClick={() => excludeStaff(g.key, id)} className="hover:text-red-600">
+                                      <button onClick={() => excludeStaff(g.key, id)} className="hover:text-[#27272A]">
                                         <X size={10} />
                                       </button>
                                     </span>
@@ -536,22 +547,22 @@ export default function NonWorkingDayModal({
                   <button
                     type="button"
                     onClick={addGroup}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-dashed border-[#D4D4D8] text-[#3F3F46] text-xs font-semibold hover:bg-[#F5F5F5] transition-colors"
                   >
-                    <Plus size={13} /> Add another team
+                    <Plus size={13} /> Add another group
                   </button>
                 </div>
               )}
             </div>
 
-            {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
+            {error && <p className="text-xs text-[#27272A] bg-white border border-[#E4E4E7] border-l-4 border-l-[#B8983C] px-3 py-2">{error}</p>}
 
             <div className="h-1" />
           </div>
 
           {/* Sticky footer */}
           <div
-            className="relative z-[3] flex items-center gap-2 px-4 sm:px-5 py-3 flex-shrink-0"
+            className="relative z-[3] flex items-center gap-2 px-4 sm:px-5 py-3 flex-shrink-0 border-t border-[#E4E4E7] bg-white"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
           >
             {hasExistingRule && (
@@ -560,7 +571,7 @@ export default function NonWorkingDayModal({
                 onClick={handleClear}
                 disabled={saving}
                 title="Remove this non-working day"
-                className="flex-shrink-0 p-3.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-colors disabled:opacity-50"
+                className="flex-shrink-0 p-3 text-[#A1A1AA] hover:text-[#F5F5F5] hover:bg-[#27272A] border border-[#E4E4E7] rounded-lg transition-colors disabled:opacity-50"
               >
                 <Trash2 size={16} />
               </button>
@@ -569,7 +580,7 @@ export default function NonWorkingDayModal({
               type="button"
               onClick={handleSave}
               disabled={!canSave}
-              className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white font-semibold py-3.5 rounded-2xl transition-all disabled:opacity-50 text-sm shadow-lg shadow-slate-500/25 active:scale-[0.98]"
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#27272A] hover:bg-[#18181B] border-b-2 border-[#B8983C] text-[#F5F5F5] font-semibold py-3 transition-colors disabled:opacity-50 text-sm"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
               {saving ? 'Saving…' : 'Save'}
