@@ -753,7 +753,9 @@ describe('the bounded search', () => {
       expect(built.softPenalty).toBeGreaterThan(100)
       expect(searched.softPenalty).toBeLessThan(built.softPenalty * 0.4)
     }
-  })
+    // Six full generations with a 20 s budget each: ~2 s on a laptop, ~7 s on
+    // a GitHub runner — past vitest's 5 s default.
+  }, 60_000)
 })
 
 // ── Ejection repair ──────────────────────────────────────────

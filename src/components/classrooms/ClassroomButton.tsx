@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { ClassroomWithDetails } from '@/lib/classrooms'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
@@ -83,24 +83,53 @@ export default function ClassroomButton({
     return () => { active = false }
   }, [banner, fillFrom, fillTo])
 
+  // Steps, not a formula: each one is a size that sits well in a 64px pill.
+  // Three lines is the last resort, at a size still comfortable to read.
+  const len = classroom.title.length
+  const titleSize = showTeacher
+    ? (len <= 22 ? 'text-[15px] sm:text-[16px] leading-[1.15] line-clamp-1' : 'text-[12.5px] sm:text-[13px] leading-[1.1] line-clamp-2')
+    : len <= 22 ? 'text-[15px] sm:text-[17px] leading-[1.15] line-clamp-2'
+    : len <= 40 ? 'text-[13.5px] sm:text-[14.5px] leading-[1.15] line-clamp-2'
+    : 'text-[12px] sm:text-[12.5px] leading-[1.12] line-clamp-3'
+
+  // The light that follows the pointer: two CSS variables written straight to
+  // the element, so moving the mouse never re-renders the grid.
+  const pillRef = useRef<HTMLDivElement>(null)
+  const followPointer = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse') return
+    const el = pillRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`)
+    el.style.setProperty('--my', `${e.clientY - r.top}px`)
+  }
+
   const translucentGrad =
     `linear-gradient(135deg, ${hexA(fillFrom, 0.6)} 0%, ${hexA(fillTo, 0.6)} 100%)`
 
   return (
-    <Link href={`/classrooms/${classroom.id}`} onClick={onNavigate}>
+    <Link
+      href={`/classrooms/${classroom.id}`}
+      onClick={onNavigate}
+      title={classroom.title}
+      className="keep-round block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+    >
       {/* Shadow lives on this outer box — kept free of `overflow-hidden` since
           that would clip the box's own outer box-shadow at its own edge.
           `snap-start` is a no-op outside a scroll-snap container, and lets
           any scrollable classroom grid snap to whole rows (see the grids in
           home/page.tsx and academics/page.tsx) instead of resting mid-row
-          with a shadow cut off at the viewport edge. */}
+          with a shadow cut off at the viewport edge. The lift on hover
+          overshoots a hair and settles, the way a control on glass does. */}
       <div
-        className={`keep-round relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-200 ease-out hover:scale-[1.025] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 active:brightness-95`}
-        style={banner ? OUTLINE_STYLE : { backgroundImage: translucentGrad, ...OUTLINE_STYLE }}
+        ref={pillRef}
+        onPointerMove={followPointer}
+        className={`cr-pill keep-round relative ${heightClass} rounded-full group cursor-pointer snap-start transition-[transform,box-shadow,filter] duration-300 ease-[cubic-bezier(0.2,0.9,0.3,1.25)] hover:scale-[1.03] hover:-translate-y-0.5 active:scale-[0.96] active:translate-y-0 active:duration-100 active:brightness-95 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:hover:translate-y-0`}
+        style={banner ? undefined : { backgroundImage: translucentGrad }}
       >
         {/* Everything that needs clipping to the pill shape (banner image,
             gloss, text) lives in this inner layer instead. */}
-        <div className="keep-round absolute inset-0 rounded-full overflow-hidden backdrop-blur-md">
+        <div className="keep-round absolute inset-0 rounded-full overflow-hidden">
           {banner && (
             <>
               <img
@@ -122,12 +151,15 @@ export default function ClassroomButton({
             style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%)' }}
           />
 
+          {/* Light that follows the pointer, and the specular rim on top. */}
+          <div className="cr-pill-light absolute inset-0 pointer-events-none z-[1]" aria-hidden />
+          <div className="cr-pill-rim keep-round absolute inset-0 rounded-full pointer-events-none z-[3]" aria-hidden />
+
           <div className="absolute inset-0 z-[2] px-3.5 flex flex-col items-center justify-center text-center">
-            {/* Two lines at a size that fits the pill, rather than one line
-                cut short — a long title stays readable. */}
+            {/* The type steps down as the title grows, so the whole name fits
+                the pill instead of being cut short with an ellipsis. */}
             <p
-              title={classroom.title}
-              className={`min-w-0 font-bold text-[15px] sm:text-[17px] tracking-[-0.01em] leading-[1.15] line-clamp-2 break-words ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
+              className={`min-w-0 font-bold tracking-[-0.01em] break-words ${titleSize} ${onDark ? 'text-white drop-shadow-sm' : 'text-slate-800'}`}
             >{classroom.title}</p>
             {showTeacher && teacherName && (
               <p
@@ -137,7 +169,7 @@ export default function ClassroomButton({
           </div>
 
           {navigating && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/15">
               <Loader2 size={14} className={`animate-spin ${onDark ? 'text-white' : 'text-slate-700'}`} />
             </div>
           )}

@@ -496,9 +496,14 @@ export default function SchoolWorkManager({
 
     if (compact) {
       return (
-        <button
+        // A div, not a <button>: the status toggle inside is a button of its
+        // own, and a button cannot hold another one.
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setDetailItem(item)}
-          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${VSTATUS_BORDER[vs]}`}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailItem(item) } }}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border cursor-pointer transition-all hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${VSTATUS_BORDER[vs]}`}
         >
           <div className="flex items-start gap-1">
             <button
@@ -522,7 +527,7 @@ export default function SchoolWorkManager({
               </div>
             </div>
           </div>
-        </button>
+        </div>
       )
     }
 
@@ -564,9 +569,14 @@ export default function SchoolWorkManager({
 
     if (compact) {
       return (
-        <button
+        // A div, not a <button>: the status toggle inside is a button of its
+        // own, and a button cannot hold another one.
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setDetailHomework(task)}
-          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border transition-all hover:shadow-sm ${VSTATUS_BORDER[vs]}`}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailHomework(task) } }}
+          className={`block w-full text-left text-[10px] p-1.5 rounded-lg border cursor-pointer transition-all hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${VSTATUS_BORDER[vs]}`}
         >
           <div className="flex items-start gap-1">
             <button
@@ -591,7 +601,7 @@ export default function SchoolWorkManager({
               </div>
             </div>
           </div>
-        </button>
+        </div>
       )
     }
 

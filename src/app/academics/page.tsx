@@ -1,13 +1,13 @@
 'use client'
 
 import React, {
-  Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState,
 } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import {
   BookOpen, Check, GraduationCap, Pencil, Image as ImageIcon, X, CalendarDays, Search, Flame, Trophy,
-  Home, ChevronDown,
+  Home,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import ProtectedLayout from '@/components/ProtectedLayout'
@@ -16,7 +16,11 @@ import {
   ClassroomWithDetails, fetchClassroomsForUser,
 } from '@/lib/classrooms'
 import { sortByLastVisited } from '@/lib/classroomVisits'
-import ClassroomTile, { ClassroomTileSkeleton } from '@/components/classrooms/ClassroomTile'
+import ClassroomGridItems from '@/components/classrooms/ClassroomGridItems'
+import { useAutoLoadMore } from '@/hooks/useAutoLoadMore'
+import { useGridColumns } from '@/hooks/useGridColumns'
+import { useStaggeredRows } from '@/hooks/useStaggeredRows'
+import { classroomGridMaxHeight, classroomItemWidth, CLASSROOM_PAD_TOP_RATIO } from '@/lib/classroomGridLayout'
 import SectionHeading from '@/components/academics/SectionHeading'
 import { Homeroom, fetchHomeroomsForClassTeacher } from '@/lib/homerooms'
 import {
@@ -45,24 +49,47 @@ import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { BANNER_TEXTURE_URI, swatchBackground, isDarkLum } from '@/lib/bannerStyle'
 import { safeSrc } from '@/lib/safeUrl'
 
-/** Rows of classrooms shown before "Show all". */
-const CLASSROOM_ROWS = 3
+/** Softens the bottom edge of a scrollable grid, so an overflowing grid hints
+ *  at the rows below instead of ending on a hard crop. */
+const GRID_FADE_MASK: React.CSSProperties = {
+  maskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
+  WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%)',
+}
 
-/** Columns the classroom list runs at each width — mirrors the grid classes
- *  below. A student's list shares the row with EduPoints from `xl`. */
-function useTileColumns(beside: boolean): number {
-  const [cols, setCols] = useState(2)
-  useEffect(() => {
-    const steps: [string, number][] = beside
-      ? [['(min-width: 1280px)', 3], ['(min-width: 1024px)', 4], ['(min-width: 640px)', 3]]
-      : [['(min-width: 1536px)', 5], ['(min-width: 1024px)', 4], ['(min-width: 640px)', 3]]
-    const mqs = steps.map(([q, n]) => [window.matchMedia(q), n] as const)
-    const update = () => setCols(mqs.find(([mq]) => mq.matches)?.[1] ?? 2)
-    update()
-    mqs.forEach(([mq]) => mq.addEventListener('change', update))
-    return () => mqs.forEach(([mq]) => mq.removeEventListener('change', update))
-  }, [beside])
-  return cols
+/**
+ * Columns to lay `count` items out in, given the most the width allows.
+ *
+ * Packing left to right strands a short last row — six items across six
+ * columns is five and a lonely one. Spreading the same items over the rows
+ * they already need (`ceil(count / rows)`) gives 3 + 3 instead, 4 + 3 for
+ * seven, and leaves a full grid untouched. A single row is left alone: two
+ * items should stay two pills, not stretch to half the page each.
+ */
+function balancedColumns(count: number, maxColumns: number): number {
+  if (count <= maxColumns) return maxColumns
+  const rows = Math.ceil(count / maxColumns)
+  return Math.ceil(count / rows)
+}
+
+/** An empty state with the weight of a panel rather than a stray line of grey text. */
+function EmptyState({
+  icon: Icon, title, hint, action,
+}: {
+  icon: React.ElementType
+  title: string
+  hint?: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="rounded-[1.5rem] px-6 py-9 text-center bg-white/85 border border-white/70 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]">
+      <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-center mx-auto mb-3">
+        <Icon size={22} className="text-slate-400" />
+      </div>
+      <p className="text-sm font-semibold text-slate-700 break-words">{title}</p>
+      {hint && <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">{hint}</p>}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
 }
 
 function greeting(name: string): string {
@@ -71,8 +98,8 @@ function greeting(name: string): string {
   return `${part}, ${name.split(' ')[0]}`
 }
 
-/** A student's streak as a small chip in the banner. */
-function StreakChip({ userId, dark }: { userId: string; dark: boolean }) {
+/** A student's streak: the flame that flickers, with the day count under it. */
+function StreakHeaderItem({ userId, dark }: { userId: string; dark: boolean }) {
   const [days, setDays] = useState<number | null>(null)
   useEffect(() => {
     let alive = true
@@ -80,17 +107,25 @@ function StreakChip({ userId, dark }: { userId: string; dark: boolean }) {
     return () => { alive = false }
   }, [userId])
   return (
-    <div
-      className={`keep-round flex-shrink-0 inline-flex items-center gap-1.5 rounded-full pl-2 pr-3 py-1.5 ${
-        dark ? 'bg-white/18 text-white ring-1 ring-inset ring-white/25' : 'bg-white/75 text-slate-800 ring-1 ring-inset ring-white'
-      }`}
-      title="Days in a row you have completed work"
-    >
-      <Flame size={18} className="text-orange-400 fill-orange-400" strokeWidth={1.4} />
-      <span className="text-[15px] font-bold tabular-nums leading-none">{days ?? '–'}</span>
-      <span className={`text-[11px] font-medium leading-none ${dark ? 'text-white/80' : 'text-slate-500'}`}>
+    <div className="flex flex-col items-center flex-shrink-0 ml-1" title="Days in a row you have completed work">
+      <motion.div
+        animate={{ scale: [1, 1.22, 0.96, 1], rotate: [-5, 5, -3, 0] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ filter: 'drop-shadow(0 0 14px rgba(251,146,60,0.9))' }}
+      >
+        <Flame size={40} className="text-orange-400 fill-orange-400" strokeWidth={1.2} />
+      </motion.div>
+      <p
+        className={`font-black text-xl leading-none tabular-nums mt-0.5 ${dark ? 'text-white' : 'text-slate-800'}`}
+        style={dark
+          ? { textShadow: '0 0 16px rgba(251,146,60,0.8), 0 1px 4px rgba(0,0,0,0.5)' }
+          : { textShadow: '0 0 8px rgba(251,146,60,0.5)' }}
+      >
+        {days ?? '·'}
+      </p>
+      <p className={`text-[10px] font-bold mt-0.5 ${dark ? 'text-white/90' : 'text-slate-500'}`}>
         day{days === 1 ? '' : 's'}
-      </span>
+      </p>
     </div>
   )
 }
@@ -131,9 +166,12 @@ export default function AcademicsPage() {
   const [classrooms, setClassrooms] = useState<ClassroomWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Classrooms section
+  const [classroomSearchOpen, setClassroomSearchOpen] = useState(false)
   const [classroomSearch, setClassroomSearch] = useState('')
-  const [showAllClassrooms, setShowAllClassrooms] = useState(false)
-  // The classroom being opened, so its tile shows a spinner while the route loads.
+  const classroomSearchRef = useRef<HTMLInputElement>(null)
+  // Tracks the classroom whose page is currently being navigated to, so the
+  // tapped button can show instant feedback while the next route loads.
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   // Banner: painted from the settings cache on the first frame, corrected by
@@ -167,21 +205,47 @@ export default function AcademicsPage() {
   const [homerooms, setHomerooms] = useState<Homeroom[] | null>(null)
   const isClassTeacher = !isStudent && (homerooms?.length ?? 0) > 0
 
-  const tileColumns = useTileColumns(isStudent)
-  const collapsedCount = tileColumns * CLASSROOM_ROWS
+  // A full-page grid: it keeps adding columns past `lg` rather than stretching
+  // four pills across a 1536px page. A student's grid shares its row with
+  // EduPoints from `xl`, so it stops at three there.
+  const classroomColumns = useGridColumns(true, isStudent)
+  const CLASSROOM_VISIBLE_ROWS = 4
+  const CLASSROOM_LIMIT = classroomColumns * CLASSROOM_VISIBLE_ROWS
+  const CLASSROOM_COL_GAP = 12
+  const CLASSROOM_ROW_GAP = 15 // 25% more than the column gap, for shadow-bleed margin between rows
+  const classroomsMaxHeight = classroomGridMaxHeight(CLASSROOM_VISIBLE_ROWS, CLASSROOM_ROW_GAP)
+  // Reveal exactly one row at a time, whatever the live column count is (see
+  // useGridColumns), so an auto-load always lands a full row — never a
+  // part-filled one on narrow screens or a short one on wide ones.
+  const {
+    visibleCount: classroomVisibleCount,
+    containerRef: classroomsScrollRef,
+    handleScroll: handleClassroomsScroll,
+  } = useAutoLoadMore({ total: classrooms.length, initialCount: CLASSROOM_LIMIT, step: classroomColumns, intervalMs: 3000, bottomBufferPx: CLASSROOM_ROW_GAP })
+  const filteredClassrooms = classroomSearch
+    ? classrooms.filter(c => c.title.toLowerCase().includes(classroomSearch.toLowerCase()))
+    : classrooms.slice(0, classroomVisibleCount)
 
-  const searchTerm = classroomSearch.trim().toLowerCase()
-  const matchingClassrooms = useMemo(
-    () => searchTerm
-      ? classrooms.filter(c =>
-          c.title.toLowerCase().includes(searchTerm) || (c.subject ?? '').toLowerCase().includes(searchTerm))
-      : classrooms,
-    [classrooms, searchTerm],
+  // Columns are balanced across the rows they actually fill rather than packed
+  // left to right (six in a six-wide grid → 3 + 3, not 5 + 1). Only ever
+  // narrows the grid, and only when it wraps.
+  const gridColumns = balancedColumns(filteredClassrooms.length, classroomColumns)
+  const classroomItemWidthCss = classroomItemWidth(gridColumns, CLASSROOM_COL_GAP)
+
+  // The grid deals its rows out one at a time on first load (up to the four it
+  // scrolls at), and the container's height follows a row at a time with it —
+  // that easing is what carries the sections below the grid down the page.
+  const classroomRowCount = Math.min(
+    CLASSROOM_VISIBLE_ROWS,
+    Math.max(1, Math.ceil(filteredClassrooms.length / gridColumns)),
   )
-  const visibleClassrooms = searchTerm || showAllClassrooms
-    ? matchingClassrooms
-    : matchingClassrooms.slice(0, collapsedCount)
-  const hiddenCount = matchingClassrooms.length - visibleClassrooms.length
+  const classroomRevealRows = useStaggeredRows(classroomRowCount, !loading)
+  const classroomGridHeight = (rows: number) =>
+    classroomGridMaxHeight(Math.max(1, Math.min(CLASSROOM_VISIBLE_ROWS, rows)), CLASSROOM_ROW_GAP)
+  const GRID_HEIGHT_TRANSITION = 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+  // True once the grid holds more rows than it can show — see GRID_FADE_MASK.
+  const classroomGridScrolls =
+    Math.ceil(filteredClassrooms.length / gridColumns) > CLASSROOM_VISIBLE_ROWS
 
   const loadClassrooms = useCallback(async () => {
     if (!user || !profile) return
@@ -320,7 +384,7 @@ export default function AcademicsPage() {
                       : 'Your classrooms and report cards'}
                 </p>
               </div>
-              {isStudent && <StreakChip userId={user.id} dark={onDark} />}
+              {isStudent && <StreakHeaderItem userId={user.id} dark={onDark} />}
               {isAdmin && !editingBanner && (
                 <button
                   onClick={openEditor}
@@ -428,100 +492,180 @@ export default function AcademicsPage() {
             </section>
           )}
 
-          {/* Classrooms — and, for a student, their EduPoints beside them on
-              a wide screen. */}
-          <div className={isStudent ? 'grid gap-7 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:items-start' : ''}>
-            <section className="min-w-0">
+          {/* Classrooms — and, for a student, their EduPoints beside them from
+              `xl`. Side by side the two sit on matching glass decks that
+              stretch to one height, so neither reads as a stray box. */}
+          <div className={isStudent ? 'grid gap-7 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch' : ''}>
+            <section className="min-w-0 flex flex-col">
               <SectionHeading
                 icon={BookOpen}
                 chipClass="bg-gradient-to-br from-cyan-400 to-teal-500"
-                title="Classrooms"
-                count={loading ? null : classrooms.length}
+                title={isStudent ? 'My classrooms' : 'Classrooms'}
                 titleAction={
                   <button
                     onClick={toggleShowOnHome}
+                    // Bare glyph: bright blue when the home page shows the
+                    // classrooms, grey when it doesn't.
                     className={`keep-round inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${
-                      showOnHome ? 'text-sky-600 bg-sky-100/80 hover:bg-sky-100' : 'text-slate-400 hover:text-slate-600 hover:bg-white/70'
+                      showOnHome ? 'text-sky-500 hover:text-sky-600' : 'text-slate-300 hover:text-slate-400'
                     }`}
                     title={showOnHome ? 'Shown on the home page. Click to hide.' : 'Not shown on the home page. Click to show.'}
                     aria-pressed={showOnHome}
                     aria-label={showOnHome ? 'Hide classrooms on the home page' : 'Show classrooms on the home page'}
                   >
-                    <Home size={15} />
+                    <Home size={16} />
                   </button>
                 }
-                action={classrooms.length > collapsedCount || classroomSearch ? (
-                  <label className="keep-round relative flex items-center w-full sm:w-56">
-                    <Search size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
-                    <input
-                      type="search"
-                      value={classroomSearch}
-                      onChange={e => setClassroomSearch(e.target.value)}
-                      placeholder="Find a classroom"
-                      aria-label="Find a classroom"
-                      className="keep-round w-full pl-8 pr-3 py-1.5 rounded-full bg-white/85 ring-1 ring-inset ring-slate-900/10 text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-[color:var(--page-primary)]/50 focus:bg-white"
-                    />
-                  </label>
-                ) : undefined}
-              />
-
-              <div className="lg-pane p-1.5 sm:p-2.5">
-                {loading ? (
-                  <div className={`relative z-[3] grid grid-cols-2 sm:grid-cols-3 ${isStudent ? 'lg:grid-cols-4 xl:grid-cols-3' : 'lg:grid-cols-4 2xl:grid-cols-5'} gap-2`}>
-                    {Array.from({ length: tileColumns }, (_, i) => <ClassroomTileSkeleton key={i} />)}
-                  </div>
-                ) : classrooms.length === 0 ? (
-                  <p className="relative z-[3] px-3 py-6 text-center text-sm text-slate-600">
-                    You are not in any classrooms yet. They appear here once a teacher adds you.
-                  </p>
-                ) : visibleClassrooms.length === 0 ? (
-                  <div className="relative z-[3] px-3 py-6 text-center">
-                    <p className="text-sm text-slate-600 break-words">No classroom matches “{classroomSearch}”.</p>
+                action={
+                  <div className="flex items-center gap-2">
+                    <AnimatePresence>
+                      {classroomSearchOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, width: 0 }}
+                          animate={{ opacity: 1, width: 'auto' }}
+                          exit={{ opacity: 0, width: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="keep-round flex items-center gap-1 bg-white/85 border border-cyan-200/70 rounded-full px-3 py-1.5 shadow-sm">
+                            <input
+                              ref={classroomSearchRef}
+                              type="text"
+                              value={classroomSearch}
+                              onChange={e => setClassroomSearch(e.target.value)}
+                              placeholder="Search classrooms"
+                              aria-label="Search classrooms"
+                              className="text-xs text-slate-700 placeholder:text-slate-400 bg-transparent focus:outline-none w-32 sm:w-40"
+                            />
+                            {classroomSearch && (
+                              <button onClick={() => setClassroomSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0" aria-label="Clear search">
+                                <X size={11} />
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                     <button
-                      onClick={() => setClassroomSearch('')}
-                      className="keep-round mt-2 text-xs font-semibold text-cyan-700 hover:underline"
+                      onClick={() => {
+                        setClassroomSearchOpen(v => {
+                          if (v) setClassroomSearch('')
+                          return !v
+                        })
+                        setTimeout(() => classroomSearchRef.current?.focus(), 50)
+                      }}
+                      className="lg-control keep-round w-8 h-8 hover:text-cyan-600"
+                      title={classroomSearchOpen ? 'Close search' : 'Search classrooms'}
+                      aria-label={classroomSearchOpen ? 'Close search' : 'Search classrooms'}
                     >
-                      Clear search
+                      {classroomSearchOpen ? <X size={15} /> : <Search size={15} />}
                     </button>
                   </div>
-                ) : (
-                  <div className="relative z-[3]">
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${isStudent ? 'lg:grid-cols-4 xl:grid-cols-3' : 'lg:grid-cols-4 2xl:grid-cols-5'} gap-1.5 sm:gap-2`}>
-                      {visibleClassrooms.map(c => (
-                        <ClassroomTile
-                          key={c.id}
-                          classroom={c}
-                          navigating={navigatingId === c.id}
-                          onNavigate={() => setNavigatingId(c.id)}
-                        />
-                      ))}
-                    </div>
-                    {(hiddenCount > 0 || (showAllClassrooms && !searchTerm && matchingClassrooms.length > collapsedCount)) && (
+                }
+              />
+
+              <div className={isStudent ? 'ac-deck flex-1 flex flex-col justify-center' : ''}>
+                {/* Loading and loaded both render this same grid container, so
+                    ClassroomGridItems can morph its skeleton placeholders into
+                    real buttons in place instead of the grid remounting. Its
+                    height is computed (classroomGridMaxHeight) from the row
+                    height and gap, so it always fits whole rows — never a
+                    partial one peeking in — and snap-y with scroll padding
+                    keeps that rhythm on whichever row a scroll settles on.
+                    The -mx/px pair gives the pills' shadows room to bleed
+                    without widening the page. */}
+                {loading ? (
+                  <div
+                    ref={classroomsScrollRef}
+                    onScroll={handleClassroomsScroll}
+                    style={{
+                      height: classroomGridHeight(1),
+                      maxHeight: classroomsMaxHeight,
+                      transition: GRID_HEIGHT_TRANSITION,
+                      rowGap: CLASSROOM_ROW_GAP,
+                      columnGap: CLASSROOM_COL_GAP,
+                      paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                      paddingBottom: CLASSROOM_ROW_GAP,
+                      scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                      scrollPaddingBottom: CLASSROOM_ROW_GAP,
+                    }}
+                    className={`flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-2 lg:px-2 ${isStudent ? 'xl:mx-0 xl:px-3' : ''}`}
+                  >
+                    <ClassroomGridItems
+                      items={null}
+                      skeletonCount={classroomColumns}
+                      heightClass="h-[64px]"
+                      itemWidth={classroomItemWidthCss}
+                      columns={classroomColumns}
+                      navigatingId={navigatingId}
+                      onNavigate={setNavigatingId}
+                    />
+                  </div>
+                ) : classrooms.length === 0 ? (
+                  <EmptyState
+                    icon={BookOpen}
+                    title="No classrooms yet"
+                    hint="A classroom appears here once a teacher adds you to it."
+                  />
+                ) : filteredClassrooms.length === 0 && classroomSearch ? (
+                  <EmptyState
+                    icon={Search}
+                    title={`No classroom matches “${classroomSearch}”`}
+                    hint="Try a shorter search, or clear it to see every classroom."
+                    action={
                       <button
-                        onClick={() => setShowAllClassrooms(v => !v)}
-                        className="keep-round mt-2 w-full inline-flex items-center justify-center gap-1 py-2 rounded-full text-[13px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-white/70 transition-colors"
-                        aria-expanded={showAllClassrooms}
+                        onClick={() => setClassroomSearch('')}
+                        className="keep-round text-xs font-semibold text-cyan-700 bg-white/80 border border-white/80 shadow-sm px-3 py-1.5 rounded-full hover:bg-white transition-colors"
                       >
-                        {showAllClassrooms ? 'Show fewer' : `Show all ${matchingClassrooms.length}`}
-                        <ChevronDown size={14} className={`transition-transform ${showAllClassrooms ? 'rotate-180' : ''}`} />
+                        Clear search
                       </button>
-                    )}
+                    }
+                  />
+                ) : (
+                  <div
+                    ref={classroomSearch ? undefined : classroomsScrollRef}
+                    onScroll={classroomSearch ? undefined : handleClassroomsScroll}
+                    style={{
+                      height: classroomGridHeight(Math.min(classroomRowCount, classroomRevealRows)),
+                      maxHeight: classroomsMaxHeight,
+                      transition: GRID_HEIGHT_TRANSITION,
+                      rowGap: CLASSROOM_ROW_GAP,
+                      columnGap: CLASSROOM_COL_GAP,
+                      paddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                      paddingBottom: CLASSROOM_ROW_GAP,
+                      scrollPaddingTop: CLASSROOM_ROW_GAP * CLASSROOM_PAD_TOP_RATIO,
+                      scrollPaddingBottom: CLASSROOM_ROW_GAP,
+                      // The scrollbar is hidden, so a grid deeper than its four
+                      // visible rows softens out at the bottom edge instead of
+                      // ending on a hard crop that reads as the last row.
+                      ...(classroomGridScrolls ? GRID_FADE_MASK : null),
+                    }}
+                    className={`flex flex-wrap justify-center content-start overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-2 lg:px-2 ${isStudent ? 'xl:mx-0 xl:px-3' : ''}`}
+                  >
+                    <ClassroomGridItems
+                      items={filteredClassrooms.map(classroom => ({ classroom }))}
+                      skeletonCount={classroomColumns}
+                      heightClass="h-[64px]"
+                      itemWidth={classroomItemWidthCss}
+                      columns={gridColumns}
+                      maxRows={classroomRevealRows}
+                      navigatingId={navigatingId}
+                      onNavigate={setNavigatingId}
+                    />
                   </div>
                 )}
               </div>
             </section>
 
             {isStudent && (
-              <section className="min-w-0">
+              <section className="min-w-0 flex flex-col">
                 <SectionHeading
                   icon={Trophy}
                   chipClass="bg-gradient-to-br from-amber-400 to-orange-500"
-                  title="EduPoints"
+                  title="My EduPoints"
                 />
-                <div className="lg-pane p-1.5 sm:p-2">
-                  <div className="relative z-[3]">
-                    <StudentGameSection userId={user.id} />
-                  </div>
+                <div className="glass-card ac-deck rounded-[1.5rem] px-3 py-4 sm:px-5 flex-1 flex flex-col justify-center">
+                  <StudentGameSection userId={user.id} />
                 </div>
               </section>
             )}
