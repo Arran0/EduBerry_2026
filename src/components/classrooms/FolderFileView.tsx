@@ -627,9 +627,15 @@ export default function FolderFileView({
             return (
               <FolderItem key={folder.id} canManage={canManage} folder={folder} onDragEnd={handleFolderDragEnd}>
                 {/* Folder Header */}
-                <button
+                {/* A div, not a <button>: the edit and delete buttons sit inside it,
+                    and a button cannot hold another one. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
                   onClick={() => toggleFolder(folder.id)}
-                  className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                  onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleFolder(folder.id) } }}
+                  className="w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 hover:bg-slate-50 transition-colors text-left cursor-pointer focus-visible:outline-none focus-visible:bg-slate-50"
                 >
                   <div className="p-2 rounded-xl flex-shrink-0 bg-slate-100">
                     <Folder size={16} className="text-slate-600" />
@@ -680,7 +686,7 @@ export default function FolderFileView({
                       </button>
                     </div>
                   )}
-                </button>
+                </div>
 
                 {/* Inline folder edit form */}
                 {canManage && editingFolder === folder.id && (

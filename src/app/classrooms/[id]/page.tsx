@@ -299,44 +299,57 @@ function ClassroomDetailPageContent() {
               </div>
             </div>
 
-            {/* ── Tabs — a glass switch riding on the banner's lower edge ── */}
-            <div className="relative z-10 -mt-7 max-w-7xl 2xl:max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8">
-              <nav className="cr-tabs" aria-label="Classroom sections">
-                {tabs.map(tab => {
-                  const meta = TAB_META[tab.id]
-                  const isActive = activeTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => selectTab(tab.id)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`relative min-w-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-3 py-1.5 sm:py-2 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--page-primary)]/50 ${
-                        isActive ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      {isActive && (
-                        <motion.span
-                          layoutId="classroom-active-tab"
-                          className="lg-seg-thumb"
-                          transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                        />
-                      )}
-                      <span className={`relative flex-shrink-0 ${isActive ? meta.color : ''}`}>{meta.icon}</span>
-                      <span className="relative text-center leading-tight text-[10.5px] sm:text-[13px] whitespace-nowrap">
-                        <span className="sm:hidden">{tab.shortLabel}</span>
-                        <span className="hidden sm:inline">{tab.label}</span>
-                      </span>
-                    </button>
-                  )
-                })}
-              </nav>
+            {/* ── Tabs — full-bleed flat strip with an icon chip + sliding
+                 underline, matching the Task Manager's mini nav bar. The bar
+                 itself spans the full browser width; only its contents align
+                 to the page's column. ── */}
+            <div className="relative z-10 -mt-7 bg-white border-b border-slate-200 shadow-sm">
+              <div className="max-w-7xl 2xl:max-w-[1600px] mx-auto px-1 sm:px-6 lg:px-8">
+                <nav className="flex items-stretch gap-0.5 sm:gap-1" aria-label="Classroom sections">
+                  {tabs.map(tab => {
+                    const meta = TAB_META[tab.id]
+                    const isActive = activeTab === tab.id
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => selectTab(tab.id)}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-0.5 sm:px-6 py-2.5 sm:py-4 font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:bg-slate-50 ${
+                          isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                            isActive
+                              ? `${meta.bg} ${meta.color} shadow-sm scale-100`
+                              : 'text-slate-500 group-hover:text-slate-700 group-hover:bg-slate-50 scale-95'
+                          }`}
+                        >
+                          {meta.icon}
+                        </span>
+                        {/* Phone labels are the short names, so none is cut off. */}
+                        <span className="relative z-10 leading-none sm:hidden text-[10px] whitespace-nowrap">{tab.shortLabel}</span>
+                        <span className="relative z-10 leading-none hidden sm:inline text-sm whitespace-nowrap">{tab.label}</span>
+                        {isActive && (
+                          <motion.span
+                            layoutId="classroom-active-tab"
+                            className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                            style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
+                            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                          />
+                        )}
+                      </button>
+                    )
+                  })}
+                </nav>
+              </div>
             </div>
 
             {/* ── Content area ──
                 Phones run edge-to-edge (no side gutters) so cards get the full
                 screen width; the bottom padding keeps the floating assistant
                 clear of the last card. */}
-            <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-28 sm:pb-24">
+            <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-0 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-24">
               {/* Closed notice */}
               {closed && (
                 <div className="mx-3 sm:mx-0 mb-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl text-[13px] text-amber-800 flex items-start gap-2">
