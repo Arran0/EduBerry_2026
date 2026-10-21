@@ -32,6 +32,10 @@ import { UserProfile } from '@/lib/supabase'
 import { AdminPage, AX, EmptyLine, Panel, PageLoading, SaveButton, SearchField, Switch } from '@/components/admin/ui'
 
 const GeofenceZoneModal = dynamic(() => import('@/components/attendance/GeofenceZoneModal'), { ssr: false })
+const FenceMap = dynamic(() => import('@/components/attendance/FenceMap'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full min-h-[320px] bg-[#F5F5F5] flex items-center justify-center text-[12.5px] text-[#71717A]">Loading map…</div>,
+})
 
 export default function GeofencingPage() {
   return (
@@ -43,7 +47,7 @@ export default function GeofencingPage() {
         backgroundIcon={Navigation}
         title="Geofencing"
         subtitle="Where staff have to be to check themselves in"
-        maxWidth="max-w-6xl"
+        maxWidth="max-w-[1800px]"
       >
         <GeofencingBody />
       </AdminPage>
@@ -133,13 +137,16 @@ function GeofencingBody() {
   const hasCentre = draft.lat != null && draft.lng != null
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5 items-start">
+    // Two rows of the full width: the fence's settings beside the map of it,
+    // then the groups beside the people exempt from any fence.
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
       {/* School fence — the default everyone is checked against. */}
-      <div className="lg:col-span-3 space-y-4 sm:space-y-5">
+      <div className="lg:col-span-1">
         <Panel
           icon={MapIcon}
           title="School fence"
-          description="Staff in no group below must be inside this fence when they check in."
+          className="h-full"
+          description="Staff in no group must be inside this fence when they check in."
         >
           <div className={`${AX.row} mb-4`}>
             <div className="flex-1 min-w-0">
@@ -173,10 +180,31 @@ function GeofencingBody() {
         </Panel>
       </div>
 
-      <div className="lg:col-span-2 space-y-4 sm:space-y-5">
+      {/* The map — the school fence in gold, each group's fence dashed. */}
+      <section className={`${AX.sheet} lg:col-span-2 flex flex-col min-h-[380px]`}>
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-[#E4E4E7]">
+          <p className="text-[13px] font-semibold text-[#18181B]">Map</p>
+          <p className="text-[12px] text-[#71717A] text-right">
+            {draft.shape === 'polygon' ? 'Click to add a corner to the outline' : 'Click to place the centre'}
+            <span className="hidden sm:inline"> · groups are dashed</span>
+          </p>
+        </div>
+        <div className="flex-1 relative">
+          <div className="absolute inset-0">
+            <FenceMap
+              value={{ shape: draft.shape, lat: draft.lat, lng: draft.lng, radius_m: draft.radius_m, polygon: draft.polygon }}
+              onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+              zones={zones.map(z => ({ id: z.id, label: z.label, lat: z.lat, lng: z.lng, radius_m: z.radius_m, shape: z.shape, polygon: z.polygon }))}
+            />
+          </div>
+        </div>
+      </section>
+
+      <div className="lg:col-span-1">
         {/* Groups — their own centre point and radius. */}
         <Panel
           icon={Users}
+          className="h-full"
           title="Groups"
           description="Give teams that work elsewhere their own fence. A person can sit in one group only; anyone pulled in by two teams is flagged before saving."
           action={
@@ -188,7 +216,11 @@ function GeofencingBody() {
           {!zonesLoaded ? (
             <EmptyLine icon={MapPin} loading>Loading groups…</EmptyLine>
           ) : zones.length === 0 ? (
-            <EmptyLine icon={MapPin}>No groups yet. Everyone uses the school fence.</EmptyLine>
+            <div className="flex-1 min-h-[8rem] flex flex-col items-center justify-center gap-3 px-4 py-6 rounded-lg border border-dashed border-[#D4D4D8] bg-[#FDFCF9] text-center">
+              <span className="w-10 h-10 rounded-lg bg-[#27272A] inline-flex items-center justify-center"><MapPin size={17} className="text-[#B8983C]" /></span>
+              <p className="text-[13px] text-[#52525B] max-w-xs">No groups yet. Everyone is checked against the school fence.</p>
+              <button onClick={() => setShowZoneModal(true)} className={AX.ghost}><Plus size={13} /> Add a group</button>
+            </div>
           ) : (
             <ul className="space-y-1.5">
               {zones.map(z => (
@@ -213,19 +245,24 @@ function GeofencingBody() {
             </ul>
           )}
         </Panel>
+      </div>
 
+      <div className="lg:col-span-2">
         {/* Exemptions — may check in from anywhere. */}
         <Panel
           icon={ShieldCheck}
+          className="h-full"
           title="Exemptions"
           description={<>People switched on here can check in from outside any fence. <span className="tabular-nums">{exemptCount}</span> exempted.</>}
         >
-          <SearchField value={query} onChange={setQuery} placeholder="Search staff" />
-          <div className="mt-3 space-y-1.5 max-h-[26rem] overflow-y-auto overscroll-contain pr-0.5">
+          <div className="sm:max-w-sm">
+            <SearchField value={query} onChange={setQuery} placeholder="Search staff" />
+          </div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-1.5 content-start max-h-[22rem] overflow-y-auto overscroll-contain pr-0.5">
             {!staffLoaded ? (
-              <EmptyLine icon={Users} loading>Loading staff…</EmptyLine>
+              <div className="md:col-span-2"><EmptyLine icon={Users} loading>Loading staff…</EmptyLine></div>
             ) : filteredStaff.length === 0 ? (
-              <EmptyLine icon={Users}>No staff match your search.</EmptyLine>
+              <div className="md:col-span-2"><EmptyLine icon={Users}>No staff match your search.</EmptyLine></div>
             ) : filteredStaff.map(s => (
               <div key={s.id} className={AX.row}>
                 <div className="flex-1 min-w-0">

@@ -32,7 +32,7 @@ import {
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown } from '@/lib/teams'
 import { UserProfile } from '@/lib/supabase'
-import { AdminPage, AX, EmptyLine, Field, Panel, PageLoading, SaveButton, SearchField, Switch } from '@/components/admin/ui'
+import { AdminPage, AX, EmptyLine, Panel, PageLoading, SaveButton, SearchField, Switch } from '@/components/admin/ui'
 
 const DayTimingModal = dynamic(() => import('@/components/attendance/DayTimingModal'), { ssr: false })
 const HolidayModal = dynamic(() => import('@/components/attendance/HolidayModal'), { ssr: false })
@@ -88,7 +88,7 @@ export default function AttendanceRulesPage() {
         backgroundIcon={CalendarClock}
         title="Attendance rules"
         subtitle="Cutoffs, holidays, non-working days and who is tracked"
-        maxWidth="max-w-6xl"
+        maxWidth="max-w-[1800px]"
       >
         <AttendanceBody />
       </AdminPage>
@@ -186,29 +186,30 @@ function AttendanceBody() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Timing — the default every day is scored against. */}
-      <Panel
-        icon={Clock3}
-        title="Timing"
-        description={<>A check-in after the late cutoff is marked <strong className="font-semibold text-[#3F3F46]">Late</strong>; a checkout before the checkout cutoff is a <strong className="font-semibold text-[#3F3F46]">Half day</strong>. The cutoff minute itself is on time, by the server&apos;s clock.</>}
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          <TimeField
-            label="Late after"
-            value={draft.late_cutoff}
-            onChange={v => setDraft(d => ({ ...d, late_cutoff: v }))}
-          />
-          <TimeField
-            label="Half day before"
-            value={draft.checkout_cutoff}
-            onChange={v => setDraft(d => ({ ...d, checkout_cutoff: v }))}
-          />
-          <SaveButton saving={saving} saved={saved} label="Save timing" onClick={handleSaveTiming} className="ml-auto" />
-        </div>
-      </Panel>
+      {/* One row across the full width: the timing every day is scored
+          against, then the three kinds of exception to it, all one height. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 items-stretch">
+        <Panel
+          icon={Clock3}
+          title="Timing"
+          className="h-full"
+          description={<>After the late cutoff is <strong className="font-semibold text-[#3F3F46]">Late</strong>; leaving before the checkout cutoff is a <strong className="font-semibold text-[#3F3F46]">Half day</strong>. The cutoff minute itself is on time.</>}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <TimeField
+              label="Late after"
+              value={draft.late_cutoff}
+              onChange={v => setDraft(d => ({ ...d, late_cutoff: v }))}
+            />
+            <TimeField
+              label="Half day before"
+              value={draft.checkout_cutoff}
+              onChange={v => setDraft(d => ({ ...d, checkout_cutoff: v }))}
+            />
+          </div>
+          <SaveButton saving={saving} saved={saved} label="Save timing" onClick={handleSaveTiming} className="mt-4 w-full" />
+        </Panel>
 
-      {/* Exceptions to it. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 items-start">
         <RulePanel
           icon={Clock}
           title="Cutoff overrides"
@@ -291,9 +292,9 @@ function AttendanceBody() {
         <div className="sm:max-w-sm">
           <SearchField value={hideQuery} onChange={setHideQuery} placeholder="Search staff" />
         </div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[28rem] overflow-y-auto overscroll-contain pr-0.5">
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5 max-h-[28rem] overflow-y-auto overscroll-contain pr-0.5">
           {filteredHide.length === 0 ? (
-            <div className="md:col-span-2"><EmptyLine icon={Users}>No staff match your search.</EmptyLine></div>
+            <div className="md:col-span-2 xl:col-span-3"><EmptyLine icon={Users}>No staff match your search.</EmptyLine></div>
           ) : filteredHide.map(s => (
             <div key={s.id} className={AX.row}>
               <div className="flex-1 min-w-0">
@@ -351,19 +352,21 @@ function AttendanceBody() {
 
 function TimeField({ label, value, onChange }: { label: string; value: string | null; onChange: (v: string | null) => void }) {
   return (
-    <Field label={label}>
-      <div className="flex items-center gap-1.5">
-        <input
-          type="time" value={value ?? ''} onChange={e => onChange(e.target.value || null)}
-          className={`${AX.field} !w-36 tabular-nums`}
-        />
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <label className={`${AX.label} !mb-0`}>{label}</label>
         {value && (
-          <button onClick={() => onChange(null)} className="text-[12px] font-medium text-[#71717A] hover:text-[#18181B] px-1.5 transition-colors">
+          <button onClick={() => onChange(null)} className="text-[11.5px] font-medium text-[#71717A] hover:text-[#18181B] transition-colors">
             Clear
           </button>
         )}
       </div>
-    </Field>
+      <input
+        type="time" value={value ?? ''} onChange={e => onChange(e.target.value || null)}
+        aria-label={label}
+        className={`${AX.field} tabular-nums`}
+      />
+    </div>
   )
 }
 
@@ -388,12 +391,13 @@ function RulePanel({
     <Panel
       icon={icon}
       title={title}
+      className="h-full"
       description={description}
     >
       {groups.length === 0 ? (
-        <EmptyLine icon={emptyIcon}>{emptyText}</EmptyLine>
+        <EmptyLine icon={emptyIcon} fill>{emptyText}</EmptyLine>
       ) : (
-        <ul className="space-y-1.5 max-h-80 overflow-y-auto overscroll-contain pr-0.5">
+        <ul className="flex-1 space-y-1.5 max-h-80 overflow-y-auto overscroll-contain pr-0.5">
           {groups.map(g => {
             const clearing = clearingKey === `${kind}:${g.key}`
             return (

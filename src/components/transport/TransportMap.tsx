@@ -186,7 +186,7 @@ function ClickCatcher({ onMapClick }: { onMapClick: (p: LatLng) => void }) {
  * a phone rotating, and the desktop split pane being dragged, without any of
  * them having to know a map is inside them.
  */
-function KeepSized() {
+export function KeepSized() {
   const map = useMap()
   useEffect(() => {
     const el = map.getContainer()
@@ -231,7 +231,7 @@ function FitStops({ stops }: { stops: { lat: number; lng: number }[] }) {
  * dropped after a handful of errors in a row, so a bad key degrades to the
  * next map rather than a grey box.
  */
-function BaseTiles() {
+export function BaseTiles() {
   const [chain, setChain] = useState<TileSource[]>(() => [defaultTiles(), OSM_TILES])
   const [at, setAt] = useState(0)
   const errors = useRef(0)

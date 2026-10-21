@@ -102,7 +102,7 @@ export function Panel({
   className?: string
 }) {
   return (
-    <section className={`${AX.sheet} p-4 sm:p-5 ${className}`}>
+    <section className={`${AX.sheet} p-4 sm:p-5 flex flex-col ${className}`}>
       <div className="flex items-start gap-3">
         {Icon && <IconTile icon={Icon} />}
         <div className="flex-1 min-w-0">
@@ -111,7 +111,9 @@ export function Panel({
         </div>
         {action && <div className="flex-shrink-0">{action}</div>}
       </div>
-      {children && <div className="mt-4">{children}</div>}
+      {/* The body takes whatever height the panel has, so a panel stretched to
+          match its neighbour gives the room to its content, not to a gap. */}
+      {children && <div className="mt-4 flex-1 min-h-0 flex flex-col">{children}</div>}
     </section>
   )
 }
@@ -165,9 +167,9 @@ export function SaveButton({ saving, saved, label, onClick, className = '' }: {
 }
 
 /** A quiet line for an empty list or a list still loading. */
-export function EmptyLine({ icon: Icon, children, loading }: { icon: LucideIcon; children: React.ReactNode; loading?: boolean }) {
+export function EmptyLine({ icon: Icon, children, loading, fill }: { icon: LucideIcon; children: React.ReactNode; loading?: boolean; fill?: boolean }) {
   return (
-    <div className="flex items-center gap-2 px-3.5 py-3 rounded-lg border border-dashed border-[#D4D4D8] bg-[#FDFCF9] text-[12.5px] text-[#71717A]">
+    <div className={`flex items-center gap-2 px-3.5 py-3 rounded-lg border border-dashed border-[#D4D4D8] bg-[#FDFCF9] text-[12.5px] text-[#71717A] ${fill ? 'flex-1 justify-center text-center min-h-[4.5rem]' : ''}`}>
       {loading ? <Loader2 size={13} className="animate-spin text-[#A1A1AA]" /> : <Icon size={13} className="text-[#B8983C]" />}
       {children}
     </div>

@@ -382,7 +382,7 @@ function DesignInner() {
         </Panel>
 
         <Panel icon={Sparkles} title="Preview" className="h-full" description="How the navigation bar reads with these settings.">
-          <div className="p-4 sm:p-5 bg-[#F5F5F5] border border-[#E4E4E7] h-[calc(100%-0.25rem)] flex flex-col justify-center gap-3">
+          <div className="p-4 sm:p-5 bg-[#F5F5F5] border border-[#E4E4E7] flex-1 flex flex-col justify-center gap-3">
             <div className="flex items-center gap-3 p-3 rounded-lg bg-white border border-[#E4E4E7]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={draftBranding.logoUrl || '/logo.png'} alt="" className="w-10 h-10 object-cover rounded-full ring-1 ring-black/10"
