@@ -36,7 +36,6 @@ export default function TimetablePage() {
           icon={<CalendarRange size={26} className="text-white" />}
           backgroundIcon={<CalendarRange size={150} className="text-white" />}
           title="Timetable"
-          subtitle={isAdmin ? 'Periods, lessons and the published week' : isStaff ? 'The periods you teach' : 'Your class week'}
           isAdmin={isAdmin}
           maxWidth={MAX_W}
           onEditingChange={setBannerEditing}

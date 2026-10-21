@@ -6,7 +6,7 @@ import {
   Search, GraduationCap,
 } from 'lucide-react'
 import {
-  createConfig, deleteConfig, setActiveConfig, deactivateConfig, updateConfig,
+  createConfig, deleteConfig, updateConfig,
   fetchPeriodSlots, createPeriodSlot, deletePeriodSlot,
   createSlotGroup, updateSlotGroup, deleteSlotGroup, assignHomeroomsToSlotGroup,
 } from '@/lib/timetable'
@@ -16,7 +16,7 @@ import { useTimetableDraftOptional } from '../draft/TimetableDraftContext'
 import type { Homeroom } from '@/lib/homerooms'
 import {
   INPUT, BTN_PRIMARY, BTN_NEUTRAL, BTN_QUIET, Section, Field, ICON_BTN, ICON_BTN_DANGER,
-  CHECK, Switch, Chip, Loading, askConfirm, choice,
+  CHECK, Chip, Loading, askConfirm, choice,
 } from '../ui'
 
 const _cy = new Date().getFullYear()
@@ -27,12 +27,14 @@ const ACADEMIC_YEARS = Array.from({ length: 8 }, (_, i) => {
 
 interface Props {
   configs: TimetableConfig[]
+  /** Configs students and staff can see. Publishing happens on the deck. */
+  published: Set<string>
   selectedConfig: TimetableConfig | null
   onSelectConfig: (id: string) => void
   onChanged: () => void
 }
 
-export default function SetupTab({ configs, selectedConfig, onSelectConfig, onChanged }: Props) {
+export default function SetupTab({ configs, published, selectedConfig, onSelectConfig, onChanged }: Props) {
   const [newName, setNewName] = useState('')
   const [newYear, setNewYear] = useState('')
   const [creating, setCreating] = useState(false)
@@ -61,7 +63,7 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
   return (
     <div>
       {/* Configurations */}
-      <Section title="Timetables" hint="Each one has its own working days, periods and lessons. Switch one on to make it the timetable people see." first>
+      <Section title="Timetables" hint="Each one has its own working days, periods and lessons. Publish one from the workspace to make it the timetable people see." first>
         {configs.length === 0 ? (
           <p className="text-[12.5px] text-slate-400 py-1">No timetables yet.</p>
         ) : (
@@ -86,16 +88,9 @@ export default function SetupTab({ configs, selectedConfig, onSelectConfig, onCh
                       {c.academic_year || 'No academic year'} · {c.working_days.length} working days
                     </span>
                   </button>
-                  {c.is_active && <Chip tone="good" className="hidden sm:inline-flex">Active</Chip>}
-                  <Switch
-                    checked={c.is_active}
-                    label={c.is_active ? `Switch ${c.name} off` : `Make ${c.name} active`}
-                    onChange={async () => {
-                      if (c.is_active) await deactivateConfig(c.id)
-                      else await setActiveConfig(c.id)
-                      onChanged()
-                    }}
-                  />
+                  {published.has(c.id)
+                    ? <Chip tone="good">Published</Chip>
+                    : <Chip tone="neutral">Not published</Chip>}
                   <button
                     onClick={async () => {
                       const ok = await askConfirm({

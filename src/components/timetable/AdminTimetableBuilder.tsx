@@ -3,10 +3,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The timetable workspace.
 //
-// Laid out like the transport, fee and salary admins: the banner, a capsule
-// switch on its foot for the three ways of looking at the week, then the
-// workspace deck — which timetable, the three steps that build and publish
-// it, and the four editors as tiles. The grid is never replaced by a settings
+// Laid out like the transport, fee and salary admins: the banner, then the
+// workspace deck — which timetable, the steps that build and publish it, and
+// the four editors as tiles — and a capsule switch for the three ways of
+// looking at the week right above the grid it switches. The grid is never replaced by a settings
 // page: the editors open over it, on the shared glass sheet.
 //
 // The view lives in the URL so a link or a refresh lands on the same one.
@@ -20,7 +20,7 @@ import {
   Settings, BookOpen, CalendarRange, Users, GraduationCap, LayoutGrid, Rows3, UserCog,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { fetchConfigs } from '@/lib/timetable'
+import { fetchConfigs, fetchPublishedConfigIds } from '@/lib/timetable'
 import type { TimetableConfig } from '@/lib/timetable'
 import ModalShell from '@/components/ui/ModalShell'
 import { GlassSegments } from '@/components/transport/glass'
@@ -64,18 +64,21 @@ export default function AdminTimetableBuilder() {
   }, [router])
 
   const [configs, setConfigs] = useState<TimetableConfig[]>([])
+  // Configs students and staff can see: switched on, with a published week.
+  const [published, setPublished] = useState<Set<string>>(new Set())
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<Editor | null>(null)
 
   const loadConfigs = useCallback(async () => {
-    const list = await fetchConfigs()
+    const [list, publishedIds] = await Promise.all([fetchConfigs(), fetchPublishedConfigIds()])
+    const live = new Set(list.filter((c) => c.is_active && publishedIds.has(c.id)).map((c) => c.id))
     setConfigs(list)
-    // Default selection: the active config, else the most recent.
+    setPublished(live)
+    // Default selection: a published config, else the most recent.
     setSelectedConfigId((prev) => {
       if (prev && list.some((c) => c.id === prev)) return prev
-      const active = list.find((c) => c.is_active)
-      return active?.id ?? list[0]?.id ?? null
+      return list.find((c) => live.has(c.id))?.id ?? list[0]?.id ?? null
     })
     setLoading(false)
   }, [])
@@ -89,9 +92,9 @@ export default function AdminTimetableBuilder() {
       value: c.id,
       label: c.name,
       sublabel: c.academic_year || undefined,
-      badge: c.is_active ? 'Active' : undefined,
+      badge: published.has(c.id) ? 'Published' : undefined,
     })),
-    [configs],
+    [configs, published],
   )
 
   const picker = (
@@ -107,6 +110,18 @@ export default function AdminTimetableBuilder() {
 
   const deck = (p: DeckProps) => (
     <WorkspaceDeck {...p} picker={picker} active={editor} onOpen={setEditor} />
+  )
+
+  // Whole school · By class · By teacher — sits right above the grid it switches.
+  const viewSwitch = (
+    <GlassSegments
+      layoutId="tt-view"
+      items={VIEWS}
+      value={view}
+      onChange={setView}
+      stretch
+      className="!bg-white ring-1 ring-black/[.06] shadow-[0_8px_20px_-14px_rgba(15,23,42,.45)]"
+    />
   )
 
   const meta = EDITORS.find((e) => e.key === editor) ?? null
@@ -133,6 +148,7 @@ export default function AdminTimetableBuilder() {
           {meta.key === 'config' && (
             <SetupTab
               configs={configs}
+              published={published}
               selectedConfig={selectedConfig}
               onSelectConfig={setSelectedConfigId}
               onChanged={loadConfigs}
@@ -150,28 +166,23 @@ export default function AdminTimetableBuilder() {
     <>
       <ConfirmHost />
 
-      {/* The switch overlaps the banner. Solid, not glass: through a
-          translucent control the banner photo shows as noise. */}
-      <div className="relative z-10 -mt-6 sm:-mt-7 mb-4 sm:mb-5 flex justify-center sm:justify-start">
-        <GlassSegments
-          layoutId="tt-view"
-          items={VIEWS}
-          value={view}
-          onChange={setView}
-          stretch
-          className="!bg-white ring-1 ring-black/[.06] shadow-[0_14px_30px_-12px_rgba(15,23,42,.55)]"
-        />
-      </div>
-
       {loading ? (
-        <Loading />
+        <div className="pt-5 sm:pt-6"><Loading /></div>
       ) : selectedConfig ? (
         <TimetableDraftProvider config={selectedConfig} key={selectedConfig.id}>
-          <GenerateTab view={view} onViewChange={setView} renderDeck={deck} />
+          <div className="pt-5 sm:pt-6">
+            <GenerateTab
+              view={view}
+              onViewChange={setView}
+              renderDeck={deck}
+              viewSwitch={viewSwitch}
+              onPublishedChange={loadConfigs}
+            />
+          </div>
           {editorModal}
         </TimetableDraftProvider>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 pt-5 sm:pt-6">
           {deck({})}
           <div className="fx-card fx-bleed px-4 py-12 text-center">
             <LayoutGrid size={28} className="mx-auto text-slate-300" />
@@ -199,15 +210,17 @@ function WorkspaceDeck({ picker, status, actions, counts, active, onOpen }: Deck
   onOpen: (e: Editor) => void
 }) {
   return (
-    <section className="fx-deck fx-bleed min-w-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 sm:px-4 pt-3 pb-2.5">
+    // z-20 on the deck and on the picker row: the picker's menu opens down over
+    // the editor tiles and whatever follows the deck, and must stay on top.
+    <section className="fx-deck fx-bleed min-w-0 z-20">
+      <div className="relative z-20 flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 sm:px-4 pt-3 pb-2.5">
         <div className="flex items-center gap-2 min-w-0 flex-1 basis-[280px]">
           <div className="min-w-0 flex-1 lg:max-w-[24rem]">{picker}</div>
           {status}
         </div>
         {actions && <div className="flex w-full sm:w-auto items-center gap-1.5">{actions}</div>}
       </div>
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 px-2.5 sm:px-3 pb-2.5 sm:pb-3">
+      <div className="relative z-0 grid grid-cols-4 gap-1.5 sm:gap-2 px-2.5 sm:px-3 pb-2.5 sm:pb-3">
         {EDITORS.map((e) => (
           <EditorTile
             key={e.key}

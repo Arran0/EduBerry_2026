@@ -181,6 +181,20 @@ export async function deactivateConfig(id: string): Promise<boolean> {
   return true
 }
 
+// Configs that have a published timetable. Together with is_active this is
+// what the admin screens show as "Published" — what students and staff see.
+export async function fetchPublishedConfigIds(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('timetables')
+    .select('config_id')
+    .eq('status', 'published')
+  if (error) {
+    console.error('fetchPublishedConfigIds error:', error)
+    return new Set()
+  }
+  return new Set(((data ?? []) as { config_id: string }[]).map((t) => t.config_id))
+}
+
 // ============================================================
 // Period slots
 // ============================================================
@@ -643,15 +657,36 @@ export async function publishTimetable(timetable: Timetable): Promise<boolean> {
     return false
   }
   // Activate the config so staff/students can see the timetable immediately.
-  // This is the authoritative "go live" step — admins can deactivate from
-  // SetupTab later to hide the timetable without deleting it.
+  // This is the authoritative "go live" step — unpublishTimetable() reverses it.
   const { error: activateErr } = await supabase
     .from('timetable_configs')
     .update({ is_active: true })
     .eq('id', timetable.config_id)
   if (activateErr) {
     console.error('publishTimetable (activate config) error:', activateErr)
-    // Non-fatal: timetable is published; admin can manually activate from SetupTab.
+    // Non-fatal: the timetable is published; publishing again retries this.
+  }
+  return true
+}
+
+// Takes a timetable off the air: it goes back to draft (its periods are kept)
+// and its config is switched off, so students and staff no longer see it.
+export async function unpublishTimetable(timetable: Timetable): Promise<boolean> {
+  const { error } = await supabase
+    .from('timetables')
+    .update({ status: 'draft' as TimetableStatus })
+    .eq('id', timetable.id)
+  if (error) {
+    console.error('unpublishTimetable error:', error)
+    return false
+  }
+  const { error: deactivateErr } = await supabase
+    .from('timetable_configs')
+    .update({ is_active: false })
+    .eq('id', timetable.config_id)
+  if (deactivateErr) {
+    // Non-fatal: with no published timetable there is nothing left to show.
+    console.error('unpublishTimetable (deactivate config) error:', deactivateErr)
   }
   return true
 }

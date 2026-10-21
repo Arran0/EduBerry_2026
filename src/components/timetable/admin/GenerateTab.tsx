@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import {
-  Sparkles, Loader2, Save, Send, Trash2, AlertTriangle, CheckCircle2, Download,
+  Sparkles, Loader2, Save, Send, Undo2, Trash2, AlertTriangle, CheckCircle2, Download,
   GraduationCap, UserCog, ShieldQuestion, Wand2, X, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import {
-  createTimetable, replaceEntries, publishTimetable, updateTimetableMeta,
+  createTimetable, replaceEntries, publishTimetable, unpublishTimetable, updateTimetableMeta,
 } from '@/lib/timetable'
 import type {
   TimetableEntry, Timetable, TimetableStatus, ScheduleWeek, Weekday,
@@ -38,16 +38,20 @@ export type View = 'class' | 'teacher' | 'master'
 export interface DeckProps {
   /** Draft or live, beside the timetable picker. */
   status?: React.ReactNode
-  /** Generate · Save draft · Publish. */
+  /** Generate · Save draft · Publish / Unpublish. */
   actions?: React.ReactNode
   /** One line per editor tile: what it holds. */
   counts?: Partial<Record<'config' | 'homeroom' | 'teacher' | 'subjects', string>>
 }
 
-export default function GenerateTab({ view, onViewChange, renderDeck }: {
+export default function GenerateTab({ view, onViewChange, renderDeck, viewSwitch, onPublishedChange }: {
   view: View
   onViewChange: (v: View) => void
   renderDeck: (p: DeckProps) => React.ReactNode
+  /** Whole school · By class · By teacher, drawn right above the grid. */
+  viewSwitch?: React.ReactNode
+  /** Called after a publish or unpublish, so the timetable list can refresh. */
+  onPublishedChange?: () => void
 }) {
   const draft = useTimetableDraft()
   const {
@@ -411,8 +415,28 @@ export default function GenerateTab({ view, onViewChange, renderDeck }: {
         prev ? { ...prev, status: 'published' as TimetableStatus, published_at: new Date().toISOString() } : prev,
       )
       flash('Published. Students and staff can see it now.')
+      onPublishedChange?.()
     } else {
       flash('Could not publish.')
+    }
+    setPublishing(false)
+  }
+
+  const handleUnpublish = async () => {
+    if (!timetable) return
+    if (!(await askConfirm({
+      title: 'Unpublish this timetable?',
+      body: 'Students and staff stop seeing it. Its periods are kept as a draft, and you can publish it again at any time.',
+      confirmLabel: 'Unpublish',
+    }))) return
+    setPublishing(true)
+    const ok = await unpublishTimetable(timetable)
+    if (ok) {
+      setTimetable((prev) => (prev ? { ...prev, status: 'draft' as TimetableStatus } : prev))
+      flash('Unpublished. Only admins can see it now.')
+      onPublishedChange?.()
+    } else {
+      flash('Could not unpublish.')
     }
     setPublishing(false)
   }
@@ -487,7 +511,9 @@ export default function GenerateTab({ view, onViewChange, renderDeck }: {
     )
   }
 
-  const isPublished = timetable?.status === 'published'
+  // Visible to students and staff only when the week is published and its
+  // config is switched on — publishing does both, unpublishing undoes both.
+  const isPublished = timetable?.status === 'published' && config.is_active
   const selectedWeek: ScheduleWeek = weekFor(selectedHomeroomId)
   // The class grid still draws break rows, which the schedule week leaves out.
   const selectedWeekSlots = slots
@@ -533,18 +559,31 @@ export default function GenerateTab({ view, onViewChange, renderDeck }: {
       )}
       <button onClick={handleSave} disabled={busy} className={`${BTN_NEUTRAL} flex-1 sm:flex-none`}>
         {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-        Save draft
+        {/* Saving a published week updates what people see straight away. */}
+        {isPublished ? 'Save' : 'Save draft'}
       </button>
-      <button onClick={handlePublish} disabled={busy} className={`${BTN_GO} flex-1 sm:flex-none`}>
-        {publishing ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-        Publish
-      </button>
+      {isPublished ? (
+        <button
+          onClick={handleUnpublish}
+          disabled={busy}
+          className={`${BTN_NEUTRAL} flex-1 sm:flex-none`}
+          title="Hide this timetable from students and staff"
+        >
+          {publishing ? <Loader2 className="animate-spin" size={14} /> : <Undo2 size={14} />}
+          Unpublish
+        </button>
+      ) : (
+        <button onClick={handlePublish} disabled={busy} className={`${BTN_GO} flex-1 sm:flex-none`}>
+          {publishing ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+          Publish
+        </button>
+      )}
     </>
   )
 
   const status = isPublished
-    ? <Chip tone="good" title="Students and staff see this timetable"><CheckCircle2 size={11} /> Live</Chip>
-    : <Chip tone="neutral" title="Only admins see this until it is published">Draft</Chip>
+    ? <Chip tone="good" title="Students and staff see this timetable"><CheckCircle2 size={11} /> Published</Chip>
+    : <Chip tone="neutral" title="Only admins see this until it is published">Not published</Chip>
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -699,6 +738,8 @@ export default function GenerateTab({ view, onViewChange, renderDeck }: {
       )}
 
       <HealthPanel report={health} />
+
+      {viewSwitch && <div className="flex justify-center sm:justify-start">{viewSwitch}</div>}
 
       {/* ── The grid ──────────────────────────────────────────
           The subject of the page: a square sheet, edge to edge on a phone. */}
