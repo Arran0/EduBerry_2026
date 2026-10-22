@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useBottomNav } from '@/contexts/BottomNavContext'
 import { safeHref } from '@/lib/safeUrl'
 import { askConfirm, tellUser } from '@/components/ui/sheet'
+import { DiscussionSkeleton } from '@/components/classrooms/ClassroomSkeletons'
 
 const ATTACH_MARKER = '__ATTACH__'
 
@@ -194,7 +195,7 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     return out
   }, [messages])
 
-  // Initial load (shows spinner once)
+  // Initial load (shows the skeleton once)
   const loadPosts = useCallback(async () => {
     setLoading(true)
     const data = await fetchDiscussionPosts(classroomId)
@@ -369,14 +370,9 @@ export default function DiscussionTab({ classroomId, userId, userRole }: Discuss
     document.execCommand('insertText', false, text)
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-16">
-        <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-500">Loading discussion…</p>
-      </div>
-    )
-  }
+  // The BottomNav is already hidden above, so the skeleton draws the compose
+  // bar in its place — the screen is the right shape before a message lands.
+  if (loading) return <DiscussionSkeleton withComposer />
 
   const canSubmit =
     (newPostContent.trim() || attachMode !== 'none') &&

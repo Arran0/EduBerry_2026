@@ -1504,6 +1504,31 @@ export async function fetchStudentMembers(classroomId: string): Promise<(Classro
     .filter((m: ClassroomMember & { user?: UserProfile }) => m.user) as (ClassroomMember & { user: UserProfile })[]
 }
 
+export interface ClassroomStudentLite {
+  id: string
+  full_name: string
+  avatar_url: string | null
+}
+
+/** A classroom's students as id / name / photo only, in one round trip and
+ *  sorted by name — for pickers that need no more than that. */
+export async function fetchStudentRoster(classroomId: string): Promise<ClassroomStudentLite[]> {
+  const { data, error } = await supabase
+    .from('classroom_members')
+    .select('profiles(id, full_name, avatar_url)')
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+
+  if (error) {
+    console.error('Failed to fetch classroom roster:', error.message)
+    return []
+  }
+  return ((data ?? []) as unknown as { profiles: ClassroomStudentLite | null }[])
+    .map(r => r.profiles)
+    .filter((p): p is ClassroomStudentLite => !!p)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+}
+
 // Batch-fetch profiles for a set of ids (e.g. the `created_by` of a page's
 // folders/files/assessments) and return them keyed by id, so callers can look
 // up "created by" names without one round trip per row.

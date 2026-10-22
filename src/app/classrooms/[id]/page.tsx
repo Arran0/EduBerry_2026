@@ -30,18 +30,61 @@ import { recordClassroomVisit } from '@/lib/classroomVisits'
 import { safeSrc } from '@/lib/safeUrl'
 import { hexToLuminance, sampleImageLuminance } from '@/lib/luminance'
 import { pickClassroomPalette, classroomGradient, classroomLogoGradient } from '@/lib/classroomPalette'
-import { isStaffRole } from '@/lib/supabase'
+import { isStaffRole, UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import ModalShell from '@/components/ui/ModalShell'
-
-const CourseWorkTab    = dynamic(() => import('@/components/classrooms/CourseWorkTab'))
-const HomeworkTab      = dynamic(() => import('@/components/classrooms/HomeworkTab'))
-const AssessmentsTab   = dynamic(() => import('@/components/classrooms/AssessmentsTab'))
-const DiscussionTab    = dynamic(() => import('@/components/classrooms/DiscussionTab'))
-const AnalysisTab      = dynamic(() => import('@/components/classrooms/AnalysisTab'))
-const AIAssistantFloat = dynamic(() => import('@/components/classrooms/AIAssistantFloat'))
+import {
+  Sk, SkeletonRegion, FolderListSkeleton, AssessmentListSkeleton, DiscussionSkeleton, AnalysisSkeleton,
+} from '@/components/classrooms/ClassroomSkeletons'
+import { WorkWeekCalendarSkeleton } from '@/components/calendar/WorkWeekCalendar'
 
 type Tab = 'coursework' | 'homework' | 'assessments' | 'discussion' | 'analysis'
+
+/** The viewer's role, for the skeleton a tab shows while its code downloads —
+ *  next/dynamic's `loading` takes no props, but it renders in place, inside
+ *  this provider. */
+const SkeletonRoleContext = React.createContext<UserRole | null>(null)
+
+/**
+ * The placeholder for one tab, matching what that tab itself shows while its
+ * data loads — so the classroom fetch, the tab's code download and the tab's
+ * own fetch read as one continuous skeleton rather than three different ones.
+ */
+function TabSkeleton({ tab, role }: { tab: Tab; role: UserRole | null }) {
+  const isStudent = role === 'student'
+  switch (tab) {
+    case 'coursework':
+      return <FolderListSkeleton canManage={role != null && !isStudent} />
+    case 'homework':
+      return <WorkWeekCalendarSkeleton />
+    case 'assessments':
+      return (
+        <AssessmentListSkeleton
+          isStaff={role != null && ['teacher', 'coordinator', 'principal', 'admin'].includes(role)}
+          isStudent={isStudent}
+        />
+      )
+    case 'discussion':
+      return <DiscussionSkeleton />
+    case 'analysis':
+      return <AnalysisSkeleton />
+  }
+}
+
+/** next/dynamic `loading` for a tab: its skeleton, for the viewer's role. */
+function tabLoading(tab: Tab) {
+  function TabLoading() {
+    return <TabSkeleton tab={tab} role={React.useContext(SkeletonRoleContext)} />
+  }
+  return TabLoading
+}
+
+const CourseWorkTab    = dynamic(() => import('@/components/classrooms/CourseWorkTab'),  { loading: tabLoading('coursework') })
+const HomeworkTab      = dynamic(() => import('@/components/classrooms/HomeworkTab'),    { loading: tabLoading('homework') })
+const AssessmentsTab   = dynamic(() => import('@/components/classrooms/AssessmentsTab'), { loading: tabLoading('assessments') })
+const DiscussionTab    = dynamic(() => import('@/components/classrooms/DiscussionTab'),  { loading: tabLoading('discussion') })
+const AnalysisTab      = dynamic(() => import('@/components/classrooms/AnalysisTab'),    { loading: tabLoading('analysis') })
+const AIAssistantFloat = dynamic(() => import('@/components/classrooms/AIAssistantFloat'))
 
 const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }> = {
   coursework:  { icon: <FileText size={15} />,     color: 'text-slate-700',  bg: 'bg-slate-100' },
@@ -52,6 +95,130 @@ const TAB_META: Record<Tab, { icon: React.ReactNode; color: string; bg: string }
 }
 
 const TAB_VALUES: Tab[] = ['coursework', 'homework', 'assessments', 'discussion', 'analysis']
+
+type TabDef = { id: Tab; label: string; shortLabel: string }
+
+const BASE_TABS: TabDef[] = [
+  { id: 'coursework',  label: 'Content',     shortLabel: 'Content'    },
+  { id: 'homework',    label: 'Calendar',    shortLabel: 'Calendar'   },
+  // Shorter names on a phone: a fifth of a 360px screen has no room for the long ones.
+  { id: 'assessments', label: 'Assessments', shortLabel: 'Marks'      },
+  { id: 'discussion',  label: 'Discussion',  shortLabel: 'Chat'       },
+]
+
+/** Tabs — full-bleed flat strip with an icon chip + sliding underline,
+ *  matching the Task Manager's mini nav bar. The bar itself spans the full
+ *  browser width; only its contents align to the page's column. The labels
+ *  never depend on the classroom, so the loading page draws it for real too. */
+function ClassroomTabStrip({ tabs, activeTab, onSelect }: {
+  tabs: TabDef[]
+  activeTab: Tab
+  onSelect?: (t: Tab) => void
+}) {
+  return (
+    <div className="relative z-10 -mt-7 bg-white border-b border-slate-200 shadow-sm">
+      <div className="max-w-7xl 2xl:max-w-[1600px] mx-auto px-1 sm:px-6 lg:px-8">
+        <nav className="flex items-stretch gap-0.5 sm:gap-1" aria-label="Classroom sections">
+          {tabs.map(tab => {
+            const meta = TAB_META[tab.id]
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={onSelect ? () => onSelect(tab.id) : undefined}
+                aria-current={isActive ? 'page' : undefined}
+                className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-0.5 sm:px-6 py-2.5 sm:py-4 font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:bg-slate-50 ${
+                  isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                <span
+                  className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 flex-shrink-0 ${
+                    isActive
+                      ? `${meta.bg} ${meta.color} shadow-sm scale-100`
+                      : 'text-slate-500 group-hover:text-slate-700 group-hover:bg-slate-50 scale-95'
+                  }`}
+                >
+                  {meta.icon}
+                </span>
+                {/* Phone labels are the short names, so none is cut off. */}
+                <span className="relative z-10 leading-none sm:hidden text-[10px] whitespace-nowrap">{tab.shortLabel}</span>
+                <span className="relative z-10 leading-none hidden sm:inline text-sm whitespace-nowrap">{tab.label}</span>
+                {isActive && (
+                  <motion.span
+                    layoutId="classroom-active-tab"
+                    className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
+                    style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  />
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The classroom page before the classroom arrives. The banner is painted in
+ * the classroom's own gradient — it is hashed from the id in the URL, so it is
+ * known before any fetch — with the logo bubble, title and meta line as
+ * placeholders; the tab strip is the real one; and the content area holds the
+ * active tab's own skeleton.
+ */
+function ClassroomPageSkeleton({ id, tabs, activeTab, onSelectTab, role, canEdit }: {
+  id: string | undefined
+  tabs: TabDef[]
+  activeTab: Tab
+  onSelectTab?: (t: Tab) => void
+  role: UserRole | null
+  canEdit: boolean
+}) {
+  const palette = id ? pickClassroomPalette(id) : null
+  // Placeholder bars on the banner: translucent white, so they sit on any of
+  // the palettes' gradients the way the real white title text does.
+  const onBanner = '!bg-white/30'
+  return (
+    <SkeletonRegion label="Loading classroom…">
+      <div
+        className={`relative overflow-hidden ${palette ? '' : 'bg-slate-300'}`}
+        style={palette ? { background: classroomGradient(palette) } : undefined}
+      >
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_60%)]" />
+        <div className="relative max-w-7xl 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-10 sm:pt-5 sm:pb-12">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div
+              className="keep-round w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-full ring-2 ring-white/90 shadow-[0_10px_26px_-10px_rgba(15,23,42,0.5)]"
+              style={palette ? { background: classroomLogoGradient(palette) } : undefined}
+            />
+            <div className="flex-1 min-w-0">
+              {/* Title, then (from sm) the description, then the meta line —
+                  each box one line of its real text tall. */}
+              <div className="h-[25px] sm:h-8 flex items-center">
+                <Sk className={`h-5 sm:h-6 w-48 sm:w-72 max-w-full !rounded-full ${onBanner}`} delay={60} />
+              </div>
+              <div className="hidden sm:flex h-[19.5px] mt-0.5 items-center">
+                <Sk className={`h-2.5 w-80 max-w-full !rounded-full ${onBanner}`} delay={120} />
+              </div>
+              <div className="h-[18px] mt-1 flex items-center gap-3">
+                <Sk className={`h-2.5 w-24 !rounded-full ${onBanner}`} delay={180} />
+                <Sk className={`hidden sm:block h-2.5 w-40 !rounded-full ${onBanner}`} delay={240} />
+              </div>
+            </div>
+            {canEdit && <div className="keep-round flex-shrink-0 self-start w-9 h-9 rounded-full bg-black/25" />}
+          </div>
+        </div>
+      </div>
+
+      <ClassroomTabStrip tabs={tabs} activeTab={activeTab} onSelect={onSelectTab} />
+
+      <div className="relative z-10 max-w-7xl 2xl:max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-28 sm:pb-24">
+        <TabSkeleton tab={activeTab} role={role} />
+      </div>
+    </SkeletonRegion>
+  )
+}
 
 function formatDay(iso: string): string {
   return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -140,12 +307,8 @@ function ClassroomDetailPageContent() {
     }
   }
 
-  const tabs: { id: Tab; label: string; shortLabel: string }[] = [
-    { id: 'coursework',  label: 'Content',     shortLabel: 'Content'    },
-    { id: 'homework',    label: 'Calendar',    shortLabel: 'Calendar'   },
-    // Shorter names on a phone: a fifth of a 360px screen has no room for the long ones.
-    { id: 'assessments', label: 'Assessments', shortLabel: 'Marks'      },
-    { id: 'discussion',  label: 'Discussion',  shortLabel: 'Chat'       },
+  const tabs: TabDef[] = [
+    ...BASE_TABS,
     // Staff-only performance analysis
     ...(canEditClassroom ? [{ id: 'analysis' as Tab, label: 'Analysis', shortLabel: 'Analysis' }] : []),
   ]
@@ -159,17 +322,17 @@ function ClassroomDetailPageContent() {
       // the few surfaces that run the full width — the banner and the tab
       // strip — and for the marks sheet, where a grid sits flush.
       <div data-page-theme="academics">
+      <SkeletonRoleContext.Provider value={profile.role}>
 
         {loading ? (
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">
-            {/* Banner / tabs / cards skeleton mirrors the loaded layout */}
-            <div className="skeleton rounded-3xl h-28 sm:h-36" />
-            <div className="skeleton rounded-2xl h-14" />
-            <div className="space-y-3">
-              <div className="skeleton rounded-2xl h-24" />
-              <div className="skeleton rounded-2xl h-24" />
-            </div>
-          </div>
+          <ClassroomPageSkeleton
+            id={id}
+            tabs={tabs}
+            activeTab={activeTab}
+            onSelectTab={selectTab}
+            role={profile.role}
+            canEdit={canEditClassroom}
+          />
         ) : !classroom ? (
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
             <div className="glass-card rounded-3xl p-12 text-center">
@@ -299,51 +462,8 @@ function ClassroomDetailPageContent() {
               </div>
             </div>
 
-            {/* ── Tabs — full-bleed flat strip with an icon chip + sliding
-                 underline, matching the Task Manager's mini nav bar. The bar
-                 itself spans the full browser width; only its contents align
-                 to the page's column. ── */}
-            <div className="relative z-10 -mt-7 bg-white border-b border-slate-200 shadow-sm">
-              <div className="max-w-7xl 2xl:max-w-[1600px] mx-auto px-1 sm:px-6 lg:px-8">
-                <nav className="flex items-stretch gap-0.5 sm:gap-1" aria-label="Classroom sections">
-                  {tabs.map(tab => {
-                    const meta = TAB_META[tab.id]
-                    const isActive = activeTab === tab.id
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => selectTab(tab.id)}
-                        aria-current={isActive ? 'page' : undefined}
-                        className={`group relative flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-0.5 sm:px-6 py-2.5 sm:py-4 font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:bg-slate-50 ${
-                          isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-800'
-                        }`}
-                      >
-                        <span
-                          className={`relative z-10 flex items-center justify-center w-7 h-7 rounded-xl transition-all duration-300 flex-shrink-0 ${
-                            isActive
-                              ? `${meta.bg} ${meta.color} shadow-sm scale-100`
-                              : 'text-slate-500 group-hover:text-slate-700 group-hover:bg-slate-50 scale-95'
-                          }`}
-                        >
-                          {meta.icon}
-                        </span>
-                        {/* Phone labels are the short names, so none is cut off. */}
-                        <span className="relative z-10 leading-none sm:hidden text-[10px] whitespace-nowrap">{tab.shortLabel}</span>
-                        <span className="relative z-10 leading-none hidden sm:inline text-sm whitespace-nowrap">{tab.label}</span>
-                        {isActive && (
-                          <motion.span
-                            layoutId="classroom-active-tab"
-                            className="absolute inset-x-1.5 sm:inset-x-3 bottom-0 h-[3px] rounded-full"
-                            style={{ background: 'linear-gradient(to right, var(--page-gradient-from, #06b6d4), var(--page-gradient-to, #14b8a6))' }}
-                            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                          />
-                        )}
-                      </button>
-                    )
-                  })}
-                </nav>
-              </div>
-            </div>
+            {/* ── Tabs ── */}
+            <ClassroomTabStrip tabs={tabs} activeTab={activeTab} onSelect={selectTab} />
 
             {/* ── Content area ──
                 Cards sit inset from the screen edge with soft corners at every
@@ -448,6 +568,7 @@ function ClassroomDetailPageContent() {
             </AnimatePresence>
           </>
         )}
+      </SkeletonRoleContext.Provider>
       </div>
   )
 
@@ -456,15 +577,22 @@ function ClassroomDetailPageContent() {
     : <ProtectedLayout>{inner}</ProtectedLayout>
 }
 
+/** Shown while the page's search params resolve — before the viewer's role is
+ *  read, so it draws the four tabs everyone has and no staff controls. */
+function ClassroomPageFallback() {
+  const { id } = useParams<{ id: string }>()
+  return (
+    <ProtectedLayout>
+      <div data-page-theme="academics">
+        <ClassroomPageSkeleton id={id} tabs={BASE_TABS} activeTab="coursework" role={null} canEdit={false} />
+      </div>
+    </ProtectedLayout>
+  )
+}
+
 export default function ClassroomDetailPage() {
   return (
-    <Suspense fallback={
-      <ProtectedLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="spinner" />
-        </div>
-      </ProtectedLayout>
-    }>
+    <Suspense fallback={<ClassroomPageFallback />}>
       <ClassroomDetailPageContent />
     </Suspense>
   )
