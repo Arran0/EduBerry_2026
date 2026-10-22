@@ -109,21 +109,100 @@ export function rankTrendOf(row: EduDashboardRow): RankTrendInfo {
   return { currRank: row.rank, prevRank: row.prev_rank, improved: delta > 0, delta }
 }
 
-// ─── Monthly EduPoints (staff analysis) ─────────────────────────────────────────
+// ─── Classroom Analysis (staff) ───────────────────────────────────────────────
+// All aggregation happens in Postgres (supabase-migrations/add_classroom_analysis_rpcs.sql);
+// these return only what the Analysis tab draws.
 
-export interface EduMonthlyRow {
-  student_id: string
-  full_name: string
-  month: string        // first-of-month date, YYYY-MM-DD
-  points: number
+/** One month of a classroom's EduPoints: class average, that month's top
+ *  scorer and most improved student, and optionally one focused student. */
+export interface EduMonthSummary {
+  month: string                 // first-of-month date, YYYY-MM-DD
+  class_avg: number
+  top_points: number
+  top_student_id: string | null
+  top_student_name: string | null
+  improved_student_id: string | null
+  improved_student_name: string | null
+  improved_delta: number | null
+  student_points: number | null // null unless a student was asked for
 }
 
-/** Student-wise EduPoints earned per month in a classroom (staff only). */
-export async function fetchClassroomEduMonthly(classroomId: string): Promise<EduMonthlyRow[]> {
-  const { data, error } = await supabase.rpc('get_classroom_edu_monthly', { p_classroom_id: classroomId })
+export async function fetchClassroomEduMonthSummary(
+  classroomId: string,
+  studentId?: string | null,
+): Promise<EduMonthSummary[]> {
+  const { data, error } = await supabase.rpc('get_classroom_edu_month_summary', {
+    p_classroom_id: classroomId,
+    p_student_id: studentId || null,
+  })
   if (error) {
-    console.error('Failed to fetch classroom monthly edu points:', error.message)
+    console.error('Failed to fetch classroom EduPoints summary:', error.message)
     return []
   }
-  return (data ?? []) as EduMonthlyRow[]
+  // NUMERIC arrives as a string from PostgREST.
+  return ((data ?? []) as EduMonthSummary[]).map(r => ({ ...r, class_avg: Number(r.class_avg) }))
+}
+
+export type EduLeaderboardSort = 'total' | 'improved'
+
+export interface EduLeaderboardRow {
+  student_id: string
+  full_name: string
+  avatar_url: string | null
+  points: number
+  prev_points: number
+  delta: number
+  rank: number
+  total_count: number
+}
+
+/** One page of a month's ranking — by that month's points, or by the change
+ *  on the month before. Every student in the class is listed, zeros too. */
+export async function fetchClassroomEduLeaderboard(
+  classroomId: string,
+  month: string,
+  sort: EduLeaderboardSort,
+  offset: number,
+  limit = 10,
+): Promise<EduLeaderboardRow[]> {
+  const { data, error } = await supabase.rpc('get_classroom_edu_leaderboard', {
+    p_classroom_id: classroomId,
+    p_month: month,
+    p_sort: sort,
+    p_limit: limit,
+    p_offset: offset,
+  })
+  if (error) {
+    console.error('Failed to fetch classroom EduPoints leaderboard:', error.message)
+    return []
+  }
+  return (data ?? []) as EduLeaderboardRow[]
+}
+
+export interface AssessmentTrendRow {
+  assessment_id: string
+  title: string
+  date: string
+  class_avg: number | null
+  student_pct: number | null
+}
+
+/** Chronological assessments with the class average % and, when a student is
+ *  given, that student's % — one round trip instead of every mark. */
+export async function fetchClassroomAssessmentTrend(
+  classroomId: string,
+  studentId?: string | null,
+): Promise<AssessmentTrendRow[]> {
+  const { data, error } = await supabase.rpc('get_classroom_assessment_trend', {
+    p_classroom_id: classroomId,
+    p_student_id: studentId || null,
+  })
+  if (error) {
+    console.error('Failed to fetch classroom assessment trend:', error.message)
+    return []
+  }
+  const num = (v: unknown) => (v == null ? null : Number(v))
+  return ((data ?? []) as AssessmentTrendRow[]).map(r => ({
+    ...r, class_avg: num(r.class_avg), student_pct: num(r.student_pct),
+  }))
 }

@@ -17,6 +17,9 @@ import Avatar from '@/components/Avatar'
 import ReportCardTitlePicker from '@/components/classrooms/ReportCardTitlePicker'
 import ModalShell from '@/components/ui/ModalShell'
 import { askConfirm } from '@/components/ui/sheet'
+import {
+  AssessmentListSkeleton, ScoreBlockSkeleton, Sk, SkText, SkAvatar, SkeletonRegion, skeletonRowCount,
+} from '@/components/classrooms/ClassroomSkeletons'
 
 interface AssessmentsTabProps {
   classroomId: string
@@ -104,6 +107,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   const [showMarksheet, setShowMarksheet] = useState<string | null>(null)
   const [marks, setMarks] = useState<Record<string, { marks: string; isAbsent: boolean }>>({})
   const [students, setStudents] = useState<(ClassroomMember & { user: UserProfile })[]>([])
+  // True from opening a marksheet until its students and marks are in: the
+  // sheet shows a skeleton meanwhile, never the previous sheet's roster.
+  const [marksheetLoading, setMarksheetLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   // Assessment creators, keyed by id — shown on the assessment's card and in
   // the marksheet header so staff can see who set it up.
@@ -278,6 +284,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     const known = componentsByAssessment[assessmentId] ?? []
     setComponents(known)
     setComponentMarks({})
+    setMarksheetLoading(true)
 
     const [existingMarks, studentList, fetchedComponents, existingComponentMarks] = await Promise.all([
       fetchAssessmentMarks(assessmentId),
@@ -296,6 +303,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     }
 
     fillSheet(studentList, comps, existingMarks, existingComponentMarks)
+    setMarksheetLoading(false)
   }
 
   /** Lays stored marks into the two grids the sheet edits.
@@ -427,8 +435,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     setConfirmingClose(false)
   }
 
-  /** True when the sheet on screen differs from what is stored. */
-  const hasUnsavedMarks = showMarksheet != null
+  /** True when the sheet on screen differs from what is stored. A sheet still
+   *  loading holds nothing typed yet, so closing it never asks. */
+  const hasUnsavedMarks = showMarksheet != null && !marksheetLoading
     && marksheetSnapshot(students, components, marks, componentMarks) !== savedSnapshot.current
 
   /** Closing a marksheet with marks typed into it and never saved is the one
@@ -646,6 +655,9 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   // component behind it, so the card can explain how the total was made up.
   const [studentMarks, setStudentMarks] = useState<Record<string, AssessmentMark>>({})
   const [studentComponentMarks, setStudentComponentMarks] = useState<Record<string, AssessmentComponentMark>>({})
+  // Until the first read lands, each card shows a placeholder score rather
+  // than claiming "Marks not yet available".
+  const [studentMarksLoaded, setStudentMarksLoaded] = useState(false)
   useEffect(() => {
     if (!isStudent || assessments.length === 0) return
     const ids = assessments.map(a => a.id)
@@ -657,6 +669,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
       if (cancelled) return
       setStudentMarks(byAssessment)
       setStudentComponentMarks(byComponent)
+      setStudentMarksLoaded(true)
     })
     return () => { cancelled = true }
   }, [isStudent, assessments, userId])
@@ -689,14 +702,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
     }
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-600">Loading assessments...</p>
-      </div>
-    )
-  }
+  if (loading) return <AssessmentListSkeleton isStaff={isStaff} isStudent={isStudent} />
 
   return (
     <div className="space-y-4">
@@ -813,6 +819,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
               userId={userId}
               creatorName={creators[assessment.created_by]?.full_name ?? null}
               myMark={studentMarks[assessment.id]}
+              myMarkLoading={isStudent && !studentMarksLoaded}
               components={componentsByAssessment[assessment.id] ?? []}
               myComponentMarks={studentComponentMarks}
               editingId={editingId}
@@ -858,7 +865,7 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
             bodyClassName="!pt-0 !px-0"
           >
               {/* Toolbar — its own wrapping row so phones aren't cramped */}
-              {students.length > 0 && (
+              {students.length > 0 && !marksheetLoading && (
                 <div className="sticky top-0 z-20 px-2 sm:px-5 py-2 bg-white/90 backdrop-blur-xl flex items-center gap-1 sm:gap-1.5 flex-wrap border-b border-slate-100">
                   <button
                     onClick={() => {
@@ -1261,7 +1268,14 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
                 )}
               </AnimatePresence>
 
-                {students.length === 0 ? (
+                {marksheetLoading ? (
+                  <MarksheetSkeleton
+                    components={components}
+                    maxMarks={assessmentMaxMarks}
+                    conversionTotal={conversionTotal}
+                    rows={skeletonRowCount(classroom.members.filter(m => m.role === 'student').length, 8, 14)}
+                  />
+                ) : students.length === 0 ? (
                   <p className="text-[11px] text-slate-500 text-center py-6">No students in this classroom</p>
                 ) : (
                   (() => {
@@ -1568,6 +1582,110 @@ export default function AssessmentsTab({ classroomId, userId, userRole, classroo
   )
 }
 
+// ─── Marksheet skeleton ───────────────────────────────────────────────────────
+
+const MARKSHEET_NAME_WIDTHS = ['w-24', 'w-16', 'w-20', 'w-28', 'w-14', 'w-24', 'w-20']
+
+/** The marksheet while its students and marks load: the toolbar's pills, then
+ *  the sheet's real column headings — the split, the maximum and the
+ *  conversion are all known before the fetch — over placeholder rows of the
+ *  same height as the mark inputs that replace them. */
+function MarksheetSkeleton({ components, maxMarks, conversionTotal, rows }: {
+  components: AssessmentComponent[]
+  maxMarks: number
+  conversionTotal: number | null
+  rows: number
+}) {
+  const split = components.length > 0
+  const inputCell = (delay: number) => (
+    <div className="flex items-center justify-center">
+      <Sk className="w-[52px] sm:w-14 h-[26px] rounded-md sm:rounded-lg" delay={delay} />
+    </div>
+  )
+  return (
+    <SkeletonRegion label="Loading marksheet…">
+      {/* Toolbar: sort, components, max, convert … export, save */}
+      <div className="px-2 sm:px-5 py-2 flex items-center gap-1 sm:gap-1.5 flex-wrap border-b border-slate-100">
+        {['w-[70px]', 'w-[66px]', 'w-[104px]', 'w-[68px]', 'w-[86px]'].map((w, i) => (
+          <Sk key={i} className={`h-7 ${w} rounded-full`} delay={i * 60} />
+        ))}
+        <Sk className="ml-auto h-7 w-[78px] rounded-full" delay={300} />
+        <Sk className="h-7 w-[66px] rounded-full" delay={360} />
+      </div>
+
+      <div className="overflow-x-auto px-2 sm:px-5 pt-2 pb-1">
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="text-left text-[9px] uppercase tracking-wide text-slate-600 font-bold align-bottom">
+              <th className="hidden sm:table-cell py-1 pr-2 w-7 font-bold">#</th>
+              <th className="py-1 pr-1.5 font-bold">Student</th>
+              {components.map(c => (
+                <th key={c.id} className="py-1 px-1 sm:px-2 text-center w-[58px] sm:w-24 font-bold">
+                  <span className="min-w-0 block break-words">{c.name}</span>
+                  <span className="block font-semibold text-slate-400 normal-case tracking-normal">/{Number(c.max_marks)}</span>
+                </th>
+              ))}
+              <th className={`py-1 px-1 sm:px-2 text-center font-bold ${split ? 'w-[52px] sm:w-20 border-l border-slate-200' : 'w-[62px] sm:w-28'}`}>
+                <span className="block">{split ? 'Total' : 'Marks'}</span>
+                <span className="block font-semibold text-slate-400 normal-case tracking-normal">/{maxMarks}</span>
+              </th>
+              {conversionTotal != null && (
+                <th className="py-1 px-1 sm:px-2 text-center w-[54px] sm:w-20 font-bold text-violet-700">
+                  <span className="block">Conv.</span>
+                  <span className="block font-semibold text-violet-400 normal-case tracking-normal">/{conversionTotal}</span>
+                </th>
+              )}
+              <th className="py-1 px-1 sm:px-2 text-center w-11 sm:w-14 font-bold">%</th>
+              <th className="py-1 pl-1 sm:pl-2 text-center w-9 sm:w-12 font-bold">AB</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rows }).map((_, idx) => {
+              const d = idx * 50
+              return (
+                <tr key={idx} className={`border-b border-slate-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                  <td className="hidden sm:table-cell py-1 pr-2 align-middle">
+                    <Sk className="h-2 w-3 !rounded-full" delay={d} />
+                  </td>
+                  <td className="py-1 pr-1.5 align-middle">
+                    <div className="w-[104px] sm:w-auto flex items-center gap-1.5 sm:gap-2 min-w-0">
+                      <span className="hidden sm:inline-flex"><SkAvatar size={22} delay={d} /></span>
+                      <SkText line="h-[26px]" className={MARKSHEET_NAME_WIDTHS[idx % MARKSHEET_NAME_WIDTHS.length]} delay={d + 30} />
+                    </div>
+                  </td>
+                  {components.map((c, ci) => (
+                    <td key={c.id} className="py-1 px-1 sm:px-2 align-middle">{inputCell(d + 60 + ci * 30)}</td>
+                  ))}
+                  <td className={`py-1 px-1 sm:px-2 align-middle ${split ? 'border-l border-slate-200' : ''}`}>
+                    {split
+                      ? <div className="flex justify-center"><Sk className="h-2.5 w-5 !rounded-full" delay={d + 90} /></div>
+                      : inputCell(d + 60)}
+                  </td>
+                  {conversionTotal != null && (
+                    <td className="py-1 px-1 sm:px-2 align-middle">
+                      <div className="flex justify-center"><Sk className="h-2.5 w-5 !rounded-full" delay={d + 120} /></div>
+                    </td>
+                  )}
+                  <td className="py-1 px-1 sm:px-2 align-middle">
+                    <div className="flex justify-center"><Sk className="h-[17px] w-7 rounded-full" delay={d + 150} /></div>
+                  </td>
+                  <td className="py-1 pl-1 sm:pl-2 align-middle">
+                    <div className="flex justify-center"><Sk className="w-[21px] h-[21px] rounded-lg" delay={d + 180} /></div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-2 sm:px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <Sk className="h-9 w-full rounded-xl" delay={200} />
+      </div>
+    </SkeletonRegion>
+  )
+}
+
 // ─── Assessment Card ──────────────────────────────────────────────────────────
 
 interface AssessmentCardProps {
@@ -1577,6 +1695,8 @@ interface AssessmentCardProps {
   userId: string
   creatorName: string | null
   myMark?: AssessmentMark
+  /** True while the student's own marks are still being read. */
+  myMarkLoading: boolean
   /** The assessment's components, empty when it is marked as a single score. */
   components: AssessmentComponent[]
   /** This student's component marks, keyed by component id. */
@@ -1601,7 +1721,7 @@ interface AssessmentCardProps {
 }
 
 function AssessmentCard({
-  assessment, isStudent, isStaff, userId, creatorName, myMark, components, myComponentMarks,
+  assessment, isStudent, isStaff, userId, creatorName, myMark, myMarkLoading, components, myComponentMarks,
   editingId, editTitle, editDesc, editDate, editReportCardTitle, editMaxMarks, editSaving,
   onEdit, onDelete, onMarksheet,
   onEditTitleChange, onEditDescChange, onEditDateChange,
@@ -1746,7 +1866,8 @@ function AssessmentCard({
                 )}
               </div>
             )}
-            {isStudent && !myMark && (
+            {isStudent && !myMark && myMarkLoading && <ScoreBlockSkeleton />}
+            {isStudent && !myMark && !myMarkLoading && (
               <p className="text-xs text-slate-500 mt-2 italic">Marks not yet available</p>
             )}
           </div>

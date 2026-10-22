@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { BookOpen, Plus, X, UserMinus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Lock, LockOpen, Trash2, ExternalLink, Search, Tag, Home, MonitorPlay, Info, DownloadCloud, CheckCircle2 } from 'lucide-react'
 import SubjectPicker from '@/components/classrooms/SubjectPicker'
+import { Sk, SkText, SkAvatar, SkeletonRegion, skeletonRowCount } from '@/components/classrooms/ClassroomSkeletons'
 import { Homeroom, searchHomerooms } from '@/lib/homerooms'
 import { importHomeroomIntoClassroom, fetchSmartboardAccounts, addSmartboardToClassroom, fetchSmartboardIdsForGradeSection } from '@/lib/smartboard'
 import { fetchClassTeachersForGradeSection } from '@/lib/homeroomClassTeachers'
@@ -328,10 +329,7 @@ export default function ClassroomManagerPage() {
 
           {/* List */}
           {loading ? (
-            <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] py-16 text-center">
-              <Loader2 size={20} className="animate-spin mx-auto mb-2 text-[#A1A1AA]" />
-              <p className="text-sm text-[#71717A]">Loading classrooms…</p>
-            </div>
+            <ClassroomListSkeleton isAdmin={isAdmin} />
           ) : total === 0 && !debouncedSearch ? (
             <div className="bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)] p-12 text-center">
               <BookOpen size={36} className="text-[#D4D4D8] mx-auto mb-3" />
@@ -537,6 +535,136 @@ export default function ClassroomManagerPage() {
   )
 }
 
+// ── Skeletons ──
+// Placeholders drawn at the size of the rows they stand in for, so the list
+// and its expanded panels don't jump when the data lands.
+
+const CARD_CLASS = 'bg-white border border-[#E4E4E7] shadow-[0_1px_2px_rgba(24,24,27,.04),0_14px_30px_-24px_rgba(24,24,27,.35)]'
+const ROW_TITLE_WIDTHS = ['w-44', 'w-32', 'w-56', 'w-40', 'w-28', 'w-48']
+
+/** The classroom list before its first page arrives: the card, its real
+ *  column headings, and rows shaped like ClassroomRow. */
+function ClassroomListSkeleton({ isAdmin, rows = 8 }: { isAdmin: boolean; rows?: number }) {
+  return (
+    <SkeletonRegion label="Loading classrooms…" className={`${CARD_CLASS} overflow-hidden`}>
+      <div className="bg-[#27272A] px-3 py-1.5 hidden sm:flex items-center gap-3 text-[11.5px] font-semibold text-[#C9C9CF]">
+        <span className="w-2 flex-shrink-0" aria-hidden />
+        <span className="flex-1">Classroom</span>
+        <span className="w-32 flex-shrink-0">Subject</span>
+        <span className="w-16 flex-shrink-0">Year</span>
+        <span className="w-20 flex-shrink-0">Members</span>
+        <span className="w-32 text-right flex-shrink-0">Actions</span>
+      </div>
+      {Array.from({ length: rows }).map((_, i) => {
+        const d = i * 60
+        return (
+          <div key={i} className="flex items-center gap-3 px-3 py-2 sm:py-1.5 bg-white border-b border-[#E4E4E7] last:border-b-0">
+            <Sk className="keep-round w-2 h-2 flex-shrink-0 rounded-full" delay={d} />
+            <div className="flex-1 min-w-0">
+              <SkText line="h-[16.25px]" className={ROW_TITLE_WIDTHS[i % ROW_TITLE_WIDTHS.length]} delay={d + 30} />
+              {i % 3 !== 2 && (
+                <div className="hidden sm:block mt-0.5">
+                  <SkText line="h-[13.75px]" bar="h-2" className="w-2/5" delay={d + 60} />
+                </div>
+              )}
+              <div className="sm:hidden mt-0.5">
+                <SkText line="h-[15px]" bar="h-2" className="w-1/2" delay={d + 60} />
+              </div>
+            </div>
+            <div className="hidden sm:block w-32 flex-shrink-0"><SkText className="w-16" delay={d + 90} /></div>
+            <div className="hidden sm:block w-16 flex-shrink-0"><SkText className="w-11" delay={d + 120} /></div>
+            <div className="hidden sm:block w-20 flex-shrink-0"><SkText className="w-6" delay={d + 150} /></div>
+            <div className="flex items-center gap-0.5 sm:w-32 justify-end flex-shrink-0">
+              <Sk className="w-[26px] h-[26px] rounded-lg" delay={d + 180} />
+              {isAdmin && [0, 1, 2].map(b => (
+                <div key={b} className="hidden sm:block"><Sk className="w-[26px] h-[26px] rounded-lg" delay={d + 210 + b * 30} /></div>
+              ))}
+              <Sk className="w-[26px] h-[26px] rounded-lg" delay={d + 300} />
+            </div>
+          </div>
+        )
+      })}
+    </SkeletonRegion>
+  )
+}
+
+/** An expanded classroom's member list, before its roster is read. */
+function MemberRowsSkeleton({ rows, removable }: { rows: number; removable: boolean }) {
+  return (
+    <SkeletonRegion label="Loading members…" className="space-y-1">
+      {Array.from({ length: rows }).map((_, i) => {
+        const d = i * 60
+        return (
+          <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white border border-[#E4E4E7]">
+            <div className="flex items-center gap-3 min-w-0">
+              <SkAvatar size={26} delay={d} />
+              <div className="min-w-0">
+                <SkText line="h-[16.25px]" className={ROW_TITLE_WIDTHS[(i + 1) % ROW_TITLE_WIDTHS.length]} delay={d + 30} />
+                <SkText line="h-[13.75px]" bar="h-2" className="w-36" delay={d + 60} />
+              </div>
+              <Sk className="h-[21px] w-16 ml-1 flex-shrink-0" delay={d + 90} />
+            </div>
+            {removable && <Sk className="w-[25px] h-[25px] flex-shrink-0" delay={d + 120} />}
+          </div>
+        )
+      })}
+    </SkeletonRegion>
+  )
+}
+
+/** Homeroom search results while a search runs. */
+function HomeroomRowsSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <SkeletonRegion label="Searching homerooms…" className="space-y-1">
+      {Array.from({ length: rows }).map((_, i) => {
+        const d = i * 60
+        return (
+          <div key={i} className="flex items-center gap-2 py-1.5 px-2 border border-[#E4E4E7] rounded">
+            <div className="flex-1 min-w-0">
+              <SkText line="h-5" bar="h-3" className="w-12" delay={d} />
+              <SkText line="h-[16.5px]" bar="h-2" className={i % 2 ? 'w-28' : 'w-36'} delay={d + 30} />
+            </div>
+            <Sk className="keep-round h-6 w-[68px] rounded-full flex-shrink-0" delay={d + 60} />
+          </div>
+        )
+      })}
+    </SkeletonRegion>
+  )
+}
+
+/** Smart board rows — the linked boards (`linked`) or the picker's accounts —
+ *  before they are read: the indigo tile, name and email, and the trailing
+ *  badge + remove pair or Add button. */
+function BoardRowsSkeleton({ rows, linked, label }: { rows: number; linked: boolean; label: string }) {
+  return (
+    <SkeletonRegion label={label} className="space-y-1">
+      {Array.from({ length: rows }).map((_, i) => {
+        const d = i * 60
+        return (
+          <div
+            key={i}
+            className={`flex items-center gap-2.5 rounded-lg border bg-white px-2.5 ${linked ? 'border-indigo-100 py-2' : 'border-[#E4E4E7] py-1.5'}`}
+          >
+            <Sk className={`${linked ? 'h-8 w-8' : 'h-7 w-7'} flex-shrink-0 rounded-lg`} delay={d} />
+            <div className="min-w-0 flex-1">
+              <SkText line="h-5" bar="h-3" className={i % 2 ? 'w-24' : 'w-32'} delay={d + 30} />
+              <SkText line="h-[16.5px]" bar="h-2" className="w-40" delay={d + 60} />
+            </div>
+            {linked ? (
+              <>
+                <Sk className="h-[19px] w-12 flex-shrink-0 rounded" delay={d + 90} />
+                <Sk className="w-[25px] h-[25px] flex-shrink-0" delay={d + 120} />
+              </>
+            ) : (
+              <Sk className="h-6 w-[52px] flex-shrink-0 rounded-md" delay={d + 90} />
+            )}
+          </div>
+        )
+      })}
+    </SkeletonRegion>
+  )
+}
+
 // ── Helpers ──
 
 const ROLE_BADGE: Record<string, string> = {
@@ -694,9 +822,10 @@ function ClassroomRow({
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                     <div className="max-h-[480px] overflow-y-auto space-y-1 mt-1">
                       {!expandedDetails ? (
-                        <div className="flex items-center gap-2 text-sm text-[#71717A] px-3 py-3">
-                          <Loader2 size={14} className="animate-spin text-[#A1A1AA]" /> Loading members…
-                        </div>
+                        <MemberRowsSkeleton
+                          rows={skeletonRowCount(classroom.member_count, 4, 8)}
+                          removable={isAdmin && !closed}
+                        />
                       ) : expandedDetails.members.length === 0 ? (
                         <p className="text-sm text-[#71717A] px-3 py-3">No members yet</p>
                       ) : (
@@ -841,9 +970,7 @@ function HomeroomImport({ classroomId, onImported }: { classroomId: string; onIm
 
           <div className="max-h-48 overflow-y-auto space-y-1">
             {searching ? (
-              <div className="flex items-center gap-2 text-xs text-[#71717A] py-2 px-1">
-                <Loader2 size={13} className="animate-spin" /> Searching…
-              </div>
+              <HomeroomRowsSkeleton />
             ) : results.length === 0 ? (
               <p className="text-xs text-[#A1A1AA] py-2 px-1">No homerooms found.</p>
             ) : (
@@ -943,9 +1070,7 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
 
       <div className="p-3 space-y-2">
         {!loaded ? (
-          <div className="flex items-center gap-2 text-xs text-[#71717A] py-1">
-            <Loader2 size={13} className="animate-spin" /> Loading…
-          </div>
+          <BoardRowsSkeleton rows={1} linked label="Loading smart boards…" />
         ) : boards.length === 0 ? (
           <p className="text-[11px] text-[#A1A1AA]">
             No smart board in this classroom yet. Importing a homeroom brings its board along, or add one directly.
@@ -1003,9 +1128,7 @@ function ClassroomSmartboards({ classroomId, boards, loaded, onChanged, onRemove
 
             <div className="max-h-52 space-y-1 overflow-y-auto">
               {loadingAccounts ? (
-                <div className="flex items-center gap-2 px-1 py-2 text-xs text-[#71717A]">
-                  <Loader2 size={13} className="animate-spin" /> Loading accounts…
-                </div>
+                <BoardRowsSkeleton rows={3} linked={false} label="Loading smart board accounts…" />
               ) : available.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-[#A1A1AA]">
                   {accounts.length === 0

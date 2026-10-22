@@ -27,6 +27,9 @@ import ModalShell from '@/components/ui/ModalShell'
 import { FieldLabel, ToggleCard, PointsPicker, INPUT_CLASS } from '@/components/classrooms/WorkFormKit'
 import { safeHref } from '@/lib/safeUrl'
 import { askConfirm, tellUser, SHEET_BTN_GHOST, SHEET_BTN_PRIMARY } from '@/components/ui/sheet'
+import {
+  FolderListSkeleton, ClassworkRowsSkeleton, StudentStatusRowsSkeleton, LoadingFrame, skeletonRowCount,
+} from '@/components/classrooms/ClassroomSkeletons'
 
 interface FolderFileViewProps {
   classroomId: string
@@ -140,7 +143,7 @@ function FolderItem({ canManage, folder, onDragEnd, children }: {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FolderFileView({
-  classroomId, userId, userRole, type, classroom: _classroom,
+  classroomId, userId, userRole, type, classroom,
 }: FolderFileViewProps) {
   const isStudent  = userRole === 'student'
   const isStaff    = !isStudent
@@ -159,6 +162,7 @@ export default function FolderFileView({
 
   // Staff per-folder progress
   const [students,              setStudents]              = useState<(ClassroomMember & { user: UserProfile })[]>([])
+  const [studentsLoaded,        setStudentsLoaded]        = useState(false)
   const [folderAllProgress,     setFolderAllProgress]     = useState<Record<string, FileProgress[]>>({})
   const [showFolderProgress,    setShowFolderProgress]    = useState<string | null>(null)
 
@@ -172,6 +176,7 @@ export default function FolderFileView({
     submissions: FileSubmission[]
   }>({ file: null, progress: [], submissions: [] })
   const [trackingUpdating, setTrackingUpdating] = useState<string | null>(null)
+  const [trackingLoading,  setTrackingLoading]  = useState(false)
   const [showSubmit,      setShowSubmit]      = useState<string | null>(null)
   const [submitContent,   setSubmitContent]   = useState('')
   const [submitFile,      setSubmitFile]      = useState<File | null>(null)
@@ -220,7 +225,7 @@ export default function FolderFileView({
 
   useEffect(() => {
     if (isStaff) {
-      fetchStudentMembers(classroomId).then(setStudents)
+      fetchStudentMembers(classroomId).then(list => { setStudents(list); setStudentsLoaded(true) })
     }
   }, [isStaff, classroomId])
 
@@ -462,11 +467,13 @@ export default function FolderFileView({
     const file = Object.values(folderFiles).flat().find(f => f.id === fileId) ?? null
     setShowTracking(fileId)
     setTrackingData({ file, progress: [], submissions: [] })
+    setTrackingLoading(true)
     const [progress, submissions] = await Promise.all([
       fetchFileProgress(fileId),
       fetchSubmissions(fileId),
     ])
     setTrackingData({ file, progress, submissions })
+    setTrackingLoading(false)
   }
 
   const handleSubmitWork = async (fileId: string) => {
@@ -542,14 +549,7 @@ export default function FolderFileView({
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="spinner mx-auto mb-3" />
-        <p className="text-sm text-slate-600">Loading content...</p>
-      </div>
-    )
-  }
+  if (loading) return <FolderListSkeleton canManage={canManage} />
 
   return (
     <div className="space-y-4">
@@ -622,6 +622,9 @@ export default function FolderFileView({
           {folders.map((folder) => {
             const isExpanded = expandedFolder === folder.id
             const files      = folderFiles[folder.id] || []
+            // Not read yet (the folder was only just opened) — as opposed to
+            // read and empty, which says so.
+            const filesLoaded = folderFiles[folder.id] !== undefined
             const summary    = isExpanded ? getFolderSummary(folder.id) : null
 
             return (
@@ -806,7 +809,9 @@ export default function FolderFileView({
                         )}
 
                         {/* File List */}
-                        {files.length === 0 && (
+                        {!filesLoaded ? (
+                          <ClassworkRowsSkeleton isStudent={isStudent} />
+                        ) : files.length === 0 && (
                           <p className="text-xs text-slate-600 text-center py-4 italic">No classwork in this folder yet</p>
                         )}
 
@@ -1075,7 +1080,13 @@ export default function FolderFileView({
                 </div>
               )}
 
-              {students.length === 0 ? (
+              {/* Until both the roster and this file's progress are in, every
+                  row would read "Not done" — so they shimmer instead. */}
+              {trackingLoading || !studentsLoaded ? (
+                <StudentStatusRowsSkeleton
+                  rows={skeletonRowCount(students.length || classroom.members.filter(m => m.role === 'student').length)}
+                />
+              ) : students.length === 0 ? (
                 <p className="text-sm text-slate-600 text-center py-6">No students in this classroom</p>
               ) : (
                 <div className="grid sm:grid-cols-2 sm:gap-x-3">
@@ -1168,7 +1179,12 @@ export default function FolderFileView({
                 if (isDoc) {
                   return (
                     <div className="space-y-2">
-                      <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`} className="w-full h-64 rounded-xl border border-slate-200" title="Document preview" />
+                      <LoadingFrame
+                        key={url}
+                        src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+                        className="w-full h-64 rounded-xl border border-slate-200"
+                        title="Document preview"
+                      />
                       <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-xs font-medium">
                         <ExternalLink size={12} /> Open in new tab
                       </a>
@@ -1437,7 +1453,12 @@ export default function FolderFileView({
                 </button>
               </div>
               <div className="flex-1 px-4 pb-4" onClick={e => e.stopPropagation()}>
-                <iframe src={docViewerUrl} className="w-full h-full rounded-xl shadow-2xl bg-white" title="Document" />
+                <LoadingFrame
+                  key={docViewerUrl}
+                  src={docViewerUrl}
+                  className="w-full h-full rounded-xl shadow-2xl bg-white"
+                  title="Document"
+                />
               </div>
             </motion.div>
           )}

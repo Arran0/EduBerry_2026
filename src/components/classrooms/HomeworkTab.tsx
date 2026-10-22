@@ -30,6 +30,7 @@ import {
   getNextSmartboardStatus,
 } from '@/lib/smartboard'
 import { safeHref } from '@/lib/safeUrl'
+import { StudentStatusRowsSkeleton, skeletonRowCount } from '@/components/classrooms/ClassroomSkeletons'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ interface HomeworkTabProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkTabProps) {
+export default function HomeworkTab({ classroomId, userId, userRole, classroom }: HomeworkTabProps) {
   const isStudent    = userRole === 'student'
   const canManage    = !isStudent
 
@@ -858,9 +859,9 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             bodyClassName="!px-3 !py-2"
           >
             {loadingTracking ? (
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 py-8">
-                <Loader2 size={13} className="animate-spin" /> Loading…
-              </div>
+              <StudentStatusRowsSkeleton
+                rows={skeletonRowCount(classroom.members.filter(m => m.role === 'student').length)}
+              />
             ) : fileTrackingData.length === 0 ? (
               <p className="text-xs text-slate-500 py-8 px-4 text-center">This classroom has no students yet.</p>
             ) : (
