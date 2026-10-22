@@ -210,17 +210,19 @@ function WorkspaceDeck({ picker, status, actions, counts, active, onOpen }: Deck
   onOpen: (e: Editor) => void
 }) {
   return (
-    // z-20 on the deck and on the picker row: the picker's menu opens down over
-    // the editor tiles and whatever follows the deck, and must stay on top.
+    // The picker's menu opens down over the editor tiles and whatever follows
+    // the deck, so the deck sits above the page and the picker row above the
+    // tiles. `!` because `.fx-deck > *` gives every row z-index 3, and the
+    // tiles come later in the page, so they would win the tie.
     <section className="fx-deck fx-bleed min-w-0 z-20">
-      <div className="relative z-20 flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 sm:px-4 pt-3 pb-2.5">
+      <div className="!z-20 flex flex-wrap items-center gap-x-3 gap-y-2.5 px-3 sm:px-4 pt-3 pb-2.5">
         <div className="flex items-center gap-2 min-w-0 flex-1 basis-[280px]">
           <div className="min-w-0 flex-1 lg:max-w-[24rem]">{picker}</div>
           {status}
         </div>
         {actions && <div className="flex w-full sm:w-auto items-center gap-1.5">{actions}</div>}
       </div>
-      <div className="relative z-0 grid grid-cols-4 gap-1.5 sm:gap-2 px-2.5 sm:px-3 pb-2.5 sm:pb-3">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 px-2.5 sm:px-3 pb-2.5 sm:pb-3">
         {EDITORS.map((e) => (
           <EditorTile
             key={e.key}
