@@ -803,7 +803,9 @@ describe('periods construction could not place', () => {
       expect(r.unplacedCount).toBe(0)
       expect(r.entries).toHaveLength(100)
     }
-  })
+    // Five generations with an 8 s budget each: ~4 s on a laptop, over 6 s on
+    // a slow runner — past vitest's 5 s default.
+  }, 60_000)
 
   it('does not break the week it repairs', () => {
     const r = generateTimetable({ ...tightWeek(10), seed: 42 }, { budgetMs: 8000 })

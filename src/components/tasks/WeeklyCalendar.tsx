@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { AnimatePresence } from 'framer-motion'
-import { Plus, AlertTriangle, Star, HelpCircle, FileSpreadsheet, Maximize2, ChevronDown, ChevronLeft, ChevronRight, CalendarDays, Loader2 } from 'lucide-react'
+import { Plus, AlertTriangle, Star, HelpCircle, FileSpreadsheet, Maximize2, ChevronDown, ChevronLeft, ChevronRight, CalendarDays, CalendarClock, Loader2 } from 'lucide-react'
 import TeamMemberSelector from './TeamMemberSelector'
 import {
   fetchCalendarData, fetchOverdueTasks, fetchBonusTasksForCalendar, createTask, createTimetableTasks, Task, TaskWithDetails,
@@ -427,29 +427,32 @@ export default function WeeklyCalendar({
   }, [targetUserId, userId, handleNewTaskCreated])
 
   // ── Suggestions from the published timetable ──────────────────────────────
-  // An empty week of someone with lessons in the timetable offers, once per
-  // visit, to put those lessons in as unnamed tasks. A week that is over is
-  // left alone; one under way is offered from today.
+  // Opening an empty week asks, once per visit, whether to put the viewed
+  // person's timetable lessons in as unnamed tasks; the bar above the grid
+  // keeps the offer (or says why there is none) for as long as the week stays
+  // empty. A week that is over is left alone; one under way is offered from
+  // today.
   const canSuggest = ['teacher', 'coordinator', 'principal', 'admin'].includes(profile.role)
   const weekKey = `${targetUserId}|${formatDate(weekStart)}`
-  const dismissKey = `tasks_tt_suggest_skip_${weekKey}`
-  useEffect(() => {
-    if (!canSuggest || loading || !timetable || tasksKey !== weekKey || tasks.length > 0) return
-    if (askedWeeks.current.has(weekKey)) return
-    askedWeeks.current.add(weekKey)
-    try { if (localStorage.getItem(dismissKey)) return } catch { /* private mode: ask anyway */ }
+  const weekEmpty = canSuggest && !loading && tasksKey === weekKey && tasks.length === 0
+  const offer = useMemo(() => {
+    if (!weekEmpty || !timetable) return null
     const dates = weekDays.map(d => d.full).filter(d => d >= todayStr)
-    if (dates.length === 0) return
-    const periods = periodsForDates(timetable, targetUserId, dates)
-    if (periods.length > 0) setSuggestion({ key: weekKey, periods, fromToday: dates.length < 7 })
-  }, [canSuggest, loading, timetable, tasksKey, weekKey, tasks.length, dismissKey, weekDays, todayStr, targetUserId])
+    if (dates.length === 0) return null
+    return { key: weekKey, periods: periodsForDates(timetable, targetUserId, dates), fromToday: dates.length < 7 }
+  }, [weekEmpty, timetable, weekDays, todayStr, weekKey, targetUserId])
+
+  useEffect(() => {
+    if (!offer || offer.periods.length === 0 || askedWeeks.current.has(offer.key)) return
+    askedWeeks.current.add(offer.key)
+    setSuggestion(offer)
+  }, [offer])
 
   // Moving to another week or person drops a question about the last one.
   useEffect(() => { setSuggestion(s => (s && s.key !== weekKey ? null : s)) }, [weekKey])
 
   const dismissSuggestion = () => {
     if (suggestBusy) return
-    try { localStorage.setItem(dismissKey, '1') } catch { /* nothing to remember it in */ }
     setSuggestion(null)
     setSuggestError(null)
   }
@@ -470,6 +473,7 @@ export default function WeeklyCalendar({
   }
   const viewedFirstName = teamMembers?.find(m => m.id === targetUserId)?.full_name?.split(' ')[0]
   const viewedName = targetUserId === userId ? 'your' : viewedFirstName ? `${viewedFirstName}’s` : 'their'
+  const viewedWho = targetUserId === userId ? 'you' : viewedFirstName ?? 'them'
 
   const weekLabel = weekDays[0].month === weekDays[6].month
     ? `${weekDays[0].date} – ${weekDays[6].date} ${weekDays[6].month}`
@@ -587,6 +591,26 @@ export default function WeeklyCalendar({
           <div className="flex justify-end min-w-0">{picker}</div>
         </div>
       </div>
+
+      {/* An empty week: the timetable offer, or why there isn't one. */}
+      {offer && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] border border-amber-200/80 bg-amber-50/80 px-3.5 py-2">
+          <CalendarClock size={16} className="text-amber-600 flex-shrink-0" />
+          <p className="flex-1 min-w-0 basis-[12rem] text-[13px] leading-snug text-slate-700">
+            {offer.periods.length > 0
+              ? <>Nothing planned this week. The published timetable has <span className="font-semibold text-slate-800">{offer.periods.length} period{offer.periods.length === 1 ? '' : 's'}</span> for {viewedWho}{offer.fromToday ? ' from today' : ''}.</>
+              : timetable && timetable.cells.length === 0
+                ? <>Nothing planned this week, and the published timetable has no lessons for {viewedWho} to fill it from.</>
+                : <>Nothing planned this week, and the published timetable has no lessons for {viewedWho} {offer.fromToday ? 'in the rest of it' : 'in it'}.</>}
+          </p>
+          {offer.periods.length > 0 && (
+            <Btn tone="primary" onClick={() => { setSuggestError(null); setSuggestion(offer) }} className="flex-shrink-0">
+              <CalendarClock size={14} />
+              Fill from timetable
+            </Btn>
+          )}
+        </div>
+      )}
 
       {/* Day view: the seven days to pick from, then that day's periods. */}
       {showDay && !loading && (
