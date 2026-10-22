@@ -7,7 +7,7 @@
  * to the run it belongs to.
  */
 
-import { supabase } from '../supabase'
+import { authHeader, supabase } from '../supabase'
 
 export type SourceKind = 'driver_app' | 'gps_device' | 'vendor_api'
 
@@ -134,6 +134,28 @@ export async function rotateSourceSecret(
     .eq('id', sourceId)
   if (keyErr) { console.error('rotateSourceSecret key failed:', keyErr); return { success: false, error: keyErr.message } }
   return { success: true, keyId, secret }
+}
+
+/**
+ * Dry-run a device's key, secret and gateway format against our own ingest
+ * endpoint. Nothing is stored and the device's health is left alone.
+ */
+export async function testSource(
+  sourceId: string,
+  at: { lat: number; lng: number },
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/transport/devices/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ sourceId, lat: at.lat, lng: at.lng }),
+    })
+    const json = await res.json().catch(() => ({}))
+    return json.success ? { success: true } : { success: false, error: json.error ?? 'Test failed' }
+  } catch (e) {
+    console.error('testSource failed:', e)
+    return { success: false, error: 'Network error' }
+  }
 }
 
 /** How healthy a device looks, in words rather than a timestamp. */

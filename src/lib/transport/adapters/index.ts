@@ -110,3 +110,26 @@ const ADAPTERS: Record<string, TelemetryAdapter> = {
 export function resolveAdapter(slug?: string | null): TelemetryAdapter {
   return ADAPTERS[slug ?? ''] ?? generic
 }
+
+/**
+ * One stationary fix in the shape the named gateway forwards, for the admin
+ * panel's "Send test". Kept beside the parsers so a change to one is a change
+ * to the other.
+ */
+export function sampleBody(slug: string | null, externalId: string, lat: number, lng: number): unknown {
+  const at = new Date().toISOString()
+  switch (resolveAdapter(slug).slug) {
+    case 'traccar':
+      return {
+        device: { id: 0, uniqueId: externalId, name: 'EduBerry test' },
+        position: { deviceTime: at, fixTime: at, latitude: lat, longitude: lng, speed: 0, course: 0, attributes: {} },
+      }
+    case 'flespi':
+      return [{
+        ident: externalId, timestamp: Math.floor(Date.now() / 1000),
+        'position.latitude': lat, 'position.longitude': lng, 'position.speed': 0,
+      }]
+    default:
+      return { externalId, lat, lng, recordedAt: at }
+  }
+}

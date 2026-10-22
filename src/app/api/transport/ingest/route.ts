@@ -100,6 +100,14 @@ export async function POST(request: NextRequest) {
     return true
   })
 
+  // A dry run from the GPS panel's "Send test": authenticated and parsed exactly
+  // like a real batch, but nothing is stored. A test must never attach to a live
+  // run and notify parents, nor make a device that has never connected look
+  // healthy.
+  if (request.headers.get('x-transport-test') === '1') {
+    return NextResponse.json({ success: true, test: true, parsed: parsed.length, usable: usable.length, rejected })
+  }
+
   if (usable.length === 0) {
     // Always 202: devices retry forever on an error status, so one malformed
     // batch must never wedge the stream.

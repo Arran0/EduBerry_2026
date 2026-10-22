@@ -3,14 +3,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   MessageCircle, Radio, Plus, Trash2, KeyRound, Copy, Check, Loader2, ExternalLink,
-  CreditCard, Download, Globe, RefreshCw, Search, Ban,
+  CreditCard, Download, Globe, RefreshCw, Search, Ban, Send,
 } from 'lucide-react'
 import { ADMIN, SegTabs, SHEET, Sheet, EmptyRow } from '../glassAdmin'
 import { supabase } from '@/lib/supabase'
 import {
   createSource, deleteSource, fetchSources, rotateSourceSecret, sourceHealth,
-  updateSource, type SourceKind, type TelemetrySource,
+  testSource, updateSource, type SourceKind, type TelemetrySource,
 } from '@/lib/transport/devices'
+import { fetchSchoolLocation } from '@/lib/transport/settings'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import {
   CREDENTIAL_LABELS, fetchCredentials, issueCredential, registerCard, revokeCredential,
@@ -170,6 +171,29 @@ export function DevicesPanel() {
     label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device',
   })
   const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ id: string; ok: boolean; message: string } | null>(null)
+
+  // Nothing is stored, so any real coordinate will do; the school's is the one
+  // every deployment already has.
+  const runTest = async (s: TelemetrySource) => {
+    setTesting(s.id); setTestResult(null)
+    const school = await fetchSchoolLocation()
+    if (!school) {
+      setTestResult({ id: s.id, ok: false, message: 'Set the school location first (Configuration → School location).' })
+      setTesting(null)
+      return
+    }
+    const res = await testSource(s.id, { lat: school.lat, lng: school.lng })
+    setTestResult({
+      id: s.id,
+      ok: res.success,
+      message: res.success
+        ? 'Test passed: the key, secret and data format all work. Health changes only when the real device reports.'
+        : `Test failed: ${res.error}`,
+    })
+    setTesting(null)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -291,7 +315,7 @@ export function DevicesPanel() {
             <span className={`${SHEET.headCell} flex-1`}>Source</span>
             <span className={`${SHEET.headCell} w-36`}>Bus</span>
             <span className={`${SHEET.headCell} w-32`}>Health</span>
-            <span className={`${SHEET.headCell} w-24 text-right`}>Actions</span>
+            <span className={`${SHEET.headCell} w-32 text-right`}>Actions</span>
           </>
         }
       >
@@ -322,6 +346,11 @@ export function DevicesPanel() {
                     {s.last_error && (
                       <p className="text-[11px] text-rose-600 truncate">{s.last_error}</p>
                     )}
+                    {testResult?.id === s.id && (
+                      <p className={`text-[11px] ${testResult.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {testResult.message}
+                      </p>
+                    )}
                   </div>
                   <span className="w-36 text-xs text-[#475264] hidden sm:block truncate">
                     {vehicle ? vehicleLabel(vehicle) : 'Not assigned'}
@@ -331,7 +360,15 @@ export function DevicesPanel() {
                   }`}>
                     {health.label}
                   </span>
-                  <div className="w-24 flex items-center justify-end gap-1 flex-shrink-0">
+                  <div className="w-32 flex items-center justify-end gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => runTest(s)}
+                      disabled={testing === s.id}
+                      className="p-1.5 rounded-md text-[#94A0B1] hover:text-[#13306B] hover:bg-[#F1F4F8] transition-colors disabled:opacity-50"
+                      aria-label="Send test" title="Send test"
+                    >
+                      {testing === s.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    </button>
                     <button
                       onClick={async () => {
                         if (!confirm(`Rotate the key for “${s.label}”? The gateway will stop reporting until you paste the new one.`)) return
