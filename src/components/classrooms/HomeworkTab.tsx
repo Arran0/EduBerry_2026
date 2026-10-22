@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import {
   Plus, Loader2, Star, ShieldCheck, Send, ChevronRight,
@@ -12,7 +12,7 @@ import {
   ClassroomWithDetails, ClassroomFile, ClassroomFolder,
   FileStatus, FileProgress,
   fetchAllFilesForClassroom, fetchProgressForStudent,
-  fetchFileProgress, updateFileProgress, fetchProfilesByIds,
+  fetchFileProgress, updateFileProgress, fetchProfilesByIds, fetchStudentMembers,
 } from '@/lib/classrooms'
 import SmartboardHomeworkForm from '@/components/smartboard/SmartboardHomeworkForm'
 import ClassroomFileEditForm from '@/components/classrooms/ClassroomFileEditForm'
@@ -34,6 +34,11 @@ import { safeHref } from '@/lib/safeUrl'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type WorkFile = ClassroomFile & { folder: ClassroomFolder }
+
+// The words the Content tab uses for the same statuses.
+const FILE_STATUS_LABEL: Record<FileStatus, string> = {
+  not_done: 'Not done', partial: 'Partial', done: 'Checking', completed: 'Completed',
+}
 
 /** One dated row on the calendar — homework or a classwork file. */
 type CalendarEntry =
@@ -171,11 +176,37 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
   useEffect(() => { load() }, [load])
 
   // ── File tracking ──────────────────────────────────────────────────────────
+  // The class list, read once per visit to this tab: every tracking popup
+  // starts from it, so each student appears by name — including those who
+  // have not started, whom the progress table holds no row for at all.
+  const rosterRef = useRef<Promise<Awaited<ReturnType<typeof fetchStudentMembers>>> | null>(null)
+
   const openFileTracking = async (fileId: string) => {
     setTrackingFileId(fileId)
     setLoadingTracking(true)
-    const data = await fetchFileProgress(fileId)
-    setFileTrackingData(data)
+    rosterRef.current ??= fetchStudentMembers(classroomId)
+    const [progress, roster] = await Promise.all([fetchFileProgress(fileId), rosterRef.current])
+
+    // Progress rows carry no profile, which is why this popup used to read
+    // "Student" with a blank avatar on every line. Join them to the roster.
+    const byStudent = new Map(progress.map(p => [p.student_id, p]))
+    const rows: FileProgress[] = roster.map(m => ({
+      ...(byStudent.get(m.user_id) ?? {
+        id: `pending-${m.user_id}`, file_id: fileId, student_id: m.user_id,
+        status: 'not_done' as FileStatus, updated_at: '',
+      }),
+      student: m.user,
+    }))
+    // Someone who has since left the class still keeps the progress they made.
+    const inRoster = new Set(roster.map(m => m.user_id))
+    const leavers = progress.filter(p => !inRoster.has(p.student_id))
+    if (leavers.length > 0) {
+      const profiles = await fetchProfilesByIds(leavers.map(p => p.student_id), 'id, full_name, email, avatar_url')
+      for (const p of leavers) rows.push({ ...p, student: profiles[p.student_id] })
+    }
+    rows.sort((a, b) => (a.student?.full_name ?? '').localeCompare(b.student?.full_name ?? ''))
+
+    setFileTrackingData(rows)
     setLoadingTracking(false)
   }
 
@@ -813,6 +844,15 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
             size="2xl"
             zClass="z-[60]"
             title="Student progress"
+            subtitle={(() => {
+              const file = files.find(f => f.id === trackingFileId)
+              const title = file?.title
+              if (loadingTracking || fileTrackingData.length === 0) return title
+              // "Done" still waits on a staff check when the classwork asks for one.
+              const finished = fileTrackingData.filter(p =>
+                p.status === 'completed' || (p.status === 'done' && !file?.requires_check)).length
+              return `${title ? `${title}: ` : ''}${finished} of ${fileTrackingData.length} finished`
+            })()}
             icon={<Users size={15} />}
             iconClassName="bg-indigo-100 text-indigo-600"
             bodyClassName="!px-3 !py-2"
@@ -822,20 +862,20 @@ export default function HomeworkTab({ classroomId, userId, userRole }: HomeworkT
                 <Loader2 size={13} className="animate-spin" /> Loading…
               </div>
             ) : fileTrackingData.length === 0 ? (
-              <p className="text-xs text-slate-500 py-8 px-4 text-center">No student progress recorded yet.</p>
+              <p className="text-xs text-slate-500 py-8 px-4 text-center">This classroom has no students yet.</p>
             ) : (
               <div className="grid sm:grid-cols-2 sm:gap-x-3">
                 {fileTrackingData.map(p => (
                   <div key={p.student_id} className="flex items-center gap-1.5 px-1.5 py-1 border-b border-slate-50">
-                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={22} />
-                    <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 break-words">{p.student?.full_name ?? 'Student'}</p>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize flex-shrink-0 ${
+                    <Avatar avatarUrl={p.student?.avatar_url} name={p.student?.full_name ?? ''} email={p.student?.email ?? ''} size={22} userId={p.student_id} />
+                    <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 break-words">{p.student?.full_name ?? 'Former student'}</p>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${
  p.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
  : p.status === 'done' ? 'bg-yellow-100 text-yellow-700'
  : p.status === 'partial' ? 'bg-orange-100 text-orange-600'
  : 'bg-slate-100 text-slate-500'
  }`}>
-                      {p.status.replace('_', ' ')}
+                      {FILE_STATUS_LABEL[p.status]}
                     </span>
                   </div>
                 ))}
