@@ -20,6 +20,7 @@ import {
   Share2,
   Check,
   MoreHorizontal,
+  BellRing,
 } from 'lucide-react'
 import {
   AnnouncementWithDetails,
@@ -30,12 +31,19 @@ import {
 } from '@/lib/announcements'
 import Avatar from '@/components/Avatar'
 import ImageGallery from './ImageGallery'
+import dynamic from 'next/dynamic'
+
+// WhatsApp reminders for this announcement — fetched only when opened.
+const AnnouncementRemindersModal = dynamic(
+  () => import('@/components/whatsapp/reminders/AnnouncementRemindersModal'), { ssr: false })
 
 interface AnnouncementCardProps {
   announcement: AnnouncementWithDetails
   canDelete: boolean
   /** The announcer (creator) — and principal/admin — may pin/unpin */
   canPin?: boolean
+  /** The announcer — and principal/admin — may WhatsApp its student audience */
+  canRemind?: boolean
   onDelete: (id: string) => void
   onPinChange?: (id: string, pinned: boolean) => void
   userId: string
@@ -136,6 +144,7 @@ export default function AnnouncementCard({
   announcement,
   canDelete,
   canPin = false,
+  canRemind = false,
   onDelete,
   onPinChange,
   userId,
@@ -154,6 +163,7 @@ export default function AnnouncementCard({
   const [pinError, setPinError]       = useState<string | null>(null)
   const [shared, setShared]           = useState(false)
   const [menuOpen, setMenuOpen]       = useState(false)
+  const [remindOpen, setRemindOpen]   = useState(false)
 
   // Long-content handling: fixed-height scroll container + optional expand
   const contentRef = useRef<HTMLDivElement>(null)
@@ -555,6 +565,18 @@ export default function AnnouncementCard({
                   <span className="hidden sm:inline">{shared ? 'Link copied' : 'Share'}</span>
                 </motion.button>
 
+                {canRemind && (
+                  <motion.button
+                    onClick={e => { e.stopPropagation(); setRemindOpen(true) }}
+                    whileTap={{ scale: 0.88 }}
+                    aria-label="WhatsApp reminders for this announcement"
+                    className={`${actionBtn} text-slate-400 hover:text-violet-600 hover:bg-violet-50`}
+                  >
+                    <BellRing size={16} strokeWidth={2.2} />
+                    <span className="hidden sm:inline">Remind</span>
+                  </motion.button>
+                )}
+
                 {canPin && (
                   <motion.button
                     onClick={handleTogglePin}
@@ -582,6 +604,15 @@ export default function AnnouncementCard({
           </div>
         </div>
       </motion.article>
+
+      <AnimatePresence>
+        {remindOpen && (
+          <AnnouncementRemindersModal
+            announcement={{ id: announcement.id, title: announcement.title }}
+            onClose={() => setRemindOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Delete confirmation portal */}
       {typeof document !== 'undefined' && createPortal(

@@ -337,6 +337,7 @@ export default function AnnouncementsList({
           )
         }
         canPin={mayPin(ann)}
+        canRemind={mayPin(ann)}
         onDelete={handleDelete}
         onPinChange={handlePinChange}
         userId={userId}

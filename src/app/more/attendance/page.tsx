@@ -8,7 +8,7 @@ import ProtectedLayout from '@/components/ProtectedLayout'
 import PageBanner from '@/components/PageBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { isStaffRole } from '@/lib/supabase'
-import { ClipboardList, Home, CheckCircle2, BookOpen, Briefcase, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search, Check } from 'lucide-react'
+import { ClipboardList, Home, CheckCircle2, BookOpen, Briefcase, AlertCircle, Clock, MinusCircle, Plane, CalendarDays, ChevronLeft, ChevronsRight, Users, X, Search, Check, BellRing } from 'lucide-react'
 import { ATTENDANCE_BANNER_DEFAULT } from '@/lib/pageConfig'
 import dynamic from 'next/dynamic'
 import DonutChart from '@/components/charts/DonutChart'
@@ -26,6 +26,8 @@ const StudentLeaveModal = dynamic(() => import('@/components/leave/StudentLeaveM
     </div>
   ),
 })
+// WhatsApp absence reminders — only fetched when somebody opens them.
+const AttendanceRemindersModal = dynamic(() => import('@/components/whatsapp/reminders/AttendanceRemindersModal'), { ssr: false })
 import Avatar from '@/components/Avatar'
 import StudentCalendarModal from '@/components/attendance/StudentCalendarModal'
 import { MonthCalendarSkeleton, STUDENT_CAL_LEGEND } from '@/components/attendance/MonthCalendarFrame'
@@ -846,6 +848,8 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
   const [pendingScroll, setPendingScroll] = useState<string | null>(null)
   // One list at a time in the student view, the same way the staff report works.
   const [activeTab, setActiveTab] = useState<ReportSection>('absent')
+  // The WhatsApp reminder popup for today's absentees.
+  const [remindersOpen, setRemindersOpen] = useState(false)
 
   // ── Search ────────────────────────────────────────────────────────────────
   // `query` is what is in the box; `searchTerm` is the same text once typing
@@ -1213,6 +1217,15 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
             ]}
           />
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            {/* Always about today, whichever day the report is showing:
+                "has not arrived as of now" is only true of today. */}
+            <button
+              onClick={() => setRemindersOpen(true)}
+              title="WhatsApp the families of today's absentees"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-semibold text-white shadow-sm transition active:scale-[0.97] bg-gradient-to-br from-[color:var(--page-gradient-from,#7c3aed)] to-[color:var(--page-gradient-to,#6d28d9)]"
+            >
+              <BellRing size={14} /> <span className="hidden sm:inline">Reminders</span>
+            </button>
             <DateToggler
               value={date}
               onChange={changeDate}
@@ -1486,6 +1499,10 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {remindersOpen && <AttendanceRemindersModal onClose={() => setRemindersOpen(false)} />}
+      </AnimatePresence>
     </section>
   )
 }

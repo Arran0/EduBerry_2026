@@ -129,7 +129,12 @@ async function recordStatus(
 
   await db.from('notification_outbox').update(patch).eq('id', row.id)
   if (Object.keys(logPatch).length > 0) {
+    // The row belongs to one module's log or the other; updating both by
+    // outbox id is a no-op on the one that does not hold it.
     await db.from('fee_reminder_log').update(logPatch).eq('outbox_id', row.id)
+    await db.from('wa_reminder_log').update(
+      status.status === 'failed' ? { ...logPatch, error: patch.last_error } : logPatch,
+    ).eq('outbox_id', row.id)
   }
 }
 

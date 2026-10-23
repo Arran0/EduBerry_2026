@@ -22,7 +22,7 @@ import dynamic from 'next/dynamic'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertTriangle, BarChart3, Bus, CalendarRange, Check, CheckCheck, ChevronLeft, ChevronRight, History,
-  Loader2, Phone, Radio, RefreshCw, ShieldAlert, Users, WifiOff, Wallet, X, Clock, Gauge,
+  Loader2, Phone, Radio, RefreshCw, ShieldAlert, Users, WifiOff, Wallet, X, Clock, Gauge, BellRing,
 } from 'lucide-react'
 import Modal from '../BusModal'
 import { supabase } from '@/lib/supabase'
@@ -45,6 +45,8 @@ import {
 } from '../glass'
 
 const ReportsSection = dynamic(() => import('./ReportsSection'))
+// WhatsApp "has not come to the bus" reminders — fetched only when opened.
+const BusRemindersModal = dynamic(() => import('@/components/whatsapp/reminders/BusRemindersModal'), { ssr: false })
 
 const TransportMap = dynamic(() => import('../TransportMap'), {
   ssr: false,
@@ -102,6 +104,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [hoverRunId, setHoverRunId] = useState<string | null>(null)
   const [reportsOpen, setReportsOpen] = useState(false)
+  const [remindersOpen, setRemindersOpen] = useState(false)
   // The map opens on the school: the location set in Configuration, else the
   // attendance geofence. undefined while loading, null when there is none.
   const [school, setSchool] = useState<SchoolLocation | null | undefined>(undefined)
@@ -422,6 +425,12 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
         icon={Bus}
         delay={0.05}
         actions={
+          <div className="flex items-center gap-2">
+          <button onClick={() => setRemindersOpen(true)} disabled={!inSession}
+            title="WhatsApp the families of children who have not come to the bus"
+            className={`${GBTN.primary} !h-7 sm:!h-8 !px-2.5 sm:!px-3 !text-[11.5px]`}>
+            <BellRing size={13} /> <span className="hidden sm:inline">Reminders</span>
+          </button>
           <div className="lg-pill flex items-center gap-2.5 sm:gap-3 h-7 sm:h-8 px-2.5 sm:px-3 text-[11px] sm:text-[11.5px] font-semibold text-slate-600 tabular-nums whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5" title="Trips within five minutes of their timetable">
               <Clock size={12} className="text-slate-400" />
@@ -432,6 +441,7 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
               <Gauge size={12} className="text-slate-400" />
               {seats != null ? <>{seats}%<span className="hidden sm:inline"> seats used</span><span className="sm:hidden"> seats</span></> : 'Seats —'}
             </span>
+          </div>
           </div>
         }
       >
@@ -556,6 +566,8 @@ export default function OperationsSection({ onOpenPanel, onOpenFees, onSetSchool
       >
         <ReportsSection />
       </Modal>
+
+      {remindersOpen && <BusRemindersModal onClose={() => setRemindersOpen(false)} />}
     </div>
   )
 }
