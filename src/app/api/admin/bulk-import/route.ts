@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server'
 import { logAdminAction } from '@/lib/adminAudit'
 import { syncStudentHomeroom, createHomeroomSyncCache } from '@/lib/homeroomAutoManage'
 import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
+import { isEmailConfigured, loadSchoolIdentity, resolveSiteUrl, sendAccountEmail } from '@/lib/email/accountEmails'
 
 interface BulkUserInput {
   email: string
@@ -256,10 +257,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-    request.headers.get('origin') ||
-    supabaseUrl
+  const siteUrl = resolveSiteUrl(request, supabaseUrl)
+  // Read once for the whole import; null means fall back to Supabase's mailer.
+  const schoolIdentity = !autoConfirm && isEmailConfigured() ? await loadSchoolIdentity(adminClient) : null
+  const inviteFailures: string[] = []
 
   // Fetch existing profiles to decide create vs update. Matched in JS by
   // lowercased email rather than filtering with `.in('email', ...)` — that
@@ -356,6 +357,24 @@ export async function POST(request: NextRequest) {
             return
           }
           newUserId = createData?.user?.id
+        } else if (schoolIdentity) {
+          // Branded invite through Cloudflare from the platform domain.
+          const sent = await sendAccountEmail(adminClient, {
+            email,
+            kind: 'invite',
+            siteUrl,
+            metadata: { role: user.role, full_name: user.full_name },
+            recipientName: user.full_name,
+            identity: schoolIdentity,
+          })
+          if (!sent.user) {
+            results.push({ email, action: 'error', error: sent.sent ? 'Failed to create the account' : sent.error })
+            return
+          }
+          // The account is made; only the mail failed. Carry on with the
+          // profile and report it so the admin can resend from the profile.
+          if (!sent.sent) inviteFailures.push(email)
+          newUserId = sent.user.id
         } else {
           const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
             data: { role: user.role, full_name: user.full_name },
@@ -431,8 +450,8 @@ export async function POST(request: NextRequest) {
 
   await logAdminAction(adminClient, request, {
     actorId: callerUser.id, action: 'user.bulk_import',
-    details: { created, updated, errors: errors.length, autoConfirm },
+    details: { created, updated, errors: errors.length, autoConfirm, inviteFailures: inviteFailures.length },
   })
 
-  return NextResponse.json({ success: true, created, updated, errors, autoConfirm })
+  return NextResponse.json({ success: true, created, updated, errors, autoConfirm, inviteFailures })
 }

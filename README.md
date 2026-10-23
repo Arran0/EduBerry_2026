@@ -74,6 +74,35 @@ Bank credentials are **not** environment variables. Each school enters its own i
 `BANK_PAYOUT_*` env vars exist only as a fallback for single-tenant self-hosting
 and are overridden by anything saved in the app.
 
+## Account emails (invite & password reset)
+
+Invites, admin-sent password links and "Forgot your password?" mails go out
+through **Cloudflare Email Service** from the platform's own domain — never a
+school's — with the school named in the sender display name
+("Muthamil Public School via EduBerry"), the subject, the body and the footer.
+Replies go to the school's contact email from **School profile**. Code:
+`src/lib/email/`.
+
+These are platform credentials, set per deployment by us (not in-app by the
+school):
+
+```
+CLOUDFLARE_ACCOUNT_ID=          # account that owns the sending domain
+CLOUDFLARE_EMAIL_API_TOKEN=     # API token with Email Sending permission
+EMAIL_FROM_ADDRESS=             # e.g. no-reply@mail.eduberry.in
+EMAIL_PLATFORM_NAME=EduBerry    # optional
+NEXT_PUBLIC_SITE_URL=           # this school's public URL, used in the links
+```
+
+One-time setup: onboard the sending domain in Cloudflare (Email Service →
+Email Sending, or `wrangler email sending enable mail.eduberry.in`) so its
+SPF/DKIM/DMARC records are published, then create the API token. Every school
+deployment reuses the same three values.
+
+Until they are set, everything falls back to Supabase Auth's own mailer as
+before. Once they are, also add `NEXT_PUBLIC_SITE_URL/update-password` to the
+school's Supabase project under Auth → URL Configuration → Redirect URLs.
+
 ## Banking
 
 Fees are collected into, and salaries are paid out of, the school's **own bank

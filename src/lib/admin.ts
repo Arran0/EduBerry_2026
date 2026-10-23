@@ -228,7 +228,7 @@ export async function fetchAllTeams(): Promise<{ id: string; name: string }[]> {
 }
 
 // Create a new user — calls the server-side API route which uses the service role key
-export async function createNewUser(input: NewUserInput): Promise<{ success: boolean; error?: string; userId?: string; inviteLink?: string; autoConfirm?: boolean }> {
+export async function createNewUser(input: NewUserInput): Promise<{ success: boolean; error?: string; userId?: string; inviteLink?: string; emailSent?: boolean; autoConfirm?: boolean }> {
   try {
     // Get current session token to authenticate the API call
     const { data: { session } } = await supabase.auth.getSession()
@@ -263,7 +263,7 @@ export async function createNewUser(input: NewUserInput): Promise<{ success: boo
       await updateTeamMemberships(result.userId, input.team_ids)
     }
 
-    return { success: true, userId: result.userId, inviteLink: result.inviteLink, autoConfirm: result.autoConfirm }
+    return { success: true, userId: result.userId, inviteLink: result.inviteLink, emailSent: result.emailSent, autoConfirm: result.autoConfirm }
   } catch (err) {
     console.error('Error creating user:', err)
     return { success: false, error: 'An unexpected error occurred' }
@@ -342,6 +342,30 @@ export async function setUserPassword(userId: string, password: string): Promise
     return await response.json()
   } catch (err) {
     console.error('Error setting password:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+/**
+ * Email the user a one-time link to set or reset their own password. On a mail
+ * failure `link` may carry the link itself, for the admin to pass on by hand.
+ */
+export async function sendPasswordEmail(userId: string): Promise<{ success: boolean; error?: string; email?: string; link?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const response = await fetch('/api/admin/send-password-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId }),
+    })
+    return await response.json()
+  } catch (err) {
+    console.error('Error sending password email:', err)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }

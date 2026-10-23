@@ -191,6 +191,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
     errors: { email: string; error: string }[]
     skipped: { email: string; reason: string }[]
     autoConfirm: boolean
+    inviteFailures: string[]
   } | null>(null)
   const [parseError, setParseError] = useState('')
   const [autoConfirm, setAutoConfirm] = useState(false)
@@ -281,7 +282,7 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
     setImporting(false)
     if (data.success) {
       const skipped = invalidRows.map(r => ({ email: r.email || '(blank email)', reason: r.validationError! }))
-      setResult({ created: data.created, updated: data.updated, errors: data.errors, skipped, autoConfirm: !!data.autoConfirm })
+      setResult({ created: data.created, updated: data.updated, errors: data.errors, skipped, autoConfirm: !!data.autoConfirm, inviteFailures: data.inviteFailures ?? [] })
       onDone()
     } else if (res.status === 401) {
       setParseError('Your session has expired. Please sign out and sign in again, then retry.')
@@ -432,6 +433,16 @@ export default function BulkImportModal({ existingEmails, onClose, onDone, mode 
                     {result.errors.map(e => (
                       <p key={e.email} className="text-xs text-rose-600 flex items-center gap-1">
                         <AlertCircle size={11} /> {e.email}: {e.error}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {result.inviteFailures.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs font-semibold text-amber-700">Account created but the invite email failed — resend from their profile (key icon):</p>
+                    {result.inviteFailures.map(email => (
+                      <p key={email} className="text-xs text-amber-700 flex items-center gap-1">
+                        <AlertCircle size={11} /> {email}
                       </p>
                     ))}
                   </div>
