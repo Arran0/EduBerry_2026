@@ -1,0 +1,91 @@
+#cloud-config
+# Shared GPS gateway: Traccar terminates the raw TCP that AIS-140 units speak
+# and forwards each position as JSON to its school's /api/transport/ingest.
+# Paste into DigitalOcean's "Initialization scripts", or let provision.py do it.
+package_update: true
+packages:
+  - unzip
+  - postgresql
+  - fail2ban
+  - caddy
+
+write_files:
+  - path: /root/setup-gps.sh
+    permissions: '0700'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      TRACCAR_VERSION="6.16.0"
+      # Devices not yet linked to a school forward here and are refused (401).
+      DEFAULT_FORWARD="https://eduberry.vercel.app/api/transport/ingest"
+
+      # Swap, so Java and Postgres fit in 1 GB of RAM
+      if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile && chmod 600 /swapfile
+        mkswap /swapfile && swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      # Database
+      DB_PASS="$(openssl rand -hex 24)"
+      sudo -u postgres psql -c "CREATE USER traccar WITH PASSWORD '${DB_PASS}';"
+      sudo -u postgres psql -c "CREATE DATABASE traccar OWNER traccar;"
+
+      # Traccar
+      cd /tmp
+      curl -fsSL -o traccar.zip "https://github.com/traccar/traccar/releases/download/v${TRACCAR_VERSION}/traccar-linux-64-${TRACCAR_VERSION}.zip"
+      unzip -o traccar.zip
+      bash ./traccar.run
+
+      cat > /opt/traccar/conf/traccar.xml <<EOF
+      <?xml version='1.0' encoding='UTF-8'?>
+      <!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+      <properties>
+          <entry key='database.driver'>org.postgresql.Driver</entry>
+          <entry key='database.url'>jdbc:postgresql://localhost/traccar</entry>
+          <entry key='database.user'>traccar</entry>
+          <entry key='database.password'>${DB_PASS}</entry>
+
+          <entry key='web.address'>127.0.0.1</entry>
+          <entry key='web.port'>8082</entry>
+
+          <entry key='forward.type'>json</entry>
+          <entry key='forward.url'>${DEFAULT_FORWARD}</entry>
+          <entry key='forward.retry.enable'>true</entry>
+
+          <entry key='filter.enable'>true</entry>
+          <entry key='filter.invalid'>true</entry>
+          <entry key='filter.zero'>true</entry>
+          <entry key='filter.duplicate'>true</entry>
+          <entry key='filter.future'>300</entry>
+          <entry key='filter.minPeriod'>15</entry>
+          <entry key='filter.skipAttributes'>alarm</entry>
+      </properties>
+      EOF
+
+      mkdir -p /etc/systemd/system/traccar.service.d
+      printf '[Service]\nEnvironment=JAVA_TOOL_OPTIONS=-Xmx448m\n' > /etc/systemd/system/traccar.service.d/memory.conf
+      systemctl daemon-reload
+      systemctl enable traccar
+      systemctl restart traccar
+
+      # HTTPS admin page on a free name that points at this server's IP
+      PUBLIC_IP="$(curl -fsS http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)"
+      ADMIN_HOST="${PUBLIC_IP//./-}.sslip.io"
+      cat > /etc/caddy/Caddyfile <<EOF
+      ${ADMIN_HOST} {
+          reverse_proxy 127.0.0.1:8082
+      }
+      EOF
+      systemctl restart caddy
+
+      # Keep 7 days on the gateway; each school's app keeps the real history
+      cat > /etc/cron.d/traccar-cleanup <<'EOF'
+      30 3 * * * postgres psql -d traccar -c "DELETE FROM tc_events WHERE eventtime < now() - interval '7 days'; DELETE FROM tc_positions p WHERE p.fixtime < now() - interval '7 days' AND NOT EXISTS (SELECT 1 FROM tc_devices d WHERE d.positionid = p.id);"
+      EOF
+
+      echo "${ADMIN_HOST}" > /root/SETUP_DONE
+
+runcmd:
+  - [bash, /root/setup-gps.sh]
