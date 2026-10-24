@@ -21,6 +21,10 @@ and read) and Account (read). Cost: $6/mo droplet + $1.20 weekly backups.
 
 ## Then
 
+0. In every school's Vercel project, set `NEXT_PUBLIC_GPS_GATEWAY_HOST` to
+   the printed reserved IP and redeploy. The GPS panel builds the vendor
+   message from it (port defaults to 5179; override with
+   `NEXT_PUBLIC_GPS_GATEWAY_PORT`).
 1. Open the printed admin page and **Register** straight away: the first
    account becomes the admin. Then **Settings → Server** → untick
    **Registration**.

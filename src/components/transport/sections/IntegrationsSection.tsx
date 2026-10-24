@@ -12,6 +12,7 @@ import {
   testSource, updateSource, type SourceKind, type TelemetrySource,
 } from '@/lib/transport/devices'
 import { fetchSchoolLocation } from '@/lib/transport/settings'
+import { GPS_GATEWAY, linkDetails, vendorMessage } from '@/lib/transport/gateway'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import {
   CREDENTIAL_LABELS, fetchCredentials, issueCredential, registerCard, revokeCredential,
@@ -166,7 +167,8 @@ export function DevicesPanel() {
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [newSecret, setNewSecret] = useState<{ label: string; keyId: string; secret: string } | null>(null)
+  const [newSecret, setNewSecret] = useState<{ label: string; bus: string; imei: string; keyId: string; secret: string } | null>(null)
+  const [messageFor, setMessageFor] = useState<string | null>(null)
   const [form, setForm] = useState<{ label: string; vendor: string; external_id: string; vehicle_id: string; kind: SourceKind }>({
     label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device',
   })
@@ -203,9 +205,14 @@ export function DevicesPanel() {
 
   useEffect(() => { load() }, [load])
 
+  const busName = (vehicleId: string | null, fallback: string) => {
+    const v = vehicles.find(x => x.id === vehicleId)
+    return v ? vehicleLabel(v) : fallback
+  }
+
   const add = async () => {
     if (!form.label.trim() || !form.external_id.trim()) {
-      setError('A label and the device id are both needed')
+      setError('A label and the IMEI are both needed')
       return
     }
     setError(null)
@@ -217,7 +224,13 @@ export function DevicesPanel() {
       vehicle_id: form.vehicle_id || null,
     })
     if (!res.success) { setError(res.error ?? 'Could not register the device'); return }
-    setNewSecret({ label: form.label.trim(), keyId: res.keyId ?? '', secret: res.secret ?? '' })
+    setNewSecret({
+      label: form.label.trim(),
+      bus: busName(form.vehicle_id || null, form.label.trim()),
+      imei: form.external_id.trim(),
+      keyId: res.keyId ?? '',
+      secret: res.secret ?? '',
+    })
     setForm({ label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device' })
     setAdding(false)
     load()
@@ -226,43 +239,80 @@ export function DevicesPanel() {
   return (
     <div className="space-y-4">
       <div className={`${ADMIN.card} p-4`}>
-        <p className="text-sm font-semibold text-[#13306B]">Using the school&apos;s existing GPS</p>
-        <p className="text-[11px] text-[#5B6676] mt-1.5">
-          AIS-140 units push over a raw TCP socket, which this app cannot accept
-          directly. The standard requires devices to report to two servers at once,
-          so point the <strong>second</strong> slot at a Traccar or flespi channel and
-          have it forward to the address below. The statutory feed to the state
-          backend keeps working untouched, and nothing has to be reconfigured away
-          from compliance.
+        <p className="text-sm font-semibold text-[#13306B]">Connect a bus GPS</p>
+        <p className="text-[11px] text-[#5B6676] mt-1">
+          For buses that already have an AIS-140 GPS device. The device keeps reporting
+          to the government exactly as before; it simply also reports to EduBerry.
         </p>
-        <code className="block mt-2 text-[11px] bg-[#F7F9FB] border border-[#E2E7EE] rounded-lg px-2.5 py-2 text-[#475264] break-all">
-          POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/transport/ingest
-        </code>
-        <p className="text-[11px] text-[#94A0B1] mt-1.5">
-          Each device gets a <strong>key id</strong> and a <strong>secret</strong>. Send the key id
-          in <code>x-transport-key-id</code>, a unix time in <code>x-transport-timestamp</code>, and
-          in <code>x-transport-signature</code> the value
-          <code> sha256=HMAC-SHA256(secret, timestamp + &quot;.&quot; + body)</code>. The secret
-          itself is never sent. Forwarders that cannot sign may append
-          <code> ?key=&lt;key id&gt;&amp;secret=&lt;secret&gt;</code> instead — simpler, but the
-          secret then appears in server logs, so rotate it periodically.
-        </p>
+        <ol className="mt-3 space-y-2">
+          {[
+            ['Find the IMEI', 'The 15-digit number on the GPS device label. Your GPS vendor can also tell you. Note the device make and model too.'],
+            ['Register it here', 'Tap Register a device, enter the IMEI and choose the bus.'],
+            ['Send the linking details to EduBerry support', 'They appear right after you register. Copy them and send them to us; we connect the device on EduBerry’s GPS server.'],
+            ['Message your GPS vendor', 'Tap the message icon on the device’s row, then Copy or WhatsApp. It asks them to add EduBerry as an extra server without touching the government or SOS servers.'],
+            ['Check it', 'Once the vendor confirms, Health changes to Reporting within 5 minutes and the bus shows live during its scheduled trips. Still “Never reported” a day later? Contact EduBerry support with the IMEI.'],
+          ].map(([title, detail], i) => (
+            <li key={title} className="flex gap-2.5">
+              <span className="w-5 h-5 rounded-full bg-[#13306B] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#13306B]">{title}</p>
+                <p className="text-[11px] text-[#5B6676]">{detail}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        {!GPS_GATEWAY.host && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3">
+            EduBerry&apos;s GPS server address isn&apos;t set for this school yet, so the vendor
+            message can&apos;t be prepared. Contact EduBerry support.
+          </p>
+        )}
+        <details className="mt-3">
+          <summary className="text-[11px] text-[#94A0B1] cursor-pointer">Using your own forwarder instead (developers)</summary>
+          <code className="block mt-2 text-[11px] bg-[#F7F9FB] border border-[#E2E7EE] rounded-lg px-2.5 py-2 text-[#475264] break-all">
+            POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/transport/ingest
+          </code>
+          <p className="text-[11px] text-[#94A0B1] mt-1.5">
+            Each device gets a <strong>key id</strong> and a <strong>secret</strong>. Send the key id
+            in <code>x-transport-key-id</code>, a unix time in <code>x-transport-timestamp</code>, and
+            in <code>x-transport-signature</code> the value
+            <code> sha256=HMAC-SHA256(secret, timestamp + &quot;.&quot; + body)</code>. The secret
+            itself is never sent. Forwarders that cannot sign may append
+            <code> ?key=&lt;key id&gt;&amp;secret=&lt;secret&gt;</code> instead — simpler, but the
+            secret then appears in server logs, so rotate it periodically.
+          </p>
+        </details>
       </div>
 
       {newSecret && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
-            <KeyRound size={14} /> Ingest key for {newSecret.label}
+            <KeyRound size={14} /> Linking details for {newSecret.label}
           </p>
           <p className="text-[11px] text-amber-800 mt-0.5 mb-2">
-            Copy the secret now — it is shown once and never again. If you lose it,
-            rotate the key rather than trying to recover it. The key id is not
-            secret and stays visible in the list below.
+            Copy these now and send them to EduBerry support. They contain the
+            device&apos;s secret, which is shown only once. If you lose it, rotate the
+            key and send the new details.
           </p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mb-1">Key id</p>
-          <SecretRow secret={newSecret.keyId} />
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mt-2 mb-1">Secret</p>
-          <SecretRow secret={newSecret.secret} />
+          <SecretRow
+            secret={linkDetails({
+              bus: newSecret.bus,
+              imei: newSecret.imei,
+              origin: typeof window !== 'undefined' ? window.location.origin : '',
+              keyId: newSecret.keyId,
+              secret: newSecret.secret,
+            })}
+            multiline
+          />
+          <details className="mt-2">
+            <summary className="text-[11px] text-amber-800 cursor-pointer">Key id and secret separately</summary>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mt-2 mb-1">Key id</p>
+            <SecretRow secret={newSecret.keyId} />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 mt-2 mb-1">Secret</p>
+            <SecretRow secret={newSecret.secret} />
+          </details>
           <button
             className="text-[11px] font-semibold text-amber-800 hover:text-amber-950 mt-2"
             onClick={() => setNewSecret(null)}
@@ -288,15 +338,15 @@ export function DevicesPanel() {
             <Field label="Label" hint="How you'll recognise it, e.g. “Bus 12 tracker”.">
               <TextInput value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
             </Field>
-            <Field label="Gateway" hint="Which system forwards this device's data.">
+            <Field label="IMEI" hint="15-digit number on the device label, or ask your GPS vendor.">
+              <TextInput inputMode="numeric" value={form.external_id} onChange={e => setForm(f => ({ ...f, external_id: e.target.value }))} />
+            </Field>
+            <Field label="Gateway" hint="Leave as EduBerry GPS server unless support says otherwise.">
               <Select value={form.vendor} onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))}>
-                <option value="traccar">Traccar</option>
+                <option value="traccar">EduBerry GPS server (Traccar)</option>
                 <option value="flespi">flespi</option>
                 <option value="generic">Custom / own forwarder</option>
               </Select>
-            </Field>
-            <Field label="Device id" hint="IMEI, or the unique id the gateway uses.">
-              <TextInput value={form.external_id} onChange={e => setForm(f => ({ ...f, external_id: e.target.value }))} />
             </Field>
             <Field label="Bus" hint="What this device is fitted to.">
               <Select value={form.vehicle_id} onChange={e => setForm(f => ({ ...f, vehicle_id: e.target.value }))}>
@@ -315,7 +365,7 @@ export function DevicesPanel() {
             <span className={`${SHEET.headCell} flex-1`}>Source</span>
             <span className={`${SHEET.headCell} w-36`}>Bus</span>
             <span className={`${SHEET.headCell} w-32`}>Health</span>
-            <span className={`${SHEET.headCell} w-32 text-right`}>Actions</span>
+            <span className={`${SHEET.headCell} w-40 text-right`}>Actions</span>
           </>
         }
       >
@@ -331,8 +381,12 @@ export function DevicesPanel() {
           sources.map(s => {
             const health = sourceHealth(s)
             const vehicle = vehicles.find(v => v.id === s.vehicle_id)
+            const message = GPS_GATEWAY.host && s.external_id
+              ? vendorMessage({ bus: busName(s.vehicle_id, s.label), imei: s.external_id, host: GPS_GATEWAY.host, port: GPS_GATEWAY.port })
+              : null
             return (
-              <div key={s.id} className={SHEET.row}>
+              <React.Fragment key={s.id}>
+              <div className={SHEET.row}>
                 <div className={`${SHEET.bar} ${
                   health.tone === 'ok' ? 'bg-emerald-400' : health.tone === 'warn' ? 'bg-amber-400' : 'bg-rose-400'
                 }`} />
@@ -360,7 +414,18 @@ export function DevicesPanel() {
                   }`}>
                     {health.label}
                   </span>
-                  <div className="w-32 flex items-center justify-end gap-1 flex-shrink-0">
+                  <div className="w-40 flex items-center justify-end gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => setMessageFor(m => (m === s.id ? null : s.id))}
+                      disabled={!message}
+                      className={`p-1.5 rounded-md transition-colors disabled:opacity-40 ${
+                        messageFor === s.id ? 'text-[#13306B] bg-[#F1F4F8]' : 'text-[#94A0B1] hover:text-[#13306B] hover:bg-[#F1F4F8]'
+                      }`}
+                      aria-label="Message for GPS vendor"
+                      title={message ? 'Message for GPS vendor' : 'GPS server address not set yet'}
+                    >
+                      <MessageCircle size={14} />
+                    </button>
                     <button
                       onClick={() => runTest(s)}
                       disabled={testing === s.id}
@@ -371,10 +436,16 @@ export function DevicesPanel() {
                     </button>
                     <button
                       onClick={async () => {
-                        if (!confirm(`Rotate the key for “${s.label}”? The gateway will stop reporting until you paste the new one.`)) return
+                        if (!confirm(`Rotate the key for “${s.label}”? The device stops reporting until EduBerry support links the new details.`)) return
                         const res = await rotateSourceSecret(s.id)
                         if (res.success && res.secret) {
-                          setNewSecret({ label: s.label, keyId: res.keyId ?? '', secret: res.secret })
+                          setNewSecret({
+                            label: s.label,
+                            bus: busName(s.vehicle_id, s.label),
+                            imei: s.external_id ?? '',
+                            keyId: res.keyId ?? '',
+                            secret: res.secret,
+                          })
                         }
                         load()
                       }}
@@ -406,6 +477,8 @@ export function DevicesPanel() {
                   </div>
                 </div>
               </div>
+              {messageFor === s.id && message && <VendorMessage message={message} />}
+              </React.Fragment>
             )
           })
         )}
@@ -414,11 +487,42 @@ export function DevicesPanel() {
   )
 }
 
-function SecretRow({ secret }: { secret: string }) {
+/** The vendor message under a device row: read it, copy it, or hand it to WhatsApp. */
+function VendorMessage({ message }: { message: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="px-4 py-3 bg-[#F7F9FB] border-t border-[#E2E7EE]">
+      <p className="text-[11px] text-[#5B6676] mb-2">
+        Send this to the company that installed the GPS device.
+      </p>
+      <pre className="text-[11px] whitespace-pre-wrap break-words bg-white border border-[#E2E7EE] rounded-lg px-3 py-2.5 text-[#13306B] font-sans">
+        {message}
+      </pre>
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          className={ADMIN.darkBtn}
+          onClick={() => { navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
+        </button>
+        <a
+          href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] transition"
+        >
+          <MessageCircle size={14} /> WhatsApp
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function SecretRow({ secret, multiline = false }: { secret: string; multiline?: boolean }) {
   const [copied, setCopied] = useState(false)
   return (
     <div className="flex items-center gap-2">
-      <code className="flex-1 min-w-0 text-[11px] bg-white border border-amber-200 rounded-lg px-2.5 py-2 text-[#13306B] break-all">
+      <code className={`flex-1 min-w-0 text-[11px] bg-white border border-amber-200 rounded-lg px-2.5 py-2 text-[#13306B] break-all ${multiline ? 'whitespace-pre-wrap' : ''}`}>
         {secret}
       </code>
       <button
