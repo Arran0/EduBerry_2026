@@ -75,6 +75,17 @@ write_files:
       systemctl enable traccar
       systemctl restart traccar
 
+      # Traccar makes whoever registers first an admin. Take that slot with an
+      # account nobody can log into, before the page is public; if this fails,
+      # set -e stops here and the page never goes public at all.
+      for i in $(seq 1 60); do
+        curl -fsS -o /dev/null -H "Authorization: Bearer ${SERVICE_TOKEN}" http://127.0.0.1:8082/api/server && break
+        sleep 5
+      done
+      curl -fsS -o /dev/null -X POST -H "Authorization: Bearer ${SERVICE_TOKEN}" -H 'Content-Type: application/json' \
+        -d "{\"name\":\"eduberry\",\"email\":\"admin@gateway.invalid\",\"password\":\"$(openssl rand -hex 24)\",\"administrator\":true}" \
+        http://127.0.0.1:8082/api/users
+
       # HTTPS admin page on a free name that points at this server's IP
       PUBLIC_IP="$(curl -fsS http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address)"
       ADMIN_HOST="${PUBLIC_IP//./-}.sslip.io"
