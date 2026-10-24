@@ -24,8 +24,24 @@ export default function UpdatePasswordPage() {
     let cancelled = false
 
     async function bootstrap() {
-      // 1. PKCE flow: Supabase v2 invite/reset links send ?code= in the query string
       const params = new URLSearchParams(window.location.search)
+
+      // 0. Our own emails (src/lib/email) carry ?token_hash=&type=. Redeemed
+      //    here in JS so a link-scanning mail filter can't use it up first.
+      const tokenHash = params.get('token_hash')
+      const linkType = params.get('type')
+      if (tokenHash && (linkType === 'invite' || linkType === 'recovery')) {
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: linkType })
+        if (!cancelled) {
+          if (!verifyError && data.session) setSessionReady(true)
+          setChecking(false)
+          // Drop the spent token from the address bar and history.
+          window.history.replaceState(null, '', window.location.pathname)
+        }
+        return
+      }
+
+      // 1. PKCE flow: Supabase v2 invite/reset links send ?code= in the query string
       const code = params.get('code')
 
       if (code) {
