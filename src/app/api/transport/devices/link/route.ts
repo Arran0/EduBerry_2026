@@ -57,8 +57,6 @@ export async function POST(request: NextRequest) {
     .eq('id', body.sourceId)
     .maybeSingle()
   if (!source) return NextResponse.json({ success: false, error: 'Device not found' }, { status: 404 })
-  // Only devices behind the gateway; flespi and custom forwarders link themselves.
-  if (source.vendor !== 'traccar') return NextResponse.json({ success: true, linked: false, reason: 'not_gateway' })
   if (!source.external_id) {
     return NextResponse.json({ success: false, error: 'This device has no IMEI' }, { status: 400 })
   }
@@ -98,6 +96,11 @@ export async function POST(request: NextRequest) {
       disabled: !source.active,
     })
     await record({ linked: true })
+    // Every device now reaches the app through the gateway, so one registered
+    // under another format before it existed is read as Traccar from here on.
+    if (source.vendor !== 'traccar') {
+      await client.from('transport_telemetry_sources').update({ vendor: 'traccar' }).eq('id', source.id)
+    }
     return NextResponse.json({ success: true, linked: true })
   } catch (e) {
     const message = e instanceof GatewayError ? e.message : 'Could not update the GPS server'

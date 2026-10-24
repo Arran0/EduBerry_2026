@@ -12,9 +12,9 @@ export const runtime = 'nodejs'
  * AIS-140 devices push comma-delimited ASCII over a raw TCP socket to a
  * configured backend IP, which Vercel cannot terminate — so EdZee does not try.
  * The school points the device's *second* server slot (the standard mandates
- * dual-server push) at a Traccar or flespi channel, which owns the protocol zoo
- * and forwards clean JSON here. Their statutory feed to the state backend is
- * untouched and no vendor is displaced.
+ * dual-server push) at EduBerry's shared Traccar gateway (infra/gps-gateway),
+ * which owns the protocol zoo and forwards clean JSON here. Their statutory
+ * feed to the state backend is untouched and no vendor is displaced.
  *
  * Whatever arrives lands in transport_telemetry through the same trigger the
  * driver's phone uses, so stop detection, ETA and alerting are identical for
