@@ -4,15 +4,9 @@
  * One Traccar server (infra/gps-gateway) serves every school. AIS-140 units
  * keep their government and SOS servers and add this one in a spare slot;
  * Traccar decodes the raw TCP and forwards to the school's ingest endpoint.
- * The address is public by design: it is what vendors type into devices.
+ * The address comes from /api/transport/devices/link, so it is a runtime
+ * setting rather than baked into the build.
  */
-
-export const GPS_GATEWAY = {
-  /** Unset until the gateway exists; the panel says so instead of guessing. */
-  host: process.env.NEXT_PUBLIC_GPS_GATEWAY_HOST?.trim() || null,
-  /** Traccar's `its` decoder: the standard AIS-140 packet format. */
-  port: Number(process.env.NEXT_PUBLIC_GPS_GATEWAY_PORT) || 5179,
-}
 
 /** The message a school forwards to its GPS vendor, ready for WhatsApp. */
 export function vendorMessage(o: { bus: string; imei: string; host: string; port: number }): string {
@@ -34,9 +28,10 @@ export function vendorMessage(o: { bus: string; imei: string; host: string; port
 }
 
 /**
- * What EduBerry support needs to link a device on the gateway: the IMEI it
- * reports under, and the address Traccar forwards it to. The address carries
- * the device's secret, because Traccar cannot sign requests.
+ * What EduBerry support needs to link a device by hand, for a deployment not
+ * yet connected to the gateway: the IMEI it reports under, and the address
+ * Traccar forwards it to. The address carries the device's secret, because
+ * Traccar cannot sign requests.
  */
 export function linkDetails(o: { bus: string; imei: string; origin: string; keyId: string; secret: string }): string {
   return [

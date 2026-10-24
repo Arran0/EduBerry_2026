@@ -158,6 +158,56 @@ export async function testSource(
   }
 }
 
+export interface GatewayInfo {
+  /** Whether this school's app links devices on the gateway by itself. */
+  configured: boolean
+  /** What GPS vendors put into the device; null until EduBerry sets it. */
+  host: string | null
+  port: number
+}
+
+export async function fetchGateway(): Promise<GatewayInfo> {
+  try {
+    const res = await fetch('/api/transport/devices/link', { headers: await authHeader() })
+    const json = await res.json()
+    if (json.success) return { configured: !!json.configured, host: json.host ?? null, port: Number(json.port) || 5179 }
+  } catch (e) {
+    console.error('fetchGateway failed:', e)
+  }
+  return { configured: false, host: null, port: 5179 }
+}
+
+/**
+ * Register (link) or remove (unlink) a device on EduBerry's GPS gateway.
+ * `linked: false` with no error means there is nothing to do for this
+ * deployment or device, not a failure.
+ */
+export async function syncSourceGateway(
+  sourceId: string,
+  action: 'link' | 'unlink',
+): Promise<{ success: boolean; linked: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/transport/devices/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ sourceId, action }),
+    })
+    const json = await res.json().catch(() => ({}))
+    return json.success
+      ? { success: true, linked: !!json.linked }
+      : { success: false, linked: false, error: json.error ?? 'Could not reach the GPS server' }
+  } catch (e) {
+    console.error('syncSourceGateway failed:', e)
+    return { success: false, linked: false, error: 'Network error' }
+  }
+}
+
+/** Gateway link state as last recorded by the link route. */
+export function gatewayLink(s: TelemetrySource): { linked: boolean; error?: string } | null {
+  const g = s.health?.gateway as { linked?: boolean; error?: string } | undefined
+  return g ? { linked: !!g.linked, error: g.error } : null
+}
+
 /** How healthy a device looks, in words rather than a timestamp. */
 export function sourceHealth(s: TelemetrySource): { label: string; tone: 'ok' | 'warn' | 'bad' } {
   if (!s.active) return { label: 'Disabled', tone: 'warn' }

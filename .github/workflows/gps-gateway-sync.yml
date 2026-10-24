@@ -1,0 +1,29 @@
+name: GPS gateway sync
+
+# Connects every school's Vercel project to the shared GPS gateway, so a new
+# school can link its buses by the next morning with nobody doing anything.
+# Never creates servers. Skips quietly until the repository secrets exist.
+
+on:
+  schedule:
+    - cron: '30 21 * * *' # 03:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gps-gateway-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: python3 infra/gps-gateway/provision.py --sync --skip-if-unconfigured
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          VERCEL_PROJECTS: ${{ vars.VERCEL_PROJECTS }}

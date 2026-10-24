@@ -19,6 +19,10 @@ write_files:
       TRACCAR_VERSION="6.16.0"
       # Devices not yet linked to a school forward here and are refused (401).
       DEFAULT_FORWARD="https://eduberry.vercel.app/api/transport/ingest"
+      # The token schools' apps use to link devices. provision.py fills it in;
+      # pasted by hand, a random one is made and the apps can't link.
+      SERVICE_TOKEN="__SERVICE_TOKEN__"
+      if [[ "$SERVICE_TOKEN" == __* ]]; then SERVICE_TOKEN="$(openssl rand -hex 32)"; fi
 
       # Swap, so Java and Postgres fit in 1 GB of RAM
       if [ ! -f /swapfile ]; then
@@ -49,6 +53,7 @@ write_files:
 
           <entry key='web.address'>127.0.0.1</entry>
           <entry key='web.port'>8082</entry>
+          <entry key='web.serviceAccountToken'>${SERVICE_TOKEN}</entry>
 
           <entry key='forward.type'>json</entry>
           <entry key='forward.url'>${DEFAULT_FORWARD}</entry>

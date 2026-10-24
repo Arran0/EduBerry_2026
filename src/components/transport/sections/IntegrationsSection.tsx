@@ -8,11 +8,12 @@ import {
 import { ADMIN, SegTabs, SHEET, Sheet, EmptyRow } from '../glassAdmin'
 import { supabase } from '@/lib/supabase'
 import {
-  createSource, deleteSource, fetchSources, rotateSourceSecret, sourceHealth,
-  testSource, updateSource, type SourceKind, type TelemetrySource,
+  createSource, deleteSource, fetchGateway, fetchSources, gatewayLink, rotateSourceSecret,
+  sourceHealth, syncSourceGateway, testSource, updateSource,
+  type GatewayInfo, type SourceKind, type TelemetrySource,
 } from '@/lib/transport/devices'
 import { fetchSchoolLocation } from '@/lib/transport/settings'
-import { GPS_GATEWAY, linkDetails, vendorMessage } from '@/lib/transport/gateway'
+import { linkDetails, vendorMessage } from '@/lib/transport/gateway'
 import { fetchVehicles, vehicleLabel } from '@/lib/transport/vehicles'
 import {
   CREDENTIAL_LABELS, fetchCredentials, issueCredential, registerCard, revokeCredential,
@@ -167,8 +168,12 @@ export function DevicesPanel() {
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [newSecret, setNewSecret] = useState<{ label: string; bus: string; imei: string; keyId: string; secret: string } | null>(null)
+  const [newSecret, setNewSecret] = useState<{
+    label: string; bus: string; imei: string; keyId: string; secret: string; linked: boolean; linkError?: string
+  } | null>(null)
   const [messageFor, setMessageFor] = useState<string | null>(null)
+  const [gateway, setGateway] = useState<GatewayInfo>({ configured: false, host: null, port: 5179 })
+  const [linking, setLinking] = useState<string | null>(null)
   const [form, setForm] = useState<{ label: string; vendor: string; external_id: string; vehicle_id: string; kind: SourceKind }>({
     label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device',
   })
@@ -199,8 +204,8 @@ export function DevicesPanel() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [s, v] = await Promise.all([fetchSources(), fetchVehicles()])
-    setSources(s); setVehicles(v); setLoading(false)
+    const [s, v, g] = await Promise.all([fetchSources(), fetchVehicles(), fetchGateway()])
+    setSources(s); setVehicles(v); setGateway(g); setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -224,15 +229,37 @@ export function DevicesPanel() {
       vehicle_id: form.vehicle_id || null,
     })
     if (!res.success) { setError(res.error ?? 'Could not register the device'); return }
+    const link = res.id && form.vendor === 'traccar' ? await syncSourceGateway(res.id, 'link') : null
     setNewSecret({
       label: form.label.trim(),
       bus: busName(form.vehicle_id || null, form.label.trim()),
       imei: form.external_id.trim(),
       keyId: res.keyId ?? '',
       secret: res.secret ?? '',
+      linked: !!link?.linked,
+      linkError: link?.error,
     })
     setForm({ label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device' })
     setAdding(false)
+    load()
+  }
+
+  // Re-link after anything the gateway's copy depends on: the key, or whether
+  // the device is enabled.
+  const relink = async (s: TelemetrySource) => {
+    if (s.vendor !== 'traccar' || !gateway.configured) return
+    setLinking(s.id)
+    await syncSourceGateway(s.id, 'link')
+    setLinking(null)
+  }
+
+  const remove = async (s: TelemetrySource) => {
+    if (!confirm(`Remove “${s.label}”? Its stored history stays.`)) return
+    if (s.vendor === 'traccar' && gateway.configured) {
+      const res = await syncSourceGateway(s.id, 'unlink')
+      if (!res.success && !confirm(`Couldn’t remove it from EduBerry’s GPS server (${res.error}). Remove it from the app anyway?`)) return
+    }
+    await deleteSource(s.id)
     load()
   }
 
@@ -247,8 +274,12 @@ export function DevicesPanel() {
         <ol className="mt-3 space-y-2">
           {[
             ['Find the IMEI', 'The 15-digit number on the GPS device label. Your GPS vendor can also tell you. Note the device make and model too.'],
-            ['Register it here', 'Tap Register a device, enter the IMEI and choose the bus.'],
-            ['Send the linking details to EduBerry support', 'They appear right after you register. Copy them and send them to us; we connect the device on EduBerry’s GPS server.'],
+            gateway.configured
+              ? ['Register it here', 'Tap Register a device, enter the IMEI and choose the bus. It is connected to EduBerry’s GPS server automatically.']
+              : ['Register it here', 'Tap Register a device, enter the IMEI and choose the bus.'],
+            ...(gateway.configured ? [] : [
+              ['Send the linking details to EduBerry support', 'They appear right after you register. Copy them and send them to us; we connect the device on EduBerry’s GPS server.'],
+            ]),
             ['Message your GPS vendor', 'Tap the message icon on the device’s row, then Copy or WhatsApp. It asks them to add EduBerry as an extra server without touching the government or SOS servers.'],
             ['Check it', 'Once the vendor confirms, Health changes to Reporting within 5 minutes and the bus shows live during its scheduled trips. Still “Never reported” a day later? Contact EduBerry support with the IMEI.'],
           ].map(([title, detail], i) => (
@@ -263,7 +294,7 @@ export function DevicesPanel() {
             </li>
           ))}
         </ol>
-        {!GPS_GATEWAY.host && (
+        {!loading && !gateway.host && (
           <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3">
             EduBerry&apos;s GPS server address isn&apos;t set for this school yet, so the vendor
             message can&apos;t be prepared. Contact EduBerry support.
@@ -286,12 +317,30 @@ export function DevicesPanel() {
         </details>
       </div>
 
-      {newSecret && (
+      {newSecret?.linked && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5">
+            <Check size={14} /> {newSecret.label} is connected to EduBerry&apos;s GPS server
+          </p>
+          <p className="text-[11px] text-emerald-800 mt-0.5">
+            Next, message your GPS vendor: tap the message icon on its row below.
+          </p>
+          <button
+            className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 mt-2"
+            onClick={() => setNewSecret(null)}
+          >
+            OK
+          </button>
+        </div>
+      )}
+
+      {newSecret && !newSecret.linked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
             <KeyRound size={14} /> Linking details for {newSecret.label}
           </p>
           <p className="text-[11px] text-amber-800 mt-0.5 mb-2">
+            {newSecret.linkError && <>Automatic linking failed ({newSecret.linkError}). </>}
             Copy these now and send them to EduBerry support. They contain the
             device&apos;s secret, which is shown only once. If you lose it, rotate the
             key and send the new details.
@@ -381,9 +430,11 @@ export function DevicesPanel() {
           sources.map(s => {
             const health = sourceHealth(s)
             const vehicle = vehicles.find(v => v.id === s.vehicle_id)
-            const message = GPS_GATEWAY.host && s.external_id
-              ? vendorMessage({ bus: busName(s.vehicle_id, s.label), imei: s.external_id, host: GPS_GATEWAY.host, port: GPS_GATEWAY.port })
+            const message = gateway.host && s.external_id
+              ? vendorMessage({ bus: busName(s.vehicle_id, s.label), imei: s.external_id, host: gateway.host, port: gateway.port })
               : null
+            const link = s.vendor === 'traccar' && gateway.configured ? gatewayLink(s) : null
+            const onGateway = s.vendor === 'traccar' && gateway.configured
             return (
               <React.Fragment key={s.id}>
               <div className={SHEET.row}>
@@ -399,6 +450,18 @@ export function DevicesPanel() {
                     </p>
                     {s.last_error && (
                       <p className="text-[11px] text-rose-600 truncate">{s.last_error}</p>
+                    )}
+                    {onGateway && !link?.linked && (
+                      <p className="text-[11px] text-amber-700">
+                        Not connected to EduBerry&apos;s GPS server{link?.error ? ` (${link.error})` : ''}.{' '}
+                        <button
+                          className="font-semibold underline disabled:opacity-50"
+                          disabled={linking === s.id}
+                          onClick={async () => { await relink(s); load() }}
+                        >
+                          {linking === s.id ? 'Connecting…' : 'Connect now'}
+                        </button>
+                      </p>
                     )}
                     {testResult?.id === s.id && (
                       <p className={`text-[11px] ${testResult.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -436,15 +499,20 @@ export function DevicesPanel() {
                     </button>
                     <button
                       onClick={async () => {
-                        if (!confirm(`Rotate the key for “${s.label}”? The device stops reporting until EduBerry support links the new details.`)) return
+                        if (!confirm(onGateway
+                          ? `Rotate the key for “${s.label}”? EduBerry’s GPS server is updated with the new key straight away.`
+                          : `Rotate the key for “${s.label}”? The device stops reporting until EduBerry support links the new details.`)) return
                         const res = await rotateSourceSecret(s.id)
                         if (res.success && res.secret) {
+                          const linked = onGateway ? await syncSourceGateway(s.id, 'link') : null
                           setNewSecret({
                             label: s.label,
                             bus: busName(s.vehicle_id, s.label),
                             imei: s.external_id ?? '',
                             keyId: res.keyId ?? '',
                             secret: res.secret,
+                            linked: !!linked?.linked,
+                            linkError: linked?.error,
                           })
                         }
                         load()
@@ -455,7 +523,7 @@ export function DevicesPanel() {
                       <KeyRound size={14} />
                     </button>
                     <button
-                      onClick={async () => { await updateSource(s.id, { active: !s.active }); load() }}
+                      onClick={async () => { await updateSource(s.id, { active: !s.active }); await relink(s); load() }}
                       className={`p-1.5 rounded-md transition-colors ${
                         s.active ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[#94A0B1] hover:bg-[#F1F4F8]'
                       }`}
@@ -465,10 +533,7 @@ export function DevicesPanel() {
                       <Radio size={14} />
                     </button>
                     <button
-                      onClick={async () => {
-                        if (!confirm(`Remove “${s.label}”? Its stored history stays.`)) return
-                        await deleteSource(s.id); load()
-                      }}
+                      onClick={() => remove(s)}
                       className="p-1.5 rounded-md text-[#94A0B1] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                       aria-label="Remove"
                     >
