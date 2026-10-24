@@ -49,11 +49,24 @@ export async function loadSchoolIdentity(admin: SupabaseClient): Promise<SchoolI
   }
 }
 
-/** The public origin that /update-password links should use. */
-export function resolveSiteUrl(request: Request, fallback: string): string {
-  return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
-    || request.headers.get('origin')
-    || fallback
+/**
+ * The public origin that /update-password links should use.
+ *
+ * Never the request's Origin header: anyone can POST /api/auth/forgot-password
+ * with `Origin: https://evil.example`, and the victim would get a genuine
+ * school email whose link hands the token to that site. So, in order:
+ *   1. NEXT_PUBLIC_SITE_URL, when a deployment pins one;
+ *   2. VERCEL_PROJECT_PRODUCTION_URL, which Vercel sets on every deployment to
+ *      the project's production domain — nothing to configure per school;
+ *   3. the host the request actually reached, which on Vercel can only be a
+ *      domain attached to this project.
+ */
+export function resolveSiteUrl(request: Request): string {
+  const pinned = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, '')
+  if (pinned) return pinned
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, '').replace(/\/$/, '')}`
+  return new URL(request.url).origin
 }
 
 export type AccountEmailResult =
@@ -86,20 +99,20 @@ export async function sendAccountEmail(
   admin: SupabaseClient,
   opts: SendAccountEmailOptions,
 ): Promise<AccountEmailResult> {
-  const redirectTo = `${opts.siteUrl}/update-password`
+  // No redirectTo: the link we mail is built from the token hash below and
+  // never goes through Supabase's /verify, so the project's Redirect URLs
+  // allow-list doesn't need this school's domain in it.
   const { data, error } = opts.kind === 'invite'
     ? await admin.auth.admin.generateLink({
-        type: 'invite', email: opts.email, options: { data: opts.metadata, redirectTo },
+        type: 'invite', email: opts.email, options: { data: opts.metadata },
       })
-    : await admin.auth.admin.generateLink({
-        type: 'recovery', email: opts.email, options: { redirectTo },
-      })
+    : await admin.auth.admin.generateLink({ type: 'recovery', email: opts.email })
 
   if (error || !data?.properties?.hashed_token) {
     return { sent: false, user: data?.user ?? null, error: error?.message || 'Could not create the link' }
   }
 
-  const actionUrl = `${redirectTo}?${new URLSearchParams({
+  const actionUrl = `${opts.siteUrl}/update-password?${new URLSearchParams({
     token_hash: data.properties.hashed_token,
     type: opts.kind,
   })}`

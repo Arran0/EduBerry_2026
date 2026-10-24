@@ -83,25 +83,35 @@ school's — with the school named in the sender display name
 Replies go to the school's contact email from **School profile**. Code:
 `src/lib/email/`.
 
-These are platform credentials, set per deployment by us (not in-app by the
-school):
+Nothing here is per school. The sending domain, its DNS records and the API
+token are set up once, and every school deployment uses the same values:
 
 ```
 CLOUDFLARE_ACCOUNT_ID=          # account that owns the sending domain
 CLOUDFLARE_EMAIL_API_TOKEN=     # API token with Email Sending permission
 EMAIL_FROM_ADDRESS=             # e.g. no-reply@mail.eduberry.in
 EMAIL_PLATFORM_NAME=EduBerry    # optional
-NEXT_PUBLIC_SITE_URL=           # this school's public URL, used in the links
 ```
 
-One-time setup: onboard the sending domain in Cloudflare (Email Service →
-Email Sending, or `wrangler email sending enable mail.eduberry.in`) so its
-SPF/DKIM/DMARC records are published, then create the API token. Every school
-deployment reuses the same three values.
+Add them once as Vercel **Shared Environment Variables** (Team Settings →
+Environment Variables) and link each new school's project to them, instead of
+typing them into every project. The school name, logo and reply-to address
+come from that school's own Design / School profile settings, so a new client
+needs no email configuration at all.
 
-Until they are set, everything falls back to Supabase Auth's own mailer as
-before. Once they are, also add `NEXT_PUBLIC_SITE_URL/update-password` to the
-school's Supabase project under Auth → URL Configuration → Redirect URLs.
+Links point at the school's own domain: `NEXT_PUBLIC_SITE_URL` if set,
+otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, otherwise the host the
+request reached — never the request's `Origin` header, which a caller controls.
+The link is redeemed on `/update-password` directly, so the school's Supabase
+Redirect URLs list needs no change for these mails.
+
+One-time platform setup: onboard the sending domain in Cloudflare (Email
+Service → Email Sending, or `wrangler email sending enable mail.eduberry.in`)
+so its SPF/DKIM/DMARC records are published, then create the API token.
+
+Until the variables are set, everything falls back to Supabase Auth's own
+mailer as before (that path does still need the school's
+`/update-password` URL in Supabase → Auth → URL Configuration → Redirect URLs).
 
 ## Banking
 

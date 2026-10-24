@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const result = await sendAccountEmail(adminClient, {
       email,
       kind: 'recovery',
-      siteUrl: resolveSiteUrl(request, supabaseUrl),
+      siteUrl: resolveSiteUrl(request),
       recipientName: profile.full_name,
     })
     if (!result.sent) console.error('forgot-password email failed:', result.error)

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       const result = await sendAccountEmail(adminClient, {
         email,
         kind: 'invite',
-        siteUrl: resolveSiteUrl(request, supabaseUrl),
+        siteUrl: resolveSiteUrl(request),
         metadata: { role, full_name },
         recipientName: full_name,
       })
@@ -105,9 +105,9 @@ export async function POST(request: NextRequest) {
       // admin the link so the person can still be onboarded.
       if (!result.sent) inviteLink = result.actionUrl
     } else {
-      // Determine the site's public URL for the redirect link in the invite email.
-      // Priority: NEXT_PUBLIC_SITE_URL env var → request Origin header → Supabase URL (fallback).
-      const siteUrl = resolveSiteUrl(request, supabaseUrl)
+      // The site's public URL for the redirect link in the invite email
+      // (see resolveSiteUrl for the order it is picked in).
+      const siteUrl = resolveSiteUrl(request)
 
       // Invite user by email — sends a password-setup / account-activation link
       const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {

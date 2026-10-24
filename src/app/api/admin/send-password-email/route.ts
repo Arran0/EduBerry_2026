@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'This account has no email address' }, { status: 404 })
   }
 
-  const siteUrl = resolveSiteUrl(request, supabaseUrl)
+  const siteUrl = resolveSiteUrl(request)
   const neverSignedIn = !target.user.last_sign_in_at
 
   if (isEmailConfigured()) {

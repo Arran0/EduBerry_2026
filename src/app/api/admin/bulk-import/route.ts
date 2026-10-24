@@ -257,7 +257,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const siteUrl = resolveSiteUrl(request, supabaseUrl)
+  const siteUrl = resolveSiteUrl(request)
   // Read once for the whole import; null means fall back to Supabase's mailer.
   const schoolIdentity = !autoConfirm && isEmailConfigured() ? await loadSchoolIdentity(adminClient) : null
   const inviteFailures: string[] = []
