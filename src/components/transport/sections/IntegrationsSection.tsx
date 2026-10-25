@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase'
 import {
   createSource, deleteSource, fetchGateway, fetchSources, gatewayLink, rotateSourceSecret,
   sourceHealth, syncSourceGateway, testSource, updateSource,
-  type GatewayInfo, type TelemetrySource,
+  type GatewayInfo, type SourceKind, type TelemetrySource,
 } from '@/lib/transport/devices'
 import { fetchSchoolLocation } from '@/lib/transport/settings'
 import { linkDetails, vendorMessage } from '@/lib/transport/gateway'
@@ -174,8 +174,8 @@ export function DevicesPanel() {
   const [messageFor, setMessageFor] = useState<string | null>(null)
   const [gateway, setGateway] = useState<GatewayInfo>({ configured: false, host: null, port: 5179 })
   const [linking, setLinking] = useState<string | null>(null)
-  const [form, setForm] = useState<{ label: string; external_id: string; vehicle_id: string }>({
-    label: '', external_id: '', vehicle_id: '',
+  const [form, setForm] = useState<{ label: string; external_id: string; vehicle_id: string; kind: SourceKind }>({
+    label: '', external_id: '', vehicle_id: '', kind: 'gps_device',
   })
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
@@ -222,15 +222,14 @@ export function DevicesPanel() {
     }
     setError(null)
     const res = await createSource({
-      kind: 'gps_device',
+      kind: form.kind,
       label: form.label.trim(),
-      // Every device goes through EduBerry's Traccar gateway.
       vendor: 'traccar',
       external_id: form.external_id.trim(),
       vehicle_id: form.vehicle_id || null,
     })
     if (!res.success) { setError(res.error ?? 'Could not register the device'); return }
-    const link = res.id ? await syncSourceGateway(res.id, 'link') : null
+    const link = res.id && gateway.configured ? await syncSourceGateway(res.id, 'link') : null
     setNewSecret({
       label: form.label.trim(),
       bus: busName(form.vehicle_id || null, form.label.trim()),
@@ -240,7 +239,7 @@ export function DevicesPanel() {
       linked: !!link?.linked,
       linkError: link?.error,
     })
-    setForm({ label: '', external_id: '', vehicle_id: '' })
+    setForm({ label: '', external_id: '', vehicle_id: '', kind: 'gps_device' })
     setAdding(false)
     load()
   }
@@ -248,7 +247,7 @@ export function DevicesPanel() {
   // Re-link after anything the gateway's copy depends on: the key, or whether
   // the device is enabled.
   const relink = async (s: TelemetrySource) => {
-    if (s.vendor !== 'traccar' || !gateway.configured) return
+    if (!gateway.configured) return
     setLinking(s.id)
     await syncSourceGateway(s.id, 'link')
     setLinking(null)
@@ -256,7 +255,7 @@ export function DevicesPanel() {
 
   const remove = async (s: TelemetrySource) => {
     if (!confirm(`Remove “${s.label}”? Its stored history stays.`)) return
-    if (s.vendor === 'traccar' && gateway.configured) {
+    if (gateway.configured) {
       const res = await syncSourceGateway(s.id, 'unlink')
       if (!res.success && !confirm(`Couldn’t remove it from EduBerry’s GPS server (${res.error}). Remove it from the app anyway?`)) return
     }
@@ -383,7 +382,7 @@ export function DevicesPanel() {
               </Select>
             </Field>
           </div>
-          <button className={ADMIN.darkBtn} onClick={add}>Register device</button>
+          <button className={ADMIN.darkBtn} onClick={add}>Register</button>
         </div>
       )}
 
@@ -412,8 +411,8 @@ export function DevicesPanel() {
             const message = gateway.host && s.external_id
               ? vendorMessage({ bus: busName(s.vehicle_id, s.label), imei: s.external_id, host: gateway.host, port: gateway.port })
               : null
-            const link = s.vendor === 'traccar' && gateway.configured ? gatewayLink(s) : null
-            const onGateway = s.vendor === 'traccar' && gateway.configured
+            const link = gateway.configured ? gatewayLink(s) : null
+            const onGateway = gateway.configured
             return (
               <React.Fragment key={s.id}>
               <div className={SHEET.row}>
