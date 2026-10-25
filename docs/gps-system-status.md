@@ -2,13 +2,13 @@
 
 As of 24 Oct 2026.
 
-The GPS system is built but not live. No school can link a bus yet, because the gateway server running now was set up before the code that links devices, and lacks the access token that code needs.
+The GPS system is built but not live. No school can link a bus yet: the branch is not merged and no school has the gateway settings. The running server needs no rebuild; an admin-account token stands in for the missing service-account token.
 
-All the code sits on branch `claude/quirky-feynman-jxi3p0`. It is not on main and has no pull request.
+All the code sits on branch `claude/quirky-feynman-jxi3p0`, now up to date with main. It is not on main and has no pull request.
 
 On multitenancy, the school side is ready: each school has its own app and its own database. The shared gateway already serves many schools from one server. The main gap is that every school's app holds the same full-control gateway token, so keeping schools apart on the gateway depends on our code, not on Traccar.
 
-Going live takes three steps: rebuild the gateway, set the Vercel and GitHub secrets, and merge the branch.
+Going live takes three steps: generate a gateway token, set the Vercel and GitHub secrets, and merge the branch.
 
 ## How it works
 
@@ -75,7 +75,7 @@ The server is up and locked down, the code is written and tested, and one blocke
 | --- | --- | --- |
 | Gateway server | Live | Droplet running Traccar 6.16. The admin page answers at https://168-144-154-4.sslip.io. |
 | Admin account | Live | Registered by the owner. Public sign-up is off (checked on 24 Oct). |
-| Service-account token on the server | Blocked | The server was built with the earlier cloud-init, which had no token. `provision.py` refuses to connect schools to it and asks for a rebuild. Waiting on a decision. |
+| Gateway token | Unblocked, not done | The server was built without a service-account token, but an admin-account token works the same (verified on Traccar 6.16 on 25 Oct). Generate it under Settings → Preferences → Token and pass it to `provision.py` as `GPS_GATEWAY_TOKEN`. No rebuild needed. |
 | Automatic linking (register, rotate, enable, remove) | Built, not merged | On the branch. Tested against a Traccar 6.16 server when written. Unit tests pass. |
 | GPS panel: Traccar only, IMEI form, vendor message | Built, not merged | On the branch. Typecheck, lint and all 588 tests pass. Not yet clicked through in a browser. |
 | Nightly sync workflow | Not verified | Needs the `DIGITALOCEAN_TOKEN` and `VERCEL_TOKEN` repository secrets; not checked whether they exist. It skips quietly until they do. |
@@ -86,8 +86,8 @@ The server is up and locked down, the code is written and tested, and one blocke
 
 To go live:
 
-1. Decide on the server. Rebuilding is recommended: nothing depends on it yet. It gives a new admin URL, and a new device IP unless we move the old reserved IP across.
-2. Set `DIGITALOCEAN_TOKEN` and `VERCEL_TOKEN` (plus `VERCEL_TEAM_ID` if schools sit under a team), then run `provision.py`. It creates the server and connects every school.
+1. Generate a token in the gateway's admin account (Settings → Preferences → Token, expiry years ahead). Keep the current server; a rebuild is no longer needed. If it is ever rebuilt, `provision.py` moves the old reserved IP across.
+2. Set `DIGITALOCEAN_TOKEN`, `VERCEL_TOKEN` and `GPS_GATEWAY_TOKEN` (plus `VERCEL_TEAM_ID` if schools sit under a team), then run `provision.py`. It finds the existing server and connects every school.
 3. Add `DIGITALOCEAN_TOKEN` and `VERCEL_TOKEN` as GitHub repository secrets, so the nightly sync connects new schools.
 4. Merge main into the branch, open a pull request, and merge it.
 5. Run one real bus end to end: register it, have the vendor set the server, and check its health turns to Reporting.

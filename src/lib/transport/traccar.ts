@@ -4,10 +4,11 @@ import 'server-only'
  * Client for EduBerry's shared Traccar gateway (infra/gps-gateway).
  *
  * Each school's app links its own devices: one Traccar device per IMEI, whose
- * `forward.url` attribute points at that school's ingest endpoint. The token is
- * the gateway's service-account token (web.serviceAccountToken), which acts as
- * an admin — so a device created here carries no user permission, and lookups
- * list everything rather than relying on one.
+ * `forward.url` attribute points at that school's ingest endpoint. The token
+ * must act as a Traccar admin: either the gateway's service-account token
+ * (web.serviceAccountToken) or one generated from an admin account under
+ * Settings → Preferences → Token. Lookups list every device rather than rely
+ * on per-user permissions, which the service account does not get.
  */
 
 export interface GatewayConfig {

@@ -20,8 +20,12 @@ Each school's app links its own devices through Traccar's API
 DIGITALOCEAN_TOKEN=... VERCEL_TOKEN=... python3 infra/gps-gateway/provision.py
 ```
 
-- DigitalOcean token: custom scopes droplet, reserved_ip, firewall (create,
-  read) and account (read).
+- DigitalOcean token: custom scopes droplet and firewall (create, read),
+  reserved_ip (create, read, update) and account (read).
+- A gateway built before the service-account token (the one live now) works
+  too: generate a token from its admin account under **Settings →
+  Preferences → Token** with a far-off expiry, and pass it as
+  `GPS_GATEWAY_TOKEN`. No rebuild needed.
 - Vercel token: for the team that hosts the schools; add `VERCEL_TEAM_ID` if
   they live under a team.
 - School projects are found by their `SUPABASE_SERVICE_ROLE_KEY` variable;

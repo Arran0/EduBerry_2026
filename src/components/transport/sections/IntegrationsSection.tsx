@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase'
 import {
   createSource, deleteSource, fetchGateway, fetchSources, gatewayLink, rotateSourceSecret,
   sourceHealth, syncSourceGateway, testSource, updateSource,
-  type GatewayInfo, type SourceKind, type TelemetrySource,
+  type GatewayInfo, type TelemetrySource,
 } from '@/lib/transport/devices'
 import { fetchSchoolLocation } from '@/lib/transport/settings'
 import { linkDetails, vendorMessage } from '@/lib/transport/gateway'
@@ -174,8 +174,8 @@ export function DevicesPanel() {
   const [messageFor, setMessageFor] = useState<string | null>(null)
   const [gateway, setGateway] = useState<GatewayInfo>({ configured: false, host: null, port: 5179 })
   const [linking, setLinking] = useState<string | null>(null)
-  const [form, setForm] = useState<{ label: string; vendor: string; external_id: string; vehicle_id: string; kind: SourceKind }>({
-    label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device',
+  const [form, setForm] = useState<{ label: string; external_id: string; vehicle_id: string }>({
+    label: '', external_id: '', vehicle_id: '',
   })
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
@@ -222,14 +222,15 @@ export function DevicesPanel() {
     }
     setError(null)
     const res = await createSource({
-      kind: form.kind,
+      kind: 'gps_device',
       label: form.label.trim(),
-      vendor: form.vendor,
+      // Every device goes through EduBerry's Traccar gateway.
+      vendor: 'traccar',
       external_id: form.external_id.trim(),
       vehicle_id: form.vehicle_id || null,
     })
     if (!res.success) { setError(res.error ?? 'Could not register the device'); return }
-    const link = res.id && form.vendor === 'traccar' ? await syncSourceGateway(res.id, 'link') : null
+    const link = res.id ? await syncSourceGateway(res.id, 'link') : null
     setNewSecret({
       label: form.label.trim(),
       bus: busName(form.vehicle_id || null, form.label.trim()),
@@ -239,7 +240,7 @@ export function DevicesPanel() {
       linked: !!link?.linked,
       linkError: link?.error,
     })
-    setForm({ label: '', vendor: 'traccar', external_id: '', vehicle_id: '', kind: 'gps_device' })
+    setForm({ label: '', external_id: '', vehicle_id: '' })
     setAdding(false)
     load()
   }
@@ -300,21 +301,6 @@ export function DevicesPanel() {
             message can&apos;t be prepared. Contact EduBerry support.
           </p>
         )}
-        <details className="mt-3">
-          <summary className="text-[11px] text-[#94A0B1] cursor-pointer">Using your own forwarder instead (developers)</summary>
-          <code className="block mt-2 text-[11px] bg-[#F7F9FB] border border-[#E2E7EE] rounded-lg px-2.5 py-2 text-[#475264] break-all">
-            POST {typeof window !== 'undefined' ? window.location.origin : ''}/api/transport/ingest
-          </code>
-          <p className="text-[11px] text-[#94A0B1] mt-1.5">
-            Each device gets a <strong>key id</strong> and a <strong>secret</strong>. Send the key id
-            in <code>x-transport-key-id</code>, a unix time in <code>x-transport-timestamp</code>, and
-            in <code>x-transport-signature</code> the value
-            <code> sha256=HMAC-SHA256(secret, timestamp + &quot;.&quot; + body)</code>. The secret
-            itself is never sent. Forwarders that cannot sign may append
-            <code> ?key=&lt;key id&gt;&amp;secret=&lt;secret&gt;</code> instead — simpler, but the
-            secret then appears in server logs, so rotate it periodically.
-          </p>
-        </details>
       </div>
 
       {newSecret?.linked && (
@@ -390,13 +376,6 @@ export function DevicesPanel() {
             <Field label="IMEI" hint="15-digit number on the device label, or ask your GPS vendor.">
               <TextInput inputMode="numeric" value={form.external_id} onChange={e => setForm(f => ({ ...f, external_id: e.target.value }))} />
             </Field>
-            <Field label="Gateway" hint="Leave as EduBerry GPS server unless support says otherwise.">
-              <Select value={form.vendor} onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))}>
-                <option value="traccar">EduBerry GPS server (Traccar)</option>
-                <option value="flespi">flespi</option>
-                <option value="generic">Custom / own forwarder</option>
-              </Select>
-            </Field>
             <Field label="Bus" hint="What this device is fitted to.">
               <Select value={form.vehicle_id} onChange={e => setForm(f => ({ ...f, vehicle_id: e.target.value }))}>
                 <option value="">Not set</option>
@@ -404,7 +383,7 @@ export function DevicesPanel() {
               </Select>
             </Field>
           </div>
-          <button className={ADMIN.darkBtn} onClick={add}>Register and mint key</button>
+          <button className={ADMIN.darkBtn} onClick={add}>Register device</button>
         </div>
       )}
 
@@ -445,7 +424,7 @@ export function DevicesPanel() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-[#13306B] truncate">{s.label}</p>
                     <p className="text-[11px] text-[#5B6676] truncate">
-                      {s.vendor} · {s.external_id}
+                      IMEI {s.external_id}
                       {s.ingest_key_prefix && ` · key ${s.ingest_key_prefix}`}
                     </p>
                     {s.last_error && (

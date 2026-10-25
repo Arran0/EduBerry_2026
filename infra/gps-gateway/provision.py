@@ -11,6 +11,9 @@ Environment:
   VERCEL_TEAM_ID      optional, when the projects live under a team
   VERCEL_PROJECTS     optional comma-separated project names; by default every
                       project that has SUPABASE_SERVICE_ROLE_KEY (an EduBerry app)
+  GPS_GATEWAY_TOKEN   optional, for a gateway built without a service-account
+                      token: one generated from its admin account under
+                      Settings → Preferences → Token
 
 Creating makes, or reuses if they already exist:
   - a droplet tagged gps-gateway (Bangalore, 1 GB, weekly backups) that
@@ -107,11 +110,19 @@ def wait_active(droplet_id):
 
 
 def reserved_ip(droplet_id, create):
-    for ip in do('GET', '/reserved_ips')['reserved_ips']:
+    ips = do('GET', '/reserved_ips')['reserved_ips']
+    for ip in ips:
         if ip.get('droplet') and ip['droplet']['id'] == droplet_id:
             return ip['ip']
     if not create:
         return None
+    # A spare one is usually the old gateway's after a rebuild: reusing it keeps
+    # every device's configured address working, and an idle one is billed.
+    for ip in ips:
+        if not ip.get('droplet') and ip.get('region', {}).get('slug') == REGION:
+            do('POST', f'/reserved_ips/{ip["ip"]}/actions', {'type': 'assign', 'droplet_id': droplet_id})
+            print(f'Moved reserved IP {ip["ip"]} to the gateway')
+            return ip['ip']
     ip = do('POST', '/reserved_ips', {'droplet_id': droplet_id})['reserved_ip']['ip']
     print(f'Assigned reserved IP {ip}')
     return ip
@@ -147,8 +158,9 @@ def admin_url(droplet):
 
 
 def gateway_answers(url, token):
-    """True once Traccar is up behind Caddy and accepts the service token."""
-    req = urllib.request.Request(url + '/api/server', headers={'Authorization': f'Bearer {token}'})
+    """True once Traccar is up behind Caddy and accepts the token as an admin."""
+    # /api/server answers anyone; listing every device needs an admin.
+    req = urllib.request.Request(url + '/api/devices?all=true&limit=1', headers={'Authorization': f'Bearer {token}'})
     try:
         with urllib.request.urlopen(req, timeout=10) as res:
             return res.status == 200
@@ -261,10 +273,11 @@ def main():
     created = False
     if droplet:
         print(f'Gateway droplet {droplet["id"]} exists')
-        token = token_from_vercel()
+        token = os.environ.get('GPS_GATEWAY_TOKEN') or token_from_vercel()
         if not token:
-            sys.exit('The gateway exists but no school on Vercel has its token, so it cannot be recovered. '
-                     'Destroy the gateway droplet and run this again to create a fresh one.')
+            sys.exit('The gateway exists but no school on Vercel has its token. Generate one in the gateway '
+                     '(Settings → Preferences → Token) and run again with GPS_GATEWAY_TOKEN set, or destroy '
+                     'the droplet and run again to build a fresh one.')
     elif sync_only:
         sys.exit('No gateway droplet yet. Run without --sync to create it.')
     else:
