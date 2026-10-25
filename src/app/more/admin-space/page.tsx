@@ -57,7 +57,7 @@ const adminTools = [
   },
   {
     title: 'Attendance Rules',
-    description: 'Late and checkout cutoffs, holidays, non-working days and who is tracked',
+    description: 'Staff and student attendance: cutoffs, groups, holiday calendars and who is tracked',
     href: '/admin/attendance',
     icon: Clock,
   },

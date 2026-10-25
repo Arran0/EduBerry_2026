@@ -11,6 +11,7 @@ import {
   fetchMyAttendanceByMonth,
   AttendanceDayRecord,
 } from '@/lib/attendance'
+import StudentHolidayNotice from '@/components/attendance/StudentHolidayNotice'
 import {
   LeaveApplicationWithDetails,
   fetchLeaveApplicationsForStudentByMonth,
@@ -437,6 +438,7 @@ export default function AttendanceMarkSheet({ homeroomId, homeroomName, markedBy
               {saved && !hasChanges ? 'Saved' : 'Save'}
             </button>
           </div>
+          <StudentHolidayNotice homeroomId={homeroomId} date={date} className="flex-shrink-0" />
 
           {/* ── Roster ── */}
           <div className="flex-1 overflow-y-auto">

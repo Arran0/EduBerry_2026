@@ -1664,6 +1664,13 @@ interface ScopeRuleTables {
   columns: string
   defaultLabel: string
   groupLabel: string
+  /**
+   * Rows may also be written by a holiday calendar (calendar_id set — see
+   * attendanceCalendars.ts). Those count everywhere a day is scored, but are
+   * managed from their calendar: the per-scope editor neither lists nor
+   * deletes them.
+   */
+  calendarManaged?: boolean
 }
 
 const HOLIDAY_TABLES: ScopeRuleTables = {
@@ -1673,6 +1680,7 @@ const HOLIDAY_TABLES: ScopeRuleTables = {
   columns: 'id, scope_type, scope_date, scope_weekday, name, is_default',
   defaultLabel: 'Holiday',
   groupLabel: 'Group holiday',
+  calendarManaged: true,
 }
 
 const NON_WORKING_DAY_TABLES: ScopeRuleTables = {
@@ -1700,6 +1708,28 @@ async function attachScopeMembers(rows: ScopeRuleRow[], t: ScopeRuleTables): Pro
     staffByRule.get(key)!.push(m.staff_id)
   }
   return rows.map(r => ({ ...r, staff_ids: staffByRule.get(r.id) ?? [] }))
+}
+
+/**
+ * Ids of the rows a holiday calendar wrote. Empty for a table calendars don't
+ * write to, and on a deployment without the calendar migration (the column
+ * is missing, the query errors) — every row is then hand-made, as before.
+ */
+async function fetchCalendarRuleIds(t: ScopeRuleTables, among: string[]): Promise<Set<string>> {
+  if (!t.calendarManaged) return new Set()
+  let query = supabase.from(t.table).select('id').not('calendar_id', 'is', null)
+  // A short list is asked about by id; a long one would overflow the URL.
+  if (among.length <= 200) query = query.in('id', among)
+  const { data, error } = await query
+  if (error) return new Set()
+  return new Set((data ?? []).map(r => r.id as string))
+}
+
+/** Only the hand-made rules — what the per-scope editor and the rules list manage. */
+async function withoutCalendarRules<T extends { id: string }>(t: ScopeRuleTables, rules: T[]): Promise<T[]> {
+  if (!t.calendarManaged || rules.length === 0) return rules
+  const calendarIds = await fetchCalendarRuleIds(t, rules.map(r => r.id))
+  return calendarIds.size === 0 ? rules : rules.filter(r => !calendarIds.has(r.id))
 }
 
 /** Rules directly attached to one scope (an exact date, or one weekday number). */
@@ -1754,11 +1784,13 @@ async function saveScopeRules(
   let delQuery = supabase.from(t.table).select('id').eq('scope_type', scope.type)
   delQuery = scope.type === 'date' ? delQuery.eq('scope_date', scope.date) : delQuery.eq('scope_weekday', scope.weekday)
 
-  const { data: existing, error: fetchError } = await delQuery
+  const { data: found, error: fetchError } = await delQuery
   if (fetchError) {
     console.error(`saveScopeRules(${t.table}) fetch error:`, fetchError)
     return false
   }
+  // A calendar's rows on this scope stay; they belong to the calendar.
+  const existing = await withoutCalendarRules(t, (found ?? []) as { id: string }[])
 
   if (existing && existing.length > 0) {
     const { error: delError } = await supabase.from(t.table).delete().in('id', existing.map(r => r.id))
@@ -1986,7 +2018,7 @@ export async function fetchHolidaysForDate(date: string): Promise<HolidayGroup[]
 
 /** Every rule directly attached to one scope — used by the edit modal, which manages one scope's rules as a unit. */
 export async function fetchHolidaysByScope(scope: DayTimingScope): Promise<HolidayGroup[]> {
-  return fetchScopeRulesByScope(HOLIDAY_TABLES, scope)
+  return withoutCalendarRules(HOLIDAY_TABLES, await fetchScopeRulesByScope(HOLIDAY_TABLES, scope))
 }
 
 /**
@@ -2001,9 +2033,12 @@ export async function saveHolidays(
   return saveScopeRules(HOLIDAY_TABLES, scope, groups, createdBy)
 }
 
-/** Every holiday rule that exists, of either scope — for a management/overview list (e.g. Settings). */
+/**
+ * Every hand-made holiday rule, of either scope — for the Attendance Rules
+ * list. Holidays a calendar wrote are listed under their calendar instead.
+ */
 export async function fetchAllHolidayRules(): Promise<HolidayGroup[]> {
-  return fetchAllScopeRules(HOLIDAY_TABLES)
+  return withoutCalendarRules(HOLIDAY_TABLES, await fetchAllScopeRules(HOLIDAY_TABLES))
 }
 
 // ============================================

@@ -1,12 +1,21 @@
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Attendance rules — how a staff check-in is scored.
+// Attendance rules, in two halves.
 //
+// Staff — how a staff check-in is scored:
 //   Timing           — the school-wide late and checkout cutoffs.
 //   Exceptions       — cutoff overrides, holidays and non-working days, each
 //                      for one date or repeating on a weekday.
+//   Groups           — named slices of the staff, each able to keep its own
+//                      holiday calendar.
+//   Calendars        — whole-year holiday lists, typed in or uploaded.
 //   Who is tracked   — the people left out of attendance lists and counts.
+//
+// Students — the class register:
+//   Groups           — named sets of homerooms (a wing, a grade band, a shift).
+//   Calendars        — holiday lists for every class or chosen groups; the
+//                      register shows the holiday on those days.
 //
 // Was the Attendance tab of App Settings; it is its own page in Admin Space
 // now. Geofence exemptions moved to the Geofencing page, beside the fence they
@@ -15,7 +24,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { X, Ban, CalendarOff, Clock, Clock3, EyeOff, Loader2, Pencil, Plus, Repeat, Trash2, Users, CalendarClock } from 'lucide-react'
+import { X, Ban, CalendarOff, Clock, Clock3, EyeOff, Loader2, Pencil, Plus, Repeat, Trash2, Users, CalendarClock, Briefcase, GraduationCap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import ProtectedLayout from '@/components/ProtectedLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -31,8 +40,14 @@ import {
   DayTimingGroup, HolidayGroup, NonWorkingDayGroup,
 } from '@/lib/attendance'
 import { fetchTeamsForDropdown } from '@/lib/teams'
+import { fetchAllHomerooms, Homeroom } from '@/lib/homerooms'
 import { UserProfile } from '@/lib/supabase'
+import {
+  AttendanceAudience, AttendanceGroup, HolidayCalendar, fetchAttendanceGroups, fetchHolidayCalendars,
+} from '@/lib/attendanceCalendars'
 import { AdminPage, AX, EmptyLine, Panel, PageLoading, SaveButton, SearchField, Switch } from '@/components/admin/ui'
+import AttendanceGroupsPanel from '@/components/attendance/AttendanceGroupsPanel'
+import HolidayCalendarsPanel from '@/components/attendance/HolidayCalendarsPanel'
 
 const DayTimingModal = dynamic(() => import('@/components/attendance/DayTimingModal'), { ssr: false })
 const HolidayModal = dynamic(() => import('@/components/attendance/HolidayModal'), { ssr: false })
@@ -87,16 +102,105 @@ export default function AttendanceRulesPage() {
         icon={Clock}
         backgroundIcon={CalendarClock}
         title="Attendance rules"
-        subtitle="Cutoffs, holidays, non-working days and who is tracked"
+        subtitle="Staff and student attendance: timing, groups and holiday calendars"
         maxWidth="max-w-[1800px]"
       >
-        <AttendanceBody />
+        <AttendanceHalves />
       </AdminPage>
     </ProtectedLayout>
   )
 }
 
-function AttendanceBody() {
+const HALF_STORAGE_KEY = 'attendance-rules-half'
+
+/** The Staff / Student switch. The choice is remembered per browser, and `?for=student` opens on the student half. */
+function AttendanceHalves() {
+  const [half, setHalf] = useState<AttendanceAudience>('staff')
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('for')
+    if (fromUrl === 'student' || fromUrl === 'staff') { setHalf(fromUrl); return }
+    try {
+      const stored = localStorage.getItem(HALF_STORAGE_KEY)
+      if (stored === 'student' || stored === 'staff') setHalf(stored)
+    } catch { /* storage blocked — stay on staff */ }
+  }, [])
+
+  function choose(next: AttendanceAudience) {
+    setHalf(next)
+    try { localStorage.setItem(HALF_STORAGE_KEY, next) } catch { /* not remembered, still switched */ }
+  }
+
+  const tabs: { key: AttendanceAudience; label: string; short: string; icon: typeof Briefcase }[] = [
+    { key: 'staff', label: 'Staff attendance', short: 'Staff', icon: Briefcase },
+    { key: 'student', label: 'Student attendance', short: 'Students', icon: GraduationCap },
+  ]
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <div role="tablist" aria-label="Attendance settings for" className={`${AX.sheet} p-1 grid grid-cols-2 gap-1 sm:inline-grid sm:w-auto`}>
+        {tabs.map(t => {
+          const on = half === t.key
+          const Icon = t.icon
+          return (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={on}
+              onClick={() => choose(t.key)}
+              className={`inline-flex items-center justify-center gap-2 h-10 px-5 rounded-lg text-[13.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8983C]/60 ${
+                on ? 'bg-[#27272A] text-[#F5F5F5] border-b-2 border-[#B8983C]' : 'text-[#52525B] hover:bg-[#F5F5F5]'
+              }`}
+            >
+              <Icon size={15} className={on ? 'text-[#B8983C]' : 'text-[#A1A1AA]'} />
+              <span className="hidden sm:inline">{t.label}</span>
+              <span className="sm:hidden">{t.short}</span>
+            </button>
+          )
+        })}
+      </div>
+      {half === 'staff' ? <StaffAttendanceBody /> : <StudentAttendanceBody />}
+    </div>
+  )
+}
+
+/** Groups and holiday calendars for one audience, loaded together and reloaded after any change. */
+function useGroupsAndCalendars(audience: AttendanceAudience) {
+  const [groups, setGroups] = useState<AttendanceGroup[]>([])
+  const [calendars, setCalendars] = useState<HolidayCalendar[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const reload = async () => {
+    const [g, c] = await Promise.all([fetchAttendanceGroups(audience), fetchHolidayCalendars(audience)])
+    setGroups(g); setCalendars(c); setLoaded(true)
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { reload() }, [audience])
+  return { groups, calendars, loaded, reload }
+}
+
+function StudentAttendanceBody() {
+  const { profile } = useAuth()
+  const { groups, calendars, loaded, reload } = useGroupsAndCalendars('student')
+  const [homerooms, setHomerooms] = useState<Homeroom[] | null>(null)
+
+  useEffect(() => { fetchAllHomerooms().then(setHomerooms) }, [])
+
+  if (!loaded || !homerooms || !profile) return <PageLoading>Loading student attendance settings…</PageLoading>
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+        <AttendanceGroupsPanel audience="student" groups={groups} homerooms={homerooms} viewerId={profile.id} onChanged={reload} />
+        <HolidayCalendarsPanel audience="student" calendars={calendars} groups={groups} viewerId={profile.id} onChanged={reload} />
+      </div>
+      <p className="text-[12px] text-[#71717A] px-1">
+        Teachers still open the register on a holiday, but it tells them the day is off. Groups follow homerooms, so a student moved to another class moves with it.
+      </p>
+    </div>
+  )
+}
+
+function StaffAttendanceBody() {
   const { profile } = useAuth()
 
   const [loaded, setLoaded] = useState(false)
@@ -116,6 +220,8 @@ function AttendanceBody() {
 
   const [editing, setEditing] = useState<Editing>(null)
   const [clearingKey, setClearingKey] = useState<string | null>(null)
+
+  const staffGroups = useGroupsAndCalendars('staff')
 
   useEffect(() => {
     Promise.all([
@@ -176,7 +282,7 @@ function AttendanceBody() {
   }, [staff, hideQuery])
   const hiddenCount = staff.filter(s => s.attendance_hidden).length
 
-  if (!loaded) return <PageLoading>Loading attendance rules…</PageLoading>
+  if (!loaded || !staffGroups.loaded) return <PageLoading>Loading attendance rules…</PageLoading>
 
   const timingGroups = groupRulesByScope(timingRules)
   const holidayGroups = groupRulesByScope(holidayRules)
@@ -283,6 +389,27 @@ function AttendanceBody() {
       <p className="text-[12px] text-[#71717A] px-1">
         The same three controls sit next to each date on the Staff Attendance page.
       </p>
+
+      {/* Groups, and the holiday calendars given to everyone or to groups. */}
+      {profile && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+          <AttendanceGroupsPanel
+            audience="staff"
+            groups={staffGroups.groups}
+            staff={trackedStaff}
+            teams={teams}
+            viewerId={profile.id}
+            onChanged={staffGroups.reload}
+          />
+          <HolidayCalendarsPanel
+            audience="staff"
+            calendars={staffGroups.calendars}
+            groups={staffGroups.groups}
+            viewerId={profile.id}
+            onChanged={staffGroups.reload}
+          />
+        </div>
+      )}
 
       {/* Who is tracked. */}
       <Panel

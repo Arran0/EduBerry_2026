@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
 import StudentCalendarModal from '@/components/attendance/StudentCalendarModal'
+import StudentHolidayNotice from '@/components/attendance/StudentHolidayNotice'
 import { Homeroom, HomeroomClassTeacher, searchHomerooms } from '@/lib/homerooms'
 import {
   AttendanceStatus,
@@ -410,6 +411,7 @@ function InlineSheet({
         </button>
         {saveButton(false)}
       </div>
+      <StudentHolidayNotice homeroomId={homeroom.id} date={date} />
 
       {/* Roster — rows are sized so ~15 students fit before it starts to
           scroll, since marking a class means working down the whole list. */}
