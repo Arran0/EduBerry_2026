@@ -41,6 +41,7 @@ import {
   deleteUser,
   toggleBan,
   setUserPassword,
+  sendPasswordEmail,
   NewUserInput,
 } from '@/lib/admin'
 import { upsertStudentDetails } from '@/lib/studentDetails'
@@ -115,6 +116,10 @@ export default function StudentProfileManagerPage() {
   useEffect(() => { if (showCreateModal) setCreateAutoConfirmPassword(generateTempPassword()) }, [showCreateModal])
   const [createdAutoConfirm, setCreatedAutoConfirm] = useState(false)
   const [createdEmail, setCreatedEmail] = useState('')
+  // Set only when the invite email could not be sent: the link to hand over instead.
+  const [createdInviteLink, setCreatedInviteLink] = useState('')
+  // A success screen left open for its link mustn't greet the next opening.
+  useEffect(() => { if (!showCreateModal) { setCreatedInviteLink(''); setCreateSuccess(false) } }, [showCreateModal])
 
   const [createForm, setCreateForm] = useState({ email: '', full_name: '', grade: '', section: '' })
   const [createStudentFields, setCreateStudentFields] = useState({
@@ -133,6 +138,7 @@ export default function StudentProfileManagerPage() {
   const [showSetPw, setShowSetPw] = useState(false)
   const [setPwLoading, setSetPwLoading] = useState(false)
   const [setPwMsg, setSetPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [sendLinkLoading, setSendLinkLoading] = useState(false)
 
   // Search, filter, sort and paging all happen in Postgres. The roster is a
   // thousand students; what used to arrive was every column of every one of
@@ -227,6 +233,8 @@ export default function StudentProfileManagerPage() {
         }
       }
       setCreatedAutoConfirm(!!result.autoConfirm)
+      const manualLink = !result.autoConfirm && !result.emailSent ? result.inviteLink ?? '' : ''
+      setCreatedInviteLink(manualLink)
       setCreatedEmail(createForm.email.trim())
       setCreateSuccess(true)
       setCreateForm({ email: '', full_name: '', grade: '', section: '' })
@@ -238,7 +246,7 @@ export default function StudentProfileManagerPage() {
         address: '', aadhaar_no: '',
       })
       await loadProfiles()
-      setTimeout(() => { setShowCreateModal(false); setCreateSuccess(false); setCreatedAutoConfirm(false); setCreatedEmail('') }, 3000)
+      if (!manualLink) setTimeout(() => { setShowCreateModal(false); setCreateSuccess(false); setCreatedAutoConfirm(false); setCreatedEmail('') }, 3000)
     } else {
       setCreateError(result.error || 'Failed to create student')
     }
@@ -250,6 +258,19 @@ export default function StudentProfileManagerPage() {
     setSetPwValue('')
     setShowSetPw(false)
     setSetPwMsg(null)
+  }
+
+  const handleSendPasswordLink = async () => {
+    if (!setPwTarget) return
+    setSendLinkLoading(true)
+    setSetPwMsg(null)
+    const result = await sendPasswordEmail(setPwTarget.id)
+    setSendLinkLoading(false)
+    if (result.success) {
+      setSetPwMsg({ type: 'success', text: `Password link emailed to ${result.email ?? setPwTarget.email}.` })
+    } else {
+      setSetPwMsg({ type: 'error', text: (result.error || 'Failed to send the email.') + (result.link ? ` Share this one-time link instead: ${result.link}` : '') })
+    }
   }
 
   const handleSetPassword = async () => {
@@ -460,7 +481,9 @@ export default function StudentProfileManagerPage() {
                           <h3 className="font-bold text-lg text-[#18181B] mb-2">Student Created!</h3>
                           {createdAutoConfirm
                             ? <div className="space-y-1"><p className="text-sm text-[#71717A]">Account confirmed. Student can sign in immediately.</p><p className="text-xs text-[#71717A] mt-1">Password: <span className="font-mono font-semibold text-[#18181B]">{createAutoConfirmPassword}</span></p></div>
-                            : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>
+                            : (createdInviteLink
+                              ? <div className="space-y-2 text-left"><p className="text-sm text-amber-700">Account created, but the setup email to {createdEmail} could not be sent. Share this one-time link with them:</p><textarea readOnly value={createdInviteLink} onFocus={e => e.currentTarget.select()} rows={3} className="w-full border border-[#D4D4D8] bg-[#F5F5F5] px-3 py-2 text-xs font-mono rounded-lg resize-none" /></div>
+                              : <p className="text-sm text-[#71717A]">Password setup email sent to {createdEmail}</p>)
                           }
                         </div>
                       ) : (
@@ -636,7 +659,7 @@ export default function StudentProfileManagerPage() {
                     type={showSetPw ? 'text' : 'password'}
                     value={setPwValue}
                     onChange={e => setSetPwValue(e.target.value)}
-                    placeholder="New password (min 6 chars)"
+                    placeholder={`New password (min ${MIN_PASSWORD_LENGTH} chars)`}
                     autoFocus
                     disabled={setPwLoading}
                     className="w-full border border-[#D4D4D8] bg-white pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:border-[#27272A] transition-colors rounded-lg"
@@ -672,6 +695,18 @@ export default function StudentProfileManagerPage() {
                     {setPwLoading ? <><Loader2 size={14} className="animate-spin" /> Setting…</> : 'Set Password'}
                   </button>
                 </div>
+
+                <div className="flex items-center gap-2 pt-1 text-[11px] uppercase tracking-widest text-[#A1A1AA]">
+                  <span className="h-px flex-1 bg-[#E4E4E7]" />or<span className="h-px flex-1 bg-[#E4E4E7]" />
+                </div>
+                <button
+                  onClick={handleSendPasswordLink}
+                  disabled={setPwLoading || sendLinkLoading || !setPwTarget.email}
+                  className="w-full h-10 px-4 rounded-lg border border-[#D4D4D8] text-[#18181B] text-sm font-semibold hover:border-[#A1A1AA] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {sendLinkLoading ? <><Loader2 size={14} className="animate-spin" /> Sending…</> : 'Email a password link'}
+                </button>
+                <p className="text-[11px] text-[#A1A1AA] text-center">They choose their own password from a one-time link sent to {setPwTarget.email || 'their email'}.</p>
               </div>
             </motion.div>
           </motion.div>

@@ -74,6 +74,45 @@ Bank credentials are **not** environment variables. Each school enters its own i
 `BANK_PAYOUT_*` env vars exist only as a fallback for single-tenant self-hosting
 and are overridden by anything saved in the app.
 
+## Account emails (invite & password reset)
+
+Invites, admin-sent password links and "Forgot your password?" mails go out
+through **Cloudflare Email Service** from the platform's own domain — never a
+school's — with the school named in the sender display name
+("Muthamil Public School via EduBerry"), the subject, the body and the footer.
+Replies go to the school's contact email from **School profile**. Code:
+`src/lib/email/`.
+
+Nothing here is per school. The sending domain, its DNS records and the API
+token are set up once, and every school deployment uses the same values:
+
+```
+CLOUDFLARE_ACCOUNT_ID=          # account that owns the sending domain
+CLOUDFLARE_EMAIL_API_TOKEN=     # API token with Email Sending permission
+EMAIL_FROM_ADDRESS=             # e.g. no-reply@mail.eduberry.in
+EMAIL_PLATFORM_NAME=EduBerry    # optional
+```
+
+Add them once as Vercel **Shared Environment Variables** (Team Settings →
+Environment Variables) and link each new school's project to them, instead of
+typing them into every project. The school name, logo and reply-to address
+come from that school's own Design / School profile settings, so a new client
+needs no email configuration at all.
+
+Links point at the school's own domain: `NEXT_PUBLIC_SITE_URL` if set,
+otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, otherwise the host the
+request reached — never the request's `Origin` header, which a caller controls.
+The link is redeemed on `/update-password` directly, so the school's Supabase
+Redirect URLs list needs no change for these mails.
+
+One-time platform setup: onboard the sending domain in Cloudflare (Email
+Service → Email Sending, or `wrangler email sending enable mail.eduberry.in`)
+so its SPF/DKIM/DMARC records are published, then create the API token.
+
+Until the variables are set, everything falls back to Supabase Auth's own
+mailer as before (that path does still need the school's
+`/update-password` URL in Supabase → Auth → URL Configuration → Redirect URLs).
+
 ## Banking
 
 Fees are collected into, and salaries are paid out of, the school's **own bank

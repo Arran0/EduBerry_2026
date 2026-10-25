@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server'
 import { logAdminAction } from '@/lib/adminAudit'
 import { syncStudentHomeroom } from '@/lib/homeroomAutoManage'
 import { MIN_PASSWORD_LENGTH } from '@/lib/passwords'
+import { isEmailConfigured, resolveSiteUrl, sendAccountEmail } from '@/lib/email/accountEmails'
 
 // This route requires SUPABASE_SERVICE_ROLE_KEY in environment variables
 // Get it from: Supabase Dashboard → Project Settings → API → service_role secret
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
   try {
     let newUserId: string | undefined
     let inviteLink: string | undefined
+    let emailSent = false
 
     if (autoConfirm) {
       // Auto-confirm: create account with the given password, no invite email needed
@@ -79,13 +81,33 @@ export async function POST(request: NextRequest) {
       }
 
       newUserId = createData.user?.id
+    } else if (isEmailConfigured()) {
+      // Branded invite from the platform domain via Cloudflare (see src/lib/email).
+      const result = await sendAccountEmail(adminClient, {
+        email,
+        kind: 'invite',
+        siteUrl: resolveSiteUrl(request),
+        metadata: { role, full_name },
+        recipientName: full_name,
+      })
+
+      if (!result.user) {
+        const message = result.sent ? 'Failed to create the account' : result.error
+        if (/already (been )?registered|already exists/i.test(message)) {
+          return NextResponse.json({ success: false, error: 'A user with this email already exists' }, { status: 409 })
+        }
+        return NextResponse.json({ success: false, error: message }, { status: 400 })
+      }
+
+      newUserId = result.user.id
+      emailSent = result.sent
+      // The account exists either way; when only the mail failed, hand the
+      // admin the link so the person can still be onboarded.
+      if (!result.sent) inviteLink = result.actionUrl
     } else {
-      // Determine the site's public URL for the redirect link in the invite email.
-      // Priority: NEXT_PUBLIC_SITE_URL env var → request Origin header → Supabase URL (fallback).
-      const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-        request.headers.get('origin') ||
-        supabaseUrl
+      // The site's public URL for the redirect link in the invite email
+      // (see resolveSiteUrl for the order it is picked in).
+      const siteUrl = resolveSiteUrl(request)
 
       // Invite user by email — sends a password-setup / account-activation link
       const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
@@ -127,6 +149,7 @@ export async function POST(request: NextRequest) {
         inviteLink = linkData.properties?.action_link
       } else {
         newUserId = inviteData.user?.id
+        emailSent = true
       }
     }
 
@@ -167,7 +190,7 @@ export async function POST(request: NextRequest) {
       details: { email: email.toLowerCase().trim(), role, autoConfirm: !!autoConfirm },
     })
 
-    return NextResponse.json({ success: true, userId: newUserId, inviteLink, autoConfirm: !!autoConfirm })
+    return NextResponse.json({ success: true, userId: newUserId, inviteLink, emailSent, autoConfirm: !!autoConfirm })
   } catch (err) {
     console.error('Create user error:', err)
     return NextResponse.json({ success: false, error: 'Unexpected server error' }, { status: 500 })

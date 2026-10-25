@@ -82,9 +82,22 @@ export default function LoginPage() {
     setForgotError(null)
     setForgotLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
-        redirectTo: `${window.location.origin}/update-password`,
+      // The server sends a school-branded email when platform mail is set up;
+      // otherwise it answers { fallback: true } and Supabase sends its own.
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
       })
+      const data = await res.json().catch(() => ({ success: false, fallback: true }))
+      let error: { message: string } | null = data.success || data.fallback
+        ? null
+        : { message: data.error || 'Could not send the reset email' }
+      if (data.fallback) {
+        ({ error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+          redirectTo: `${window.location.origin}/update-password`,
+        }))
+      }
       if (error) {
         setForgotError(error.message)
       } else {
