@@ -407,7 +407,7 @@ BEGIN
   IF v_run.service_date <> public.wa_today() THEN
     RAISE EXCEPTION 'Bus reminders are only sent for today''s trips';
   END IF;
-  IF v_run.status IN ('cancelled', 'missed') THEN
+  IF v_run.status IN ('cancelled', 'missed', 'abandoned') THEN
     RETURN jsonb_build_object('queued', 0,
       'considered', COALESCE(array_length(p_students, 1), 0),
       'skipped', jsonb_build_object('trip_not_running', COALESCE(array_length(p_students, 1), 0)));
@@ -543,7 +543,7 @@ BEGIN
              WHERE x.run_id = r.id AND x.state::TEXT IN ('boarded', 'dropped'))::INT AS boarded
       FROM public.transport_trip_runs r
       JOIN public.transport_routes rt ON rt.id = r.route_id
-     WHERE r.service_date = v_date AND r.status::TEXT NOT IN ('cancelled', 'missed'))
+     WHERE r.service_date = v_date AND r.status::TEXT NOT IN ('cancelled', 'missed', 'abandoned'))
   SELECT runs.id, runs.route_id, runs.route_name, runs.direction, runs.run_status,
          runs.scheduled_start_at, runs.boarded,
          (count(*) OVER (PARTITION BY runs.id))::INT,
@@ -748,7 +748,15 @@ BEGIN
     UPDATE public.wa_reminder_schedules SET last_run_on = v_today WHERE kind = v_s.kind;
 
     IF v_s.kind = 'attendance_absent' THEN
-      CONTINUE WHEN EXISTS (SELECT 1 FROM public.attendance_holidays WHERE date = v_today);
+      -- A school-wide holiday, dated or on a recurring weekday: the same
+      -- match as attendance_day_off_kind() and transport_materialise_runs().
+      -- (attendance_holidays has no `date` column any more; it became
+      -- scope_date when weekday holidays were added.)
+      CONTINUE WHEN EXISTS (
+        SELECT 1 FROM public.attendance_holidays h
+         WHERE h.is_default
+           AND ((h.scope_type = 'date'    AND h.scope_date    = v_today)
+             OR (h.scope_type = 'weekday' AND h.scope_weekday = EXTRACT(DOW FROM v_today)::INT)));
       v_ids := ARRAY(
         SELECT DISTINCT ar.student_id FROM public.attendance_records ar
          WHERE ar.date = v_today AND ar.status = 'absent' AND ar.leave_application_id IS NULL);
@@ -759,7 +767,7 @@ BEGIN
         SELECT r.id FROM public.transport_trip_runs r
          WHERE r.service_date = v_today
            AND r.direction::TEXT = CASE v_s.kind WHEN 'bus_inbound' THEN 'inbound' ELSE 'outbound' END
-           AND r.status::TEXT NOT IN ('cancelled', 'missed')
+           AND r.status::TEXT NOT IN ('cancelled', 'missed', 'abandoned')
       LOOP
         -- Nobody on this route marked aboard means the route is not running
         -- today — a holiday for it — so no family is told their child is
