@@ -13,8 +13,8 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Feature-lev
 
 | Integration | Used for | Code today | Credentials today |
 | --- | --- | --- | --- |
-| Bank APIs (collect) | Fee and bus fee collection: reference matching, virtual UPI ids, virtual accounts | `bankClient.ts`, `bankConfig.ts`, `smartCollect.ts`, `collectSetup.ts`, `/api/fees/upi/*`, `/api/bus/upi/*` | `payment_secrets.bank_collect` (API key, OAuth client, HMAC secret, client certificate + key + passphrase, webhook secret); `BANK_COLLECT_*` env fallback (11 variables) |
-| Bank APIs (payout) | Salary and driver payroll payouts by bank file or bank API | `payoutProvider.ts`, `payoutClaim.ts`, `payoutWebhook.ts`, `/api/salary/payout/*`, `/api/bus/payroll/payout/*` | `payment_secrets.payout`; `BANK_PAYOUT_*` env fallback (12 variables); legacy RazorpayX / Cashfree keys |
+| Bank APIs (collect) | Fee and bus fee collection: reference matching, virtual UPI ids, virtual accounts | `bankClient.ts`, `bankConfig.ts`, `smartCollect.ts`, `collectSetup.ts`, `/api/fees/upi/*`, `/api/bus/upi/*` | `payment_secrets.bank_collect` (API key, OAuth client, HMAC secret, client certificate + key + passphrase, webhook secret); `BANK_COLLECT_*` env fallback (10 variables, plus the legacy Smart Collect webhook secret) |
+| Bank APIs (payout) | Salary and driver payroll payouts by bank file or bank API | `payoutProvider.ts`, `payoutClaim.ts`, `payoutWebhook.ts`, `/api/salary/payout/*`, `/api/bus/payroll/payout/*` | `payment_secrets.payout`; `BANK_PAYOUT_*` env fallback (11 variables, plus `PAYOUT_WEBHOOK_SECRET`); legacy RazorpayX / Cashfree keys |
 | Razorpay | Optional card and netbanking for fees and bus fees | `fees/razorpayKeys.ts`, `fees/online.ts`, `onlineSettle.ts`, `/api/fees/razorpay/*`, `/api/bus/razorpay/*`, checkout script in the browser | `site_settings.razorpay_config` + secret in `payment_secrets`; `RAZORPAY_*` env fallback |
 | Smart Collect (legacy) | Older UPI collect flow | `smartCollect.ts` | `SMART_COLLECT_*` env |
 | WhatsApp (Meta Cloud API) | Fee reminders, bus alerts, (branch) attendance/announcement/bus reminders | `src/lib/whatsapp/*`, `src/lib/notifications/whatsapp/*`, `/api/whatsapp/webhook` | `fee_settings.whatsapp` (phone number id, WABA id), `integration_secrets` (access token, app secret, verify token); `WHATSAPP_*` env fallback |
@@ -84,7 +84,7 @@ Processing rules are in [14-jobs-messaging-realtime.md](14-jobs-messaging-realti
 
 | Integration | Change for the target |
 | --- | --- |
-| Bank collect and payout | Move `bankClient.ts` logic into the school's payments module; mTLS calls through the bank gateway container; payout claims no longer need `FOR UPDATE SKIP LOCKED` (single-threaded object) |
+| Bank collect and payout | Move `bankClient.ts` logic into the school's payments module; mTLS calls through the bank gateway container; the payout claim (a conditional update today) becomes a check and write in one object transaction, committed before the bank call ([35](35-bank-collections-and-payouts.md)) |
 | Razorpay | Order creation and signature checks run in the Worker with `fetch` and WebCrypto HMAC (no Node SDK needed); the checkout script stays allowed in the CSP |
 | WhatsApp | One sender in the outbox consumer replaces the two libraries (`src/lib/whatsapp` and `src/lib/notifications/whatsapp`); per-school credentials and templates as today. The open decisions in `docs/whatsapp-system-status.md` still apply |
 | Web push | Platform VAPID keys; sending from the outbox consumer; library choice confirmed in a spike (WebCrypto supports the needed ECDH, AES-GCM and ECDSA P-256) |
