@@ -6,7 +6,7 @@ Started 27 Oct 2026. These documents describe the EduBerry app section by sectio
 
 Today every school is a separate copy of the app: its own Vercel project, its own Supabase project (database, login, files, realtime, scheduled jobs) and its own environment variables. The target is one app that serves every school, runs entirely on Cloudflare, and uses no Supabase service, including Supabase Auth.
 
-The new repository starts as a clone of this one. Read these docs in order, run the spikes in the architecture doc, then rebuild one section at a time. Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
+The new repository starts as a clone of this one. Read these docs in order, run the spikes in the architecture doc, then rebuild one section at a time in the order given in [92-build-order.md](92-build-order.md). Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
 
 ## Target in one paragraph
 
@@ -25,7 +25,7 @@ One router Worker serves the app for every school. It finds the school from the 
 
 ## Documents and status
 
-Status: **Done** = written and pushed; **Next** = the round in progress; blank = planned.
+Status: **Done** = written and pushed. All eight rounds are done; the order of work in the new repository is in [92-build-order.md](92-build-order.md).
 
 | Round | Doc | Covers | Status |
 | --- | --- | --- | --- |
@@ -58,10 +58,10 @@ Status: **Done** = written and pushed; **Next** = the round in progress; blank =
 | 6 | [34-payroll-and-salary.md](34-payroll-and-salary.md) | Payroll runs, salary records, statutory, locations | Done |
 | 6 | [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md) | Bank smart collect, UPI, payouts, webhooks, Razorpay | Done |
 | 7 | [36-transport.md](36-transport.md) | Routes, runs, GPS, driver app, alerts, live tracking, bus fees and bus payroll | Done |
-| 8 | 37-home-profile-and-misc.md | Home dashboards, profile, feedback, gamification, quotes | Next |
-| 8 | 90-data-migration-and-cutover.md | Moving each live school from Supabase to its School object | Next |
-| 8 | 91-test-and-parity-plan.md | How to prove each section matches today | Next |
-| 8 | 92-build-order.md | Order of work in the new repository, milestones | Next |
+| 8 | [37-home-profile-and-misc.md](37-home-profile-and-misc.md) | Home dashboards, profile, feedback, gamification, quotes | Done |
+| 8 | [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md) | Moving each live school from Supabase to its School object | Done |
+| 8 | [91-test-and-parity-plan.md](91-test-and-parity-plan.md) | How to prove each section matches today | Done |
+| 8 | [92-build-order.md](92-build-order.md) | Order of work in the new repository, milestones | Done |
 
 Existing docs in `docs/` (fee, payroll, timetable, transport plans; GPS, email and WhatsApp status) describe features in depth and stay valid as feature references. Section docs link to them rather than repeat them.
 
@@ -118,3 +118,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | 27 Oct 2026 | 5 | Section docs 28–32: classrooms and coursework, exams, assessments and report cards, timetable, certificates |
 | 27 Oct 2026 | 6 | Section docs 33–35: fees, payroll and salary, bank collections and payouts |
 | 27 Oct 2026 | 7 | Section doc 36: transport (live runs stay in the school object; positions move out of SQL into trail chunks and R2) |
+| 27 Oct 2026 | 8 | Doc 37 (home, profile, feedback, streaks); 90 data migration and cutover runbook; 91 test and parity plan; 92 build order with milestones M0–M7 and the list of issues to fix now versus in the rebuild |
