@@ -57,11 +57,11 @@ Status: **Done** = written and pushed; **Next** = the round in progress; blank =
 | 6 | [33-fees.md](33-fees.md) | Fee structures, invoices, collection, receipts, refunds, reminders | Done |
 | 6 | [34-payroll-and-salary.md](34-payroll-and-salary.md) | Payroll runs, salary records, statutory, locations | Done |
 | 6 | [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md) | Bank smart collect, UPI, payouts, webhooks, Razorpay | Done |
-| 7 | 36-transport.md | Routes, runs, GPS, driver app, alerts, live tracking, bus fees and bus payroll | Next |
-| 8 | 37-home-profile-and-misc.md | Home dashboards, profile, feedback, gamification, quotes | |
-| 8 | 90-data-migration-and-cutover.md | Moving each live school from Supabase to its School object | |
-| 8 | 91-test-and-parity-plan.md | How to prove each section matches today | |
-| 8 | 92-build-order.md | Order of work in the new repository, milestones | |
+| 7 | [36-transport.md](36-transport.md) | Routes, runs, GPS, driver app, alerts, live tracking, bus fees and bus payroll | Done |
+| 8 | 37-home-profile-and-misc.md | Home dashboards, profile, feedback, gamification, quotes | Next |
+| 8 | 90-data-migration-and-cutover.md | Moving each live school from Supabase to its School object | Next |
+| 8 | 91-test-and-parity-plan.md | How to prove each section matches today | Next |
+| 8 | 92-build-order.md | Order of work in the new repository, milestones | Next |
 
 Existing docs in `docs/` (fee, payroll, timetable, transport plans; GPS, email and WhatsApp status) describe features in depth and stay valid as feature references. Section docs link to them rather than repeat them.
 
@@ -117,3 +117,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | 27 Oct 2026 | 4 | Section docs 23–27: attendance, leave, announcements and notifications, task manager and projects, smartboard |
 | 27 Oct 2026 | 5 | Section docs 28–32: classrooms and coursework, exams, assessments and report cards, timetable, certificates |
 | 27 Oct 2026 | 6 | Section docs 33–35: fees, payroll and salary, bank collections and payouts |
+| 27 Oct 2026 | 7 | Section doc 36: transport (live runs stay in the school object; positions move out of SQL into trail chunks and R2) |

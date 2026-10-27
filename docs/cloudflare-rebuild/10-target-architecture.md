@@ -16,7 +16,7 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Builds on t
 | --- | --- | --- | --- |
 | `eduberry-app` router Worker | Workers + Static Assets | Platform | Serves the static app; runs `/api/*`; finds the school; checks sessions; calls the school object; uploads and serves files; verifies webhooks |
 | `School` | SQLite Durable Object | School | The school's tables, business logic, scheduled work (alarm) and live WebSocket fan-out |
-| `RunLive` (optional) | SQLite Durable Object | Bus run | One live bus run: position fixes, ETA, parents' live sockets. Keeps the busy GPS stream off the school's own thread (decided in the transport doc) |
+| `RunLive` (optional) | SQLite Durable Object | Bus run | One live bus run: position fixes, ETA, parents' live sockets. Not used at launch: [36-transport.md](36-transport.md) keeps live runs in the school object behind one interface, and moves them here only if the bus peak measurably slows the school object |
 | `platform` database | D1 | Platform | Schools, host names, plans, provisioning state, platform staff, platform audit log |
 | `eduberry-files` bucket | R2 | Platform | All files, keys prefixed `schools/<schoolId>/` |
 | `outbox` queue | Queues | Platform | Outgoing WhatsApp, web push and email messages |
