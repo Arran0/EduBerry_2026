@@ -32,18 +32,18 @@ Status: **Done** = written and pushed; **Next** = the round in progress; blank =
 | 1 | [README.md](README.md) | This index, the plan and the template | Done |
 | 1 | [01-architecture-options.md](01-architecture-options.md) | D1 per school vs shared D1 vs Durable Objects vs others; validation; recommendation; spikes | Done |
 | 1 | [02-cost-study.md](02-cost-study.md) + [tools/costmodel.py](tools/costmodel.py) | Workload model from live data; cost per school and per fleet up to 10,000 users | Done |
-| 2 | 10-target-architecture.md | Repository layout, Workers and Durable Object classes, request lifecycle, environments, deploys, observability | Next |
-| 2 | 11-tenancy-and-control-plane.md | Platform D1, finding the school from the host, domains, provisioning and offboarding, platform admin | Next |
-| 2 | 12-auth-and-permissions.md | Replacing Supabase Auth; sessions; password import; invites and resets; replacing row-level security | Next |
-| 2 | 13-data-layer.md | Postgres to SQLite rules, migrations inside each school, data export and import, archiving, backups | Next |
-| 2 | 14-jobs-messaging-realtime.md | `pg_cron`, `pg_net` and Realtime replaced by alarms, Cron Triggers, Queues and WebSockets | Next |
-| 2 | 15-files-and-media.md | Supabase Storage to R2 | Next |
-| 2 | 16-frontend-and-api.md | Next.js to a static app; API conventions; CSP; PWA and push | Next |
-| 2 | 17-integrations-and-secrets.md | Banks, Razorpay, WhatsApp, GPS gateway, email, web push, solver; per-school secrets | Next |
-| 2 | reference/ | Generated inventory of the live schema by section | Next |
-| 3 | 20-users-profiles-and-admin.md | Profiles, student and staff details, user management, bulk import, audit | |
-| 3 | 21-school-settings-and-branding.md | Site settings, design, page themes, banners, school profile, favicon | |
-| 3 | 22-academic-structure.md | Academic years, homerooms, classrooms, teams, subjects | |
+| 2 | [10-target-architecture.md](10-target-architecture.md) | Repository layout, Workers and Durable Object classes, request lifecycle, environments, deploys, observability | Done |
+| 2 | [11-tenancy-and-control-plane.md](11-tenancy-and-control-plane.md) | Platform D1, finding the school from the host, domains, provisioning and offboarding, platform admin | Done |
+| 2 | [12-auth-and-permissions.md](12-auth-and-permissions.md) | Replacing Supabase Auth; sessions; password import; invites and resets; replacing row-level security | Done |
+| 2 | [13-data-layer.md](13-data-layer.md) | Postgres to SQLite rules, migrations inside each school, data export and import, archiving, backups | Done |
+| 2 | [14-jobs-messaging-realtime.md](14-jobs-messaging-realtime.md) | `pg_cron`, `pg_net` and Realtime replaced by alarms, Cron Triggers, Queues and WebSockets | Done |
+| 2 | [15-files-and-media.md](15-files-and-media.md) | Supabase Storage to R2 | Done |
+| 2 | [16-frontend-and-api.md](16-frontend-and-api.md) | Next.js to a static app; API conventions; CSP; PWA and push | Done |
+| 2 | [17-integrations-and-secrets.md](17-integrations-and-secrets.md) | Banks, Razorpay, WhatsApp, GPS gateway, email, web push, solver; per-school secrets | Done |
+| 2 | [reference/live-schema.md](reference/live-schema.md) | Every live table, column, link, trigger, function, enum, view and cron job, by section | Done |
+| 3 | 20-users-profiles-and-admin.md | Profiles, student and staff details, user management, bulk import, audit | Next |
+| 3 | 21-school-settings-and-branding.md | Site settings, design, page themes, banners, school profile, favicon | Next |
+| 3 | 22-academic-structure.md | Academic years, homerooms, classrooms, teams, subjects | Next |
 | 4 | 23-attendance.md | Student and staff attendance, geofence, rules, holiday calendars, reports | |
 | 4 | 24-leave.md | Student and staff leave and approvals | |
 | 4 | 25-announcements-and-notifications.md | Announcements, audiences, reads, push and in-app notifications | |
@@ -112,3 +112,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | Date | Round | What was done |
 | --- | --- | --- |
 | 27 Oct 2026 | 1 | Architecture options evaluated against live usage and current Cloudflare limits; cost model and study; this index |
+| 27 Oct 2026 | 2 | Live schema reference; platform docs 10–17 (target architecture, tenancy, auth and permissions, data layer, jobs and realtime, files, front end and API, integrations and secrets) |
