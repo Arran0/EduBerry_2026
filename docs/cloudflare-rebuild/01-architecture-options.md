@@ -200,7 +200,7 @@ Keeping Postgres (hosted anywhere but Supabase) behind Hyperdrive keeps the 268 
 | Today | On Cloudflare | Notes |
 | --- | --- | --- |
 | Vercel hosting, one project per school | One router Worker + Workers Static Assets | Static asset requests are free and unlimited |
-| Next.js App Router pages (client-rendered) | Static single-page app served as assets | Pages already render in the browser; server rendering exists only to stamp the CSP nonce. Detailed in round 2 |
+| Next.js App Router pages (client-rendered) | Static single-page app served as assets | Pages already render in the browser; server rendering exists only to stamp the CSP nonce. Detailed in [16-frontend-and-api.md](16-frontend-and-api.md) |
 | Next.js API routes | Routes in the router Worker, plus RPC methods on the school object | |
 | Supabase Postgres, one project per school | SQLite in the school's Durable Object | Schema translated table by table in the section docs |
 | Row-level security | Permission checks in the school object's methods, from the session's user and role | One shared authorization module, tested per role |
@@ -241,7 +241,9 @@ If S1, S2 or S3 fail, fall back to option F for the database and keep everything
 | Shared or sharded D1 for school data | Rejected | Fails isolation and throughput at 10,000 users |
 | Workers for Platforms | Not now | Revisit if schools need different versions |
 | Login | EduBerry's own auth, no Supabase Auth | Owner's decision |
-| Front end | Static single-page app on Workers Static Assets | Recommended; detailed in round 2 |
+| Front end | Static single-page app on Workers Static Assets | Recommended; detailed in [16-frontend-and-api.md](16-frontend-and-api.md) |
+| Live bus runs | In the school object at launch; one object per run only if the bus peak measurably slows the school | Decided in [36-transport.md](36-transport.md) |
+| Banks that need a client certificate | A bank gateway container makes those calls | Recommended in [17-integrations-and-secrets.md](17-integrations-and-secrets.md) |
 | Data residency | Not decided | Confirm whether any school requires India-only storage |
 
 ## Sources

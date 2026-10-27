@@ -148,7 +148,7 @@ Same 50 schools if the rebuilt app kept today's pattern of many small queries fr
 
 | Lever | Effect on a typical 10,000-user school | Where it is decided |
 | --- | --- | --- |
-| Store only each bus's latest position in SQL; batch the trail to R2 once a minute | About −$2.30 (−18%) | Transport doc |
+| Store only each bus's latest position in SQL; batch the trail to R2 once a minute | About −$2.30 (−18%) | Adopted in [36-transport.md](36-transport.md) |
 | Every index must earn its write cost; avoid counters updated on every read | Each index removed on a hot table saves up to a third of that table's write cost | Data-layer doc |
 | One API call per screen, joins on the server | Avoids the 2.7× chatty penalty | Front-end and API doc |
 | Keep log sampling at 10% or lower in production | Logging every invocation instead of 10% adds about $5.90 per school | Platform doc |

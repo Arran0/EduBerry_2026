@@ -166,7 +166,7 @@ flowchart LR
 - If the socket cannot connect (some school networks block WebSockets), the screen falls back to polling every 30 seconds.
 - Polling that exists today for counts (task unread comments) can move to the same channel later; it is not required for launch.
 
-Whether bus runs need their own `RunLive` object is decided in the transport doc. The reasoning: a 50-bus school sends about 3–10 GPS fixes a second at peak. That is well within one object's capacity, but moving the live stream to one object per run keeps the school's thread free for attendance and fees during the morning rush.
+[36-transport.md](36-transport.md) decides that live bus runs stay in the school object at launch. A 50-bus school sends about 3–10 GPS fixes a second at peak, and each fix writes to SQL only when something changes, which is well within one object's capacity. Runs move to one `RunLive` object each only if load tests or production show the morning bus peak slowing attendance and fees.
 
 ### Inbound webhooks
 

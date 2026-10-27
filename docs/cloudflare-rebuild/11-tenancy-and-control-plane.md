@@ -146,7 +146,7 @@ Accounts belong to one school, as they do today (each school is its own Supabase
 
 ## Moving the current school
 
-The live school becomes the first `schools` row, keeping its current domain as its primary custom host. Its data moves from Supabase into its school object through the importer described in [13-data-layer.md](13-data-layer.md) and the cutover plan in round 8.
+The live school becomes the first `schools` row, keeping its current domain as its primary custom host. Its data moves from Supabase into its school object through the importer described in [13-data-layer.md](13-data-layer.md) and the cutover runbook in [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md).
 
 ## Open questions
 
