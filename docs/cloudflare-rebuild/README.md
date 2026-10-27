@@ -44,16 +44,16 @@ Status: **Done** = written and pushed; **Next** = the round in progress; blank =
 | 3 | [20-users-profiles-and-admin.md](20-users-profiles-and-admin.md) | Profiles, student and staff details, user management, bulk import, audit | Done |
 | 3 | [21-school-settings-and-branding.md](21-school-settings-and-branding.md) | Site settings, design, page themes, banners, school profile, favicon | Done |
 | 3 | [22-academic-structure.md](22-academic-structure.md) | Academic years, homerooms, classrooms, teams, subjects | Done |
-| 4 | 23-attendance.md | Student and staff attendance, geofence, rules, holiday calendars, reports | Next |
-| 4 | 24-leave.md | Student and staff leave and approvals | Next |
-| 4 | 25-announcements-and-notifications.md | Announcements, audiences, reads, push and in-app notifications | Next |
-| 4 | 26-tasks-and-projects.md | Task manager, subtasks, projects, planner, team analytics | Next |
-| 4 | 27-smartboard.md | Homeroom kiosk | Next |
-| 5 | 28-classrooms-and-coursework.md | LMS: coursework, homework, files, discussions, analysis | |
-| 5 | 29-exams.md | Exams, attempts, grading, results | |
-| 5 | 30-grades-and-report-cards.md | Assessments, marks, report cards, academic record | |
-| 5 | 31-timetable.md | Timetable builder and the CP-SAT solver | |
-| 5 | 32-certificates.md | Certificates and public verification | |
+| 4 | [23-attendance.md](23-attendance.md) | Student and staff attendance, geofence, rules, holiday calendars, reports | Done |
+| 4 | [24-leave.md](24-leave.md) | Student and staff leave and approvals | Done |
+| 4 | [25-announcements-and-notifications.md](25-announcements-and-notifications.md) | Announcements, audiences, reads, push and in-app notifications | Done |
+| 4 | [26-tasks-and-projects.md](26-tasks-and-projects.md) | Task manager, subtasks, projects, planner, team analytics | Done |
+| 4 | [27-smartboard.md](27-smartboard.md) | Homeroom kiosk | Done |
+| 5 | 28-classrooms-and-coursework.md | LMS: coursework, homework, files, discussions, analysis | Next |
+| 5 | 29-exams.md | Exams, attempts, grading, results | Next |
+| 5 | 30-grades-and-report-cards.md | Assessments, marks, report cards, academic record | Next |
+| 5 | 31-timetable.md | Timetable builder and the CP-SAT solver | Next |
+| 5 | 32-certificates.md | Certificates and public verification | Next |
 | 6 | 33-fees.md | Fee structures, invoices, collection, receipts, refunds, reminders | |
 | 6 | 34-payroll-and-salary.md | Payroll runs, salary records, statutory, locations | |
 | 6 | 35-bank-collections-and-payouts.md | Bank smart collect, UPI, payouts, webhooks, Razorpay | |
@@ -114,3 +114,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | 27 Oct 2026 | 1 | Architecture options evaluated against live usage and current Cloudflare limits; cost model and study; this index |
 | 27 Oct 2026 | 2 | Live schema reference; platform docs 10–17 (target architecture, tenancy, auth and permissions, data layer, jobs and realtime, files, front end and API, integrations and secrets) |
 | 27 Oct 2026 | 3 | Section docs 20–22: users, profiles and admin; school settings and branding; academic years, homerooms and teams |
+| 27 Oct 2026 | 4 | Section docs 23–27: attendance, leave, announcements and notifications, task manager and projects, smartboard |

@@ -1091,7 +1091,7 @@ SQLite has no enum type. Each becomes `TEXT` with a `CHECK (col IN (...))` const
 | transport_telemetry_state | unknown, live, stale, offline |
 | transport_vehicle_status | active, maintenance, retired |
 
-`staff_attendance_status` contains a stray value `e`, added by an old migration; check before reproducing it.
+`staff_attendance_status` value `e` means "Exception": it is set when a staff member checks in a second time in one day (`staff_attendance_punch`), and support-staff attendance uses it too. Keep it, ideally renamed to `exception` in the new schema with the importer mapping old values.
 
 ## Functions by section
 
