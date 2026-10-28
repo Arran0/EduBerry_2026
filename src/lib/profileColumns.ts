@@ -15,7 +15,6 @@
 import { supabase } from './supabase'
 
 /** The governed address, as `email` on the row it is embedded in. */
-/** The governed address, as `email` on the row it is embedded in. */
 export const PROFILE_EMAIL = '...profile_emails(email)'
 
 /** Every profiles column the app may read, plus the governed email — use instead of '*'. */
