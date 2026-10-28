@@ -5,18 +5,18 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
 ## Summary
 
 - **All files move to one R2 bucket**, with every key under `schools/<schoolId>/`. R2 has no egress fees, and the first 10 GB a month is free.
-- **Files become private by default.** Today almost everything (including leave medical certificates and task attachments) sits in a public bucket and is served by a permanent public URL. In the target every file is served by the router Worker after a permission check, or by a short-lived signed link.
+- **Files become private by default.** Today most files (coursework, submissions, discussions, avatars, banners) sit in a public bucket and are served by a permanent public URL. Leave, task, subtask and announcement attachments moved to a private bucket on 28 Oct 2026 and are opened through one-hour signed links. In the target every file is served by the router Worker after a permission check, or by a short-lived signed link.
 - **Uploads go through the Worker**, which checks size, type and permission, then writes to R2. The browser keeps today's image compression (≤ 1600 px, WebP) before upload.
 - **Database rows store file keys, not URLs**, so a domain change or a move between storage products never breaks a link again.
-- **One existing bug** surfaces in the inventory: subtask attachments upload to a `subtask-attachments` bucket that does not exist on the live project.
+- **One existing bug surfaced in the inventory and is fixed:** subtask attachments uploaded to a `subtask-attachments` bucket that never existed; since 28 Oct 2026 they go to the private bucket.
 
 ## How it works today
 
 | Bucket (live) | Objects | Size | Access |
 | --- | --- | --- | --- |
-| `classroom-files` | 628 | ~996 MB | Public: every file has a permanent public URL |
+| `classroom-files` | 628 (before the move below) | ~996 MB | Public by URL. Since 28 Oct 2026 it cannot be listed, and only a file's uploader or an admin can overwrite or delete it |
+| `private-files` | new on 28 Oct 2026 | — | Private: leave, task comment, subtask comment and announcement attachments (`lib/privateFiles.ts`). Rows store `private-file:<path>`; a file is readable by whoever can read its row (`can_read_private_file`) and opened by a one-hour signed URL. `scripts/move-private-attachments.mjs` moves the older ones out of `classroom-files` |
 | `feedback-files` | 2 | ~0.7 MB | Private: one-hour signed URLs (`feedback.ts`) |
-| `subtask-attachments` | — | — | Referenced by `src/lib/projects.ts` but does not exist on live; uploads there fail |
 
 What is stored in `classroom-files`, by path:
 

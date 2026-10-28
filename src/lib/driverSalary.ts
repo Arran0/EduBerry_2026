@@ -1,6 +1,7 @@
 import { supabase, UserProfile, isMissingRelation } from './supabase'
 import type { CycleTally } from './salary'
 import { fetchHiddenSalaryMemberIds } from './salary'
+import { PROFILE_COLUMNS } from './profileColumns'
 
 // Driver Payroll data layer — a cycle-based payroll for bus drivers that mirrors
 // the staff Salary Manager (src/lib/salary.ts) on the driver_payroll_* tables:
@@ -107,7 +108,7 @@ export async function fetchEligibleDrivers(): Promise<UserProfile[]> {
   const [{ data, error }, hiddenIds] = await Promise.all([
     supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_COLUMNS)
       .eq('role', 'driver')
       .eq('is_banned', false)
       .order('full_name', { ascending: true }),
@@ -161,7 +162,7 @@ export async function fetchDriverCycle(cycleId: string): Promise<DriverCycle | n
 export async function fetchDriverCycleRecords(cycleId: string): Promise<DriverSalaryRecord[]> {
   const { data, error } = await supabase
     .from('driver_payroll_records')
-    .select('*, items:driver_payroll_record_items(*), driver:profiles!driver_id(*)')
+    .select(`*, items:driver_payroll_record_items(*), driver:profiles!driver_id(${PROFILE_COLUMNS})`)
     .eq('cycle_id', cycleId)
   if (error) { console.error('fetchDriverCycleRecords failed:', error); return [] }
   return ((data as DriverSalaryRecord[]) || []).sort(
@@ -307,7 +308,7 @@ export async function deleteDriverSalaryRecordsByIds(
 export async function fetchDriverBaseSalaries(): Promise<DriverSalaryBase[]> {
   const { data, error } = await supabase
     .from('driver_payroll_base')
-    .select('*, driver:profiles!driver_id(*)')
+    .select(`*, driver:profiles!driver_id(${PROFILE_COLUMNS})`)
   if (error) {
     // Same as fetchDriverBankAccounts: a school with no bus module has no such
     // table, and that is not an error worth shouting about on the salary sheet.

@@ -27,9 +27,10 @@ import {
 } from '@/lib/announcements'
 import { notifyAnnouncement } from '@/lib/push'
 import { searchHomerooms, Homeroom } from '@/lib/homerooms'
-import { supabase, UserRole, UserProfile } from '@/lib/supabase'
+import { UserRole, UserProfile } from '@/lib/supabase'
 import { compressImageIfNeeded } from '@/lib/imageCompression'
 import Avatar from '@/components/Avatar'
+import { profileDirectory } from '@/lib/profileColumns'
 
 interface NewAnnouncementFormProps {
   isOpen: boolean
@@ -169,8 +170,7 @@ export default function NewAnnouncementForm({
     const query = memberQuery.trim()
     if (query.length < 2) { setMemberSuggestions([]); return }
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
+      const { data } = await profileDirectory()
         .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
         .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
         .order('full_name')

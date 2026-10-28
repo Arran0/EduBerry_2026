@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { profileDirectory } from './profileColumns'
 
 // --- Types ---
 
@@ -40,8 +41,7 @@ export async function createTeam(input: {
   // Resolve coordinator by email
   let coordinatorId: string | null = null
   if (input.coordinator_email) {
-    const { data: profile } = await supabase
-      .from('profiles')
+    const { data: profile } = await profileDirectory()
       .select('id')
       .eq('email', input.coordinator_email.trim().toLowerCase())
       .single()
@@ -127,7 +127,7 @@ export async function fetchAllTeams(): Promise<TeamWithDetails[]> {
       .from('profiles')
       // Only what a member/coordinator chip renders — the full row carried a
       // dozen columns this page never reads.
-      .select('id, email, full_name, role, avatar_url, is_non_teaching, display_role')
+      .select('id, ...profile_emails(email), full_name, role, avatar_url, is_non_teaching, display_role')
       .in('id', [...allUserIds])
     profiles = (profilesData ?? []) as UserProfile[]
   }
@@ -211,8 +211,7 @@ export async function addTeamMember(teamId: string, userId: string): Promise<boo
 }
 
 export async function addTeamMemberByEmail(teamId: string, email: string): Promise<{ success: boolean; error?: string }> {
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
+  const { data: profile, error: profileError } = await profileDirectory()
     .select('id, role')
     .eq('email', email.trim().toLowerCase())
     .single()
@@ -330,7 +329,7 @@ export async function fetchMyTeamRosters(userId: string): Promise<TeamRoster[]> 
 
   const { data: profiles, error: profErr } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden, is_banned')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, geofence_exempt, attendance_hidden, is_banned')
     .in('id', userIds)
     .eq('is_banned', false)
     .order('full_name', { ascending: true })
@@ -381,7 +380,7 @@ export async function fetchTeamStaffById(teamId: string): Promise<import('./supa
 
   const { data: profiles, error: profErr } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, geofence_exempt, attendance_hidden')
     .in('id', userIds)
     .eq('is_banned', false)
     .order('full_name', { ascending: true })

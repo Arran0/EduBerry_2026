@@ -28,8 +28,8 @@ Code: `src/lib/tasks.ts` (1,137 lines), `projects.ts` (621), `planner.ts`, `task
 - **Create:** one row per assignee with identical content, then assignees and checklist rows. Duplicate-title, period-conflict and slot-conflict checks run first (`checkDuplicateTaskTitle`, `checkTaskPeriodConflict`, `checkTaskSlotConflict`).
 - **Recurrence:** `none` (57,264), `weekly` (378), `daily` (250), `monthly` (25); recurring tasks are expanded when the week is read (`tasks_for_user_week`).
 - **Bonus points:** `tag = 'bonus'` with `bonus_points`, summed by `tasks_bonus_for_user`; feed into gamification and the salary bonus snapshot ([34](34-payroll-and-salary.md)).
-- **Comments:** text plus one attachment (public bucket, `task-comments/`); unread counts by `task_unread_comment_count(since)` polled from the browser.
-- **Projects:** members, subtasks with assignee, status, due date, timing, bonus points, verification, sequential mode; subtask checklists and comments; subtask attachments target a `subtask-attachments` bucket that does not exist on live ([15](15-files-and-media.md)).
+- **Comments:** text plus one attachment (private bucket, `task-comments/`, since 28 Oct 2026); unread counts by `task_unread_comment_count(since)` polled from the browser.
+- **Projects:** members, subtasks with assignee, status, due date, timing, bonus points, verification, sequential mode; subtask checklists and comments; subtask attachments go to the private bucket under `subtasks/` (they targeted a `subtask-attachments` bucket that never existed until 28 Oct 2026; [15](15-files-and-media.md)).
 - **Analytics:** per-person stats (`task_stats_rows_for_user`), team analytics (`/api/analytics/team` pages through all tasks and subtasks of a month for every team member, because Supabase caps responses at 1,000 rows), monthly member stats (`get_monthly_member_stats`, shared with attendance).
 - **Delete account:** the person's created tasks are deleted (see [20](20-users-profiles-and-admin.md)).
 - **Calendar sharing:** `calendar_access` lets one person view another's calendar (0 rows on live).

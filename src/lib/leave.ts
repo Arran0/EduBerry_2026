@@ -4,6 +4,7 @@ import { notifyLeaveEvent } from './push'
 import { emitLeaveNotificationsChanged } from './leaveNotificationEvents'
 import { compressImageIfNeeded } from './imageCompression'
 import { uploadPrivateFile } from './privateFiles'
+import { profileDirectory } from './profileColumns'
 
 // ============================================
 // Types
@@ -134,19 +135,19 @@ export async function uploadLeaveFile(
 
 export async function fetchCoordinators(): Promise<{ id: string; full_name: string; email: string }[]> {
   const { data } = await supabase
-    .from('profiles').select('id, full_name, email').eq('role', 'coordinator').order('full_name')
+    .from('profiles').select('id, full_name, ...profile_emails(email)').eq('role', 'coordinator').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
 export async function fetchPrincipals(): Promise<{ id: string; full_name: string; email: string }[]> {
   const { data } = await supabase
-    .from('profiles').select('id, full_name, email').eq('role', 'principal').order('full_name')
+    .from('profiles').select('id, full_name, ...profile_emails(email)').eq('role', 'principal').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
 export async function fetchAdmins(): Promise<{ id: string; full_name: string; email: string }[]> {
   const { data } = await supabase
-    .from('profiles').select('id, full_name, email').eq('role', 'admin').order('full_name')
+    .from('profiles').select('id, full_name, ...profile_emails(email)').eq('role', 'admin').order('full_name')
   return (data ?? []) as { id: string; full_name: string; email: string }[]
 }
 
@@ -172,8 +173,7 @@ export async function searchStaffRecipients(query: string, applicantRole: UserRo
   }
   const roles = roleMap[applicantRole] ?? []
   if (!roles.length) return []
-  const { data } = await supabase
-    .from('profiles')
+  const { data } = await profileDirectory()
     .select('id, full_name, email, role, avatar_url')
     .in('role', roles)
     .or(`email.ilike.%${query.trim()}%,full_name.ilike.%${query.trim()}%`)
@@ -185,8 +185,7 @@ export async function searchStaffRecipients(query: string, applicantRole: UserRo
 
 export async function searchLeaveRecipients(query: string): Promise<RecipientProfile[]> {
   if (!query || query.trim().length < 2) return []
-  const { data } = await supabase
-    .from('profiles')
+  const { data } = await profileDirectory()
     .select('id, full_name, email, role, avatar_url')
     .in('role', ['teacher', 'coordinator', 'principal', 'admin'])
     .or(`email.ilike.%${query.trim()}%,full_name.ilike.%${query.trim()}%`)
@@ -464,8 +463,7 @@ export async function searchLeaveApplicationIdsByPerson(query: string): Promise<
   if (term.length < LEAVE_SEARCH_MIN_CHARS) return []
   const like = `%${term}%`
 
-  const { data: people, error: peopleError } = await supabase
-    .from('profiles')
+  const { data: people, error: peopleError } = await profileDirectory()
     .select('id')
     .or(`full_name.ilike.${like},email.ilike.${like}`)
     .limit(200)
@@ -475,7 +473,7 @@ export async function searchLeaveApplicationIdsByPerson(query: string): Promise<
     return []
   }
 
-  const personIds = (people ?? []).map(p => p.id)
+  const personIds = ((people ?? []) as { id: string }[]).map(p => p.id)
   if (personIds.length === 0) return []
 
   const [asApplicant, asApprover] = await Promise.all([

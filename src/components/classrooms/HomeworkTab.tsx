@@ -202,7 +202,7 @@ export default function HomeworkTab({ classroomId, userId, userRole, classroom }
     const inRoster = new Set(roster.map(m => m.user_id))
     const leavers = progress.filter(p => !inRoster.has(p.student_id))
     if (leavers.length > 0) {
-      const profiles = await fetchProfilesByIds(leavers.map(p => p.student_id), 'id, full_name, email, avatar_url')
+      const profiles = await fetchProfilesByIds(leavers.map(p => p.student_id), 'id, full_name, ...profile_emails(email), avatar_url')
       for (const p of leavers) rows.push({ ...p, student: profiles[p.student_id] })
     }
     rows.sort((a, b) => (a.student?.full_name ?? '').localeCompare(b.student?.full_name ?? ''))

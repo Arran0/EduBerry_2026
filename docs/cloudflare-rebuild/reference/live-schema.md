@@ -8,6 +8,16 @@ Notation: `!` = NOT NULL; `ts` = timestamptz; `time` = time without time zone; `
 
 Totals: 217 tables, 17 views, 37 enum types, 879 indexes, 696 policies, 171 triggers, 268 functions.
 
+**Changes since 27 Oct 2026** (the fixes listed in [92-build-order.md](../92-build-order.md#3-work-that-can-start-now-in-the-current-repository); counts above are from before them):
+
+| Change | Section |
+| --- | --- |
+| Table `profile_emails` (id → profiles, email, is_student) kept in step by trigger `profiles_sync_email`; `profiles.email` no longer readable by `anon`/`authenticated` (column grants) | 20 |
+| Functions `profile_directory()`, `profile_card_email(uuid)`; `student_roster_facets` now runs as its owner | 20 |
+| Functions `assessment_marks_released(uuid)`, `report_card_title_released(uuid, text)`; select policies on `classroom_assessment_marks`, `classroom_assessment_component_marks`, `report_card_remarks` gate students on publication | 30 |
+| Functions `fee_home_summary(date, uuid)`, `fee_home_collections(int)` for the home dashboard | 33, 37 |
+| Storage bucket `private-files` and function `can_read_private_file(text)`; `classroom-files` no longer listable, update and delete limited to uploader or admin | 15 |
+
 ## 17 · Integrations, messaging and secrets
 
 #### `integration_secrets` — 1 row · 1 policy · 1 index

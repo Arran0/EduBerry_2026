@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import type { UserProfile, UserRole } from '@/lib/supabase'
 import Avatar from '@/components/Avatar'
 import SmartTypeahead from '@/components/SmartTypeahead'
+import { profileDirectory } from '@/lib/profileColumns'
 
 interface UserEmailSuggestProps {
   value: string
@@ -34,8 +34,7 @@ export default function UserEmailSuggest({
     }
     setLoading(true)
     const timer = setTimeout(async () => {
-      let q = supabase
-        .from('profiles')
+      let q = profileDirectory()
         .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
         .or(`email.ilike.%${query}%,full_name.ilike.%${query}%`)
         .order('full_name')

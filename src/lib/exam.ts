@@ -3,6 +3,7 @@ import { computeSubmissionScores, allManualGraded } from './examGrading'
 import type { ExamMode, ScoringStrategyId, ScoringParams } from './examScoring'
 import { createAssessment, upsertAssessmentMarks, fetchStudentMembers } from './classrooms'
 import { compressImageIfNeeded } from './imageCompression'
+import { DIRECTORY_COLUMNS, PROFILE_COLUMNS, profileDirectory } from './profileColumns'
 
 // ============================================================
 // Exam App — shared types
@@ -655,11 +656,11 @@ async function resolveAudienceStudentsBulk(examIds: string[]): Promise<Map<strin
     homeroomIds.length > 0
       ? supabase
           .from('homeroom_members')
-          .select('homeroom_id, student:profiles!homeroom_members_student_id_fkey(id, full_name, avatar_url, email, role)')
+          .select('homeroom_id, student:profiles!homeroom_members_student_id_fkey(id, full_name, avatar_url, ...profile_emails(email), role)')
           .in('homeroom_id', homeroomIds)
       : Promise.resolve({ data: [] }),
     userIds.length > 0
-      ? supabase.from('profiles').select('id, full_name, avatar_url, email, role').in('id', userIds)
+      ? supabase.from('profiles').select('id, full_name, avatar_url, ...profile_emails(email), role').in('id', userIds)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -700,7 +701,7 @@ export async function resolveAudienceStudents(examId: string): Promise<UserProfi
 
 export async function fetchProfilesByIds(ids: string[]): Promise<UserProfile[]> {
   if (ids.length === 0) return []
-  const { data, error } = await supabase.from('profiles').select('*').in('id', ids)
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).in('id', ids)
   if (error) {
     console.error('fetchProfilesByIds error:', error.message)
     return []
@@ -715,9 +716,8 @@ export async function searchStudents(query: string, limit = 20): Promise<UserPro
   // LIKE wildcards — otherwise a crafted query escapes the filter it sits in.
   const q = query.trim().replace(/[,()"\\%_*]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!q) return []
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
+  const { data, error } = await profileDirectory()
+    .select(DIRECTORY_COLUMNS)
     .eq('role', 'student')
     .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
     .order('full_name', { ascending: true })
@@ -734,9 +734,8 @@ export async function findUserByEmail(
   email: string,
   roles?: UserRole[],
 ): Promise<{ user?: UserProfile; error?: string }> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
+  const { data, error } = await profileDirectory()
+    .select(DIRECTORY_COLUMNS)
     .eq('email', email.trim().toLowerCase())
     .maybeSingle()
 
@@ -753,7 +752,7 @@ export async function findUserByEmail(
 export async function fetchGraders(examId: string): Promise<ExamGrader[]> {
   const { data, error } = await supabase
     .from('exam_graders')
-    .select('*, teacher:profiles!exam_graders_teacher_id_fkey(id, full_name, avatar_url, email)')
+    .select('*, teacher:profiles!exam_graders_teacher_id_fkey(id, full_name, avatar_url, ...profile_emails(email))')
     .eq('exam_id', examId)
   if (error) {
     console.error('fetchGraders error:', error.message)

@@ -51,7 +51,7 @@ export default function AcademicRecordPage() {
     fetchBranding().then(setBranding).catch(() => {})
     supabase
       .from('profiles')
-      .select('id, full_name, email, avatar_url, grade, section')
+      .select('id, full_name, ...profile_emails(email), avatar_url, grade, section')
       .eq('id', studentId)
       .single()
       .then(({ data }) => {

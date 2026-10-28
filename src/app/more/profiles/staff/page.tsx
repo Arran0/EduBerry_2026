@@ -257,7 +257,7 @@ export default function StaffProfileManagerPage() {
   // Handed to the bulk-import modal; rebuilding the Set on every render made
   // the modal re-check the whole roster for each keystroke behind it.
   const existingEmails = useMemo(
-    () => new Set(profiles.map(p => p.email.toLowerCase())),
+    () => new Set(profiles.map(p => (p.email ?? '').toLowerCase())),
     [profiles],
   )
 

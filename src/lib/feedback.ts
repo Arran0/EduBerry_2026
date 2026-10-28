@@ -1,5 +1,6 @@
 import { supabase, UserProfile } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
+import { PROFILE_COLUMNS } from './profileColumns'
 
 // --- Types ---
 
@@ -122,8 +123,8 @@ export async function submitFeedback(
  */
 const FEEDBACK_SELECT = `
   *,
-  submitter:profiles!feedbacks_submitted_by_fkey(*),
-  replier:profiles!feedbacks_replied_by_fkey(*)
+  submitter:profiles!feedbacks_submitted_by_fkey(${PROFILE_COLUMNS}),
+  replier:profiles!feedbacks_replied_by_fkey(${PROFILE_COLUMNS})
 ` as const
 
 export async function fetchMyFeedbacks(userId: string, limit = 50, offset = 0): Promise<FeedbackWithDetails[]> {

@@ -8,7 +8,7 @@ Teachers record assessments inside each classroom (tests, assignments; "main" or
 
 Live: 252 assessments, 697 components, 6,213 assessment marks, 17,587 component marks, 10 report-card titles; no publications or remarks yet.
 
-What changes: the component-to-total recompute trigger becomes explicit code in the mark-saving method; publication becomes the gate for students reading marks of a report-card title (today students can read their own raw marks whenever they like, even before a class is published); class-wise marks and trends read from indexed queries inside the object.
+What changes: the component-to-total recompute trigger becomes explicit code in the mark-saving method; publication stays the gate for students reading marks of a report-card title (enforced in the current app since 28 Oct 2026 by `assessment_marks_released` in the marks policies; before that students could read their raw marks before publication); class-wise marks and trends read from indexed queries inside the object.
 
 ## 2. Users and screens
 
@@ -75,7 +75,7 @@ Carried over. Marks as `REAL` (2 decimals). Indexes: `classroom_assessments (cla
 
 ### Rules
 
-- A student reads marks for an assessment only if it has no report-card title, or its title is published for the student's grade-section. (Tightens today's behaviour; confirm with the school.)
+- A student reads marks for an assessment only if it has no report-card title, or its title is published for the assessment's class (classroom grade and section). Remarks follow the same rule for the student's own class. (Live since 28 Oct 2026; carry it over as is.)
 - Staff read marks of classrooms they teach; class teachers read their grade-section; coordinators, principal and admin read all.
 
 ### Methods
@@ -106,5 +106,5 @@ Straight copy. After import, recompute every assessment that has components and 
 
 ## 12. Open questions
 
-- [ ] Should students be blocked from seeing raw marks of a report-card title before publication? (Recommended; today they are not.)
+- [x] Should students be blocked from seeing raw marks of a report-card title before publication? Yes, decided and live since 28 Oct 2026.
 - [ ] Is a configurable grading scale needed for non-CBSE schools?

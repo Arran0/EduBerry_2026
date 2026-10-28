@@ -32,6 +32,7 @@ Status: **Done** = written and pushed. All eight rounds are done; the order of w
 | 1 | [README.md](README.md) | This index, the plan and the template | Done |
 | 1 | [01-architecture-options.md](01-architecture-options.md) | D1 per school vs shared D1 vs Durable Objects vs others; validation; recommendation; spikes | Done |
 | 1 | [02-cost-study.md](02-cost-study.md) + [tools/costmodel.py](tools/costmodel.py) | Workload model from live data; cost per school and per fleet up to 10,000 users | Done |
+| 9 | [03-cost-efficiency.md](03-cost-efficiency.md) | Cost-efficiency practices checked against the cost study; what is done, what the rebuild must do, a checklist per screen | Done |
 | 2 | [10-target-architecture.md](10-target-architecture.md) | Repository layout, Workers and Durable Object classes, request lifecycle, environments, deploys, observability | Done |
 | 2 | [11-tenancy-and-control-plane.md](11-tenancy-and-control-plane.md) | Platform D1, finding the school from the host, domains, provisioning and offboarding, platform admin | Done |
 | 2 | [12-auth-and-permissions.md](12-auth-and-permissions.md) | Replacing Supabase Auth; sessions; password import; invites and resets; replacing row-level security | Done |
@@ -119,3 +120,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | 27 Oct 2026 | 6 | Section docs 33–35: fees, payroll and salary, bank collections and payouts |
 | 27 Oct 2026 | 7 | Section doc 36: transport (live runs stay in the school object; positions move out of SQL into trail chunks and R2) |
 | 27 Oct 2026 | 8 | Doc 37 (home, profile, feedback, streaks); 90 data migration and cutover runbook; 91 test and parity plan; 92 build order with milestones M0–M7 and the list of issues to fix now versus in the rebuild |
+| 28 Oct 2026 | 9 | Doc 03 (cost efficiency). Live fixes in the current app: home fee figures, private attachments, subtask uploads, report-card marks gate, profile email visibility |

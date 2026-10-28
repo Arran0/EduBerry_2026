@@ -3,6 +3,7 @@ import { Homeroom } from './homerooms'
 import { addClassroomMember, Classroom } from './classrooms'
 import { staffRolesForClassTeachers } from './homeroomClassTeachers'
 import { compressImageIfNeeded } from './imageCompression'
+import { PROFILE_EMAIL } from './profileColumns'
 
 // Reuse the same four-state model as staff tasks / classroom progress.
 export type SmartboardTaskStatus = 'not_done' | 'partial' | 'done' | 'checked'
@@ -114,7 +115,7 @@ export async function importHomeroomIntoClassroom(
 export async function fetchSmartboardAccounts(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, created_at, updated_at')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, created_at, updated_at')
     .eq('role', 'smartboard')
     .order('full_name', { ascending: true })
 
@@ -468,7 +469,7 @@ export async function uploadSmartboardTaskAttachment(
 export async function fetchTaskCompletions(
   task: Pick<SmartboardTask, 'id' | 'homeroom_id' | 'classroom_id'>,
 ): Promise<SmartboardTaskCompletion[]> {
-  const studentSelect = `id, email, full_name, role, avatar_url, grade, section`
+  const studentSelect = `id, ${PROFILE_EMAIL}, full_name, role, avatar_url, grade, section` as const
 
   let memberIds: { student_id: string; student?: UserProfile }[] = []
   if (!task.classroom_id && task.homeroom_id) {

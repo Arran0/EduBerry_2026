@@ -8,7 +8,7 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
 - **Nobody has to reset their password.** Supabase stores standard bcrypt hashes; they are imported as they are, checked with bcrypt on the next sign-in, and quietly re-hashed with the new scheme.
 - **Sessions move from `localStorage` to an `HttpOnly` cookie.** Today a single injected script can read the session; the 300-line cross-tab refresh-lock workaround in `src/lib/supabase.ts` also disappears.
 - **Row-level security (696 policies) is replaced by one permission module in code**, with a permission matrix generalised from the fee module's existing grants system. Every object method declares the permission it needs; tests prove each role's access.
-- **Two existing gaps close on the way:** any signed-in user can read every profile (including emails) today, and every admin API route re-implements its own "is this caller an admin" check.
+- **Two existing gaps close on the way:** every admin API route re-implements its own "is this caller an admin" check, and staff can read every student's full details. (A third, any signed-in user reading every profile's email, was fixed in the current app on 28 Oct 2026: addresses now come from `profile_emails`, which shows a student's address only to staff and the student; the profile card shows it to anyone who opens it. The rebuild keeps that rule.)
 
 ## How it works today
 
@@ -183,9 +183,9 @@ The full matrix is built section by section; each section doc adds its rows. The
 
 | Today | Risk | Target |
 | --- | --- | --- |
-| Every signed-in user can read every profile row, including emails | A student can list every account's email | Directory endpoints return only name, role, photo and class; emails visible to admins and the person themself |
+| Every signed-in user could read every profile row, including emails (fixed in the current app on 28 Oct 2026: `profile_emails`, `profile_directory`, `profile_card_email`, and `profiles.email` hidden from the API roles) | A student could list every account's email | Directory endpoints return name, role, photo and class; a student's email only to staff and the student; the profile card shows the email to anyone who opens it (the school's choice) |
 | Staff can read every student's full details (Aadhaar, caste, income, guardian phones) | Wider than a teacher needs | `student_details.read_sensitive` permission, granted to admin and principal by default; teachers see contact fields for their own homerooms |
-| Uploaded files are in a public bucket with guessable paths (leave certificates, feedback files, task attachments) | Anyone with a link can open a medical certificate | Files private by default, served after a permission check ([15](15-files-and-media.md)) |
+| Uploaded files are in a public bucket (leave certificates and task, subtask and announcement attachments moved to a private bucket on 28 Oct 2026; coursework, submissions, avatars and banners are still public by URL, no longer listable) | Anyone with a link can open them | Files private by default, served after a permission check ([15](15-files-and-media.md)) |
 | Admin checks re-implemented in each route | One forgotten check is an escalation | One `admin.*` permission set checked by the shared method wrapper |
 
 ## Moving existing accounts

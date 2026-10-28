@@ -136,7 +136,7 @@ Collected from the open questions in the section docs. Each must be decided beca
 
 - [ ] Import the one auth user with no profile? ([20](20-users-profiles-and-admin.md))
 - [ ] Tasks with several assignees: split or keep a child table? Tasks with no assignee: assign to the creator or drop? ([26](26-tasks-and-projects.md))
-- [ ] Students reading raw marks before publication: tighten at cutover? ([30](30-grades-and-report-cards.md))
+- [x] Students reading raw marks before publication: tightened in the current app on 28 Oct 2026 ([30](30-grades-and-report-cards.md))
 - [ ] Payroll option A, B or C ([34](34-payroll-and-salary.md))
 - [ ] Bank collections settle into v2 fee bills only ([35](35-bank-collections-and-payouts.md))
 - [ ] Keep or drop resolved transport alerts ([36](36-transport.md))

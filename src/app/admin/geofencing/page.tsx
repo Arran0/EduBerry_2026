@@ -126,7 +126,7 @@ function GeofencingBody() {
 
   const filteredStaff = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)) : staff
+    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || (s.email ?? '').toLowerCase().includes(q)) : staff
     // Exempted people first: they are the list an admin comes here to check.
     return [...list].sort((a, b) => Number(!!b.geofence_exempt) - Number(!!a.geofence_exempt))
   }, [staff, query])

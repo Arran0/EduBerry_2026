@@ -1,5 +1,6 @@
 import { supabase, UserProfile } from './supabase'
 import { enrolClassTeacherInMatchingClassrooms } from './homeroomClassTeachers'
+import { profileDirectory } from './profileColumns'
 
 // ============================================
 // Types
@@ -108,7 +109,7 @@ export async function searchHomerooms(query: string): Promise<Homeroom[]> {
 
   let dbQuery = supabase
     .from('homerooms')
-    .select('*, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, email, avatar_url)')
+    .select('*, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, ...profile_emails(email), avatar_url)')
 
   if (gradeSecMatch) {
     const grade = parseInt(gradeSecMatch[1], 10)
@@ -141,7 +142,7 @@ export async function fetchHomeroomWithMembers(homeroomId: string): Promise<Home
     supabase.from('homerooms').select('*').eq('id', homeroomId).single(),
     supabase
       .from('homeroom_members')
-      .select(`*, student:profiles!homeroom_members_student_id_fkey(id, email, full_name, role, avatar_url, grade, section)`)
+      .select(`*, student:profiles!homeroom_members_student_id_fkey(id, ...profile_emails(email), full_name, role, avatar_url, grade, section)`)
       .eq('homeroom_id', homeroomId)
       .order('created_at', { ascending: true }),
   ])
@@ -294,8 +295,7 @@ export async function addHomeroomMemberByEmail(
   homeroomId: string,
   email: string
 ): Promise<{ success: boolean; error?: string; linkedSmartboard?: boolean }> {
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
+  const { data: profile, error: profileError } = await profileDirectory()
     .select('id, role')
     .eq('email', email.trim().toLowerCase())
     .single()
@@ -436,7 +436,7 @@ export async function fetchHomeroomSmartboard(homeroomId: string): Promise<UserP
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, grade, section, created_at, updated_at')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, grade, section, created_at, updated_at')
     .eq('id', hr.smartboard_id)
     .single()
 
@@ -450,8 +450,7 @@ export async function linkSmartboardToHomeroom(
   homeroomId: string,
   email: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: profile } = await supabase
-    .from('profiles')
+  const { data: profile } = await profileDirectory()
     .select('id, role')
     .eq('email', email.trim().toLowerCase())
     .maybeSingle()

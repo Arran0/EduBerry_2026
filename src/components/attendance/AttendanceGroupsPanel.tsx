@@ -161,7 +161,7 @@ function GroupModal({ audience, group, viewerId, staff, teams, homerooms, onClos
 
   const filteredStaff = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)) : staff
+    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || (s.email ?? '').toLowerCase().includes(q)) : staff
     // Members first, so what the group holds is visible without scrolling.
     return [...list].sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)) || a.full_name.localeCompare(b.full_name))
   }, [staff, query, selected])

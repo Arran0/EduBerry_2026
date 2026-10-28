@@ -24,6 +24,7 @@ import { ClassroomMember, ClassroomMemberRole, ClassroomWithDetails, fetchClassr
 import { supabase } from '@/lib/supabase'
 import { useServerPagedList } from '@/hooks/useServerPagedList'
 import useDebounce from '@/hooks/useDebounce'
+import { profileDirectory } from '@/lib/profileColumns'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -168,8 +169,7 @@ export default function ClassroomManagerPage() {
 
     let coordinatorId: string | undefined
     if (newClassroom.coordinator_email.trim()) {
-      const { data: coordProfile } = await supabase
-        .from('profiles').select('id, role')
+      const { data: coordProfile } = await profileDirectory().select('id, role')
         .eq('email', newClassroom.coordinator_email.trim().toLowerCase())
         .in('role', ['coordinator', 'principal', 'admin']).single()
       if (coordProfile) {

@@ -1,6 +1,7 @@
 import { invalidateFeeConfig } from '@/lib/fees/config'
 import { supabase, UserProfile } from './supabase'
 import { deriveYearCode } from '@/lib/academicYear'
+import { PROFILE_COLUMNS } from './profileColumns'
 
 // School Fee Manager data layer. Mirrors the fee section of src/lib/bus.ts but
 // operates on the school_fees / school_fee_payments / fee_heads tables. Fees are
@@ -195,7 +196,7 @@ export async function fetchStudentsForHomerooms(homeroomIds: string[]): Promise<
   if (homeroomIds.length === 0) return []
   const { data, error } = await supabase
     .from('homeroom_members')
-    .select('student:profiles!homeroom_members_student_id_fkey(*)')
+    .select(`student:profiles!homeroom_members_student_id_fkey(${PROFILE_COLUMNS})`)
     .in('homeroom_id', homeroomIds)
   if (error) { console.error('fetchStudentsForHomerooms failed:', error); return [] }
   const rows = (data as unknown as { student: UserProfile | UserProfile[] | null }[]) || []
@@ -211,7 +212,7 @@ export async function fetchStudentsForHomerooms(homeroomIds: string[]): Promise<
 export async function fetchAllStudents(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .eq('role', 'student')
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchAllStudents failed:', error); return [] }
@@ -253,7 +254,7 @@ export function isFeeOverdue(fee: SchoolFee, todayStr: string): boolean {
 export async function fetchAllFees(year?: string): Promise<SchoolFee[]> {
   let q = supabase
     .from('school_fees')
-    .select('*, student:profiles!student_id(*), fee_head:fee_heads!fee_head_id(id, name)')
+    .select(`*, student:profiles!student_id(${PROFILE_COLUMNS}), fee_head:fee_heads!fee_head_id(id, name)`)
     .order('created_at', { ascending: false })
   if (year) q = q.eq('academic_year', year)
   const { data, error } = await q
@@ -428,7 +429,7 @@ export interface PendingPayment extends SchoolFeePayment {
 export async function fetchPendingPayments(): Promise<PendingPayment[]> {
   const { data, error } = await supabase
     .from('school_fee_payments')
-    .select('*, fee:school_fees!fee_id(id, amount, description, upi_reference, student:profiles!student_id(*))')
+    .select(`*, fee:school_fees!fee_id(id, amount, description, upi_reference, student:profiles!student_id(${PROFILE_COLUMNS}))`)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
   if (error) { console.error('fetchPendingPayments failed:', error); return [] }
@@ -558,7 +559,7 @@ export interface CollectionFilter {
 export async function fetchCollectionReport(filter: CollectionFilter = {}): Promise<CollectionRow[]> {
   let q = supabase
     .from('school_fee_payments')
-    .select('*, fee:school_fees!fee_id(id, amount, status, description, upi_reference, academic_year, student:profiles!student_id(*), fee_head:fee_heads!fee_head_id(id, name))')
+    .select(`*, fee:school_fees!fee_id(id, amount, status, description, upi_reference, academic_year, student:profiles!student_id(${PROFILE_COLUMNS}), fee_head:fee_heads!fee_head_id(id, name))`)
     .eq('status', 'verified')
     .order('verified_at', { ascending: false })
   if (filter.from) q = q.gte('verified_at', filter.from)

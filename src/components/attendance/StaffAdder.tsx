@@ -23,7 +23,7 @@ export default function StaffAdder({ allStaff, selectedIds, onAdd }: {
     const q = query.trim().toLowerCase()
     return allStaff
       .filter(s => !selectedIds.has(s.id) && !s.attendance_hidden)
-      .filter(s => !q || s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q))
+      .filter(s => !q || s.full_name.toLowerCase().includes(q) || (s.email ?? '').toLowerCase().includes(q))
       .sort((a, b) => a.full_name.localeCompare(b.full_name))
       .slice(0, 8)
   }, [allStaff, selectedIds, query])

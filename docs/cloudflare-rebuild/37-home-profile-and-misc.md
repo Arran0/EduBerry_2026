@@ -31,7 +31,7 @@ Live data:
 - `feedbacks`: 0 rows, but 2 files in `feedback-files`.
 - `user_activity_streaks`: 195 rows.
 
-**Gap found while writing this doc.** The home page's fee widgets (`OverdueFeesCard` for students, and the admin fee summary at `home/page.tsx:793`) read the first-generation tables `school_fees`, `school_fee_payments`, `bus_fees` and `bus_payments`. All four are empty or near-empty on live. The v2 fee app keeps its bills in `fee_invoices` and `fee_payments`, so these widgets never show real bills or collections. The rebuild must read the v2 fee module ([33](33-fees.md)).
+**Gap found while writing this doc, fixed on 28 Oct 2026.** The home page's fee widgets read the first-generation tables `school_fees`, `school_fee_payments`, `bus_fees` and `bus_payments`, which are empty on live, so they never showed real bills or collections. They now read the v2 fee tables: the admin overview through `fee_home_summary` (one call instead of five), the monthly chart through `fee_home_collections` (one instead of four), and the student card through `fetchOverdueBills`. The rebuild keeps this through the fee module ([33](33-fees.md)).
 
 What changes:
 
@@ -138,7 +138,7 @@ Carried over. `feedbacks` gains `file_key` (an R2 key) in place of `file_url`. `
 ## 11. Parity checklist
 
 - [ ] Each role sees the same cards as today, with the same data, in at most two network round trips.
-- [ ] The overdue-fees card and the admin fee summary show v2 bills and today's collections (a fix, not parity).
+- [ ] The overdue-fees card and the admin fee summary show v2 bills and today's collections, with the same figures as `fee_home_summary`.
 - [ ] A streak increments once per school day in the school's time zone, resets after a missed day, and cannot be kept alive by changing the device clock.
 - [ ] Feedback attachments open only for the sender and admins.
 - [ ] The `/more` hub shows only modules switched on for the school.

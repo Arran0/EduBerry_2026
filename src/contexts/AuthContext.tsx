@@ -5,6 +5,7 @@ import { User, Session } from '@supabase/supabase-js'
 import { clearFeeCaches } from '@/lib/fees/cache'
 import { supabase, AUTH_STORAGE_KEY, UserProfile } from '@/lib/supabase'
 import { recordAppOpen } from '@/lib/gamification'
+import { PROFILE_COLUMNS } from '@/lib/profileColumns'
 
 interface AuthContextType {
   user: User | null
@@ -102,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('*')
+          .select(PROFILE_COLUMNS)
           .eq('id', userId)
           .single()
 

@@ -277,7 +277,7 @@ function StaffAttendanceBody() {
 
   const filteredHide = useMemo(() => {
     const q = hideQuery.trim().toLowerCase()
-    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)) : staff
+    const list = q ? staff.filter(s => s.full_name.toLowerCase().includes(q) || (s.email ?? '').toLowerCase().includes(q)) : staff
     return [...list].sort((a, b) => Number(!!b.attendance_hidden) - Number(!!a.attendance_hidden))
   }, [staff, hideQuery])
   const hiddenCount = staff.filter(s => s.attendance_hidden).length

@@ -475,7 +475,7 @@ function StaffReportCardSearch({
     const ids = getRecentReportCardStudentIds(viewerId, RECENT_LIMIT)
     if (ids.length === 0) { setRecent([]); return }
     // One lookup for the whole list, and only the columns a row renders.
-    fetchProfilesByIds(ids, 'id, full_name, email, avatar_url, grade, section, role')
+    fetchProfilesByIds(ids, 'id, full_name, ...profile_emails(email), avatar_url, grade, section, role')
       .then(byId => {
         if (cancelled) return
         // Keep the stored recency order, and drop ids that no longer resolve

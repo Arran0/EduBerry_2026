@@ -2,6 +2,7 @@ import { supabase, UserProfile } from './supabase'
 import { fetchStaffDirectoryMap } from './staffDetails'
 import { DEFAULT_TRUSTED_ACCURACY_M, LatLng, haversineDistance as haversine } from './geofence'
 import { HomeroomClassTeacher, normalizeClassTeacher } from './homerooms'
+import { profileDirectory } from './profileColumns'
 
 // ============================================
 // Types
@@ -666,7 +667,7 @@ export async function fetchAttendanceSheet(
     .select(`
       student_id,
       student:profiles!homeroom_members_student_id_fkey(
-        id, email, full_name, role, avatar_url, grade, section
+        id, ...profile_emails(email), full_name, role, avatar_url, grade, section
       )
     `)
     .eq('homeroom_id', homeroomId)
@@ -1189,7 +1190,7 @@ export async function fetchStaffAttendanceReportByDate(
     .select(`
       ${STAFF_ATTENDANCE_COLUMNS},
       staff:profiles!staff_attendance_records_staff_id_fkey(
-        id, email, full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
+        id, ...profile_emails(email), full_name, role, avatar_url, geofence_exempt, is_banned, attendance_hidden
       )
     `)
     .eq('date', date)
@@ -1265,7 +1266,7 @@ export async function fetchStudentAttendanceTallyByDate(date: string): Promise<S
 export async function fetchTrackedStaffCount(): Promise<number> {
   const { count, error } = await supabase
     .from('profiles')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .in('role', STAFF_ROLES)
     .eq('is_banned', false)
     .eq('attendance_hidden', false)
@@ -2345,7 +2346,7 @@ export async function recomputePendingAttendance(): Promise<AttendanceRecomputeR
 export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, attendance_hidden')
     .in('role', STAFF_ROLES)
     .eq('is_banned', false)
     .eq('attendance_hidden', false)
@@ -2368,7 +2369,7 @@ export async function fetchAllTrackedStaff(): Promise<UserProfile[]> {
 export async function fetchTrackedDrivers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, attendance_hidden')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, attendance_hidden')
     .eq('role', 'driver')
     .eq('is_banned', false)
     .eq('attendance_hidden', false)
@@ -2438,7 +2439,7 @@ export async function setStaffAttendanceVisibility(staffId: string, hidden: bool
 export async function fetchAllStaff(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, geofence_exempt, attendance_hidden')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, geofence_exempt, attendance_hidden')
     .in('role', STAFF_ROLES)
     .order('full_name', { ascending: true })
 
@@ -2607,7 +2608,7 @@ async function hydrateStudentEntries(
 
   const [{ data: profiles }, { data: homerooms }] = await Promise.all([
     supabase.from('profiles')
-      .select('id, email, full_name, role, avatar_url, grade, section')
+      .select('id, ...profile_emails(email), full_name, role, avatar_url, grade, section')
       .in('id', studentIds),
     supabase.from('homerooms').select('id, name').in('id', homeroomIds),
   ])
@@ -2681,8 +2682,7 @@ function sanitiseReportSearch(raw: string | null | undefined): string {
  */
 async function searchStudentIds(term: string): Promise<string[]> {
   const like = `%${term}%`
-  const { data, error } = await supabase
-    .from('profiles')
+  const { data, error } = await profileDirectory()
     .select('id')
     .eq('role', 'student')
     .or(`full_name.ilike.${like},email.ilike.${like}`)
@@ -2691,7 +2691,7 @@ async function searchStudentIds(term: string): Promise<string[]> {
     console.error('searchStudentIds error:', error)
     return []
   }
-  return (data ?? []).map(r => r.id as string)
+  return ((data ?? []) as { id: string }[]).map(r => r.id)
 }
 
 // Present students for a date, paged so a whole-school list never loads at once.
@@ -2826,7 +2826,7 @@ export async function fetchHomeroomAttendanceCountsByDate(
     let q = supabase
       .from('homerooms')
       .select(
-        'id, name, grade, section, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, email, avatar_url)',
+        'id, name, grade, section, class_teacher:profiles!homerooms_class_teacher_id_fkey(id, full_name, ...profile_emails(email), avatar_url)',
         { count: 'exact' }
       )
       .order('grade', { ascending: true, nullsFirst: false })

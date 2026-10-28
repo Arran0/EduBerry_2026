@@ -5,6 +5,7 @@ import type { Subject, Room, TimetableConfig, PeriodSlot, Requirement, TeacherUn
 // Re-export types so feature code can import everything from '@/lib/timetable'.
 export * from './timetable/types'
 import { teacherIdsOf, WEEKDAYS } from './timetable/types'
+import { profileDirectory } from './profileColumns'
 
 // PostgREST puts `.in()` lists in the query string, so a long one (a CSV import
 // of a whole year group) overruns the URL length limit and the request fails
@@ -956,7 +957,7 @@ export async function fetchTimetableForHomeroom(homeroomId: string): Promise<Tim
 // ============================================================
 
 const GROUP_SELECT =
-  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(id, full_name, avatar_url, role, email))'
+  '*, subject:timetable_subjects(*), members:timetable_group_members(*, student:profiles(id, full_name, avatar_url, role, ...profile_emails(email)))'
 
 export async function fetchGroupsForHomeroom(homeroomId: string): Promise<HomeroomGroup[]> {
   const { data, error } = await supabase
@@ -1050,7 +1051,7 @@ export async function bulkAddGroupMembersByEmails(
 
   const [profilePages, { data: roster }] = await Promise.all([
     Promise.all(
-      chunk(wanted).map((batch) => supabase.from('profiles').select('id, email').in('email', batch)),
+      chunk(wanted).map((batch) => profileDirectory().select('id, email').in('email', batch)),
     ),
     supabase.from('homeroom_members').select('student_id').eq('homeroom_id', group.homeroom_id),
   ])
@@ -1142,7 +1143,7 @@ export async function fetchClassroomStudentsInHomeroom(
 
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, grade, section')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, grade, section')
     .in('id', studentIds)
     .order('full_name', { ascending: true })
   if (error) {

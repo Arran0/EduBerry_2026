@@ -9,6 +9,7 @@ import { X, Mail, Phone as PhoneIcon, IdCard, Hash, Briefcase, CalendarDays, Cal
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfileCard, type ProfileCardSeed, type SupportCardPerson } from '@/contexts/ProfileCardContext'
 import { supabase, UserProfile, getDisplayRole, getRoleBadgeColor } from '@/lib/supabase'
+import { PROFILE_COLUMNS, fetchProfileCardEmail } from '@/lib/profileColumns'
 import {
   getCachedProfileBanner,
   isProfileBannerDecoded,
@@ -349,10 +350,16 @@ function ProfileCardModal({ userId, seed, onClose }: { userId: string; seed: Pro
   const loadProfile = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_COLUMNS)
       .eq('id', userId)
       .single()
-    if (!error && data) setTargetProfile(data as UserProfile)
+    if (!error && data) {
+      const profile = data as unknown as UserProfile
+      // A student's address is hidden from other students in lists, but the
+      // card shows it to anyone who opens it — asked for only when hidden.
+      if (!profile.email) profile.email = (await fetchProfileCardEmail(userId)) ?? ''
+      setTargetProfile(profile)
+    }
     setLoadingProfile(false)
     setProfileFetched(true)
   }, [userId])

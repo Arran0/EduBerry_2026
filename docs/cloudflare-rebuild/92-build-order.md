@@ -142,7 +142,9 @@ The sections every school uses daily, and that most other sections depend on.
 
 These reduce risk for the rebuild and help the live school today.
 
-### Fix now (they affect live users)
+### Fix now (they affect live users) — done on 28 Oct 2026
+
+All five were fixed in the current app (migrations `fix_home_fee_summary_v2.sql`, `fix_private_attachments.sql`, `fix_report_card_marks_gate.sql`, `fix_profile_email_visibility_a.sql` and `_b.sql`; `scripts/move-private-attachments.mjs` for the older files). The rebuild carries the same rules.
 
 | Issue | Doc | Why now |
 | --- | --- | --- |

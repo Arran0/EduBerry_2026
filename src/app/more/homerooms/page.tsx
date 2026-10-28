@@ -28,6 +28,7 @@ import {
   updateHomeroomClassTeacher,
 } from '@/lib/homerooms'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import { profileDirectory } from '@/lib/profileColumns'
 
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 const SECTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))
@@ -155,8 +156,7 @@ export default function HomeroomsPage() {
     const q = addEmail.trim()
     if (q.length < 2) { setAddMemberSuggestions([]); return }
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
+      const { data } = await profileDirectory()
         .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
         .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
         .in('role', ['student', 'smartboard'])
@@ -171,8 +171,7 @@ export default function HomeroomsPage() {
     const q = classTeacherQuery.trim()
     if (q.length < 2) { setClassTeacherSuggestions([]); return }
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
+      const { data } = await profileDirectory()
         .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
         .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
         .in('role', ['teacher', 'coordinator', 'principal', 'admin'])
@@ -220,7 +219,7 @@ export default function HomeroomsPage() {
       classTeacherId
         ? supabase
             .from('profiles')
-            .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
+            .select('id, full_name, ...profile_emails(email), role, avatar_url, grade, section, created_at, updated_at')
             .eq('id', classTeacherId)
             .single()
             .then(r => r.data as UserProfile | null)

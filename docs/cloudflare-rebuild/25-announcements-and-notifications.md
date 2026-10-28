@@ -24,7 +24,7 @@ Code: `src/lib/announcements.ts`, `announcementReads.ts`, `notificationDismissal
 
 ## 3. How it works today
 
-1. **Post.** The form builds audience rows; `type` (`student`, `staff`, `both`) is derived from them and stored so row-level security can filter cheaply. Attachments upload to the public bucket under `announcements/`. After insert, the browser calls `/api/announcements/notify`, which re-checks the author, resolves recipients and sends web push.
+1. **Post.** The form builds audience rows; `type` (`student`, `staff`, `both`) is derived from them and stored so row-level security can filter cheaply. Attachments upload to the private bucket under `announcements/` (since 28 Oct 2026; readable by the announcement's audience through signed links). After insert, the browser calls `/api/announcements/notify`, which re-checks the author, resolves recipients and sends web push.
 2. **Read.** `get_announcement_feed(limit, offset)` returns posts with audiences, author and like counts; visibility comes from row-level security: coordinators, principals and admins see all; teachers see `staff`/`both` posts for their teams or all teams; students see `student`/`both` posts for their grade/section or all students; anyone sees posts addressed to them by name.
 3. **Unread.** A per-device `localStorage` "last read" timestamp floors the count; `announcement_reads` records per-post reads for the home box across devices. Opening the page marks everything read.
 4. **Pin and like.** Pinned posts sort first; likes are one row per user.

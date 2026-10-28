@@ -9,8 +9,9 @@ import { supabase, UserProfile, UserRole, isMissingRelation } from './supabase'
  * statement modals, `email`/`role` by the payslip builder, the rest by the
  * avatar and name rows.
  */
-const PROFILE_COLS = 'id, email, full_name, role, avatar_url, grade, section, is_non_teaching'
+const PROFILE_COLS = `id, ${PROFILE_EMAIL}, full_name, role, avatar_url, grade, section, is_non_teaching` as const
 import { academicYearOf, currentAcademicYear } from './fees'
+import { PROFILE_COLUMNS, PROFILE_EMAIL } from './profileColumns'
 
 export { academicYearOf, currentAcademicYear }
 
@@ -150,7 +151,7 @@ export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
     .from('profiles')
     // Not select('*'): profiles is joined from ~50 places and a wildcard here
     // is the single biggest egress multiplier in the app (README conventions).
-    .select('id, email, full_name, role, avatar_url, grade, section, created_at, updated_at')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, grade, section, created_at, updated_at')
     .not('role', 'in', `(${excluded.join(',')})`)
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchAssignablePassengers failed:', error); return [] }
@@ -164,7 +165,7 @@ export async function fetchAssignablePassengers(): Promise<UserProfile[]> {
 export async function fetchDrivers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .eq('role', 'driver')
     .order('full_name', { ascending: true })
   if (error) { console.error('fetchDrivers failed:', error); return [] }

@@ -1,6 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
 import { fetchPublishedKeys, publicationKey } from './reportCardPublication'
+import { PROFILE_COLUMNS, profileDirectory } from './profileColumns'
 
 // --- Types ---
 
@@ -449,7 +450,7 @@ export async function fetchClassroomById(classroomId: string): Promise<Classroom
   if (memberUserIds.length > 0) {
     const { data: profilesData } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_COLUMNS)
       .in('id', memberUserIds)
     profiles = (profilesData ?? []) as UserProfile[]
   }
@@ -486,8 +487,7 @@ export async function addClassroomMember(classroomId: string, userId: string, ro
 }
 
 export async function addMemberByEmail(classroomId: string, email: string): Promise<{ success: boolean; error?: string }> {
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
+  const { data: profile, error: profileError } = await profileDirectory()
     .select('id, role')
     .eq('email', email.trim().toLowerCase())
     .single()
@@ -1328,7 +1328,7 @@ export async function fetchDiscussionPosts(classroomId: string): Promise<Discuss
   if (userIds.length > 0) {
     const { data: profilesData } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_COLUMNS)
       .in('id', userIds)
     profiles = (profilesData ?? []) as UserProfile[]
   }
@@ -1363,7 +1363,7 @@ export async function deleteDiscussionPost(postId: string): Promise<boolean> {
 export async function fetchCoordinators(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .eq('role', 'coordinator')
     .order('full_name', { ascending: true })
 
@@ -1491,7 +1491,7 @@ export async function fetchStudentMembers(classroomId: string): Promise<(Classro
   const userIds = members.map((m: ClassroomMember) => m.user_id)
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .in('id', userIds)
 
   const profileMap = new Map((profiles ?? []).map((p: UserProfile) => [p.id, p]))
@@ -1536,7 +1536,7 @@ export async function fetchProfilesByIds(
   ids: (string | null | undefined)[],
   // Callers that render a name and an avatar (rather than a whole profile) can
   // narrow this; the default keeps every existing caller's shape unchanged.
-  columns = '*',
+  columns: string = PROFILE_COLUMNS,
 ): Promise<Record<string, UserProfile>> {
   const uniqueIds = [...new Set(ids.filter((id): id is string => !!id))]
   if (uniqueIds.length === 0) return {}
@@ -2075,8 +2075,7 @@ export async function searchStudentsForReportCard(
 
   // Admin/principal can search everyone.
   if (['admin', 'principal'].includes(viewerRole)) {
-    const { data, error } = await supabase
-      .from('profiles')
+    const { data, error } = await profileDirectory()
       .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
       .eq('role', 'student')
       .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
@@ -2111,8 +2110,7 @@ export async function searchStudentsForReportCard(
   ))
   if (studentIds.length === 0) return []
 
-  const { data, error } = await supabase
-    .from('profiles')
+  const { data, error } = await profileDirectory()
     .select('id, full_name, email, role, avatar_url, grade, section, created_at, updated_at')
     .in('id', studentIds)
     .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
@@ -2310,7 +2308,7 @@ export async function fetchClasswiseMarks(
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, full_name, email, role, avatar_url, grade, section')
+      .select('id, full_name, ...profile_emails(email), role, avatar_url, grade, section')
       .eq('role', 'student')
       .eq('grade', grade)
       .ilike('section', section)

@@ -6,6 +6,7 @@ import { Homeroom, fetchHomeromsForStudent } from './homerooms'
 import { AttendanceSummary, fetchAttendanceSummary } from './attendance'
 import { StudentMarkWithContext, fetchMarksForStudent } from './classrooms'
 import { SchoolFee, fetchFeesForStudent, currentAcademicYear } from './fees'
+import { PROFILE_COLUMNS } from './profileColumns'
 
 // ============================================
 // Certificate Generation Engine — data layer
@@ -159,7 +160,7 @@ export async function buildCertContext(
     await Promise.all([
       fetchBranding(),
       fetchSchoolProfile(),
-      supabase.from('profiles').select('*').eq('id', studentId).maybeSingle(),
+      supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', studentId).maybeSingle(),
       fetchStudentDetails(studentId),
       fetchHomeromsForStudent(studentId),
       fetchAttendanceSummary(studentId, opts.homeroomId),

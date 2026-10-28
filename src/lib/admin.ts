@@ -1,5 +1,6 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { GRADE_OPTIONS } from './grades'
+import { PROFILE_COLUMNS, profileDirectory } from './profileColumns'
 
 // ============================================
 // Admin Functions for User Management
@@ -36,7 +37,7 @@ const STAFF_ROLES: UserRole[] = ['teacher', 'coordinator', 'principal', 'admin']
 export async function fetchStaffProfiles(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, grade, section')
+    .select('id, ...profile_emails(email), full_name, role, avatar_url, grade, section')
     .in('role', STAFF_ROLES)
     .order('full_name', { ascending: true })
 
@@ -72,7 +73,7 @@ export async function fetchAllProfiles(
   // truncates, which makes existing members look absent — e.g. the bulk
   // import preview would mark them "new" and try to re-create them.
   const fetchProfilePage = (page: number) => {
-    let q = supabase.from('profiles').select('*')
+    let q = supabase.from('profiles').select(PROFILE_COLUMNS)
     if (roles?.length) q = q.in('role', roles)
     return q
       .order('role', { ascending: true })
@@ -425,9 +426,10 @@ export async function fetchStudentPage(
   offset: number,
   limit: number,
 ): Promise<{ rows: ProfileWithTeams[]; total: number }> {
-  let q = supabase
-    .from('profiles')
-    .select(STUDENT_ROW_COLUMNS, { count: 'exact' })
+  // The directory, not the table: the search below matches email addresses,
+  // and only addresses the caller may see (profileDirectory).
+  let q = profileDirectory({ count: 'exact' })
+    .select(STUDENT_ROW_COLUMNS)
     .eq('role', 'student')
 
   const search = sanitiseSearch(query.search)
@@ -463,7 +465,7 @@ export async function fetchStudentPage(
     return { rows: [], total: 0 }
   }
   return {
-    rows: (data ?? []).map(p => ({ ...p, teams: [] })) as unknown as ProfileWithTeams[],
+    rows: ((data ?? []) as UserProfile[]).map(p => ({ ...p, teams: [] })) as unknown as ProfileWithTeams[],
     total: count ?? 0,
   }
 }
@@ -509,11 +511,11 @@ export async function fetchStudentEmails(): Promise<Set<string>> {
   for (let page = 0; ; page++) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('email')
+      .select('...profile_emails(email)')
       .eq('role', 'student')
       .range(page * PROFILE_PAGE_SIZE, page * PROFILE_PAGE_SIZE + PROFILE_PAGE_SIZE - 1)
     if (error) { console.error('fetchStudentEmails error:', error); break }
-    for (const r of data ?? []) emails.add((r as { email: string }).email.toLowerCase())
+    for (const r of data ?? []) emails.add(((r as { email: string | null }).email ?? '').toLowerCase())
     if (!data || data.length < PROFILE_PAGE_SIZE) break
   }
   return emails

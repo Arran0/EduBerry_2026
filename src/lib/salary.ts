@@ -1,4 +1,5 @@
 import { supabase, UserProfile, isMissingRelation } from './supabase'
+import { PROFILE_COLUMNS } from './profileColumns'
 
 // ============================================
 // Types
@@ -203,7 +204,7 @@ export async function fetchEligibleStaff(): Promise<UserProfile[]> {
   const [{ data, error }, hiddenIds] = await Promise.all([
     supabase
       .from('profiles')
-      .select('*')
+      .select(PROFILE_COLUMNS)
       .in('role', ELIGIBLE_STAFF_ROLES)
       .eq('is_banned', false)
       .order('full_name', { ascending: true }),
@@ -222,7 +223,7 @@ export async function fetchEligibleStaff(): Promise<UserProfile[]> {
 export async function fetchAllSalaryMembers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .in('role', [...ELIGIBLE_STAFF_ROLES, 'driver'])
     .eq('is_banned', false)
     .order('full_name', { ascending: true })
@@ -297,7 +298,7 @@ export async function fetchCycle(cycleId: string): Promise<SalaryCycle | null> {
 // for the rows that have no profile at all — see recordPersonId/recordPersonName.
 const CYCLE_RECORD_SELECT =
   '*, items:salary_record_items(*), ' +
-  'staff:profiles!staff_id(id, full_name, email, avatar_url, role, is_non_teaching, display_role, is_banned), ' +
+  'staff:profiles!staff_id(id, full_name, ...profile_emails(email), avatar_url, role, is_non_teaching, display_role, is_banned), ' +
   'support_staff:support_staff!support_staff_id(id, full_name, designation, is_active)'
 
 export async function fetchCycleRecords(cycleId: string): Promise<SalaryRecord[]> {
