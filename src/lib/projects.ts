@@ -2,6 +2,7 @@ import { supabase, UserProfile, UserRole } from './supabase'
 import { TaskStatus, TaskTag } from './tasks'
 import { compressImageIfNeeded } from './imageCompression'
 import { attachmentProblem, isImageAttachment } from './attachmentPolicy'
+import { uploadPrivateFile } from './privateFiles'
 
 // ============================================
 // Types
@@ -567,13 +568,11 @@ export async function uploadSubtaskAttachment(
   const isImage = isImageAttachment(file.name)
   const compressed = isImage ? await compressImageIfNeeded(file) : file
   const ext = (compressed.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '')
-  const path = `${userId}/${subtaskId}/${Date.now()}.${ext}`
-  const { error } = await supabase.storage
-    .from('subtask-attachments')
-    .upload(path, compressed, { cacheControl: '31536000', upsert: false })
-  if (error) { console.error('uploadSubtaskAttachment:', error); return null }
-  const { data: { publicUrl } } = supabase.storage.from('subtask-attachments').getPublicUrl(path)
-  return { url: publicUrl, name: compressed.name, type: isImage ? 'image' : 'document' }
+  // Private: readable by whoever can read the comment (see lib/privateFiles).
+  // The `subtask-attachments` bucket this once targeted never existed.
+  const ref = await uploadPrivateFile(`subtasks/${subtaskId}/${userId}/${Date.now()}.${ext}`, compressed)
+  if (!ref) return null
+  return { url: ref, name: compressed.name, type: isImage ? 'image' : 'document' }
 }
 
 // ============================================

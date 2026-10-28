@@ -1,77 +1,58 @@
-import { supabase } from '@/lib/supabase'
+import { supabase, isMissingRelation } from '@/lib/supabase'
 
 // Month-by-month fee collection for the admin home's School Overview chart:
-// verified school-fee and bus-fee payments, bucketed by the calendar month
-// they were verified in and by fee head (bus fee is the single head '__bus').
+// verified payments on fee bills, bucketed by the calendar month they were paid
+// in and by fee head (fee_home_collections). A head is keyed by its name, since
+// heads are created per session and the chart spans two; transport heads come
+// back as '__bus', and late fees, fines, brought-forward balances and bills
+// without fee lines as late_fee · fine · carry_forward · other.
 
-/** Twelve months, Jan → Dec; each maps a fee head id to the amount collected. */
+/** Twelve months, Jan → Dec; each maps a fee head key to the amount collected. */
 export type MonthlyCollections = Record<string, number>[]
 
-const PAGE = 1000
+interface CollectionsResponse {
+  first_year: number | null
+  months: { month: number; head: string; collected: number | null }[]
+}
 
-/** Every row of a payments query, a page at a time — PostgREST caps a
- *  response at 1000 rows, and a school's year of payments passes that. */
-async function fetchAllPages<T>(
-  query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-): Promise<T[]> {
-  const rows: T[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await query(from, from + PAGE - 1)
-    if (error) throw new Error(error.message)
-    rows.push(...(data ?? []))
-    if (!data || data.length < PAGE) return rows
+/** The chart asks for the year list and this year's months at the same time;
+ *  both come out of one response, so they share the request while it is open.
+ *  Settled requests are dropped, so a later visit reads fresh figures. */
+const inFlight = new Map<number, Promise<CollectionsResponse>>()
+
+function load(year: number): Promise<CollectionsResponse> {
+  let p = inFlight.get(year)
+  if (!p) {
+    p = (async () => {
+      const { data, error } = await supabase.rpc('fee_home_collections', { p_year: year })
+      if (error) {
+        if (isMissingRelation(error)) return { first_year: null, months: [] }
+        throw new Error(error.message)
+      }
+      return (data ?? { first_year: null, months: [] }) as CollectionsResponse
+    })()
+    inFlight.set(year, p)
+    p.then(() => inFlight.delete(year), () => inFlight.delete(year))
   }
+  return p
 }
 
 export async function fetchMonthlyCollections(year: number): Promise<MonthlyCollections> {
-  const start = new Date(year, 0, 1).toISOString()
-  const end = new Date(year + 1, 0, 1).toISOString()
-
-  type SchoolRow = { amount: number; verified_at: string; fee: { fee_head_id: string | null } | null }
-  type BusRow = { amount: number; verified_at: string }
-
-  const [school, bus] = await Promise.all([
-    fetchAllPages<SchoolRow>((from, to) => supabase
-      .from('school_fee_payments')
-      .select('amount, verified_at, fee:school_fees!fee_id(fee_head_id)')
-      .eq('status', 'verified')
-      .gte('verified_at', start)
-      .lt('verified_at', end)
-      .order('verified_at')
-      .range(from, to) as unknown as PromiseLike<{ data: SchoolRow[] | null; error: { message: string } | null }>),
-    fetchAllPages<BusRow>((from, to) => supabase
-      .from('bus_payments')
-      .select('amount, verified_at')
-      .eq('status', 'verified')
-      .gte('verified_at', start)
-      .lt('verified_at', end)
-      .order('verified_at')
-      .range(from, to)),
-  ])
-
+  const r = await load(year)
   const months: MonthlyCollections = Array.from({ length: 12 }, () => ({}))
-  const add = (at: string, head: string, amount: number) => {
-    const m = new Date(at).getMonth()
-    months[m][head] = (months[m][head] ?? 0) + (Number(amount) || 0)
+  for (const m of r.months ?? []) {
+    const slot = months[m.month - 1]
+    if (!slot) continue
+    slot[m.head] = (slot[m.head] ?? 0) + (Number(m.collected) || 0)
   }
-  for (const p of school) add(p.verified_at, p.fee?.fee_head_id ?? '__other', p.amount)
-  for (const p of bus) add(p.verified_at, '__bus', p.amount)
   return months
 }
 
 /** The calendar years that have any verified payment, oldest first, always
  *  ending at the current year — the chart's year switcher steps through these. */
 export async function fetchCollectionYears(): Promise<number[]> {
-  const [{ data: s }, { data: b }] = await Promise.all([
-    supabase.from('school_fee_payments').select('verified_at').eq('status', 'verified')
-      .not('verified_at', 'is', null).order('verified_at').limit(1),
-    supabase.from('bus_payments').select('verified_at').eq('status', 'verified')
-      .not('verified_at', 'is', null).order('verified_at').limit(1),
-  ])
   const now = new Date().getFullYear()
-  const firsts = [s?.[0]?.verified_at, b?.[0]?.verified_at]
-    .filter((v): v is string => !!v)
-    .map(v => new Date(v).getFullYear())
-  const first = Math.min(now, ...firsts)
+  const r = await load(now)
+  const first = Math.min(now, r.first_year ?? now)
   return Array.from({ length: now - first + 1 }, (_, i) => first + i)
 }

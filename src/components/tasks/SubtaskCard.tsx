@@ -16,6 +16,7 @@ import {
 } from '@/lib/projects'
 import { ATTACHMENT_ACCEPT, IMAGE_ACCEPT, attachmentProblem } from '@/lib/attachmentPolicy'
 import { safeHref, safeSrc } from '@/lib/safeUrl'
+import { usePrivateFileUrls } from '@/hooks/usePrivateFileUrl'
 import { formatSlotTime } from '@/lib/taskSlots'
 import { Btn, IconBtn, FormCard, FormRow, Toggle, Notice, TaskSheet, Fact, SubHead, shortDate } from './ui'
 
@@ -65,6 +66,8 @@ export default function SubtaskCard({
   const [newCheckText, setNewCheckText] = useState('')
 
   const [comments, setComments] = useState<SubtaskComment[]>([])
+  // Uploaded files are private; every attachment on the card is signed in one request.
+  const fileUrl = usePrivateFileUrls(comments.flatMap(c => (c.attachments ?? []).map(a => a.url)))
   const [commentsLoading, setCommentsLoading] = useState(true)
   const [commentText, setCommentText] = useState('')
   const [commentFiles, setCommentFiles] = useState<File[]>([])
@@ -372,12 +375,13 @@ export default function SubtaskCard({
                     {c.attachments && c.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1.5">
                         {c.attachments.map(att => {
-                          const href = safeHref(att.url)
-                          const src = safeSrc(att.url)
+                          const url = fileUrl(att.url)
+                          const href = safeHref(url)
+                          const src = safeSrc(url)
                           if (!href) return null
                           return att.type === 'image' && src ? (
                             <a key={att.id} href={href} target="_blank" rel="noopener noreferrer" className="block w-20 h-20 rounded-[10px] overflow-hidden border border-amber-900/10 hover:border-amber-400 transition-colors">
-                              {/* eslint-disable-next-line @next/next/no-img-element -- uploads on a public bucket */}
+                              {/* eslint-disable-next-line @next/next/no-img-element -- signed storage URLs */}
                               <img src={src} alt={att.name} loading="lazy" className="w-full h-full object-cover" />
                             </a>
                           ) : (

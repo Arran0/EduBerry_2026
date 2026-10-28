@@ -39,7 +39,9 @@ import {
 } from 'lucide-react'
 import { isStaffRole } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import { currentAcademicYear, academicYearOf, fetchFeesForStudent, isFeeOverdue, SchoolFee } from '@/lib/fees'
+import { fetchOverdueBills, type OverdueBill } from '@/lib/fees/invoices'
+import { fetchHomeFeeSummary, type HomeFeeFigures, type HomeFeeHead } from '@/lib/fees/reports'
+import { todayIn } from '@/lib/fees/engine/dates'
 import { fetchGraderGradingQueues, GraderExamProgress } from '@/lib/exam'
 import {
   fetchHolidayByDate,
@@ -460,7 +462,7 @@ export default function HomePage() {
   const [feeBreakdown, setFeeBreakdown] = useState<HomeFeeBreakdown | null>(null)
   // Presence data for conditional carousel slots (resolved so the slot list is
   // built before the strip settles, avoiding a visible resnap).
-  const [overdueFees, setOverdueFees] = useState<SchoolFee[]>([])
+  const [overdueFees, setOverdueFees] = useState<OverdueBill[]>([])
   const [gradingQueues, setGradingQueues] = useState<GraderExamProgress[]>([])
   /* Whether those two fetches have returned. They decide what the card SAYS,
      never whether the card EXISTS — an empty array means "not asked yet" on the
@@ -784,122 +786,73 @@ export default function HomePage() {
 
   const loadFeeSummaries = useCallback(async () => {
     if (!isAdmin) return
-    const currentYear = currentAcademicYear()
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+    // One call for the open session's figures: every bill, its non-transport
+    // and transport shares, and each fee head (fee_home_summary). A figure the
+    // viewer may not see comes back null and reads as zero here.
+    const summary = await fetchHomeFeeSummary(todayIn())
+    if (!summary) return
+    const n = (v: number | null) => v ?? 0
+    const toSummary = (f: HomeFeeFigures): HomeFeesSummary => ({
+      collected: n(f.collected), outstanding: n(f.outstanding), todayCollection: n(f.today), studentsWithDues: f.students_with_dues,
+    })
+    setSchoolFeesSummary(toSummary(summary.school))
+    setBusFeesSummary(toSummary(summary.transport))
 
-    const [
-      { data: schoolFees }, { data: busFees }, { data: todaySchoolPay }, { data: todayBusPay }, { data: feeHeads },
-    ] = await Promise.all([
-      supabase.from('school_fees').select('status, amount, student_id, fee_head_id').eq('academic_year', currentYear).neq('status', 'cancelled'),
-      supabase.from('bus_fees').select('status, amount, passenger_id, due_date, created_at').neq('status', 'cancelled'),
-      supabase.from('school_fee_payments').select('amount, fee:school_fees!fee_id(fee_head_id)').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
-      supabase.from('bus_payments').select('amount').eq('status', 'verified').gte('verified_at', todayStart.toISOString()),
-      supabase.from('fee_heads').select('id, name').order('name'),
-    ])
-
-    /* One running tally per fee head, for the School Overview's bar. Fees
-       issued without a head are pooled as "Other"; bus fees are one more head
-       at the end, so the overview can treat the whole ledger as one. */
-    type Tally = { collected: number; outstanding: number; today: number; dues: Set<string> }
-    const blank = (): Tally => ({ collected: 0, outstanding: 0, today: 0, dues: new Set() })
-    const byHead = new Map<string, Tally>()
-    const headOf = (id: string | null | undefined) => {
-      const key = id ?? '__other'
-      if (!byHead.has(key)) byHead.set(key, blank())
-      return byHead.get(key)!
-    }
-
-    let sCollected = 0, sOutstanding = 0
-    const sDueStudents = new Set<string>()
-    for (const f of (schoolFees ?? []) as { status: string; amount: number; student_id: string; fee_head_id: string | null }[]) {
-      const amt = Number(f.amount) || 0
-      const h = headOf(f.fee_head_id)
-      if (f.status === 'paid') { sCollected += amt; h.collected += amt }
-      else { sOutstanding += amt; sDueStudents.add(f.student_id); h.outstanding += amt; h.dues.add(f.student_id) }
-    }
-    let sTodayCollection = 0
-    for (const p of (todaySchoolPay ?? []) as unknown as { amount: number; fee: { fee_head_id: string | null } | null }[]) {
-      const amt = Number(p.amount) || 0
-      sTodayCollection += amt
-      headOf(p.fee?.fee_head_id).today += amt
-    }
-    setSchoolFeesSummary({ collected: sCollected, outstanding: sOutstanding, todayCollection: sTodayCollection, studentsWithDues: sDueStudents.size })
-
-    let bCollected = 0, bOutstanding = 0
-    const bDuePassengers = new Set<string>()
-    type BusFeeRow = { due_date: string | null; created_at: string; status: string; amount: number; passenger_id: string }
-    const scopedBusFees = ((busFees ?? []) as BusFeeRow[]).filter(f => academicYearOf(f.due_date ?? f.created_at) === currentYear)
-    for (const f of scopedBusFees) {
-      const amt = Number(f.amount) || 0
-      if (f.status === 'paid') bCollected += amt
-      else { bOutstanding += amt; bDuePassengers.add(f.passenger_id) }
-    }
-    const bTodayCollection = (todayBusPay ?? []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0)
-    setBusFeesSummary({ collected: bCollected, outstanding: bOutstanding, todayCollection: bTodayCollection, studentsWithDues: bDuePassengers.size })
-
-    const names = new Map(((feeHeads ?? []) as { id: string; name: string }[]).map(h => [h.id, h.name]))
     /* Five named heads at most, largest first; the rest fold into "Other
-       fees" rather than being handed an invented sixth hue. Bus fee keeps its
-       own slot (orange) at the end. The palette is the validated categorical
-       set (dataviz validator: lightness, chroma, CVD and normal-vision
-       separation all pass in this order). */
-    const ranked = [...byHead.entries()]
-      .filter(([, t]) => t.collected + t.outstanding + t.today > 0)
-      .sort((a, b) => (b[1].collected + b[1].outstanding) - (a[1].collected + a[1].outstanding))
-    const named = ranked.filter(([id]) => id !== '__other').slice(0, FEE_HEAD_COLORS.length)
-    const folded = ranked.filter(([id]) => !named.some(([n]) => n === id))
-    const heads: FeeHeadStat[] = named.map(([id, t], i) => ({
-      id,
-      memberIds: [id],
-      name: names.get(id) ?? 'Fee',
+       fees" rather than being handed an invented sixth hue. Bus fee (the
+       transport heads) keeps its own slot (orange) at the end. The palette is
+       the validated categorical set (dataviz validator: lightness, chroma, CVD
+       and normal-vision separation all pass in this order). A head is matched
+       to the monthly chart by its key and by its name, which is how the chart
+       reports heads across sessions. */
+    const size = (h: HomeFeeHead) => n(h.collected) + n(h.outstanding) + n(h.today)
+    const live = summary.heads.filter(h => size(h) > 0)
+    const bus = live.filter(h => h.is_transport)
+    const ranked = live.filter(h => !h.is_transport)
+    const named = ranked.filter(h => h.key !== 'other').slice(0, FEE_HEAD_COLORS.length)
+    const folded = ranked.filter(h => !named.includes(h))
+    const heads: FeeHeadStat[] = named.map((h, i) => ({
+      id: h.key,
+      memberIds: [h.key, h.name],
+      name: h.name,
       color: FEE_HEAD_COLORS[i],
-      collected: t.collected,
-      outstanding: t.outstanding,
-      todayCollection: t.today,
-      studentsWithDues: t.dues.size,
+      collected: n(h.collected),
+      outstanding: n(h.outstanding),
+      todayCollection: n(h.today),
+      studentsWithDues: h.students_with_dues,
       todayHref: '/more/fees?section=collection',
       duesHref: '/more/fees?section=issued&filter=outstanding',
     }))
     if (folded.length > 0) {
-      const dues = new Set<string>()
-      folded.forEach(([, t]) => t.dues.forEach(d => dues.add(d)))
       heads.push({
         id: '__other',
-        memberIds: folded.map(([id]) => id),
+        memberIds: folded.flatMap(h => [h.key, h.name]),
         name: 'Other fees',
         color: OTHER_FEE_COLOR,
-        collected: folded.reduce((n, [, t]) => n + t.collected, 0),
-        outstanding: folded.reduce((n, [, t]) => n + t.outstanding, 0),
-        todayCollection: folded.reduce((n, [, t]) => n + t.today, 0),
-        studentsWithDues: dues.size,
+        collected: folded.reduce((t, h) => t + n(h.collected), 0),
+        outstanding: folded.reduce((t, h) => t + n(h.outstanding), 0),
+        todayCollection: folded.reduce((t, h) => t + n(h.today), 0),
+        // A student can owe on several folded heads; the largest is a floor.
+        studentsWithDues: Math.max(...folded.map(h => h.students_with_dues)),
         todayHref: '/more/fees?section=collection',
         duesHref: '/more/fees?section=issued&filter=outstanding',
       })
     }
-    if (bCollected + bOutstanding + bTodayCollection > 0) {
+    if (bus.length > 0) {
       heads.push({
         id: '__bus',
-        memberIds: ['__bus'],
+        memberIds: ['__bus', ...bus.flatMap(h => [h.key, h.name])],
         name: 'Bus fee',
         color: BUS_FEE_COLOR,
-        collected: bCollected,
-        outstanding: bOutstanding,
-        todayCollection: bTodayCollection,
-        studentsWithDues: bDuePassengers.size,
+        collected: n(summary.transport.collected),
+        outstanding: n(summary.transport.outstanding),
+        todayCollection: n(summary.transport.today),
+        studentsWithDues: summary.transport.students_with_dues,
         todayHref: '/more/bus?tab=fees&section=collection',
         duesHref: '/more/bus?tab=fees&section=issued&filter=outstanding',
       })
     }
-    setFeeBreakdown({
-      total: {
-        collected: sCollected + bCollected,
-        outstanding: sOutstanding + bOutstanding,
-        todayCollection: sTodayCollection + bTodayCollection,
-        // A student owing both school and bus fees is one student with dues.
-        studentsWithDues: new Set([...sDueStudents, ...bDuePassengers]).size,
-      },
-      heads,
-    })
+    setFeeBreakdown({ total: toSummary(summary.total), heads })
   }, [isAdmin])
 
 
@@ -938,9 +891,8 @@ export default function HomePage() {
   // Presence checks that gate conditional student/staff slots.
   useEffect(() => {
     if (!isStudent || !user) return
-    const today = new Date().toISOString().split('T')[0]
-    fetchFeesForStudent(user.id, undefined, ['unpaid', 'partial'])
-      .then(fees => setOverdueFees(fees.filter(f => isFeeOverdue(f, today))))
+    fetchOverdueBills(user.id, todayIn())
+      .then(setOverdueFees)
       .catch(err => console.error('Failed to load student fees for home card:', err))
       .finally(() => setOverdueFeesLoaded(true))
   }, [isStudent, user])

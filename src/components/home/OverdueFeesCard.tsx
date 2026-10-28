@@ -3,7 +3,8 @@
 import React from 'react'
 import Link from 'next/link'
 import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
-import { SchoolFee } from '@/lib/fees'
+import type { OverdueBill } from '@/lib/fees/invoices'
+import { billFor } from '@/components/fees/student/studentFees'
 import { SkeletonRows } from './HomeCardSkeletons'
 
 function formatAmount(n: number): string {
@@ -17,20 +18,20 @@ function formatDue(dateStr: string | null): string {
 }
 
 interface OverdueFeesCardProps {
-  /** Fees already filtered to overdue (unpaid/partial, past due date). */
-  fees: SchoolFee[]
+  /** Bills past their due date with money still owed (fetchOverdueBills). */
+  fees: OverdueBill[]
   /** The fee fetch is still in flight — see ExamGradingCard's note. Telling a
    *  student they are all paid up before anyone has looked is the one thing
    *  this card must never do. */
   loading?: boolean
 }
 
-/** A student's fees past their due date, each row linking to the fees app.
+/** A student's bills past their due date, each row linking to the fees app.
  *  The mobile carousel only carries this card when there are any; the desktop
  *  dashboard shows every card, so an empty list reads as "nothing overdue"
  *  (good news worth stating) rather than an empty box. */
 export default function OverdueFeesCard({ fees, loading = false }: OverdueFeesCardProps) {
-  const total = fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0)
+  const total = fees.reduce((sum, f) => sum + (Number(f.balance) || 0), 0)
 
   if (loading) {
     return (
@@ -68,11 +69,11 @@ export default function OverdueFeesCard({ fees, loading = false }: OverdueFeesCa
               <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-red-500" />
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-slate-800 text-sm truncate group-hover:text-slate-900 transition-colors">
-                  {fee.fee_head?.name || fee.description || 'Fee'}
+                  {billFor(fee.lines)}
                 </h4>
                 <p className="text-[11px] text-red-400 truncate">Due {formatDue(fee.due_date)}</p>
               </div>
-              <span className="flex-shrink-0 text-xs font-semibold text-slate-600 tabular-nums">{formatAmount(fee.amount)}</span>
+              <span className="flex-shrink-0 text-xs font-semibold text-slate-600 tabular-nums">{formatAmount(fee.balance ?? 0)}</span>
               <ChevronRight size={14} className="flex-shrink-0 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-0.5" />
             </div>
           </Link>

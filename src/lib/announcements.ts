@@ -1,4 +1,5 @@
 import { supabase, UserProfile } from './supabase'
+import { uploadPrivateFile } from './privateFiles'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -349,18 +350,9 @@ export async function uploadAnnouncementFile(
   file: File,
 ): Promise<{ url: string; name: string } | null> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `announcements/${Date.now()}_${safeName}`
-  const { data, error } = await supabase.storage
-    .from('classroom-files')
-    .upload(path, file, { upsert: true, cacheControl: '31536000' })
-  if (error) {
-    console.error('Upload failed:', error)
-    return null
-  }
-  const { data: { publicUrl } } = supabase.storage
-    .from('classroom-files')
-    .getPublicUrl(data.path)
-  return { url: publicUrl, name: file.name }
+  // Private: readable by whoever can read the announcement (see lib/privateFiles).
+  const ref = await uploadPrivateFile(`announcements/${Date.now()}_${safeName}`, file)
+  return ref ? { url: ref, name: file.name } : null
 }
 
 // ---------------------------------------------------------------------------

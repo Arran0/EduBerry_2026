@@ -30,6 +30,7 @@ import {
 } from '@/lib/announcements'
 import Avatar from '@/components/Avatar'
 import ImageGallery from './ImageGallery'
+import { usePrivateFileUrls } from '@/hooks/usePrivateFileUrl'
 
 interface AnnouncementCardProps {
   announcement: AnnouncementWithDetails
@@ -164,7 +165,15 @@ export default function AnnouncementCard({
   const cfg     = TYPE_CONFIG[typeKey]
   const badges  = getAudienceBadges(announcement)
 
-  const attachments      = announcement.attachments ?? []
+  // Uploaded files are private and shown through signed URLs (lib/privateFiles),
+  // all of a card's signed in one request; one still being signed, or that the
+  // viewer may not open, is left out rather than drawn broken.
+  const stored           = announcement.attachments ?? []
+  const fileUrl          = usePrivateFileUrls(stored.map(a => a.url))
+  const attachments      = stored.flatMap(a => {
+    const url = fileUrl(a.url)
+    return url ? [{ ...a, url }] : []
+  })
   const images           = attachments.filter(a => a.type === 'image')
   const otherAttachments = attachments.filter(a => a.type !== 'image')
 

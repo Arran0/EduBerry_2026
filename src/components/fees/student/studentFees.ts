@@ -30,7 +30,7 @@ export function dueWords(inv: InvoiceRow, today: string): { text: string; tone: 
 }
 
 /** "Tuition fee, Bus fee + 2 more" — what a bill is for, in one line. */
-export function billFor(lines: InvoiceLineRow[]): string {
+export function billFor(lines: Pick<InvoiceLineRow, 'kind' | 'label'>[]): string {
   const fees = lines.filter(l => l.kind === 'fee' || l.kind === 'carry_forward')
   const names = [...new Set(fees.map(l => l.label))]
   if (!names.length) return 'School fees'

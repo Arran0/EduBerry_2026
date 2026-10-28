@@ -197,6 +197,33 @@ export async function fetchUnpaidInvoices(academicYearId: string): Promise<Invoi
   return (data ?? []) as unknown as InvoiceRow[]
 }
 
+export interface OverdueBill {
+  id: string
+  number: string
+  due_date: string
+  balance: number | null
+  lines: Pick<InvoiceLineRow, 'kind' | 'label'>[]
+}
+
+/**
+ * A student's own bills that are past their due date with money still owed,
+ * oldest first — the home card. Across every session, not just the open one:
+ * a bill left from last year is still owed until it is paid or carried forward.
+ * One request, the lines embedded so the card can say what each bill is for.
+ */
+export async function fetchOverdueBills(studentId: string, today: string): Promise<OverdueBill[]> {
+  const { data, error } = await supabase.from('fee_invoices_v')
+    .select('id, number, due_date, balance, lines:fee_invoice_lines(kind, label)')
+    .eq('student_id', studentId)
+    .in('status', ['pending', 'partly_paid', 'overdue'])
+    .gt('balance', 0)
+    .lt('due_date', today)
+    .order('due_date')
+    .limit(50)
+  if (error) return emptyOnMissing(error, [])
+  return (data ?? []) as unknown as OverdueBill[]
+}
+
 /** The bills a payment can be put against, oldest first. */
 
 export async function fetchInvoiceLines(invoiceIds: string[]): Promise<InvoiceLineRow[]> {

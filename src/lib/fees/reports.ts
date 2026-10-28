@@ -629,3 +629,50 @@ export async function fetchCollectionByHead(yearId: string): Promise<{ heads: He
     months: (r.months ?? []).map(m => ({ ...m, collected: m.collected === null ? null : Number(m.collected) })),
   }
 }
+
+// ── Home dashboard ──────────────────────────────────────────────────────
+/** Money figures are null for a viewer without fees.view_amounts. */
+export interface HomeFeeFigures {
+  collected: number | null
+  outstanding: number | null
+  /** Collected on the day the summary was asked for. */
+  today: number | null
+  students_with_dues: number
+}
+
+export interface HomeFeeHead extends HomeFeeFigures {
+  /** A fee head id, or late_fee · fine · carry_forward · other. */
+  key: string
+  name: string
+  is_transport: boolean
+}
+
+export interface HomeFeeSummary {
+  total: HomeFeeFigures
+  /** Every head except transport. */
+  school: HomeFeeFigures
+  transport: HomeFeeFigures
+  /** Largest first. */
+  heads: HomeFeeHead[]
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
+const figures = (f: Partial<HomeFeeFigures> | undefined): HomeFeeFigures => ({
+  collected: num(f?.collected),
+  outstanding: num(f?.outstanding),
+  today: num(f?.today),
+  students_with_dues: Number(f?.students_with_dues ?? 0),
+})
+
+/** The open session's fee figures for the admin home, in one call. */
+export async function fetchHomeFeeSummary(today: string): Promise<HomeFeeSummary | null> {
+  const { data, error } = await supabase.rpc('fee_home_summary', { p_today: today })
+  if (error) return empty(error, null)
+  const r = (data ?? {}) as Partial<Record<'total' | 'school' | 'transport', HomeFeeFigures>> & { heads?: HomeFeeHead[] }
+  return {
+    total: figures(r.total),
+    school: figures(r.school),
+    transport: figures(r.transport),
+    heads: (r.heads ?? []).map(h => ({ ...figures(h), key: h.key, name: h.name, is_transport: !!h.is_transport })),
+  }
+}

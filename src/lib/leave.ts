@@ -3,6 +3,7 @@ import { syncLeaveToStudentAttendance, syncLeaveToStaffAttendance } from './atte
 import { notifyLeaveEvent } from './push'
 import { emitLeaveNotificationsChanged } from './leaveNotificationEvents'
 import { compressImageIfNeeded } from './imageCompression'
+import { uploadPrivateFile } from './privateFiles'
 
 // ============================================
 // Types
@@ -107,8 +108,6 @@ export const LEAVE_STATUS_COLORS: Record<LeaveStatus, string> = {
   rejected: 'bg-red-50 text-red-700 border-red-200',
 }
 
-const LEAVE_BUCKET = 'classroom-files'
-
 // ============================================
 // File Upload Helpers
 // ============================================
@@ -123,16 +122,10 @@ export async function uploadLeaveFile(
 ): Promise<{ url: string; name: string } | null> {
   const compressed = await compressImageIfNeeded(file)
   const ext = compressed.name.split('.').pop() || 'bin'
-  const path = `leave/${folder}/${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage
-    .from(LEAVE_BUCKET)
-    .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
-  if (error) {
-    console.error('Leave file upload failed:', error)
-    return null
-  }
-  const { data } = supabase.storage.from(LEAVE_BUCKET).getPublicUrl(path)
-  return { url: data.publicUrl, name: compressed.name }
+  // Medical certificates and the like: private, readable by whoever can read
+  // the application or decision that references them (see lib/privateFiles).
+  const ref = await uploadPrivateFile(`leave/${folder}/${crypto.randomUUID()}.${ext}`, compressed)
+  return ref ? { url: ref, name: compressed.name } : null
 }
 
 // ============================================

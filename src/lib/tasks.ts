@@ -1,6 +1,7 @@
 import { supabase, UserProfile, UserRole } from './supabase'
 import { compressImageIfNeeded } from './imageCompression'
 import { attachmentProblem, isImageAttachment, normalizeLinkUrl } from './attachmentPolicy'
+import { uploadPrivateFile } from './privateFiles'
 import { taskDisplayTitle } from './taskClasses'
 
 // ============================================
@@ -996,17 +997,10 @@ export async function uploadTaskAttachment(file: File, taskId: string, userId: s
   const isImage = isImageAttachment(file.name)
   const compressed = isImage ? await compressImageIfNeeded(file) : file
   const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`
-  // Never upsert: a path collision must not overwrite someone else's file.
-  const { data, error } = await supabase.storage
-    .from('classroom-files')
-    .upload(path, compressed, { upsert: false, cacheControl: '31536000' })
-  if (error) {
-    console.error('Task attachment upload failed:', error)
-    return null
-  }
-  const { data: { publicUrl } } = supabase.storage.from('classroom-files').getPublicUrl(data.path)
-  return { url: publicUrl, name: compressed.name, type: isImage ? 'image' : 'document' }
+  // Private: readable by whoever can read the comment (see lib/privateFiles).
+  const ref = await uploadPrivateFile(`task-comments/${taskId}/${userId}/${Date.now()}_${safeName}`, compressed)
+  if (!ref) return null
+  return { url: ref, name: compressed.name, type: isImage ? 'image' : 'document' }
 }
 
 // ============================================

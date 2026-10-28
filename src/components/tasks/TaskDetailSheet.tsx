@@ -17,6 +17,7 @@ import { taskDisplayTitle } from '@/lib/taskClasses'
 import ClassPicker from './ClassPicker'
 import { ATTACHMENT_ACCEPT, attachmentProblem, normalizeLinkUrl } from '@/lib/attachmentPolicy'
 import { safeHref, safeSrc } from '@/lib/safeUrl'
+import { usePrivateFileUrl } from '@/hooks/usePrivateFileUrl'
 import { Btn, IconBtn, ConfirmSheet, Notice, TaskSheet, Fact, SubHead } from './ui'
 
 function canDeleteTask(task: TaskWithDetails, userId: string, userRole: string): boolean {
@@ -457,8 +458,11 @@ export default function TaskDetailSheet({
 function CommentRow({ comment }: { comment: TaskComment }) {
   // Links saved before the http(s) check still read the way new ones are
   // checked; anything that isn't a web, mail or phone link renders as text.
-  const href = safeHref(comment.attachment_url)
-  const src = safeSrc(comment.attachment_url)
+  // Uploaded files are private and opened through a signed URL (lib/privateFiles);
+  // links and files from before the move come through unchanged.
+  const attachment = usePrivateFileUrl(comment.attachment_url)
+  const href = safeHref(attachment)
+  const src = safeSrc(attachment)
   return (
     <div className="flex gap-2.5 min-w-0">
       <Avatar avatarUrl={comment.user?.avatar_url} name={comment.user?.full_name} size={28} userId={comment.user?.id} />
@@ -472,7 +476,7 @@ function CommentRow({ comment }: { comment: TaskComment }) {
           <div className="mt-1.5">
             {comment.attachment_type === 'image' && src ? (
               <a href={href} target="_blank" rel="noopener noreferrer" className="inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element -- uploads on a public bucket; next/image would need every storage host listed */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- signed storage URLs; next/image would need every storage host listed */}
                 <img src={src} alt={comment.attachment_name || 'Attached image'} loading="lazy" className="max-h-36 max-w-full rounded-[10px] border border-amber-900/10 object-cover" />
               </a>
             ) : href ? (
@@ -486,7 +490,9 @@ function CommentRow({ comment }: { comment: TaskComment }) {
                 <span className="min-w-0 break-all">{comment.attachment_name || (comment.attachment_type === 'link' ? href : 'Document')}</span>
               </a>
             ) : (
-              <span className="text-[12px] text-slate-400 break-all">{comment.attachment_name || 'Attachment'} (link blocked)</span>
+              <span className="text-[12px] text-slate-400 break-all">
+                {comment.attachment_name || 'Attachment'}{attachment === undefined ? '…' : attachment === null ? ' (unavailable)' : ' (link blocked)'}
+              </span>
             )}
           </div>
         )}

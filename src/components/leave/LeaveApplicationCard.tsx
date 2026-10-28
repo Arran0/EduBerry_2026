@@ -31,6 +31,7 @@ import {
 } from '@/lib/leave'
 import ApproverDecisionPanel from '@/components/leave/ApproverDecisionPanel'
 import { SHEET_MOTION } from '@/lib/sheetMotion'
+import { usePrivateFileUrl } from '@/hooks/usePrivateFileUrl'
 
 /**
  * `card` is the standalone surface — a rounded panel that shows everything,
@@ -115,9 +116,18 @@ function calcDays(start: string, end: string): number {
   return Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1
 }
 
-function AttachmentView({ url, name }: { url: string; name: string }) {
+function AttachmentView({ url: stored, name }: { url: string; name: string }) {
   const isImg = isImageFile(name)
   const [open, setOpen] = useState(isImg)
+  // Private attachments are opened through a signed URL (lib/privateFiles).
+  const url = usePrivateFileUrl(stored)
+
+  if (url === null) {
+    return <span className="text-[11px] text-slate-400">{name} (unavailable)</span>
+  }
+  if (url === undefined) {
+    return <span className="text-[11px] text-slate-400">{name}…</span>
+  }
 
   if (isImg) {
     return (
