@@ -144,13 +144,15 @@ function FeesInner() {
         subtitle="Bills, collection and pricing"
         isAdmin
         actions={
-          <>
+          // One row: the year capsule is a block-level flex, so without this
+          // wrapper the Settings pill drops below it.
+          <div className="flex items-center gap-1.5">
             <YearToggle />
             <button onClick={() => go({ tool: 'settings' })} aria-label="Fee settings" className={BANNER_BTN}>
               <Settings size={13} className="text-[#8B6F47]" />
               <span className="hidden sm:inline">Settings</span>
             </button>
-          </>
+          </div>
         }
         onEditingChange={setBannerEditing}
         maxWidth="max-w-7xl 2xl:max-w-[1600px]"

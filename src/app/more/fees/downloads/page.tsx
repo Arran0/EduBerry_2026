@@ -69,7 +69,7 @@ export default function DownloadCenterPage() {
               <ChevronLeft size={16} /> Back
             </button>
             <h1 className="flex-1 font-bold text-slate-800 text-lg">Download Center</h1>
-            <YearToggler years={years} value={year} onChange={setYear} tone="light" />
+            <YearToggler years={years} value={year} onChange={setYear} />
           </div>
         </div>
 
