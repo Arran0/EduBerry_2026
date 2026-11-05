@@ -218,21 +218,43 @@ It remains the cheapest to run (about $13 a month for a 10,000-user school, abou
 
 If S3 fails, phase 1 goes straight to Worker endpoints for the screens that need it. If S4 fails, move the heaviest screens to single SQL functions first.
 
+## Spike S4, desk estimate (5 Nov 2026)
+
+Published server-to-server round trips (WonderNetwork, continuous pings; Microsoft's inter-region figures agree):
+
+| From | To Mumbai | To Singapore | Extra for Singapore |
+| --- | --- | --- | --- |
+| Mumbai | about 4 ms (Pune) | 53 ms | about +50 ms |
+| New Delhi | 27 ms | 74 ms | +47 ms |
+| Bangalore | 13 ms | 39 ms | +26 ms |
+| Chennai | 20 ms | 32 ms | +12 ms |
+
+AWS's Mumbai and Singapore regions are about 60–65 ms apart. Home and mobile connections add the same last-mile delay to both columns, so the extra column is the cost of Singapore.
+
+What this means for users:
+
+- With one call per screen, a screen gets 12–50 ms slower than it would be with Mumbai. Users rarely notice under about 100 ms.
+- A screen that makes 12 calls one after another gets 0.15–0.6 s slower. So the busiest screens move to one call each before cutover ([16](16-frontend-and-api.md)).
+- Schools in Tamil Nadu and the south pay the least: Chennai is only about 12 ms further from Singapore than from Mumbai.
+
+The on-site measurement (part A in [`tools/spike-s4`](tools/spike-s4/README.md)) is still worth running once from a school, to catch slow local networks.
+
 ## Decision record
 
 | Decision | Choice | Status |
 | --- | --- | --- |
-| Where school data lives | A Neon Postgres project per school | Decided 5 Nov 2026 (owner) |
+| Where school data lives | Neon Postgres in Singapore: a database per school, in a pod or a project of its own | Confirmed 5 Nov 2026 (owner), after MongoDB, Firebase, DigitalOcean and India-hosted Postgres were compared ([04](04-database-and-region-options.md)) |
 | Where platform data lives | One Neon `platform` database, cached in Workers KV | Decided |
-| Pods of many schools per project | Later, for cost | Revisit past about 50 schools |
+| Pods of many schools per project | New and small schools start in pods; large schools get a project | Decided ([11](11-tenancy-and-control-plane.md)) |
 | Durable Object per school for data | Not now | Kept as the low-cost alternative |
 | Shared Postgres with `school_id` | Rejected | Rewrite of its own; restore rolls back everyone |
-| Login | EduBerry's own auth, no Supabase Auth, no Neon Auth | Decided |
+| Login | EdZee's own auth, no Supabase Auth, no Neon Auth | Decided |
 | Front end | Static single-page app on Workers Static Assets | Recommended ([16](16-frontend-and-api.md)) |
 | Browser data access | Neon Data API in phase 1, Worker endpoints in phase 2 | Pending spike S3 |
 | Live updates | Durable Object hub per school | Recommended ([14](14-jobs-messaging-realtime.md)) |
 | Banks that need a client certificate | A bank gateway container | Recommended ([17](17-integrations-and-secrets.md)) |
-| Data residency | Singapore (no Indian Neon region) | Confirm no school requires India-only storage |
+| Data residency | Singapore (no Indian Neon region) | Confirm no school requires India-only storage; India-hosted Postgres is the per-school fallback ([04](04-database-and-region-options.md)) |
+| Speed from India | Published round trips to Singapore are 11–50 ms longer than to Mumbai, depending on the city (S4 desk estimate below) | Accepted with one call per screen; measure from schools after S1 |
 
 ## Sources
 
@@ -241,3 +263,4 @@ Read 5 Nov 2026:
 - Neon [pricing](https://neon.com/pricing), [plans](https://neon.com/docs/introduction/plans), [regions](https://neon.com/docs/introduction/regions), [extensions](https://neon.com/docs/extensions/pg-extensions), [Data API](https://neon.com/docs/data-api/get-started), [Neon Auth](https://neon.com/docs/neon-auth/overview), [object hierarchy](https://neon.tech/docs/manage/overview), [connection pooling](https://neon.com/docs/connect/connection-pooling)
 - Cloudflare [Hyperdrive pricing](https://developers.cloudflare.com/hyperdrive/platform/pricing/) and [limits](https://developers.cloudflare.com/hyperdrive/platform/limits/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
 - Supabase [pricing](https://supabase.com/pricing)
+- India to Singapore and Mumbai round trips: <https://www.techplained.com/india-cloud-latency>, <https://www.economize.cloud/resources/aws/latency/ap-south-1-vs-ap-southeast-1/>, <https://getstream.io/blog/low-latency-chat-messaging-asia-pacific/>
