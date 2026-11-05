@@ -21,7 +21,8 @@ You are continuing the EduBerry multi-tenant rebuild in this repository, a clone
 
 3. Where things stand
 - The live app still runs on Supabase project tgxxqzeaqxiwoqzopcku (mps-web, Mumbai) and Vercel. Do not change it, except through small migrations the user reviews and runs.
-- The user has created a Neon project in Singapore (Postgres 17, named EdZee2027 at creation). Use it for the spikes. Do every experiment on a Neon branch, never on its default branch.
+- The user has created a Neon project for the spikes: EdZee2027, id shiny-smoke-43180905, aws-ap-southeast-1, Postgres 17, autoscaling 0.25–2 CU. It is on Neon's free plan (1 GB per branch, 6 hours of restore history), which is enough for the 207 MB live database. Do every experiment on a Neon branch, never on its default branch. Move to the Launch plan before any school uses it.
+- The user's claude.ai account has the Neon connector, so the Neon tools may already be available; check before asking for keys.
 - Spike S4 part A (docs/cloudflare-rebuild/tools/spike-s4) runs on the user's Mac in India; ask for its results.
 - Nothing of the new platform is built yet. Next is milestone M0, spikes S1–S8 (docs 01 and 92).
 
