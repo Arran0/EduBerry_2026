@@ -6,7 +6,7 @@ Started 27 Oct 2026; rewritten around Neon on 5 Nov 2026. These documents descri
 
 Today every school is a separate copy of the app: its own Vercel project, its own Supabase project (database, login, files, realtime, scheduled jobs) and its own environment variables. The target is one app that serves every school. Each school keeps its own Postgres database, moved from Supabase to a Neon project of its own; everything else runs on Cloudflare; no Supabase service is used, including Supabase Auth.
 
-The new repository starts as a clone of this one. Read these docs in order, run the spikes in the architecture doc, then build the platform and move the sections in the order given in [92-build-order.md](92-build-order.md). Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
+The new repository starts as a clone of this one; [HANDOFF.md](HANDOFF.md) holds the prompt that starts its first session. Read these docs in order, run the spikes in the architecture doc, then build the platform and move the sections in the order given in [92-build-order.md](92-build-order.md). Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
 
 ## Target in one paragraph
 
