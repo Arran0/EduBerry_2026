@@ -5,9 +5,9 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Po
 ## Summary
 
 - **Today a school is a deployment.** The Vercel project that receives a request, and the Supabase project its environment variables point at, decide which school the request belongs to. Starting a school means forking the repository, creating a Supabase project, running about 260 migrations by hand, setting environment variables and pointing a domain.
-- **In the target a school is a row plus a database.** One `platform` database lists every school, its host names and its Neon project. The router Worker maps the host to a school and runs the request against that school's database. Starting a school is one provisioning job that takes about a minute: create a Neon project, apply the schema, seed defaults, invite the first admin.
+- **In the target a school is a row plus a database.** One `platform` database lists every school, its host names and its database. The router Worker maps the host to a school and runs the request against that school's database. Nobody creates databases by hand: when checkout succeeds, a provisioning job takes a database that was prepared in advance, seeds it and invites the first admin, so the school can use the app within seconds.
 - **Isolation stays as strong as today.** Each school is still its own Postgres database in its own Neon project, with its own roles, backups and restore history. The Worker only ever holds the connection string of the school named by the host.
-- **The 100-project line shapes the plan.** Neon's Launch plan holds 100 projects. Start with one project per school; before reaching about 80, move small schools into shared projects ("pods") or open a second Neon organisation ([02](02-cost-study.md)).
+- **New schools start in pods.** Most schools start as a database in a shared Neon project (a "pod" of about 20 schools), which halves their cost and keeps well clear of the Launch plan's 100-project limit. Large or premium schools get a Neon project of their own ([02](02-cost-study.md), [04](04-database-and-region-options.md)).
 - **About 20 single-school assumptions** have to go: per-deployment environment variables, a hard-coded Supabase host, a hard-coded default school name, static PWA manifest and icons, runtime URLs stored in the database, cron times fixed in UTC, and the `+91` country code. Each is listed below with its replacement.
 
 ## How tenancy works today
@@ -83,7 +83,8 @@ A small Neon project of its own, in the same region as the schools, reached thro
 | `schools` | One row per school | `id` (stable uuid, also the `SchoolHub` name and the R2 prefix), `slug`, `display_name`, `status` (`provisioning`, `active`, `suspended`, `read_only`, `offboarding`, `deleted`), `plan_id`, `timezone`, `country`, `created_at` |
 | `school_databases` | Where the school's data lives | `school_id`, `pod_id` (null for a project of its own), `neon_project_id`, `neon_branch_id`, `neon_endpoint_id`, `db_name`, `region`, `cu_min`, `cu_max`, `schema_version` |
 | `school_db_credentials` | Connection strings the Worker uses | `school_id`, `purpose` (`app` for user requests, `jobs` for server-only work), `conn_enc` (encrypted with a platform key), `key_version`, `rotated_at` |
-| `db_pods` | Shared Neon projects holding several small schools (later) | `id`, `neon_project_id`, `region`, `cu_min`, `cu_max`, `school_count` |
+| `db_pods` | Shared Neon projects holding several small schools | `id`, `neon_project_id`, `region`, `cu_min`, `cu_max`, `school_count` |
+| `ready_databases` | The pool of prepared databases waiting for a school | `id`, `kind` (`pod_seat`, `project`), `pod_id`, `neon_project_id`, `db_name`, `schema_version`, `created_at` |
 | `school_hosts` | Every host name that serves a school | `host` (unique), `school_id`, `kind` (`subdomain`, `custom`), `is_primary`, `cf_custom_hostname_id`, `verification_status` |
 | `plans` | What a plan allows | `id`, `name`, `max_users`, `max_storage_gb`, `modules` (fees, payroll, transport, timetable, exams...), `price` |
 | `school_features` | Per-school overrides and feature flags | `school_id`, `key`, `value` |
@@ -144,32 +145,58 @@ A school can have several hosts; exactly one is primary, and that is the one use
 
 ## Provisioning a school
 
-One provisioning job, run from the `jobs` queue, carries out these steps, records each in `provisioning_runs`, and can be re-run safely from any step.
+Nobody creates projects by hand. A school is ready to use a few seconds after its checkout succeeds, because the slow part (creating a database and applying about 300 functions and 700 policies) is done ahead of time.
 
-| Step | What happens | Where |
+### Ready databases
+
+The platform keeps a small pool of **ready databases**: created through the Neon API, the baseline schema and every migration applied, the roles and credentials made, and asleep. A ready database costs almost nothing (about 50 MB of storage, no compute while asleep). `tools/migrate` keeps them at the current schema version like every school. A background job tops the pool up whenever it drops below its target (for example 5 ready pod seats and 2 ready projects).
+
+### From checkout to a working school
+
+```mermaid
+sequenceDiagram
+  participant B as Buyer
+  participant W as Router Worker
+  participant P as Payment provider
+  participant J as Provisioning job
+  participant DB as Ready database
+  B->>W: Checkout: school name, slug, admin email, plan
+  W->>W: Reserve the slug (schools row, status provisioning)
+  W->>P: Create the order
+  P-->>W: Payment webhook (verified)
+  W->>J: jobs queue: provision(schoolId)
+  J->>DB: Claim one ready database from the pool
+  J->>DB: Write name, time zone, country, branding defaults; create the first admin
+  J->>J: Store the encrypted credentials, add the subdomain host, status active, clear the KV key
+  J-->>B: Invite email: https://<slug>.eduberry.in, set your password
+  Note over J: Then: top up the pool; start the custom-domain set-up if one was given
+```
+
+| Step | What happens | Time |
 | --- | --- | --- |
-| 1 | Insert the `schools` row with status `provisioning`; reserve the slug | platform database |
-| 2 | Insert the subdomain into `school_hosts`; if a custom domain was given, create the Cloudflare for SaaS custom hostname and store its id | platform database, Cloudflare API |
-| 3 | Create the Neon project: region `aws-ap-southeast-1` (Singapore), Postgres 17, autoscaling range from the plan (for example 0.25–0.5 CU), scale to zero on. Store the project, branch and endpoint ids. In a pod, create a database in the pod's project instead | Neon API |
-| 4 | Apply the baseline schema (extensions, roles, tables, functions, triggers, policies, grants) and every later migration; record them in `school_migrations` | School database, as owner |
-| 5 | Seed defaults (academic year, roles and permission grants, neutral page themes, attendance rules, fee permission presets, message templates); write the school's name, logo, time zone, country and contact email | School database |
-| 6 | Create the `app_worker` and `app_jobs` passwords, encrypt their connection strings and store them in `school_db_credentials` | Neon API, platform database |
-| 7 | Create the first admin account and send the invite email from the school's branding | School database, Email Service |
-| 8 | Set status `active`; the hub builds its job schedule on first use | platform database |
+| 1 | At checkout, insert the `schools` row (status `provisioning`) and reserve the slug, so it cannot be taken while the buyer pays | At once |
+| 2 | The verified payment webhook queues `provision(schoolId)` | Seconds |
+| 3 | Claim a ready database from the pool, matching the plan: a seat in a pod for most new schools, a project of its own for large or premium plans ([below](#projects-pods-and-the-100-project-limit)). Record it in `school_databases` and `school_db_credentials` | Under a second |
+| 4 | Seed the school: name, logo placeholder, time zone, country, academic year, neutral page themes, attendance rules, fee permission presets, message templates; create the first admin in `auth.users` | A second or two |
+| 5 | Add `<slug>.eduberry.in` to `school_hosts` (wildcard DNS already points at the Worker), set status `active`, clear the KV key | At once |
+| 6 | Email the admin an invite from the school's branding; the buyer's browser, which has been waiting on a "setting up your school" page, moves to the new site | Seconds |
+| 7 | In the background: top up the pool; if the buyer gave a custom domain, create the Cloudflare for SaaS hostname and show the CNAME to add (its certificate follows within minutes) | Minutes |
 
-Self-serve signup (checkout) and the platform console both start the same job. The email doc's "Checkout creates the school and emails its first admin" row is this flow.
+Every step is recorded in `provisioning_runs` and can be re-run safely, so a failed payment webhook retry or a crash part-way never leaves a half-made school. If the pool is ever empty, step 3 creates a database on the spot (about a minute) and the buyer sees the "setting up" page a little longer. The platform console starts the same job for schools onboarded by hand.
 
 ## Projects, pods and the 100-project limit
 
-| Stage | Layout | When |
+| School | Where its database lives | Why |
 | --- | --- | --- |
-| Launch | One Neon project per school, Launch plan | Up to about 80 schools |
-| Growth | Small schools (under about 2,000 users) moved into pods of about 20 per project; large schools keep a project of their own | Before 100 projects; halves compute for small schools ([02](02-cost-study.md)) |
-| Scale | A second Neon organisation on Launch, or the Scale plan (1,000 projects, twice the compute price) | When pods are not enough |
+| New and small schools (under about 2,000 users), and trials | A database in a pod: about 20 schools per Neon project, sharing one autoscaling compute | About half the cost of a project of its own; instant start from the pool; uses few of the 100 projects |
+| Large schools (about 2,000 users and up) or a premium plan | A Neon project of its own | Own compute and autoscaling range, own restore history, no noisy neighbours |
+| The live school (about 1,200 users) | A project of its own at first, as the cutover target ([90](90-data-migration-and-cutover.md)) | Simplest restore and rollback; it can join a pod later |
+| Past 100 projects | A second Neon organisation on Launch, or the Scale plan (1,000 projects, twice the compute price) | When pods are not enough |
+| Schools that must keep data in India | India-hosted Postgres instead of Neon ([04](04-database-and-region-options.md)) | Only if a contract requires it |
 
 In a pod each school still has its own database, its own login roles and its own `auth.users`. `CONNECT` on each database is revoked from `PUBLIC` and granted only to that school's login roles, so one school's credentials cannot open another's database. What a pod gives up: restore is per project, so restoring one school in a pod means restoring the project to a branch and copying that school's database back with `pg_dump`; and the schools share one compute, so one busy school slows its neighbours.
 
-Moving a school between a project and a pod is a provisioning run: put the school in `read_only`, `pg_dump` from the old database, `pg_restore` into the new one, switch `school_databases` and the credentials, clear the KV key, set `active`. For a 10,000-user school this is a few minutes.
+A school that outgrows its pod moves to a project of its own (or back) in a provisioning run: put the school in `read_only`, `pg_dump` from the old database, `pg_restore` into the new one, switch `school_databases` and the credentials, clear the KV key, set `active`. For a 10,000-user school this is a few minutes.
 
 ## Suspending, exporting and deleting a school
 

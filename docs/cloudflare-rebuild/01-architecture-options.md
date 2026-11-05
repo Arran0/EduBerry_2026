@@ -179,6 +179,8 @@ It remains the cheapest to run (about $13 a month for a 10,000-user school, abou
 - **A. D1 per school:** no interactive transactions, a binding and redeploy per school, a round trip per query. Rejected.
 - **B / C. Shared or sharded D1:** 10 GB cap, one query at a time for every school, no row-level security. Rejected.
 - **E. Workers for Platforms + D1:** keeps D1's limits and adds $25 a month and an upload per school per release. Rejected.
+- **MongoDB (Atlas has Indian regions):** costs 3–10 times as much per school as Neon and needs every function, trigger and policy rewritten, more work than option D. Rejected; see [04](04-database-and-region-options.md).
+- **Postgres hosted in India (Supabase Mumbai, AWS Aurora or RDS Mumbai):** the same database, so it stays available per school if a contract requires India storage. Dearer than Neon for large schools because nothing sleeps; see [04](04-database-and-region-options.md).
 - **F. One shared Postgres with `school_id`:** cheap compute, but adding `school_id` to 221 tables and every policy is a rewrite of its own, one mistake leaks across schools, and a restore rolls back everyone. Rejected.
 
 ## What replaces each Supabase and Vercel piece

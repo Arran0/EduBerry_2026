@@ -158,6 +158,55 @@ def supabase_estimate(users, n):
     return SUPABASE['pro'] - SUPABASE['pro_credit'] + n * size
 
 
+# --- Database hosts compared (5 Nov 2026) -------------------------------------
+# List prices; AWS and Atlas figures are US East list prices, and Mumbai list
+# prices are usually somewhat higher. Each school needs its busy data in memory:
+# about 1 GB at 1,000 users, 2 GB at 3,000 and 3 GB at 10,000 (as neon_compute).
+HOSTS = dict(
+    aurora_acu=0.12,          # Aurora Serverless v2, per ACU-hour (1 ACU ~ 2 GiB), US East
+    rds_16gb=0.225,           # RDS PostgreSQL db.r6g.large (16 GiB, 2 vCPU), per hour, single-AZ, US East
+    rds_reserved=0.65,        # 1-year reserved, about a third off
+    mongo=dict(flex=8.0, m10=0.08, m20=0.20, m30=0.54, m40=1.04),  # Atlas, per hour (Flex per month)
+)
+
+
+def ram_gb(users):
+    return 1 if users < 2000 else 2 if users < 6000 else 3
+
+
+def cloudflare_share(s):
+    """Per-school Cloudflare cost (Workers, R2, queues, hub, logs) on a running account."""
+    c = cost([s] * 50, 'neon')
+    return (c['total'] - c['workers_base'] - c['neon_compute'] - c['neon_storage']) / 50
+
+
+def db_options(users, scenario='typical', year=1):
+    """USD per school per month for each database host, plus the Cloudflare share."""
+    s = school(users, scenario, year)
+    cf = cloudflare_share(s)
+    hours = 22 * (13 if users >= 1000 else 10) + 8 * 4 + 30 * 0.5
+    ram = ram_gb(users)
+    neon = cost([s] * 50, 'neon')
+    pod = cost([s] * 50, 'neon_pod')
+    per_server = 16 // ram if ram > 1 else 16            # schools per 16 GiB shared server
+    rds = HOSTS['rds_16gb'] * 730 / per_server
+    sb = SUPABASE['micro'] if ram <= 1 else SUPABASE['small'] if ram <= 2 else SUPABASE['medium']
+    m = HOSTS['mongo']
+    mongo_own = m['m10'] * 730 if ram <= 1 else m['m20'] * 730 if ram <= 2 else m['m30'] * 730
+    mongo_shared = m['m40'] * 730 / per_server
+    return {
+        'Neon, project per school (Singapore)': (neon['total'] - neon['workers_base']) / 50,
+        'Neon, pods of 20 (Singapore)': (pod['total'] - pod['workers_base']) / 50,
+        'Supabase, project per school (Mumbai)': sb + cf,
+        'Aurora Serverless v2 per school (Mumbai)': max(0.5, ram / 2) * hours * HOSTS['aurora_acu'] + s['db_gb'] * 0.10 + cf,
+        'Shared RDS server, single-AZ (Mumbai)': rds + cf,
+        'Shared RDS server, Multi-AZ (Mumbai)': 2 * rds + cf,
+        'Shared RDS server, Multi-AZ, reserved (Mumbai)': 2 * rds * HOSTS['rds_reserved'] + cf,
+        'MongoDB Atlas, cluster per school (Mumbai)': mongo_own + cf,
+        'MongoDB Atlas, shared M40 clusters (Mumbai)': mongo_shared + cf,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--users', type=int, default=10000)
@@ -197,6 +246,10 @@ def main():
     for k, v in cost([extra] * 50, 'neon').items():
         print(f"  {k:22s} {v:>9.2f}")
     print(f"  CU-hours per school    {neon_compute(extra):>9.1f}")
+
+    print("\nDatabase hosts compared, USD per school per month (database + Cloudflare share):")
+    for k, v in db_options(a.users, a.scenario, a.year).items():
+        print(f"  {k:48s} {v:>8.2f}")
 
     print("\nBreakdown, 50 such schools, DO:")
     for k, v in cost([extra] * 50, 'do').items():

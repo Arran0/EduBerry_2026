@@ -42,7 +42,7 @@ Everything every section needs. No section work yet.
 | Monorepo layout; CI with every test layer on Neon branches of a seeded test school; environments (local, preview, staging, production); deploy pipeline with migrations first and gradual rollout | [10](10-target-architecture.md), [91](91-test-and-parity-plan.md) |
 | Router Worker: host → school lookup (isolate memory, KV, platform database), API routing, static assets, `/hooks/<schoolId>/...`, rate limiting, security headers | [10](10-target-architecture.md), [11](11-tenancy-and-control-plane.md), [16](16-frontend-and-api.md) |
 | Platform database through Hyperdrive: schools, databases and credentials, hosts, plans, features, provisioning runs, migrations, platform users, support grants, audit, usage | [11](11-tenancy-and-control-plane.md) |
-| Provisioning through the Neon API; `tools/migrate`; the baseline schema with the hook replacements; the school roles (`app_worker`, `app_jobs`) | [11](11-tenancy-and-control-plane.md), [13](13-data-layer.md) |
+| Provisioning through the Neon API: pods and projects, the pool of ready databases, the provisioning job; `tools/migrate`; the baseline schema with the hook replacements; the school roles (`app_worker`, `app_jobs`) | [11](11-tenancy-and-control-plane.md), [13](13-data-layer.md) |
 | The "run as user" transaction helper and `app_after_write()` | [10](10-target-architecture.md), [14](14-jobs-messaging-realtime.md) |
 | Auth: our `auth` schema and `auth.uid()` (S2's choice), scrypt hashing with bcrypt import, refresh cookie and 15-minute access tokens, per-school signing keys and JWKS, sign-in, invite and reset links, admin account functions and bulk import, rate limits, kiosk sign-in | [12](12-auth-and-permissions.md) |
 | Data API proxy `/api/db` with its allow-list | [16](16-frontend-and-api.md) |
@@ -88,7 +88,7 @@ Today's pages and their query code move onto the new shell as they are. Per sect
 | Onboarding flow: legal entity and work location for payroll, time zone, branding, CSV imports of users and structure | [11](11-tenancy-and-control-plane.md), [20](20-users-profiles-and-admin.md), [34](34-payroll-and-salary.md) |
 | Usage roll-up and billing figures per school | [11](11-tenancy-and-control-plane.md), [02](02-cost-study.md) |
 | School export, restore and offboarding | [11](11-tenancy-and-control-plane.md), [13](13-data-layer.md) |
-| Pods for small schools, before the 100-project line | [11](11-tenancy-and-control-plane.md) |
+| Checkout: plans, payment, and the webhook that starts provisioning, so a school can use the app seconds after paying | [11](11-tenancy-and-control-plane.md) |
 | Platform-maintained statutory rule-set library for payroll (if decided) | [34](34-payroll-and-salary.md) |
 
 **Exit:** a second school is onboarded without a deploy and without touching the first.
