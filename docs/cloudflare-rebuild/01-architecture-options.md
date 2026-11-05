@@ -1,258 +1,241 @@
-# Architecture Options: D1, Durable Objects and the Rest
+# Architecture Options: Neon, Durable Objects, D1 and the Rest
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The 27 Oct version of this doc recommended a SQLite Durable Object per school; on 5 Nov the owner chose Neon Postgres instead, and this doc now records that decision, the checks behind it and what it costs.
 
 ## Summary
 
-**Recommendation: one Workers app for every school, with each school's data in its own SQLite Durable Object, one D1 database for the platform's own records, R2 for files, and Queues, Cron Triggers and Durable Object alarms for background work. Supabase, including Supabase Auth, goes away entirely.**
+**Decision: each school keeps its own Postgres database, moved from Supabase to Neon, and everything else runs on Cloudflare: one Workers app for every school, the static web app, R2 for files, Queues and Cron Triggers for background work, and a small Durable Object per school for live updates. Supabase, including Supabase Auth, goes away entirely.**
 
-- **The preferred design (Workers + D1 + R2 + Queues + Cron Triggers) is feasible, but D1 is the wrong home for school data.** Validation found three problems with one D1 database per school, none of which a Durable Object has:
-  1. **No interactive transactions in D1.** A Worker can only send a fixed list of statements as one batch; it cannot read, decide and then write inside one transaction. Today's money and attendance logic depends on exactly that: 89 `FOR UPDATE` row locks in 47 migration files, `SKIP LOCKED` queues and advisory locks. A Durable Object runs one request at a time and has real transactions (`transactionSync`), so the same logic ports directly to TypeScript.
-  2. **Every D1 database needs a binding written into the Worker's config.** Adding a school means a redeploy, and one Worker holds about 5,000 bindings at most. A Durable Object is addressed by name at runtime (`idFromName(schoolId)`), so a new school needs no deploy.
-  3. **Every D1 query is a network round trip** from the Worker to the database. Today's screens make 5–20 queries each. A Durable Object runs the queries next to its data, so one call from the Worker does all of them.
-- **D1 still has a job:** the platform's own small database (schools, domains, plans, provisioning state, platform staff). It is shared, low-traffic and benefits from D1's console, export and HTTP API.
-- **Shared D1 (all schools in one database) is not feasible** for schools of up to 10,000 users: one database is capped at 10 GB, which a single 10,000-user school fills in about five years; one database runs one query at a time for every school; and a missing `WHERE school_id = ?` anywhere leaks one school's data to another, with no row-level security to catch it.
-- **Cost does not decide this.** A typical 10,000-user school costs about **$13 a month** on either Durable Objects or D1 (year one, list prices, after the plan's included usage); a high-usage one about **$19**. The two stay within 5% of each other until storage grows, where Durable Objects are cheaper ($0.20 against $0.75 per GB-month). See [02-cost-study.md](02-cost-study.md).
-- **The biggest job is not the database product.** It is moving 268 SQL functions, 171 triggers, 696 row-level security policies and about 100 RPCs out of Postgres into TypeScript, and replacing 126 front-end files that query the database directly with calls to the school's API. That work is the same under every Cloudflare-native option.
+- **Cloudflare can replace Supabase, but only by rewriting the database.** The Cloudflare-only design (a SQLite Durable Object per school) works, and is the cheapest to run, but it moves 268 SQL functions, 171 triggers and 699 row-level security policies into TypeScript, and changes every type and query. That rewrite is the single biggest risk in the whole rebuild.
+- **Neon keeps the database as it is.** The tables, functions, triggers and policies move with `pg_dump` and keep working. What changes is around the database: sign-in, files, scheduled jobs, live updates and the server routes. Eleven Supabase-specific hooks inside the database need replacing (listed below), not 1,100 objects.
+- **It costs more per school than the Cloudflare-only design, and less than Supabase today.** From the [cost study](02-cost-study.md), per school per month including Cloudflare:
+  - today's school (about 1,200 users): **about $14**, against $25 on Supabase now;
+  - a 10,000-user school on its own Neon project: **about $30**, against about $13 on Durable Objects;
+  - the same school in a shared Neon "pod" of 20 schools: **about $15**.
+  The extra money buys months of build time and a much smaller chance of breaking money and attendance logic.
+- **Four things the checks found that shape the design:**
+  1. **Neon has no Indian region.** The nearest is Singapore (`aws-ap-southeast-1`). Requests from India add about 30–60 ms per database round trip, and school data would be stored outside India; confirm that no school contract forbids it.
+  2. **Hyperdrive allows 25 configurations per account**, so it cannot give each school its own pool. Workers reach each school's database with Neon's serverless driver over HTTPS, using a connection string looked up per request.
+  3. **`pg_cron` runs only while a Neon compute is awake**, which would stop the database scaling to zero. Scheduled jobs move to Cloudflare Cron Triggers, which call the same SQL functions.
+  4. **Neon's Launch plan holds 100 projects.** One project per school works up to 100 schools; past that, either the Scale plan (compute price doubles) or pods of several schools' databases per project.
 
-## What has to move
+## What stays and what changes
 
-Counts are from the live database (`mps-web`, read 27 Oct 2026) and the code on `main` at `4762ae2`.
+Counts are from the live database (`mps-web`, read 5 Nov 2026).
 
-| Area | Today | Count |
+| Area | Today | Under Neon |
 | --- | --- | --- |
-| Tables | Postgres, `public` schema | 217 tables, 17 views, 37 enum types, 879 indexes |
-| Business logic in the database | PL/pgSQL functions, mostly `SECURITY DEFINER` | 268 functions, 171 triggers |
-| Access control | Row-level security policies | 696 policies |
-| Browser to database | supabase-js from the browser | 126 files; 103 `.rpc()` calls, 261 `.in()` filters |
-| Server code | Next.js API routes on Vercel | 57 routes |
-| Pages | Next.js App Router | 86 pages: 68 client-rendered, 18 redirects |
-| Login | Supabase Auth | 1,178 accounts, bcrypt password hashes |
-| Files | Supabase Storage | 2 buckets, 630 objects, about 1.0 GB |
-| Live updates | Supabase Realtime | 6 tables (leave, bus runs, stops, passengers, alerts) |
-| Scheduled jobs | `pg_cron` + `pg_net` | 15 jobs, 3 of them every minute |
-| Postgres extensions in use | | `pg_cron`, `pg_net`, `pgcrypto`, `uuid-ossp`, `btree_gist` (4 exclusion constraints) |
-| Separate service | Python timetable solver (OR-Tools CP-SAT) on Vercel | 1 |
+| Tables, views, enums, indexes | 217 tables, 17 views, 37 enums, 879 indexes | Unchanged |
+| Functions and triggers | 268 functions, 171 triggers | Unchanged except the 6 that touch Supabase internals (below) |
+| Row-level security | 699 policies | Unchanged; `auth.uid()` is provided by a small shim fed by our own sign-in |
+| Browser to database | supabase-js from the browser, 126 files | Phase 1: Neon's Data API (PostgREST syntax) with the same queries; phase 2: one call per screen through the Worker ([16](16-frontend-and-api.md)) |
+| Server code | 57 Next.js API routes on Vercel | Worker routes |
+| Login | Supabase Auth, 1,178 accounts, bcrypt hashes | EduBerry's own accounts in each school's database ([12](12-auth-and-permissions.md)) |
+| Files | Supabase Storage, 2 buckets | R2 ([15](15-files-and-media.md)) |
+| Live updates | Supabase Realtime on 6 tables | A Durable Object hub per school with WebSockets ([14](14-jobs-messaging-realtime.md)) |
+| Scheduled jobs | 15 `pg_cron` jobs, 3 with `pg_net` | Cloudflare Cron Triggers and Queues calling the same functions |
+| Timetable solver | Python on Vercel | Cloudflare Containers |
 
-Live size and usage of the one school running today, over 13 days (14–27 Oct 2026):
+The Supabase-specific hooks inside the database, from the live catalogue:
 
-| Measure | Value |
-| --- | --- |
-| Accounts | 1,177 (1,067 students, 86 teachers, 9 drivers, 8 coordinators, 5 admins, 1 principal, 1 smartboard) |
-| Daily active users on a school day | about 80, mostly staff (65 teachers, 7 coordinators, 8 students) |
-| Database requests from signed-in users | about 32,900 a day (about 500 per active staff member per school day) |
-| Rows read | about 5.3 million a day |
-| Rows inserted, updated or deleted | about 9,100 a day |
-| Busiest hour | 08:00–09:00 IST, 23% of the day's sessions; 17:00–18:00 has 18% |
-| Database size | 192 MB after about 9 months |
-| Files | about 1.0 GB |
+| Hook | Where | Replacement |
+| --- | --- | --- |
+| `auth.uid()` in 155 policies and 99 functions | RLS and helpers such as `get_user_role()` | A shim schema `auth` with `uid()` reading the user id our sign-in sets for each request; nothing in the policies changes |
+| `auth.jwt()` in 2 functions | `get_student_edu_dashboard`, `get_student_edu_standings` | The same shim returns the request's claims |
+| `auth.users` | 4 foreign keys (`profiles`, `announcement_likes`, `announcement_reads`, `push_subscriptions`), trigger `on_auth_user_created` → `handle_new_user`, function `sync_role_to_auth_metadata` | Our `auth.users` table in each school's database, keyed by the same ids; the trigger stays; the metadata sync is dropped |
+| `pg_net` in 3 functions | `fee_kick_drain`, `wa_kick_drain`, `transport_kick_drain` | Removed; Queues consumers drain the outboxes ([14](14-jobs-messaging-realtime.md)) |
+| `pg_cron` | 15 jobs | Cron Triggers |
+| `supabase_vault` | Installed, used by no function | Dropped |
+| `storage.objects` policies | Storage buckets | R2 behind the Worker's permission checks |
+| Realtime publication | 6 tables | Writes on those tables publish to the school's hub |
 
-## Requirements the architecture must meet
+Extensions in use that Neon supports: `pgcrypto`, `uuid-ossp`, `btree_gist`, `pg_stat_statements`, `plpgsql` (and `pg_cron`, which is not used for the reason above).
 
-These come from the app as it is today plus the multi-tenant goal.
+## Requirements
 
 | # | Requirement | Why |
 | --- | --- | --- |
-| R1 | One school can never read or change another school's data | Schools are separate customers; today each has its own Supabase project |
-| R2 | A school of 10,000 users runs comfortably at peak | Morning check-in and attendance push about 40–65 requests a second at 10,000 users (cost study) |
-| R3 | Multi-step money and attendance changes are atomic and serialised | Fee allocation, refunds, payroll runs, payout claims and attendance recompute all read, decide and write |
-| R4 | A new school goes live without a person or a deploy | Self-serve signup and checkout |
+| R1 | One school can never read or change another school's data | Schools are separate customers |
+| R2 | A school of 10,000 users runs comfortably at peak | About 40–65 requests a second at the morning peak |
+| R3 | Multi-step money and attendance changes stay atomic | Fee allocation, refunds, payroll runs, payout claims, attendance recompute |
+| R4 | A new school goes live without a person or a deploy | Self-serve signup |
 | R5 | Per-school scheduled jobs in the school's time zone | Fee autogen, reminders, transport runs, WhatsApp timers |
 | R6 | Live bus tracking and live leave updates | Replaces Supabase Realtime |
-| R7 | Files per school, private by default | Classroom files, feedback files, avatars, banners, certificates |
-| R8 | Point-in-time recovery and long-term backups per school | A school must be restorable on its own |
-| R9 | Each school's custom domain or subdomain | `school.eduberry.in` or the school's own domain |
-| R10 | Per-school secrets (bank, Razorpay, WhatsApp) | Already stored per school today |
-| R11 | Room to grow past 10 GB per school | Old academic years must not count against the live database forever |
+| R7 | Files per school, private by default | Leave certificates, coursework, avatars |
+| R8 | Point-in-time recovery per school | A school must be restorable on its own |
+| R9 | Each school's own domain or subdomain | `school.eduberry.in` or the school's own |
+| R10 | Per-school secrets | Bank, Razorpay, WhatsApp |
+| R11 | Room to grow | Years of history per school |
 | R12 | No Supabase, including no Supabase Auth | Owner's decision |
+| R13 | The smallest rewrite that meets R1–R12 | Added 5 Nov: build time and risk now weigh more than the lowest bill |
 
 ## Options considered
 
-| Option | Shape | Cloudflare-native |
-| --- | --- | --- |
-| A. D1 per school | One router Worker; one D1 database per school, each bound by name | Yes |
-| B. Shared D1 | One D1 database for all schools; `school_id` on every row | Yes |
-| C. Sharded D1 | A handful of D1 databases, each holding many schools with `school_id` | Yes |
-| D. Durable Object per school | One router Worker; one SQLite-backed Durable Object per school holds that school's data and runs its logic | Yes |
-| E. Workers for Platforms + D1 per school | A copy of the app per school as a "user Worker", each bound to its own D1 | Yes |
-| F. Postgres through Hyperdrive (reference only) | Workers app; a Postgres you host elsewhere, reached through Hyperdrive; `school_id` plus row-level security | No: the database lives outside Cloudflare |
-
-Option F is listed only as a yardstick: it is the smallest rewrite (functions, triggers and policies survive), but it keeps a database bill outside Cloudflare, which is what this move is meant to end.
+| Option | Shape |
+| --- | --- |
+| **G. Neon project per school (chosen)** | One Workers app; each school has its own Neon project (its own Postgres and compute); connection string per school in the platform database |
+| H. Neon pods | As G, but up to ~20 schools' databases share one Neon project and its compute |
+| D. Durable Object per school (27 Oct recommendation) | Each school's data in its own SQLite Durable Object, logic rewritten in TypeScript |
+| A. D1 per school | One D1 database per school, bound by name |
+| B / C. Shared or sharded D1 | Many schools per D1 database with `school_id` |
+| E. Workers for Platforms + D1 | A copy of the app per school |
+| F. One shared Postgres with `school_id` | All schools in one database, row-level security by `school_id` |
 
 ## Validation against the requirements
 
 ✔ meets it, △ meets it with work or limits, ✘ does not meet it.
 
-| Requirement | A. D1 per school | B. Shared D1 | C. Sharded D1 | D. DO per school | E. WfP + D1 | F. Postgres |
-| --- | --- | --- | --- | --- | --- | --- |
-| R1 Isolation | ✔ separate database | ✘ `WHERE` in every query | ✘ same as B inside a shard | ✔ separate object | ✔ separate database and Worker | △ row-level security |
-| R2 10,000-user peak | △ round trip per query; needs batching or Smart Placement | ✘ one thread for all schools | △ one thread per shard, noisy neighbours | ✔ one call per request; ~1,000 req/s soft limit per school | △ as A | ✔ |
-| R3 Atomic, serialised logic | ✘ batch only, no read-decide-write | ✘ as A | ✘ as A | ✔ single-threaded, real transactions | ✘ as A | ✔ |
-| R4 No deploy per school | △ redeploy to add a binding; ~5,000 per Worker | ✔ | ✔ | ✔ created on first use | △ upload a Worker per school | ✔ |
-| R5 Per-school jobs | △ cron fan-out | △ cron fan-out | △ cron fan-out | ✔ each school sets its own alarm | △ cron fan-out | ✔ `pg_cron` |
-| R6 Live updates | △ needs Durable Objects anyway | △ same | △ same | ✔ WebSockets on the same object | △ same | △ needs Durable Objects anyway |
-| R7 Files | ✔ R2 | ✔ R2 | ✔ R2 | ✔ R2 | ✔ R2 | ✔ R2 |
-| R8 Recovery and backups | ✔ Time Travel 30 days; `d1 export` | △ whole-database restore only | △ per shard only | ✔ PITR 30 days per object; export must be built | ✔ as A | ✔ provider's |
-| R9 Domains | ✔ Cloudflare for SaaS | ✔ | ✔ | ✔ | ✔ | ✔ |
-| R10 Secrets | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| R11 Past 10 GB | △ archive old years | ✘ 10 GB for everyone | △ re-shard | △ archive old years | △ archive | ✔ |
-| R12 No Supabase | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ if not Supabase-hosted |
+| Requirement | G. Neon per school | H. Neon pods | D. DO per school | A. D1 per school | F. Shared Postgres |
+| --- | --- | --- | --- | --- | --- |
+| R1 Isolation | ✔ separate project and compute | ✔ separate database, shared compute | ✔ separate object | ✔ separate database | △ every policy needs `school_id` |
+| R2 10,000-user peak | ✔ autoscaling compute up to 16 CU | △ neighbours share the compute | ✔ | △ round trip per query | △ one database for all |
+| R3 Atomic logic | ✔ Postgres transactions, `FOR UPDATE`, as today | ✔ | ✔ after the rewrite | ✘ batch only | ✔ |
+| R4 No deploy per school | ✔ Neon API creates a project | ✔ create a database | ✔ | △ binding per school | ✔ |
+| R5 Per-school jobs | △ Cron Trigger fan-out | △ same | ✔ alarm per object | △ fan-out | △ fan-out |
+| R6 Live updates | △ Durable Object hub | △ same | ✔ on the object | △ hub | △ hub |
+| R7 Files | ✔ R2 | ✔ | ✔ | ✔ | ✔ |
+| R8 Per-school recovery | ✔ restore the school's branch (7 days on Launch, 30 on Scale) | △ a restore rolls back every school in the pod; one school needs a copy-out | ✔ 30 days per object | ✔ 30 days | ✘ whole database only |
+| R9, R10 | ✔ | ✔ | ✔ | ✔ | ✔ |
+| R11 Growth | ✔ no practical size cap | ✔ | △ 10 GB per object, archive old years | △ 10 GB | ✔ |
+| R12 No Supabase | ✔ | ✔ | ✔ | ✔ | ✔ |
+| R13 Smallest rewrite | ✔ database moves as is | ✔ | ✘ every function, trigger and policy rewritten | ✘ same | ✘ `school_id` on 217 tables and 699 policies |
 
-Only option D meets every requirement without a ✘. Options B and C fail on isolation and throughput; A and E fail on R3, the one requirement the money modules cannot do without.
+Only G and H meet R13. G is chosen to start, because it gives each school its own restore and its own compute, and needs no change to the database at all. H is the cost lever for later (§ Option H).
 
-## Option A in detail: D1 per school (the preferred design)
-
-What works:
-
-- **Isolation and recovery are excellent.** Each school is its own database with 30 days of Time Travel, `wrangler d1 export`, the dashboard console and the HTTP API.
-- **Account limits fit.** 50,000 databases per account (raisable to millions), 1 TB of storage per account (raisable), 10 GB per database.
-- **Read replicas** can spread read load across regions for free.
-
-What the validation found:
-
-| Finding | Evidence | Impact | Workaround |
-| --- | --- | --- | --- |
-| No interactive transactions | D1 runs in auto-commit; `batch()` is the only transaction and its statements are fixed before it is sent | Fee allocation, payment reversal, refund approval, payroll calculation and payout claims cannot read-check-write atomically | Rewrite each as one SQL statement or a trigger, use version columns and retry, or put a Durable Object in front of the database to serialise writes, which is option D with an extra hop |
-| Static bindings | A Worker reaches a D1 database only through a binding in its configuration; about 5,000 per Worker (1 MB of script metadata) | Each new school means editing the config and redeploying; a bad deploy affects every school | Automate the redeploy in provisioning; split schools across several router Workers past a few thousand |
-| Round trip per query | D1 runs in one location; the Worker runs near the user | A screen with 10 sequential queries pays 10 round trips | `batch()` independent queries, Smart Placement, and fewer, larger queries |
-| Single thread per database | "Each database is single-threaded and runs one query at a time" | Same as option D | Same as option D: keep hot queries indexed and heavy reports off the request path |
-| 100 bound parameters per query | D1 limit | 261 `.in()` filters in today's code; any list over 100 ids must be split | Chunk lists, or use a temporary table or JSON `IN (SELECT value FROM json_each(?))` |
-| No `FOR UPDATE`, no `SKIP LOCKED`, no advisory locks, no exclusion constraints | SQLite | The outbox and payout claim queues lose their locking | Queues for outboxes; single-statement claims |
-
-Verdict: **feasible for everything except the transactional modules, which would need a Durable Object in front anyway.** Once that Durable Object exists, the D1 behind it only adds a network hop and a second place for each school's data.
-
-## Option B and C in detail: shared and sharded D1
-
-| Finding | Detail |
-| --- | --- |
-| Storage | A 10,000-user school writes about 2 GB of database a year (measured 0.22 MB per user-year today). Ten such schools fill a 10 GB database in six months. The cap cannot be raised. |
-| Throughput | One database serves one query at a time for every school on it. Ten 10,000-user schools at peak would ask one thread for 400–650 requests a second. |
-| Isolation | SQLite has no row-level security. Every query, report, export and join must carry `school_id`; one omission leaks data across schools. Today 696 policies do this job. |
-| Sharding (C) | Spreads load, but keeps every isolation risk of B, adds a shard map, and moving a school between shards is a data migration. |
-
-Verdict: **not feasible** for schools of this size. Sharded D1 only pays off for thousands of tiny tenants, which EduBerry does not have.
-
-## Option D in detail: a Durable Object per school (recommended)
-
-A Durable Object is a small server with its own SQLite database (up to 10 GB). Exactly one copy of each object runs at a time, and it handles one request at a time. EduBerry would define a `School` class; each school gets one object, addressed by name.
+## Option G in detail: a Neon project per school (chosen)
 
 ```mermaid
 flowchart LR
   browser["Browser<br/>static app from Workers Static Assets"]
   subgraph edge["Router Worker (one, for every school)"]
-    route["Find the school from the host name<br/>check the session cookie<br/>call the school's object"]
+    route["Find the school from the host name<br/>check the session cookie<br/>run the request"]
   end
-  cp[("D1 'platform'<br/>schools, domains, plans,<br/>provisioning, platform staff")]
-  subgraph schoolA["School A"]
-    doa["School object<br/>business logic + SQLite (≤10 GB)<br/>alarms, live sockets"]
+  kv[("Workers KV<br/>host → school cache")]
+  plat[("Neon 'platform' database<br/>schools, domains, plans,<br/>connection strings (encrypted)")]
+  subgraph schoolA["School A — Neon project"]
+    pga[("Postgres<br/>tables, functions, RLS<br/>scales to zero when idle")]
   end
-  subgraph schoolB["School B"]
-    dob["School object"]
+  subgraph schoolB["School B — Neon project"]
+    pgb[("Postgres")]
   end
+  hub["Durable Object hub per school<br/>live updates over WebSockets"]
   r2[("R2<br/>files under schools/&lt;id&gt;/")]
   q["Queues<br/>WhatsApp, push, email, webhooks"]
+  cron["Cron Triggers<br/>scheduled jobs"]
   browser --> route
-  route --> cp
-  route -- "one RPC per request" --> doa
-  route --> dob
+  route --> kv
+  kv -. miss .-> plat
+  route -- "serverless driver<br/>(HTTPS)" --> pga
+  route --> pgb
   route --> r2
-  doa --> q
-  dob --> q
+  route --> hub
+  route --> q
+  cron --> q
+  q --> pga
 ```
 
-What the validation found:
+What the checks found (Neon and Cloudflare documentation, read 5 Nov 2026):
 
-| Check | Result | Source |
-| --- | --- | --- |
-| Number of objects | Unlimited per account and per class | Durable Objects limits |
-| Storage per school | 10 GB per object; writes fail with `SQLITE_FULL` at the cap, reads keep working | Durable Objects limits |
-| Throughput | Soft limit about 1,000 requests a second per object; above that requests queue, then fail "overloaded" | Durable Objects limits |
-| Transactions | `transactionSync()`; writes in one synchronous block commit together; requests never interleave | SQLite storage API |
-| Provisioning | The object is created on first call to `idFromName(schoolId)`; no binding or deploy per school | Durable Objects API |
-| Recovery | Point-in-time recovery to any moment in the last 30 days, per object | SQLite storage API (PITR) |
-| Inspection | Data Studio in the dashboard reads and edits an object's SQL tables | Durable Objects Data Studio |
-| Scheduled work | Each object sets its own alarm (`setAlarm`), billed as one row written | Durable Objects pricing |
-| Live updates | Hibernatable WebSockets on the object; idle sockets are not billed for duration | Durable Objects pricing |
-| SQL limits | Same as D1: 100 columns per table (widest table today has 44), 100 bound parameters, 100 KB statements, 2 MB rows | Durable Objects limits |
-| Billing | Requests $0.15 per million; duration only while running; SQL rows and storage priced like D1 except storage at $0.20 per GB-month | Durable Objects pricing |
+| Check | Result |
+| --- | --- |
+| Compute | Sized in CUs: 1 CU is about 4 GB of RAM with its CPU; the smallest is 0.25 CU; Launch autoscales up to 16 CU |
+| Billing | Compute time only while awake: $0.106 per CU-hour on Launch, $0.222 on Scale; storage $0.35 per GB-month; change history for restores $0.20 per GB-month; no monthly minimum |
+| Scale to zero | After 5 idle minutes on Launch (can be turned off); 1 minute to always-on on Scale |
+| Projects | 100 per account on Launch and Free, 1,000 on Scale (more on request) |
+| Recovery | Instant restore to any point within 7 days on Launch, 30 days on Scale; branches for staging and tests |
+| Regions | AWS US, Europe, Singapore, Sydney, São Paulo; no India |
+| Connections | Pooled endpoint (PgBouncer, transaction mode) up to 10,000 client connections |
+| Extensions | `pgcrypto`, `uuid-ossp`, `btree_gist`, `pg_stat_statements`, `pg_trgm`, `postgis` and more; `pg_cron` only with scale-to-zero off; `pg_net` and `supabase_vault` not listed |
+| Data API | PostgREST-style HTTP API per branch; requests carry a JWT; access is decided by Postgres grants and RLS; `auth.uid()` returns the token's `sub` as a uuid. Release status not stated on the page: treat as a spike |
+| Auth | Neon offers a managed Better Auth that stores users in a `neon_auth` schema; import of existing bcrypt hashes is not documented, so EduBerry keeps its own sign-in ([12](12-auth-and-permissions.md)) |
+| Hyperdrive | Included in Workers Paid with unlimited queries, but 25 configurations per account and a static binding each: fine for the platform database, not for one per school |
 
 Costs of this choice, stated plainly:
 
-- **No SQL access from outside.** There is no HTTP API or `wrangler d1 execute` for an object. Support tooling (a platform-admin "run query" screen, exports to R2) has to be built, and Data Studio covers ad-hoc looks.
-- **Exports are ours to build.** Point-in-time recovery covers 30 days. Nightly or per-term exports to R2 for long-term backup and for schools that leave are part of the platform work.
-- **Schema migrations run inside each object.** Each object checks its schema version when it wakes and applies pending migrations before serving. A sweep after each deploy wakes every school so that no school migrates on a parent's first click. A migration that fails stops only that school, and must be tested against a copy of real data first.
-- **One thread per school.** A report that scans 2 million attendance rows blocks that school for its duration. Heavy reads need summary tables kept current on write, or must run in slices via alarms. This is equally true of D1.
-- **CPU-heavy work stays out of the object.** Password hashing, PDF rendering and spreadsheet parsing run in the stateless Worker, so they never hold the school's single thread.
-- **Location.** An object is placed near where it is first used (a location hint can steer it). Neither D1 nor Durable Objects offers an India-only jurisdiction today; the live Supabase project is in Mumbai (`ap-south-1`). Check whether any school contract requires data to stay in India before moving that school.
+- **A database bill outside Cloudflare.** About $9–30 per school a month in compute, depending on size and how long the school is active each day.
+- **Every request crosses to Singapore.** A screen that makes several dependent queries pays each round trip. Logic already lives in SQL functions, so most screens become one function call; Smart Placement runs the Worker near the database when a route needs several queries.
+- **Two kinds of database to run.** Postgres per school plus Workers KV for the host cache; D1 is no longer needed.
+- **Neon's own products are not used** (Neon Auth, Neon Functions, Neon Object Storage): Cloudflare covers the same ground and keeps the rest of the stack in one place. Revisit only if one of them removes real work.
+- **Live updates and scheduled jobs are no longer "free" inside the database.** Both are built on Cloudflare ([14](14-jobs-messaging-realtime.md)), and must not wake a school's database more often than they need to: a compute kept awake all night costs money for nothing.
 
-Splitting a school across more than one object is allowed and expected where it helps: for example a separate object for a bus run's live tracking and GPS trail, so that a busy morning of position fixes never queues behind a fee payment. Each split is decided in the section docs.
+## Option H: Neon pods
 
-## Option E in detail: Workers for Platforms with D1 per school
+Several schools' databases (up to about 20) in one Neon project share one autoscaling compute. Compute that sits idle between one school's requests serves another, so a 10,000-user school costs about $15 a month instead of $30.
 
-Workers for Platforms runs a copy of the app per school as a "user Worker", each with its own D1 binding, behind a dispatch Worker. It removes the 5,000-binding ceiling and lets one school pin an older version. It keeps every D1 limitation from option A, adds $25 a month and turns every release into one upload per school. Worth revisiting only if schools need different code versions.
+What it gives up:
 
-## Option F as a yardstick: Postgres through Hyperdrive
+- **Restore granularity.** Neon restores a branch, and a branch holds every database in the pod. Restoring one school means restoring the branch to a new branch and copying that school's database back; slower and manual.
+- **Noisy neighbours.** One school's heavy report slows the others on the same compute.
+- **Moving a school** between a pod and its own project is a dump and restore.
 
-Keeping Postgres (hosted anywhere but Supabase) behind Hyperdrive keeps the 268 functions, 171 triggers and 696 policies working with modest changes. It is the fastest route off Vercel and Supabase Auth, but it keeps a separately billed database server, a single point of failure for every school, and `school_id` plus row-level security on all 217 tables. It is the fallback if the Durable Object spikes below fail.
+Use pods for small schools once the fleet passes about 50 schools, or before passing 100 projects on Launch.
+
+## Option D: the Durable Object design (27 Oct recommendation)
+
+It remains the cheapest to run (about $13 a month for a 10,000-user school, about $1.60 for a 1,200-user one, both at fleet scale) and the strongest isolation. It was set aside because it rewrites the whole database layer. Revisit it if Neon's bill grows past what the extra build effort would cost, or for new, smaller modules that can live in an object from the start. The analysis that led to it is in git history (`git show 702b954:docs/cloudflare-rebuild/01-architecture-options.md`).
+
+## Other options in brief
+
+- **A. D1 per school:** no interactive transactions, a binding and redeploy per school, a round trip per query. Rejected.
+- **B / C. Shared or sharded D1:** 10 GB cap, one query at a time for every school, no row-level security. Rejected.
+- **E. Workers for Platforms + D1:** keeps D1's limits and adds $25 a month and an upload per school per release. Rejected.
+- **F. One shared Postgres with `school_id`:** cheap compute, but adding `school_id` to 217 tables and every policy is a rewrite of its own, one mistake leaks across schools, and a restore rolls back everyone. Rejected.
 
 ## What replaces each Supabase and Vercel piece
 
-| Today | On Cloudflare | Notes |
+| Today | Rebuild | Notes |
 | --- | --- | --- |
-| Vercel hosting, one project per school | One router Worker + Workers Static Assets | Static asset requests are free and unlimited |
-| Next.js App Router pages (client-rendered) | Static single-page app served as assets | Pages already render in the browser; server rendering exists only to stamp the CSP nonce. Detailed in [16-frontend-and-api.md](16-frontend-and-api.md) |
-| Next.js API routes | Routes in the router Worker, plus RPC methods on the school object | |
-| Supabase Postgres, one project per school | SQLite in the school's Durable Object | Schema translated table by table in the section docs |
-| Row-level security | Permission checks in the school object's methods, from the session's user and role | One shared authorization module, tested per role |
-| PL/pgSQL functions and triggers | TypeScript methods on the school object; SQLite triggers only for simple bookkeeping | |
-| Supabase Auth | EduBerry's own accounts, password hashes and sessions in each school object | Existing bcrypt hashes import as-is and are re-hashed on next sign-in |
-| Supabase Storage | R2, one bucket, keys prefixed by school | Private by default, served through the Worker or short-lived signed links |
-| Supabase Realtime | Hibernatable WebSockets on the school object (or a per-run object for buses) | |
-| `pg_cron` | Each school object's own alarm; one Cron Trigger as a watchdog | Account limit: 250 Cron Triggers |
-| `pg_net` outbound calls | Queues consumer Workers | Retries and dead-letter queues built in |
-| Supabase Vault / `payment_secrets` table | Encrypted columns in the school object, key in Workers Secrets | |
-| Email via Supabase or Cloudflare REST | Cloudflare Email Service binding | Already designed for in `docs/account-email-system.md` |
-| Python solver on Vercel | Cloudflare Containers, started on demand | OR-Tools has no JavaScript build |
-| Per-school Vercel project and env vars | One row per school in the platform D1; secrets in the school object | |
+| Vercel hosting, one project per school | One router Worker + Workers Static Assets | Static asset requests are free |
+| Next.js pages (client-rendered) | Static single-page app | [16](16-frontend-and-api.md) |
+| Next.js API routes | Worker routes | |
+| Supabase Postgres, one project per school | Neon Postgres, one project per school | `pg_dump` / `pg_restore` ([90](90-data-migration-and-cutover.md)) |
+| Supabase's PostgREST API from the browser | Neon Data API in phase 1; Worker endpoints in phase 2 | [16](16-frontend-and-api.md) |
+| Row-level security | Unchanged | `auth.uid()` from our own sign-in |
+| PL/pgSQL functions and triggers | Unchanged | |
+| Supabase Auth | EduBerry's own accounts in each school's database | bcrypt hashes import as they are |
+| Supabase Storage | R2, keys prefixed by school | [15](15-files-and-media.md) |
+| Supabase Realtime | Durable Object hub per school | |
+| `pg_cron` | Cron Triggers fanned out through a queue | |
+| `pg_net` | Queues consumers | |
+| `payment_secrets` table | Stays, encrypted at rest with a key held in Workers Secrets | [17](17-integrations-and-secrets.md) |
+| Python solver on Vercel | Cloudflare Containers | |
+| Per-school Vercel project and env vars | One row per school in the platform database | |
 
-## Spikes to run first in the new repository
-
-Each spike is small, throwaway and answers one question that could change this decision. Run them before building features.
+## Spikes to run first
 
 | # | Question | Pass when |
 | --- | --- | --- |
-| S1 | Can a `School` object run today's heaviest screens fast enough? | Load the live school's data into an object; the home, attendance and fee-student screens answer in under 50 ms of object time at the 99th percentile |
-| S2 | Does one object hold a 10,000-user school's peak? | Synthetic data for 10,000 users; 100 requests a second for 10 minutes with the real query mix; no "overloaded" errors and 99th percentile under 300 ms end to end from India |
-| S3 | Can money logic port with the same guarantees? | Port one fee function chain (payment allocation and reversal) with `transactionSync`; concurrent payment tests give the same ledger as Postgres |
-| S4 | Do existing passwords survive? | Import exported bcrypt hashes; sign in with them; re-hash on success |
-| S5 | Do migrations and recovery work per school? | Ship a schema change; the sweep upgrades 100 test schools; a PITR restore of one leaves the others untouched |
-| S6 | How long does a full-year report take? | 2 million attendance rows; the monthly summary from rollup tables in under 50 ms, and the raw scan measured |
-| S7 | Does the browser app run as static assets? | Three real pages built as a static app, calling the Worker API, with a strict CSP and no inline scripts |
-| S8 | Can data move from Supabase to an object losslessly? | Export the live database, transform, import; row counts and checksums match per table |
+| S1 | Does the live database restore into Neon unchanged? | `pg_dump` of `public` restores into a Neon project; every function compiles; row counts match per table |
+| S2 | Do the 699 policies work with our `auth.uid()` shim? | The permission matrix from [91](91-test-and-parity-plan.md) passes for every role against the restored copy |
+| S3 | Is the Data API a safe phase-1 path? | Ten of today's heaviest browser queries run unchanged through `@neon/postgrest-js` with a JWT from our sign-in; RLS applies; latency from India measured |
+| S4 | How fast are screens from India to Singapore? | Home, attendance and the fee counter answer in under 300 ms at the 95th percentile through the Worker |
+| S5 | Does a 10,000-user school fit its compute? | Synthetic 10,000-user data; 100 requests a second for 10 minutes; autoscaling stays under 2 CU; no pool exhaustion |
+| S6 | Do old passwords work? | Imported bcrypt hashes sign in and re-hash on success |
+| S7 | Does a school scale to zero at night? | With jobs on Cron Triggers, the compute is suspended from 21:00 to 06:00 except for the nightly job window |
+| S8 | Does a restore touch only one school? | Restore one school's project to an hour ago; others untouched; time to restore recorded |
 
-If S1, S2 or S3 fail, fall back to option F for the database and keep everything else in this plan.
+If S3 fails, phase 1 goes straight to Worker endpoints for the screens that need it. If S4 fails, move the heaviest screens to single SQL functions first.
 
 ## Decision record
 
 | Decision | Choice | Status |
 | --- | --- | --- |
-| Where school data lives | SQLite Durable Object per school | Recommended, pending spikes S1–S3 |
-| Where platform data lives | One D1 database (`platform`) | Recommended |
-| Shared or sharded D1 for school data | Rejected | Fails isolation and throughput at 10,000 users |
-| Workers for Platforms | Not now | Revisit if schools need different versions |
-| Login | EduBerry's own auth, no Supabase Auth | Owner's decision |
-| Front end | Static single-page app on Workers Static Assets | Recommended; detailed in [16-frontend-and-api.md](16-frontend-and-api.md) |
-| Live bus runs | In the school object at launch; one object per run only if the bus peak measurably slows the school | Decided in [36-transport.md](36-transport.md) |
-| Banks that need a client certificate | A bank gateway container makes those calls | Recommended in [17-integrations-and-secrets.md](17-integrations-and-secrets.md) |
-| Data residency | Not decided | Confirm whether any school requires India-only storage |
+| Where school data lives | A Neon Postgres project per school | Decided 5 Nov 2026 (owner) |
+| Where platform data lives | One Neon `platform` database, cached in Workers KV | Decided |
+| Pods of many schools per project | Later, for cost | Revisit past about 50 schools |
+| Durable Object per school for data | Not now | Kept as the low-cost alternative |
+| Shared Postgres with `school_id` | Rejected | Rewrite of its own; restore rolls back everyone |
+| Login | EduBerry's own auth, no Supabase Auth, no Neon Auth | Decided |
+| Front end | Static single-page app on Workers Static Assets | Recommended ([16](16-frontend-and-api.md)) |
+| Browser data access | Neon Data API in phase 1, Worker endpoints in phase 2 | Pending spike S3 |
+| Live updates | Durable Object hub per school | Recommended ([14](14-jobs-messaging-realtime.md)) |
+| Banks that need a client certificate | A bank gateway container | Recommended ([17](17-integrations-and-secrets.md)) |
+| Data residency | Singapore (no Indian Neon region) | Confirm no school requires India-only storage |
 
 ## Sources
 
-Cloudflare documentation, read 27 Oct 2026:
+Read 5 Nov 2026:
 
-- [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) and [D1 batch](https://developers.cloudflare.com/d1/worker-api/d1-database/)
-- [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/), [pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) and [lifecycle](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)
-- [SQLite storage API, including PITR](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) and [Data Studio](https://developers.cloudflare.com/durable-objects/observability/data-studio/)
-- [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) and [pricing](https://developers.cloudflare.com/workers/platform/pricing/)
-- [Workers for Platforms pricing](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/platform/pricing/)
-- [Cloudflare for SaaS plans](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/)
+- Neon [pricing](https://neon.com/pricing), [plans](https://neon.com/docs/introduction/plans), [regions](https://neon.com/docs/introduction/regions), [extensions](https://neon.com/docs/extensions/pg-extensions), [Data API](https://neon.com/docs/data-api/get-started), [Neon Auth](https://neon.com/docs/neon-auth/overview), [object hierarchy](https://neon.tech/docs/manage/overview), [connection pooling](https://neon.com/docs/connect/connection-pooling)
+- Cloudflare [Hyperdrive pricing](https://developers.cloudflare.com/hyperdrive/platform/pricing/) and [limits](https://developers.cloudflare.com/hyperdrive/platform/limits/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- Supabase [pricing](https://supabase.com/pricing)

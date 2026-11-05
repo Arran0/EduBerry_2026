@@ -1,188 +1,155 @@
-# Cost Study: Schools of up to 10,000 Users on Cloudflare
+# Cost Study: Schools of up to 10,000 Users on Neon and Cloudflare
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Prices are Cloudflare's published list prices on that date; the model is [`tools/costmodel.py`](tools/costmodel.py), so every number here can be re-run with other assumptions.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). Prices are list prices: Cloudflare read on 27 Oct 2026, Neon and Supabase on 5 Nov 2026. The model is [`tools/costmodel.py`](tools/costmodel.py); every number here can be re-run with other assumptions. The chosen design is Neon Postgres per school with Cloudflare for everything else ([01](01-architecture-options.md)); the Durable Object design is kept as the comparison.
 
 ## Summary
 
-- **A typical 10,000-user school costs about $13 a month on Cloudflare** in its first year, and about $19 if most students and parents use the app every day. A 3,000-user school costs about $4 and a 1,000-user school under $1.50.
-- **The account's first school costs about $6 in total**, because the $5 Workers Paid plan includes 10 million requests, 25 billion rows read and 50 million rows written a month.
-- **Durable Objects and D1 cost the same to within 5%** in year one. By year three D1 is about 15% dearer for large schools, because its SQL storage is $0.75 against Durable Objects' $0.20 per GB-month.
-- **Rows written are 60% of the bill.** Every indexed column written counts as an extra row. GPS position fixes alone are about $2.60 of a 10,000-user school's monthly cost; keeping only the latest fix in SQL and the trail in R2 would cut that by about 90%.
-- **Today's chatty browser code would more than double the bill.** At today's measured 500 database requests per active staff member a day, 50 large schools cost about $1,470 a month instead of $550. Consolidating each screen into one API call is a cost requirement, not only a speed one.
-- **Shared D1 costs the same per row but cannot hold these schools** (10 GB cap, one thread). See [01-architecture-options.md](01-architecture-options.md).
+- **Today's school (about 1,200 users) costs about $14 a month on Neon and Cloudflare** if it is the only school: $5 for Workers Paid and about $9 of Neon compute. On Supabase it costs $25 today.
+- **One more school on a running account costs** about **$9** (1,000 users), **$19** (3,000 users) and **$30** (10,000 users) a month, in Neon projects of their own. Usage level barely changes it: a 10,000-user school costs $29 with little use and $32 with heavy use.
+- **Neon compute is almost the whole bill (about 90%).** Neon bills compute time while the database is awake, not rows. Two things decide it: how many hours a day the school's database is awake, and how much memory it needs to hold the school's busy data.
+- **Pods halve it.** About 20 schools' databases sharing one Neon compute cost about $4.50 (1,000 users) to $15 (10,000 users) per school, because idle time and memory headroom are shared. The price is restore granularity and noisy neighbours ([01](01-architecture-options.md)).
+- **Mind the 100-project line.** Neon's Launch plan holds 100 projects. Past that, one project per school needs the Scale plan, whose compute price is twice Launch's ($0.222 against $0.106 per CU-hour). Move small schools into pods before reaching 100.
+- **It is dearer than the Cloudflare-only design** (about $13 a month for a 10,000-user school, $1.60 for a 1,000-user one) and cheaper than Supabase (about $60 for a 10,000-user school on Medium compute). The difference against the Cloudflare-only design pays for not rewriting the database.
+- **Chattiness costs latency more than money on Neon.** Today's many-small-queries pattern adds about 15% to the bill (versus 2.7× on Durable Objects), but every query crosses from India to Singapore, so one call per screen still matters for speed ([03](03-cost-efficiency.md)).
 
 ## Where the workload numbers come from
 
-The model starts from the one school running today and scales it to larger schools.
+The model starts from the one school running today and scales it.
 
 | Measured on the live school, 14–27 Oct 2026 | Value |
 | --- | --- |
 | Accounts | 1,177 (92% students, 7% staff, 1% drivers and others) |
 | Active users on a school day | about 80, nearly all staff (75% of staff sign in daily) |
 | Requests from signed-in users | about 500 per active staff member per school day |
-| Rows read per request | about 160, including row-level security checks and background jobs |
-| Rows changed | about 9,100 a day; about 0.22 per request |
+| Rows changed | about 9,100 a day |
 | Database growth | 192 MB in about 9 months: 0.22 MB per user per year |
 | File growth | about 1.0 GB in about 9 months: 1.1 MB per user per year |
 | Peak | 23% of the day's sessions start between 08:00 and 09:00 IST |
 
-The live school has almost no student or parent usage yet, so student and parent activity is a scenario rather than a measurement:
+Student and parent use is a scenario, not a measurement:
 
-| Scenario | Staff active daily | Students or parents active daily | Daily active users at 10,000 users |
+| Scenario | Staff active daily | Students or parents active daily | Daily active at 10,000 users |
 | --- | --- | --- | --- |
 | Low (like today) | 75% | 2% | about 710 |
 | Typical | 75% | 30% | about 3,300 |
 | High | 75% | 70% | about 7,000 |
 
-Per-user assumptions for the rebuilt app:
+## How Neon compute is estimated
+
+Neon bills `compute size × hours awake`. A compute suspends after 5 idle minutes and wakes on the next query.
 
 | Assumption | Value | Reasoning |
 | --- | --- | --- |
-| API calls per active staff member per day | 150 | One call per screen instead of today's ~500 browser queries |
-| API calls per active student or parent per day | 40 | Home, announcements, attendance, fees, bus |
-| Rows read per API call | 200 | Today's 160, plus growth in table size |
-| Rows written | Attendance (1 per student), staff punches (3 per staff), GPS (1 per bus per 15 s for 3 hours), absence messages, user edits (10% of calls, 3 rows each), all ×3 for index rows | Index rows count as writes in D1 and Durable Objects |
-| Buses | 1 per 200 users | 50 buses at 10,000 users |
-| School days per month | 24 equivalents | 22 school days plus light weekends |
-| Database growth | 0.20 MB per user per year | Measured 0.22 on Postgres |
-| File growth | 1.2 MB per user per year | Measured 1.1 |
-| Logs kept | 10% of invocations | Workers Logs bills per event after 20 million a month |
+| Hours awake per month | 22 school days × 13 h + 8 weekend days × 4 h + 30 nights × 0.5 h ≈ 333 h (10 h school days under 1,000 users) | Staff 07:00–17:00, students and parents into the evening; scheduled jobs gathered into one nightly window |
+| Compute size while awake | 0.25 CU under 2,000 users, 0.5 CU under 6,000, 0.75 CU average at 10,000 (autoscaling between 0.5 and 1) | Memory first: the current year's attendance, fees and marks should fit in RAM (1 CU ≈ 4 GB) |
+| CPU check | Postgres time of about 12 ms per screen call, 1 ms per GPS fix, ×3 for peaks | At 10,000 users this is about 0.15 CU, below the memory floor: memory, not CPU, sets the size |
+| Storage | 0.20 GB per 1,000 users per year at $0.35 per GB-month; 0.3 GB of change history per school at $0.20 | Restore history kept 7 days on Launch |
+| Pods | 20 schools per compute; each school's share is 45% of its own compute | Shared idle time and memory headroom |
 
-Workload per school per month that results:
+Resulting CU-hours per school a month: about 83 (1,000 users), 167 (3,000) and 250 (10,000).
 
-| School | Daily active | Requests | Rows read | Rows written | Database | Files | Peak requests/s |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1,000 users, typical | 330 | 0.54 M | 91 M | 0.76 M | 0.2 GB/yr | 1.2 GB/yr | 4 |
-| 3,000 users, typical | 990 | 1.6 M | 274 M | 2.3 M | 0.6 GB/yr | 3.6 GB/yr | 12 |
-| 10,000 users, low | 710 | 2.9 M | 418 M | 5.4 M | 2 GB/yr | 12 GB/yr | 21 |
-| 10,000 users, typical | 3,290 | 5.4 M | 912 M | 7.6 M | 2 GB/yr | 12 GB/yr | 39 |
-| 10,000 users, high | 6,970 | 9.0 M | 1,619 M | 10.8 M | 2 GB/yr | 12 GB/yr | 65 |
-
-Peak is 25% of the day's requests in the busiest hour with a 2.5× burst inside it. Even the high case is under 7% of a Durable Object's soft limit of about 1,000 requests a second, so one object per school has room, provided no single request holds the school's thread for long (see the architecture doc).
+The biggest single risk to these numbers is **anything that keeps a compute awake when nobody is using the app**: a job every few minutes all night, a monitoring ping, an open connection. The design moves every scheduled job onto Cloudflare Cron Triggers and gathers them into windows, so that a school's database is idle from evening to morning ([14](14-jobs-messaging-realtime.md)). If a school's compute never slept, a 10,000-user school would cost about $58 a month instead of $30.
 
 ## Price sheet used
 
-All on the Workers Paid plan ($5 a month per account). "Included" is per account per month, shared by every school.
-
 | Product | Included | Price beyond |
 | --- | --- | --- |
+| Neon compute, Launch plan | — | $0.106 per CU-hour; 100 projects |
+| Neon compute, Scale plan | — | $0.222 per CU-hour; 1,000 projects |
+| Neon storage | — | $0.35 per GB-month |
+| Neon change history (instant restore) | — | $0.20 per GB-month; 7 days on Launch, 30 on Scale |
+| Neon egress | 500 GB per project | $0.10 per GB |
+| Cloudflare Workers Paid | per account | $5 a month |
 | Worker requests | 10 million | $0.30 per million |
 | Worker CPU time | 30 million ms | $0.02 per million ms |
 | Static asset requests | Unlimited | Free |
-| Durable Object requests (incl. RPC, alarms; WebSocket messages at 20:1) | 1 million | $0.15 per million |
-| Durable Object duration (only while running) | 400,000 GB-s | $12.50 per million GB-s |
-| SQL rows read (D1 and Durable Objects) | 25 billion | $0.001 per million |
-| SQL rows written (D1 and Durable Objects) | 50 million | $1.00 per million |
-| SQL storage, Durable Objects | 5 GB | $0.20 per GB-month |
-| SQL storage, D1 | 5 GB | $0.75 per GB-month |
+| Hyperdrive (platform database only) | Unlimited queries | Free on Workers Paid |
+| Durable Object requests (live-update hub) | 1 million | $0.15 per million |
 | R2 storage | 10 GB | $0.015 per GB-month; no egress fees |
-| R2 Class A (writes, lists) / Class B (reads) | 1 M / 10 M | $4.50 / $0.36 per million |
-| Queues | 1 million operations | $0.40 per million (about 3 per message) |
+| Queues | 1 million operations | $0.40 per million |
 | Email Service | 3,000 emails | $0.35 per 1,000 |
-| Workers Logs | 20 million events | $0.60 per million (changes to Cloudflare Observability pricing on 1 Dec 2026) |
-| Cloudflare for SaaS custom hostnames | 100 | $0.10 per hostname per month |
-| Workers for Platforms (option E only) | — | $25 a month |
-| Containers (timetable solver) | 25 GiB-h memory, 375 vCPU-min | $0.0000025 per GiB-s, $0.000020 per vCPU-s |
+| Workers Logs | 20 million events | $0.60 per million |
+| Workers KV (host cache) | 10 million reads | $0.50 per million |
+| Containers (timetable solver) | 25 GiB-h, 375 vCPU-min | per use |
 
 ## Results
 
-### Cost of one more school on a large account
+### One more school on a running account
 
-This is the number to price plans against: the account's included usage is already used up by other schools, so every unit is paid for.
-
-| School size | Low | Typical | High |
-| --- | --- | --- | --- |
-| 1,000 users | $0.94 | $1.37 | $2.00 |
-| 3,000 users | $2.62 | $3.92 | $5.79 |
-| 10,000 users, year 1 | $8.50 | $12.85 | $19.05 |
-| 10,000 users, year 3 | — | $14.01 | $20.21 |
-
-Durable Objects shown; D1 is within 5% in year one and about 15% dearer by year three for 10,000-user schools.
+| School size | Low | Typical | High | In a pod (typical) |
+| --- | --- | --- | --- | --- |
+| 1,000 users | $9.12 | $9.23 | $9.39 | $4.38 |
+| 3,000 users | $18.42 | $18.75 | $19.23 | $9.05 |
+| 10,000 users, year 1 | $28.92 | $30.02 | $31.60 | $15.46 |
+| 10,000 users, year 3 | — | $31.78 | $33.36 | — |
 
 ### A fleet of 10,000-user schools, typical usage, year one
 
-| Schools | Durable Objects | DO, worst case duration | D1 per school | D1 + Workers for Platforms | Per school (DO) |
-| --- | --- | --- | --- | --- | --- |
-| 1 | $5.69 | $5.69 | $5.03 | $30.03 | $5.69 |
-| 10 | $60 | $75 | $61 | $86 | $6.05 |
-| 50 | $548 | $640 | $544 | $569 | $10.96 |
-| 200 | $2,467 | $2,849 | $2,457 | $2,482 | $12.34 |
+| Schools | Neon, project per school | Per school | Neon pods | Per school | Durable Objects (comparison) | Supabase, Medium per school (comparison) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | $32 | $32 | $18 | $18 | $6 | $75 |
+| 10 | $297 | $30 | $151 | $15 | $60 | $615 |
+| 50 | $1,489 | $30 | $761 | $15 | $548 | $3,015 |
+| 100 | $2,990 | $30 | $1,534 | $15 | $1,184 | $6,015 |
+| 200 | $11,796 | $59 | $3,089 | $15 | $2,467 | $12,015 |
 
-"Worst case duration" assumes each school's object never goes idle during 14 school hours a day, for example because a timer or an open outbound connection stops it hibernating. It adds about $1.90 per school, so it is worth avoiding but not alarming.
-
-### Same fleet, high usage, year three
-
-| Schools | Durable Objects | D1 per school | Per school (DO) |
-| --- | --- | --- | --- |
-| 10 | $123 | $140 | $12.28 |
-| 50 | $916 | $985 | $18.33 |
-| 200 | $3,943 | $4,222 | $19.72 |
+At 200 schools, one project per school forces the Scale plan for every project, doubling compute. Pods, or a second Neon organisation, avoid that.
 
 ### Where the money goes
 
-50 schools of 10,000 users, typical, year one, Durable Objects ($548 a month):
+50 schools of 10,000 users, typical, year one, one project each ($1,489 a month):
 
 | Item | $ per month | Share |
 | --- | --- | --- |
-| SQL rows written | 331 | 60% |
-| Worker requests | 79 | 14% |
-| Durable Object requests | 40 | 7% |
-| SQL rows read | 21 | 4% |
-| Workers Logs (10% sampled) | 21 | 4% |
-| SQL storage | 19 | 3% |
-| Worker CPU | 19 | 3% |
-| R2 | 9 | 2% |
-| Workers Paid plan | 5 | 1% |
-| Email, Queues, Durable Object duration | 5 | 1% |
+| Neon compute | 1,324 | 89% |
+| Worker requests | 79 | 5% |
+| Neon storage and history | 38 | 3% |
+| Worker CPU | 19 | 1% |
+| R2 | 9 | 1% |
+| Live-update hub, logs, email, queues, plan | 20 | 1% |
 
-### The chatty-client penalty
+### The chatty-client effect
 
-Same 50 schools if the rebuilt app kept today's pattern of many small queries from the browser (500 calls per active staff member, 120 per student, more rows read per call):
+| Client | 10,000-user school, typical, one more on a running account |
+| --- | --- |
+| Rebuilt: one call per screen | $30.02 |
+| As today: many browser queries | $34.29 |
 
-| Client | 50 schools, typical | Per school |
-| --- | --- | --- |
-| Rebuilt: one API call per screen | $548 | $10.96 |
-| As today: many browser queries | $1,469 | $29.38 |
+On Neon each small query costs little compute, so the bill moves by about 15%. The cost is latency: each query is a round trip to Singapore.
 
 ## Levers that move the bill
 
-| Lever | Effect on a typical 10,000-user school | Where it is decided |
+| Lever | Effect | Where it is decided |
 | --- | --- | --- |
-| Store only each bus's latest position in SQL; batch the trail to R2 once a minute | About −$2.30 (−18%) | Adopted in [36-transport.md](36-transport.md) |
-| Every index must earn its write cost; avoid counters updated on every read | Each index removed on a hot table saves up to a third of that table's write cost | Data-layer doc |
-| One API call per screen, joins on the server | Avoids the 2.7× chatty penalty | Front-end and API doc |
-| Keep log sampling at 10% or lower in production | Logging every invocation instead of 10% adds about $5.90 per school | Platform doc |
-| Archive closed academic years to R2 | Keeps each school's database small and well under 10 GB | Data-layer doc |
-| Read from summary tables for reports | Cuts rows read and keeps the school's thread free | Each section doc |
+| Let every school's database sleep from evening to morning | A compute awake around the clock roughly doubles a school's bill | [14](14-jobs-messaging-realtime.md) |
+| Pods for small schools | About half the compute per school | [11](11-tenancy-and-control-plane.md) |
+| Right-size the autoscaling range per school | Each 0.25 CU off the floor saves about $9 a month at 333 hours | [11](11-tenancy-and-control-plane.md) |
+| Stay on Launch (under 100 projects per organisation) | Scale doubles the compute price | [11](11-tenancy-and-control-plane.md) |
+| Cache public, shared reads at the edge | Fewer wake-ups for anonymous pages (branding, certificate checks) | [16](16-frontend-and-api.md) |
+| Keep GPS trails out of Postgres | Fewer writes and less storage; the trail goes to R2 | [36](36-transport.md) |
+| Summary tables for reports and dashboards | Shorter queries, smaller compute | Section docs |
 
 ## Compared with today
 
-Today each school is one Supabase project plus one Vercel project:
-
-| Item | Today, per school | On Cloudflare |
+| Item | Today (Supabase + Vercel), per school | Rebuild (Neon + Cloudflare) |
 | --- | --- | --- |
-| Database and auth | Supabase Pro organisation $25 a month, plus compute per project: Micro $10, Small $15, Medium $60. A 10,000-user school with today's query pattern would likely need Medium or larger | Included in the usage above |
-| Hosting | Vercel Pro $20 per team member a month, plus usage | Included in the usage above |
-| GPS gateway | DigitalOcean droplet, about $7.20 a month, shared | Unchanged unless also moved (Containers) |
-| Email | Cloudflare Email Service (already planned) | Same |
-| Floor for a new school | At least $10 a month of Supabase compute, even if unused | About $0 until the school is used |
-
-Supabase prices from [supabase.com/pricing](https://supabase.com/pricing), read 27 Oct 2026. The live project's compute size was not checked.
+| Database and auth | Supabase Pro $25 a month per organisation (includes one Micro compute), plus $10 (Micro), $15 (Small) or $60 (Medium) per extra project | Neon compute and storage as above; sign-in is our own |
+| Hosting and API | Vercel Pro $20 per team member a month, plus usage | Workers Paid $5 per account, plus usage |
+| A school nobody uses | At least $10 a month of Supabase compute | About $0: its Neon compute is asleep |
+| GPS gateway | DigitalOcean droplet, about $7.20 a month, shared | Unchanged |
 
 ## What this study does not cover
 
-- **Messaging charges.** WhatsApp (Meta) and SMS are billed by Meta or the provider per message, the same on any hosting.
-- **Payment fees.** Razorpay and bank charges are unchanged.
-- **The GPS gateway** (Traccar on DigitalOcean) stays as it is in this plan.
-- **People's time.** The rebuild itself is the dominant cost of this move; this study prices running it.
-- **Price changes.** Workers Logs moves to Cloudflare Observability pricing on 1 Dec 2026; re-run the model when that is published.
+- **Messaging and payment fees** (Meta, SMS providers, Razorpay, banks) are the same on any hosting.
+- **People's time.** The rebuild effort is the main cost of this move; the Neon design is chosen because it cuts that effort sharply.
+- **Price changes.** Neon changed its pricing in 2025 and may again; re-run the model when it does.
 
 ## How to re-run
 
 ```sh
 python3 docs/cloudflare-rebuild/tools/costmodel.py --users 10000 --scenario typical --year 1
-python3 docs/cloudflare-rebuild/tools/costmodel.py --users 3000 --scenario high --year 3
+python3 docs/cloudflare-rebuild/tools/costmodel.py --users 1200 --scenario low
 python3 docs/cloudflare-rebuild/tools/costmodel.py --client asis   # today's chatty pattern
 ```
 
-Change the constants at the top of the script (prices, requests per user, rows per request, write amplification) to test other assumptions. Re-measure from the live database before trusting the model for pricing decisions; the queries used are listed in the [README](README.md#measuring-the-live-school-again).
+The Neon assumptions are in `neon_compute()`: hours awake, the memory floor by school size and the pod sharing factor. Measure them on the first school after cutover (Neon's console shows CU-hours per project) and update the model before pricing plans.
