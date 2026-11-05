@@ -47,7 +47,7 @@ Upload rules already in place, worth keeping:
 ### One bucket, per-school keys
 
 ```
-eduberry-files/
+edzee-files/
   schools/<schoolId>/
     public/site/...                 logo, favicon, banners, login background
     classrooms/<classroomId>/...    banners, logos, coursework

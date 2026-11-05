@@ -15,12 +15,12 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). Builds on the decision 
 
 | Block | Product | One per | Holds or does |
 | --- | --- | --- | --- |
-| `eduberry-app` router Worker | Workers + Static Assets | Platform | Serves the static app; runs `/api/*`; finds the school; signs in users and issues tokens; queries the school's database; uploads and serves files; verifies webhooks |
+| `edzee-app` router Worker | Workers + Static Assets | Platform | Serves the static app; runs `/api/*`; finds the school; signs in users and issues tokens; queries the school's database; uploads and serves files; verifies webhooks |
 | School database | Neon project (Postgres 17) | School | The school's tables, functions, triggers, RLS policies and its `auth.users` and `sessions` tables |
 | `platform` database | Neon project, reached through Hyperdrive | Platform | Schools, host names, plans, encrypted connection strings, provisioning state, platform staff, platform audit |
 | Host cache | Workers KV | Platform | `host → schoolId, status, plan` for about a minute, so most requests never touch the platform database |
 | `SchoolHub` | Durable Object | School | Live WebSocket fan-out (leave, transport); the school's job timer in its own time zone |
-| `eduberry-files` bucket | R2 | Platform | All files, keys prefixed `schools/<schoolId>/` |
+| `edzee-files` bucket | R2 | Platform | All files, keys prefixed `schools/<schoolId>/` |
 | `outbox` queue | Queues | Platform | Outgoing WhatsApp, web push and email |
 | `jobs` queue | Queues | Platform | Scheduled work per school, migrations sweep, exports |
 | `webhooks` queue | Queues | Platform | Verified bank, Razorpay and WhatsApp callbacks, delivered to the right school with retries |

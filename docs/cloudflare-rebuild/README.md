@@ -1,4 +1,6 @@
-# EduBerry Rebuild Docs: Neon and Cloudflare
+# EdZee Rebuild Docs: Neon and Cloudflare
+
+**EdZee** is the name of the rebuilt, multi-tenant app; **EduBerry** is today's one-school app that these docs describe as the starting point. Host names such as `<slug>.edzee.in` are placeholders until the domain is registered.
 
 Started 27 Oct 2026; rewritten around Neon on 5 Nov 2026. These documents describe the EduBerry app section by section: how each part works today as a one-school-per-deployment app on Supabase and Vercel, and what it must become in the multi-tenant version on Neon Postgres and Cloudflare. They are written to be the brief for rebuilding the app in a new repository cloned from this one.
 

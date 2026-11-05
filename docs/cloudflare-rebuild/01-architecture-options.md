@@ -63,7 +63,7 @@ Extensions in use that Neon supports: `pgcrypto`, `uuid-ossp`, `btree_gist`, `pg
 | R6 | Live bus tracking and live leave updates | Replaces Supabase Realtime |
 | R7 | Files per school, private by default | Leave certificates, coursework, avatars |
 | R8 | Point-in-time recovery per school | A school must be restorable on its own |
-| R9 | Each school's own domain or subdomain | `school.eduberry.in` or the school's own |
+| R9 | Each school's own domain or subdomain | `school.edzee.in` or the school's own |
 | R10 | Per-school secrets | Bank, Razorpay, WhatsApp |
 | R11 | Room to grow | Years of history per school |
 | R12 | No Supabase, including no Supabase Auth | Owner's decision |

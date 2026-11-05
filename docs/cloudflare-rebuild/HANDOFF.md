@@ -3,7 +3,7 @@
 Paste the block below as the first message of a Claude session in the new repository (the clone that becomes the multi-tenant app). Written 5 Nov 2026.
 
 ```text
-You are continuing the EduBerry multi-tenant rebuild in this repository, a clone of arran0/EduBerry_2026.
+You are building EdZee, the multi-tenant rebuild of the EduBerry school app, in this repository, a clone of arran0/EduBerry_2026. EduBerry is today's one-school app; EdZee is the product name from now on (domains like <slug>.edzee.in are placeholders until registered).
 
 1. Get the latest plan first
 - The plan lives in docs/cloudflare-rebuild/. If it lacks 04-database-and-region-options.md, HANDOFF.md or tools/spike-s4/, bring docs/cloudflare-rebuild/ over from arran0/EduBerry_2026 main (commit 20bbd32 or later) before anything else.

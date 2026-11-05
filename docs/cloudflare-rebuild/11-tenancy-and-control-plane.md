@@ -138,7 +138,7 @@ The Neon Data API (phase 1) connects with its own role and switches to `authenti
 
 | Kind | How | Cost |
 | --- | --- | --- |
-| Default subdomain `<slug>.eduberry.in` | Wildcard DNS record and a Worker route `*.eduberry.in/*` | Free |
+| Default subdomain `<slug>.edzee.in` | Wildcard DNS record and a Worker route `*.edzee.in/*` | Free |
 | School's own domain, e.g. `app.greenfield.edu.in` | Cloudflare for SaaS custom hostname pointing at the Worker; the school adds one CNAME; certificate issued automatically | First 100 free, then $0.10 per host name per month |
 
 A school can have several hosts; exactly one is primary, and that is the one used in emails, pay links, QR codes and certificates.
@@ -168,7 +168,7 @@ sequenceDiagram
   J->>DB: Claim one ready database from the pool
   J->>DB: Write name, time zone, country, branding defaults; create the first admin
   J->>J: Store the encrypted credentials, add the subdomain host, status active, clear the KV key
-  J-->>B: Invite email: https://<slug>.eduberry.in, set your password
+  J-->>B: Invite email: https://<slug>.edzee.in, set your password
   Note over J: Then: top up the pool; start the custom-domain set-up if one was given
 ```
 
@@ -178,7 +178,7 @@ sequenceDiagram
 | 2 | The verified payment webhook queues `provision(schoolId)` | Seconds |
 | 3 | Claim a ready database from the pool, matching the plan: a seat in a pod for most new schools, a project of its own for large or premium plans ([below](#projects-pods-and-the-100-project-limit)). Record it in `school_databases` and `school_db_credentials` | Under a second |
 | 4 | Seed the school: name, logo placeholder, time zone, country, academic year, neutral page themes, attendance rules, fee permission presets, message templates; create the first admin in `auth.users` | A second or two |
-| 5 | Add `<slug>.eduberry.in` to `school_hosts` (wildcard DNS already points at the Worker), set status `active`, clear the KV key | At once |
+| 5 | Add `<slug>.edzee.in` to `school_hosts` (wildcard DNS already points at the Worker), set status `active`, clear the KV key | At once |
 | 6 | Email the admin an invite from the school's branding; the buyer's browser, which has been waiting on a "setting up your school" page, moves to the new site | Seconds |
 | 7 | In the background: top up the pool; if the buyer gave a custom domain, create the Cloudflare for SaaS hostname and show the CNAME to add (its certificate follows within minutes) | Minutes |
 
@@ -210,7 +210,7 @@ A school that outgrows its pod moves to a project of its own (or back) in a prov
 
 ## Platform console
 
-A separate area on the platform domain (`console.eduberry.in`) for EduBerry staff only:
+A separate area on the platform domain (`console.edzee.in`) for EduBerry staff only:
 
 - schools list with status, plan, users, storage, compute hours, last activity, error rate;
 - create, suspend, reactivate, export, delete a school; move it into or out of a pod;
@@ -232,7 +232,7 @@ The live school becomes the first `schools` row, keeping its current domain as i
 
 ## Open questions
 
-- [ ] Default subdomain format: `<slug>.eduberry.in`, or a separate domain for school sites?
+- [ ] Default subdomain format: `<slug>.edzee.in`, or a separate domain for school sites?
 - [ ] Data location: Neon has no India region; Singapore is the nearest. Does any school contract require India-only storage?
 - [ ] At what size does a school get a project of its own rather than a pod seat?
 - [ ] Retention period between "read-only" and "deleted" (suggest 90 days).
