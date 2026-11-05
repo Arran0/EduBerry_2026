@@ -1,11 +1,11 @@
 # External Integrations and Secrets
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Feature-level detail stays in the existing docs: `docs/account-email-system.md`, `docs/whatsapp-system-status.md`, `docs/gps-system-status.md`, `docs/fee-upgrade-plan.md`, `docs/payroll-upgrade-plan.md` and the README's Banking section.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Feature-level detail stays in the existing docs: `docs/account-email-system.md`, `docs/whatsapp-system-status.md`, `docs/gps-system-status.md`, `docs/fee-upgrade-plan.md`, `docs/payroll-upgrade-plan.md` and the README's Banking section.
 
 ## Summary
 
 - **Every integration keeps working on Cloudflare; one needs a design change.** Banks that require a client certificate (mutual TLS) cannot be called from a Worker with a certificate typed into the app: Workers present client certificates only through bindings uploaded ahead of time. The fix is a small bank gateway container used only for those calls.
-- **Secrets split cleanly into two kinds.** Platform secrets (one value for every school: email token, VAPID keys, encryption key, solver) become Workers Secrets. School secrets (bank, Razorpay, WhatsApp, GPS device keys) stay in each school's own database, encrypted with a platform key.
+- **Secrets split cleanly into two kinds.** Platform secrets (one value for every school: Neon API key, VAPID keys, encryption key, solver) become Workers Secrets. School secrets (bank, Razorpay, WhatsApp, GPS device keys) stay in each school's own database, in today's tables, encrypted with a platform key that never enters the database.
 - **The environment-variable fallbacks for school secrets go away.** They exist today so a single-school deployment could run without the settings screens; with one deployment for every school they would apply one school's bank to all.
 - **Webhooks move to `/hooks/<schoolId>/<provider>`**, so a school changing its domain no longer breaks bank, Razorpay or Meta callbacks.
 
@@ -30,8 +30,9 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Feature-lev
 
 | Secret | Purpose |
 | --- | --- |
-| `SESSION_PEPPER` | Mixed into session token hashes |
-| `DATA_ENCRYPTION_KEY` (versioned, e.g. `DEK_V1`, `DEK_V2`) | Encrypts school secrets at rest (AES-256-GCM) |
+| `SESSION_PEPPER` | Mixed into refresh-token hashes ([12](12-auth-and-permissions.md)) |
+| `DATA_ENCRYPTION_KEY` (versioned, e.g. `DEK_V1`, `DEK_V2`) | Encrypts school secrets, school connection strings and per-school token signing keys at rest (AES-256-GCM) |
+| `NEON_API_KEY` | Creating school projects, fetching owner credentials for migrations, reading compute state and usage ([11](11-tenancy-and-control-plane.md)) |
 | `FILE_LINK_SIGNING_KEY` | Signs short-lived file links ([15](15-files-and-media.md)) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web push for every school |
 | Email Service binding | Replaces `CLOUDFLARE_EMAIL_API_TOKEN` (the binding needs no token) |
@@ -41,16 +42,17 @@ As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Feature-lev
 
 ### School secrets (encrypted in the school database)
 
-One table, `integration_secrets`, replaces today's `payment_secrets` and `integration_secrets`:
+Today's `payment_secrets` and `integration_secrets` tables stay, with their keys (`bank_collect`, `payout`, `razorpay`, `whatsapp`, `telemetry:<sourceId>`, ...). Each secret value is stored encrypted:
 
 | Column | Meaning |
 | --- | --- |
-| `key` | `bank_collect`, `bank_payout`, `razorpay`, `whatsapp`, `gps_device:<sourceId>`, ... |
-| `ciphertext` | AES-256-GCM of the JSON secret |
+| `ciphertext` | AES-256-GCM of the JSON secret, encrypted by the Worker |
 | `key_version` | Which `DATA_ENCRYPTION_KEY` encrypted it, so keys can be rotated |
-| `updated_by`, `updated_at` | Audit |
+| `updated_by`, `updated_at` | Audit, as today |
 
-- Only server code that uses a secret can decrypt it; no API action returns a secret to the browser. Settings screens show "saved" and the last four characters, as today.
+- The key stays in Workers Secrets, so a copy of the database (a branch, a `pg_dump`, a restore) holds no usable secret.
+- The Worker reads ciphertext through `SECURITY DEFINER` functions that only `app_jobs` and the owning settings screens' save path may call; it decrypts in memory and never logs the value. No route returns a secret to the browser. Settings screens show "saved" and the last four characters, as today.
+- The importer encrypts today's values on the way in ([13](13-data-layer.md)).
 - Rotation: a job re-encrypts every row with the newest key version, school by school.
 - Non-secret configuration (endpoints, field maps, transfer modes, phone number id) stays in ordinary settings tables.
 
@@ -60,11 +62,11 @@ Today `bankClient.ts` uses Node's `https.request` because "a per-request client 
 
 | Option | How | Verdict |
 | --- | --- | --- |
-| mTLS binding per school | When an admin saves a certificate, upload it through the Cloudflare API, add a binding `BANK_CERT_<schoolId>` and redeploy | Works but couples a school setting to a platform deploy, the same problem as D1 bindings |
+| mTLS binding per school | When an admin saves a certificate, upload it through the Cloudflare API, add a binding `BANK_CERT_<schoolId>` and redeploy | Works but couples a school setting to a platform deploy |
 | Bank gateway container | A tiny Node service in Cloudflare Containers that receives the request, the decrypted certificate and key, and makes the call with `https.request`, exactly as `bankClient.ts` does now | **Recommended.** Fully dynamic, reuses today's code, runs only for banks that need mTLS, costs fractions of a cent per call |
 | Bank-side alternative | Ask the bank for an API-key or OAuth-only programme | Use where the bank offers it; then the call stays in the Worker |
 
-Bank calls are infrequent (collect setup, payout batches, status checks), so a container cold start of a few seconds is acceptable. Calls that need no certificate stay as plain `fetch` in the Worker or school object.
+Bank calls are infrequent (collect setup, payout batches, status checks), so a container cold start of a few seconds is acceptable. Calls that need no certificate stay as plain `fetch` in the Worker.
 
 Banks that allow-list caller IP addresses (the README's onboarding list mentions this) need fixed egress addresses. Workers and Containers do not have a fixed outbound IP address by default. If a bank insists on an allow-list, check Cloudflare's dedicated-egress offerings at that time, or route that bank's calls through a small fixed-IP relay. Confirm with the first bank onboarded; this is the one integration that could keep a non-Cloudflare piece.
 
@@ -84,7 +86,7 @@ Processing rules are in [14-jobs-messaging-realtime.md](14-jobs-messaging-realti
 
 | Integration | Change for the target |
 | --- | --- |
-| Bank collect and payout | Move `bankClient.ts` logic into the school's payments module; mTLS calls through the bank gateway container; the payout claim (a conditional update today) becomes a check and write in one object transaction, committed before the bank call ([35](35-bank-collections-and-payouts.md)) |
+| Bank collect and payout | `bankClient.ts` and its helpers move to the Worker as they are (they are TypeScript today); mTLS calls through the bank gateway container; the payout claim stays the conditional update in SQL it is today, committed before the bank call ([35](35-bank-collections-and-payouts.md)) |
 | Razorpay | Order creation and signature checks run in the Worker with `fetch` and WebCrypto HMAC (no Node SDK needed); the checkout script stays allowed in the CSP |
 | WhatsApp | One sender in the outbox consumer replaces the two libraries (`src/lib/whatsapp` and `src/lib/notifications/whatsapp`); per-school credentials and templates as today. The open decisions in `docs/whatsapp-system-status.md` still apply |
 | Web push | Platform VAPID keys; sending from the outbox consumer; library choice confirmed in a spike (WebCrypto supports the needed ECDH, AES-GCM and ECDSA P-256) |

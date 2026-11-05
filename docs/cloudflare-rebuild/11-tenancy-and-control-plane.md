@@ -1,11 +1,13 @@
 # Tenancy and the Control Plane
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## Summary
 
-- **Today a school is a deployment.** Which school a request belongs to is decided by which Vercel project received it and which Supabase project its environment variables point at. Starting a school means forking the repository, creating a Supabase project, running about 260 migrations by hand, setting environment variables and pointing a domain.
-- **In the target a school is a row.** One `platform` D1 database lists every school and its host names. The router Worker maps the host to a school id and calls that school's `School` object. Starting a school is an API call that takes seconds.
+- **Today a school is a deployment.** The Vercel project that receives a request, and the Supabase project its environment variables point at, decide which school the request belongs to. Starting a school means forking the repository, creating a Supabase project, running about 260 migrations by hand, setting environment variables and pointing a domain.
+- **In the target a school is a row plus a database.** One `platform` database lists every school, its host names and its Neon project. The router Worker maps the host to a school and runs the request against that school's database. Starting a school is one provisioning job that takes about a minute: create a Neon project, apply the schema, seed defaults, invite the first admin.
+- **Isolation stays as strong as today.** Each school is still its own Postgres database in its own Neon project, with its own roles, backups and restore history. The Worker only ever holds the connection string of the school named by the host.
+- **The 100-project line shapes the plan.** Neon's Launch plan holds 100 projects. Start with one project per school; before reaching about 80, move small schools into shared projects ("pods") or open a second Neon organisation ([02](02-cost-study.md)).
 - **About 20 single-school assumptions** have to go: per-deployment environment variables, a hard-coded Supabase host, a hard-coded default school name, static PWA manifest and icons, runtime URLs stored in the database, cron times fixed in UTC, and the `+91` country code. Each is listed below with its replacement.
 
 ## How tenancy works today
@@ -30,20 +32,34 @@ flowchart LR
 
 The README's "New School Deployment Checklist" is the provisioning process: fork, create a Supabase project, run migrations, set environment variables, configure the domain, seed the admin, send credentials. Nothing in the app knows that other schools exist, which is why isolation is strong today and onboarding is slow.
 
+## How tenancy works in the target
+
+```mermaid
+flowchart LR
+  ha["school-a host"] --> w
+  hb["school-b host"] --> w
+  w["Router Worker<br/>(one deployment)"] --> kv["KV host cache"]
+  kv -. miss .-> p[("platform database<br/>Neon, via Hyperdrive")]
+  w -- "school A's connection string" --> na[("Neon project A<br/>school A's Postgres")]
+  w -- "school B's connection string" --> nb[("Neon project B<br/>school B's Postgres")]
+  w --> r2["R2: schools/&lt;id&gt;/..."]
+  w --> hub["SchoolHub A / SchoolHub B<br/>(live sockets, job timer)"]
+```
+
 ## Single-school assumptions to remove
 
 | # | Assumption today | Where | Replacement |
 | --- | --- | --- | --- |
-| 1 | Database chosen by `NEXT_PUBLIC_SUPABASE_URL` / anon key / service-role key | 34 + 9 + 30 references | School chosen from the host name through `platform` |
+| 1 | Database chosen by `NEXT_PUBLIC_SUPABASE_URL` / anon key / service-role key | 34 + 9 + 30 references | School chosen from the host name; its connection string comes from `platform` |
 | 2 | Supabase host hard-coded in `images.domains` | `next.config.js` | Images served from `/files/...` on the school's own host |
 | 3 | Public site URL from `NEXT_PUBLIC_SITE_URL` or `VERCEL_PROJECT_PRODUCTION_URL` | Account emails, pay links, webhooks | The school's primary host from `platform.school_hosts` |
 | 4 | Default branding names "Muthamil Public School" | `src/lib/pageConfig.ts` (`BRANDING_DEFAULTS`, `LOGIN_DEFAULTS`) | Neutral defaults; the real name is written into the school's settings at provisioning |
 | 5 | Static PWA manifest ("EduBerry", fixed icons) | `public/manifest.json`, `public/*.png` | `/manifest.webmanifest` generated per school from its branding |
 | 6 | Favicon route trusts only "our Supabase Storage" | `src/app/api/favicon/route.ts` | Trust only the school's own R2 prefix |
-| 7 | Drain URL and cron secret saved into the database the first time a screen is opened | `site_settings.fee_runtime`, `transport_runtime_config`, `wa_runtime_config` | Not needed: jobs run inside the school object and send to Queues |
-| 8 | Cron schedules fixed in UTC per project (fee autogen 02:00 IST, reminders 10:00 IST, transport materialise 03:00 IST) | `cron.job` | Each school's own jobs table, in the school's time zone |
+| 7 | Drain URL and cron secret saved into the database the first time a screen is opened | `site_settings.fee_runtime`, `transport_runtime_config`, `wa_runtime_config` | Not needed: queue consumers drain the outboxes ([14](14-jobs-messaging-realtime.md)) |
+| 8 | Cron schedules fixed in UTC per project (fee autogen 02:00 IST, reminders 10:00 IST, transport materialise 03:00 IST) | `cron.job` | The school's `SchoolHub` timer, in the school's time zone, gathered into a few windows a day so the database can sleep |
 | 9 | Country code 91 added to every 10-digit number | `normalize_msisdn(p_default_cc DEFAULT '91')` | Per-school setting `phone.default_country_code` |
-| 10 | Time zone per school stored in `site_settings.attendance_config.timezone`, default `Asia/Kolkata`; one fee engine file hard-codes `Asia/Kolkata` | `attendance_timezone()`, `src/lib/fees/engine/dates.ts` | One school setting `school.timezone`, read by every module |
+| 10 | Time zone per school stored in `site_settings.attendance_config.timezone`, default `Asia/Kolkata`; one fee engine file hard-codes `Asia/Kolkata` | `attendance_timezone()`, `src/lib/fees/engine/dates.ts` | One school setting `school.timezone`, read by every module and by the hub |
 | 11 | Currency and number format: `en-IN` in 37 files, `₹`/`INR` in 73 files | Front end | Keep as the default; read locale and currency from school settings so a non-Indian school is a setting, not a code change |
 | 12 | Bank, Razorpay, WhatsApp, Smart Collect, payout and Cashfree credentials fall back to environment variables | `serverSecrets.ts`, `serverIntegrationSecrets.ts`, `paymentSecrets.ts` | School secrets only, stored encrypted in the school database ([17](17-integrations-and-secrets.md)) |
 | 13 | Webhook URLs on the school's domain (`/api/fees/upi/webhook`, etc.) | Bank and Meta dashboards | `/hooks/<schoolId>/<provider>` on any EduBerry host; a domain change no longer breaks them |
@@ -53,47 +69,69 @@ The README's "New School Deployment Checklist" is the provisioning process: fork
 | 17 | Maps keys (`NEXT_PUBLIC_MAPBOX_*`) per deployment | Transport maps | One platform key, or per-school override in settings |
 | 18 | Solver URL and shared secret per deployment | `SOLVER_INTERNAL_URL`, `SOLVER_SHARED_SECRET` | One `SolverContainer` binding for all schools |
 | 19 | VAPID key pair per deployment | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | One platform key pair; subscriptions are already per user |
-| 20 | Migrations applied by hand per project | `supabase-migrations/` | Migrations run inside each school object on wake, plus a sweep after deploy |
+| 20 | Migrations applied by hand per project | `supabase-migrations/` | `tools/migrate` applies `db/migrations` to every school database in turn and records each in `platform.school_migrations` ([13](13-data-layer.md)) |
 | 21 | First admin seeded by hand; `STUDENT_PASSWORD` in a bulk script | `create-users-properly.js`, `scripts/bulk-create-students.js` | Provisioning creates the first admin and emails an invite |
 
-Settings that already live in each school's database (branding, page themes, attendance rules, fee settings, WhatsApp templates and the rest of `site_settings`) are per-school data, not assumptions. They move into the school's own tables unchanged.
+Settings that already live in each school's database (branding, page themes, attendance rules, fee settings, WhatsApp templates and the rest of `site_settings`) are per-school data, not assumptions. They stay in the school's own tables unchanged.
 
-## The `platform` database (D1)
+## The `platform` database
 
-Small, shared and read on almost every request (through a cache). It never holds school data such as students, marks or money.
+A small Neon project of its own, in the same region as the schools, reached through Hyperdrive (one configuration, free on Workers Paid). It is read on cache misses and by the platform console. It never holds school data such as students, marks or money.
 
 | Table | Purpose | Key columns |
 | --- | --- | --- |
-| `schools` | One row per school | `id` (stable id, also the Durable Object name), `slug`, `display_name`, `status` (`provisioning`, `active`, `suspended`, `read_only`, `offboarding`, `deleted`), `plan_id`, `timezone`, `country`, `created_at`, `data_location_hint` |
+| `schools` | One row per school | `id` (stable uuid, also the `SchoolHub` name and the R2 prefix), `slug`, `display_name`, `status` (`provisioning`, `active`, `suspended`, `read_only`, `offboarding`, `deleted`), `plan_id`, `timezone`, `country`, `created_at` |
+| `school_databases` | Where the school's data lives | `school_id`, `pod_id` (null for a project of its own), `neon_project_id`, `neon_branch_id`, `neon_endpoint_id`, `db_name`, `region`, `cu_min`, `cu_max`, `schema_version` |
+| `school_db_credentials` | Connection strings the Worker uses | `school_id`, `purpose` (`app` for user requests, `jobs` for server-only work), `conn_enc` (encrypted with a platform key), `key_version`, `rotated_at` |
+| `db_pods` | Shared Neon projects holding several small schools (later) | `id`, `neon_project_id`, `region`, `cu_min`, `cu_max`, `school_count` |
 | `school_hosts` | Every host name that serves a school | `host` (unique), `school_id`, `kind` (`subdomain`, `custom`), `is_primary`, `cf_custom_hostname_id`, `verification_status` |
 | `plans` | What a plan allows | `id`, `name`, `max_users`, `max_storage_gb`, `modules` (fees, payroll, transport, timetable, exams...), `price` |
 | `school_features` | Per-school overrides and feature flags | `school_id`, `key`, `value` |
-| `provisioning_runs` | Steps of creating, migrating, exporting or deleting a school | `id`, `school_id`, `kind`, `step`, `status`, `error`, `started_at`, `finished_at` |
+| `provisioning_runs` | Steps of creating, moving, exporting or deleting a school | `id`, `school_id`, `kind`, `step`, `status`, `error`, `started_at`, `finished_at` |
+| `school_migrations` | Which migrations each school database has | `school_id`, `version`, `checksum`, `applied_at`, `status`, `error` |
 | `platform_users` | EduBerry staff who run the platform | `id`, `email`, `password_hash`, `role` (`owner`, `support`, `finance`), `mfa_secret` |
 | `platform_sessions` | Their sessions (separate from school sessions) | `token_hash`, `user_id`, `expires_at` |
 | `support_grants` | Time-limited, audited access by EduBerry support into a school | `school_id`, `platform_user_id`, `reason`, `granted_by`, `expires_at` |
 | `platform_audit` | Every platform-staff action | `actor`, `action`, `school_id`, `details`, `at` |
-| `school_usage_daily` | Rolled up from Analytics Engine for plans and billing | `school_id`, `date`, `requests`, `active_users`, `rows_written`, `storage_bytes`, `files_bytes` |
+| `school_usage_daily` | Rolled up from Analytics Engine and the Neon consumption API, for plans and billing | `school_id`, `date`, `requests`, `active_users`, `cu_hours`, `db_bytes`, `files_bytes` |
+
+Owner (migration) credentials are not stored here. `tools/migrate` and provisioning fetch them from the Neon API when they run, with the platform's Neon API key.
 
 ## Finding the school for a request
 
 ```mermaid
 flowchart TD
-  req["Request to host H"] --> cache{"H in isolate cache<br/>(≤ 60 s old)?"}
-  cache -- yes --> st
-  cache -- no --> d1["SELECT school_id, status FROM school_hosts JOIN schools<br/>WHERE host = H"]
-  d1 --> found{"found?"}
+  req["Request to host H"] --> mem{"H in isolate memory<br/>(≤ 10 s old)?"}
+  mem -- yes --> st
+  mem -- no --> kv{"H in KV<br/>(≤ 60 s old)?"}
+  kv -- yes --> st
+  kv -- no --> pdb["platform database via Hyperdrive:<br/>school, status, plan, encrypted app connection string"]
+  pdb --> found{"found?"}
   found -- no --> unknown["Unknown host:<br/>marketing site or 404"]
-  found -- yes --> st{"status"}
-  st -- active --> go["Call School object"]
+  found -- yes --> put["write to KV"] --> st{"status"}
+  st -- active --> go["Decrypt the connection string;<br/>run the request against the school's database"]
   st -- read_only/suspended --> limited["Allow sign-in and reads;<br/>block writes with a clear message"]
   st -- provisioning --> wait["'Your school is being set up' page"]
   st -- deleted --> gone["410 Gone"]
 ```
 
-- The lookup result is cached in the Worker isolate's memory for about a minute, so the D1 read happens a few times a minute per Cloudflare location, not per request.
-- Status changes (suspend, reactivate) take effect within the cache lifetime; that is acceptable for every status change EduBerry makes.
+- The KV entry holds the connection string still encrypted; the Worker decrypts it in memory with a key from Workers Secrets and never logs it.
+- Status changes (suspend, reactivate) delete the KV key and take effect within about a minute everywhere; that is acceptable for every status change EduBerry makes.
 - `www`, `app` and the bare platform domain are reserved for EduBerry's own pages and the platform console.
+
+## Inside each school database
+
+Each school's Postgres keeps Supabase's role names, because 699 policies and many grants name them:
+
+| Role | Login | Used by |
+| --- | --- | --- |
+| Owner (`neondb_owner` or a named owner) | Yes | Migrations and provisioning only; owns the tables and the `SECURITY DEFINER` functions |
+| `authenticated`, `anon` | No | Every user request: the Worker's login role switches to one of these for each transaction ([12](12-auth-and-permissions.md)) |
+| `app_worker` | Yes | The `app` connection string. Member of `authenticated` and `anon`; owns nothing and has no `BYPASSRLS` |
+| `app_jobs` | Yes | The `jobs` connection string. May execute the job and webhook functions and nothing else |
+| `service_role` | No | Kept so existing grants and checks still compile; no login role is a member of it |
+
+The Neon Data API (phase 1) connects with its own role and switches to `authenticated` from the verified token, so the same policies apply ([16](16-frontend-and-api.md)).
 
 ## Domains
 
@@ -106,39 +144,56 @@ A school can have several hosts; exactly one is primary, and that is the one use
 
 ## Provisioning a school
 
-One function (`provisionSchool`) runs these steps, records each in `provisioning_runs`, and can be re-run safely from any step.
+One provisioning job, run from the `jobs` queue, carries out these steps, records each in `provisioning_runs`, and can be re-run safely from any step.
 
 | Step | What happens | Where |
 | --- | --- | --- |
-| 1 | Insert `schools` row with status `provisioning`; reserve the slug | platform D1 |
-| 2 | Insert the subdomain into `school_hosts`; if a custom domain was given, create the Cloudflare for SaaS custom hostname and store its id | platform D1, Cloudflare API |
-| 3 | `School.call("system.provision", {...})`: create every table at the current schema version, seed defaults (academic year, roles and permission grants, neutral page themes, attendance rules, fee permission presets, message templates), write the school's name, logo, time zone, country and contact email | School object |
-| 4 | Create the first admin account and send the invite email from the school's branding | School object, Email Service |
-| 5 | Set status `active` | platform D1 |
+| 1 | Insert the `schools` row with status `provisioning`; reserve the slug | platform database |
+| 2 | Insert the subdomain into `school_hosts`; if a custom domain was given, create the Cloudflare for SaaS custom hostname and store its id | platform database, Cloudflare API |
+| 3 | Create the Neon project: region `aws-ap-southeast-1` (Singapore), Postgres 17, autoscaling range from the plan (for example 0.25–0.5 CU), scale to zero on. Store the project, branch and endpoint ids. In a pod, create a database in the pod's project instead | Neon API |
+| 4 | Apply the baseline schema (extensions, roles, tables, functions, triggers, policies, grants) and every later migration; record them in `school_migrations` | School database, as owner |
+| 5 | Seed defaults (academic year, roles and permission grants, neutral page themes, attendance rules, fee permission presets, message templates); write the school's name, logo, time zone, country and contact email | School database |
+| 6 | Create the `app_worker` and `app_jobs` passwords, encrypt their connection strings and store them in `school_db_credentials` | Neon API, platform database |
+| 7 | Create the first admin account and send the invite email from the school's branding | School database, Email Service |
+| 8 | Set status `active`; the hub builds its job schedule on first use | platform database |
 
-Self-serve signup (checkout) and the platform console both call the same function. The email doc's "Checkout creates the school and emails its first admin" row is this flow.
+Self-serve signup (checkout) and the platform console both start the same job. The email doc's "Checkout creates the school and emails its first admin" row is this flow.
+
+## Projects, pods and the 100-project limit
+
+| Stage | Layout | When |
+| --- | --- | --- |
+| Launch | One Neon project per school, Launch plan | Up to about 80 schools |
+| Growth | Small schools (under about 2,000 users) moved into pods of about 20 per project; large schools keep a project of their own | Before 100 projects; halves compute for small schools ([02](02-cost-study.md)) |
+| Scale | A second Neon organisation on Launch, or the Scale plan (1,000 projects, twice the compute price) | When pods are not enough |
+
+In a pod each school still has its own database, its own login roles and its own `auth.users`. `CONNECT` on each database is revoked from `PUBLIC` and granted only to that school's login roles, so one school's credentials cannot open another's database. What a pod gives up: restore is per project, so restoring one school in a pod means restoring the project to a branch and copying that school's database back with `pg_dump`; and the schools share one compute, so one busy school slows its neighbours.
+
+Moving a school between a project and a pod is a provisioning run: put the school in `read_only`, `pg_dump` from the old database, `pg_restore` into the new one, switch `school_databases` and the credentials, clear the KV key, set `active`. For a 10,000-user school this is a few minutes.
 
 ## Suspending, exporting and deleting a school
 
 | Action | Effect |
 | --- | --- |
-| Suspend | Status `suspended`: users can sign in and read; every write returns a "school suspended" message. Alarms keep running only for clean-up jobs |
+| Suspend | Status `suspended`: users can sign in and read; every write returns a "school suspended" message. The hub runs only clean-up jobs |
 | Read-only (end of contract) | Same as suspended, but also offered an export |
-| Export | A job walks every table of the school object in pages and writes newline-delimited JSON plus a manifest to `exports/<schoolId>/<date>/` in R2, together with a copy of the school's files list. The school admin downloads it from a signed link |
-| Delete | After the agreed retention period: delete the school object's storage (`deleteAll()`), delete the R2 prefix, remove custom hostnames, mark the `schools` row `deleted` and keep only the platform audit trail |
+| Export | A job in a container runs `pg_dump` of the school database into `exports/<schoolId>/<date>/` in R2, along with one CSV per table and a manifest of the school's files. The school admin downloads it from a signed link |
+| Delete | After the agreed retention period: delete the Neon project (or the school's database in its pod), delete the R2 prefix, remove custom hostnames, mark the `schools` row `deleted` and keep only the platform audit trail |
+| Restore (support) | Neon's point-in-time restore on the school's project, up to 7 days back on Launch, without touching any other school ([13](13-data-layer.md)) |
 
 ## Platform console
 
 A separate area on the platform domain (`console.eduberry.in`) for EduBerry staff only:
 
-- schools list with status, plan, users, storage, last activity, error rate;
-- create, suspend, reactivate, export, delete a school;
+- schools list with status, plan, users, storage, compute hours, last activity, error rate;
+- create, suspend, reactivate, export, delete a school; move it into or out of a pod;
 - custom-domain status and re-verification;
-- feature flags and plan overrides per school;
+- feature flags and plan overrides per school, including its autoscaling range;
 - support access: request a time-limited grant into one school, which creates a session in that school flagged as support and logs every action to both the school's audit log and `platform_audit`;
-- migration sweep status after each deploy.
+- migration status per school after each deploy;
+- a "never sleeps" list: schools whose compute stayed awake overnight, which is the main cost leak.
 
-Platform staff never have standing access to school data. Every look inside a school goes through a support grant.
+Platform staff never have standing access to school data. Every look inside a school goes through a support grant; nobody uses the owner role for support work.
 
 ## People in more than one school
 
@@ -146,11 +201,12 @@ Accounts belong to one school, as they do today (each school is its own Supabase
 
 ## Moving the current school
 
-The live school becomes the first `schools` row, keeping its current domain as its primary custom host. Its data moves from Supabase into its school object through the importer described in [13-data-layer.md](13-data-layer.md) and the cutover runbook in [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md).
+The live school becomes the first `schools` row, keeping its current domain as its primary custom host. Its Supabase database is dumped and restored into a new Neon project, its accounts are copied into its own `auth.users` with their password hashes, and its files are copied to R2: [13-data-layer.md](13-data-layer.md) and the cutover runbook in [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md).
 
 ## Open questions
 
 - [ ] Default subdomain format: `<slug>.eduberry.in`, or a separate domain for school sites?
-- [ ] Data location: does any school contract require India-only storage? Neither D1 nor Durable Objects has an India jurisdiction today.
+- [ ] Data location: Neon has no India region; Singapore is the nearest. Does any school contract require India-only storage?
+- [ ] At what size does a school get a project of its own rather than a pod seat?
 - [ ] Retention period between "read-only" and "deleted" (suggest 90 days).
 - [ ] Which modules are plan-gated (fees, payroll, transport, timetable solver, WhatsApp)?

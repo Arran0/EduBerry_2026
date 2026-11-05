@@ -1,12 +1,12 @@
 # Files and Media: Supabase Storage to R2
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)); files go to R2 either way.
 
 ## Summary
 
 - **All files move to one R2 bucket**, with every key under `schools/<schoolId>/`. R2 has no egress fees, and the first 10 GB a month is free.
 - **Files become private by default.** Today most files (coursework, submissions, discussions, avatars, banners) sit in a public bucket and are served by a permanent public URL. Leave, task, subtask and announcement attachments moved to a private bucket on 28 Oct 2026 and are opened through one-hour signed links. In the target every file is served by the router Worker after a permission check, or by a short-lived signed link.
-- **Uploads go through the Worker**, which checks size, type and permission, then writes to R2. The browser keeps today's image compression (≤ 1600 px, WebP) before upload.
+- **Uploads go through the Worker**, which checks size and type, asks the school database whether this person may attach a file to that record, then writes to R2. The browser keeps today's image compression (≤ 1600 px, WebP) before upload.
 - **Database rows store file keys, not URLs**, so a domain change or a move between storage products never breaks a link again.
 - **One existing bug surfaced in the inventory and is fixed:** subtask attachments uploaded to a `subtask-attachments` bucket that never existed; since 28 Oct 2026 they go to the private bucket.
 
@@ -62,7 +62,7 @@ eduberry-files/
     feedback/<feedbackId>/...
     exports/<date>/...              spreadsheet and PDF exports kept for download
   exports/<schoolId>/<date>/        offboarding exports
-  backups/<schoolId>/<date>/        nightly and weekly backups
+  backups/<schoolId>/<date>/        weekly pg_dump copies of the school database ([13](13-data-layer.md))
   archive/<schoolId>/<year>/        archived logs (GPS, location attempts)
 ```
 
@@ -74,27 +74,27 @@ The `schoolId` part is always added by the server from the request's host. The b
 sequenceDiagram
   participant B as Browser
   participant W as Router Worker
-  participant S as School object
+  participant N as School database
   participant R as R2
   B->>B: compress image (≤1600 px WebP), check policy
   B->>W: POST /api/files (multipart: purpose, ownerId, file)
-  W->>S: call('files.authorizeUpload', purpose, ownerId, size, type)
-  S-->>W: allowed + key (e.g. leave/<id>/<uuid>.webp)
+  W->>N: select file_authorize_upload(purpose, ownerId, size, type) as the user
+  N-->>W: allowed + key (e.g. leave/<id>/<uuid>.webp); files row inserted as pending
   W->>R: put(schools/<schoolId>/<key>, body, metadata)
-  W->>S: call('files.recordUpload', key, size, type, ownerId)
+  W->>N: select file_mark_uploaded(key)
   W-->>B: { key, name }
 ```
 
-- `purpose` (avatar, leave attachment, coursework, ...) decides the folder, size limit and who may upload, through the same permission module as everything else.
+- `purpose` (avatar, leave attachment, coursework, ...) decides the folder, size limit and who may upload. `file_authorize_upload` applies the same rules as the owning record's own policies, so a person can attach a file only to a record they may write.
 - Files over 50 MB (none today) would use R2 multipart upload with a presigned URL; not needed for launch.
-- A `files` table in the school database records each object (key, owner record, size, type, uploaded_by, uploaded_at), which makes storage usage per school and orphan clean-up simple.
+- A `files` table in the school database records each object (key, owner record, size, type, uploaded_by, uploaded_at, status), which makes storage usage per school and orphan clean-up simple. The nightly job deletes rows left `pending` for a day and their objects.
 
 ### Download
 
 | Kind | How it is served |
 | --- | --- |
 | Public school assets (`public/site/...`) | `GET /files/public/...` on the school host; cacheable for a year; no session needed (login page needs the logo) |
-| Everything else | `GET /files/<key>` on the school host: the Worker checks the session and asks the school object whether this person may read this file's owning record, then streams it from R2 with `Cache-Control: private` |
+| Everything else | `GET /files/<key>` on the school host: the Worker verifies the access token and asks the school database, with one SQL call as the user (`can_read_file(key)`, generalising today's `can_read_private_file`), whether this person may read the file's owning record, then streams it from R2 with `Cache-Control: private` |
 | Links that must work without a session (WhatsApp messages, emails) | Short-lived signed links: `/files/s/<key>?exp=...&sig=...` with an HMAC over key and expiry, valid for hours, not forever |
 
 Because rows store keys, the front end builds `/files/<key>` itself; no row ever contains a host name.
@@ -110,7 +110,7 @@ Keep client-side compression. Optional later: Cloudflare Images transformations 
 ## Moving existing files
 
 1. For each object in each Supabase bucket of a school, copy it to `schools/<schoolId>/<new key>` using the path mapping in the tables above (most paths keep their tail unchanged).
-2. Rewrite every URL column and every URL inside JSON settings to the new key (the importer in [13](13-data-layer.md) does this in the same pass).
+2. Rewrite every URL column and every URL inside JSON settings to the new key (the adaptation step of the import in [13](13-data-layer.md) does this with SQL updates).
 3. Record each copied file in the `files` table.
 4. Verify: object count and total bytes per prefix equal; every key referenced by a row exists in R2; list rows that reference files that never existed (the failing subtask uploads).
 

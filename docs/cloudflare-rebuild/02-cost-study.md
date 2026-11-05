@@ -48,7 +48,7 @@ Neon bills `compute size × hours awake`. A compute suspends after 5 idle minute
 
 Resulting CU-hours per school a month: about 83 (1,000 users), 167 (3,000) and 250 (10,000).
 
-The biggest single risk to these numbers is **anything that keeps a compute awake when nobody is using the app**: a job every few minutes all night, a monitoring ping, an open connection. The design moves every scheduled job onto Cloudflare Cron Triggers and gathers them into windows, so that a school's database is idle from evening to morning ([14](14-jobs-messaging-realtime.md)). If a school's compute never slept, a 10,000-user school would cost about $58 a month instead of $30.
+The biggest single risk to these numbers is **anything that keeps a compute awake when nobody is using the app**: a job every few minutes all night, a monitoring ping, an open connection. The design moves every scheduled job out of Postgres onto each school's hub timer and gathers them into windows, so that a school's database is idle from evening to morning ([14](14-jobs-messaging-realtime.md)). If a school's compute never slept, a 10,000-user school would cost about $58 a month instead of $30.
 
 ## Price sheet used
 

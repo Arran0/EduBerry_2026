@@ -4,9 +4,9 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). The 27 Oct version of t
 
 ## Summary
 
-**Decision: each school keeps its own Postgres database, moved from Supabase to Neon, and everything else runs on Cloudflare: one Workers app for every school, the static web app, R2 for files, Queues and Cron Triggers for background work, and a small Durable Object per school for live updates. Supabase, including Supabase Auth, goes away entirely.**
+**Decision: each school keeps its own Postgres database, moved from Supabase to Neon, and everything else runs on Cloudflare: one Workers app for every school, the static web app, R2 for files, Queues for background work, and a small Durable Object per school for live updates and the job timer. Supabase, including Supabase Auth, goes away entirely.**
 
-- **Cloudflare can replace Supabase, but only by rewriting the database.** The Cloudflare-only design (a SQLite Durable Object per school) works, and is the cheapest to run, but it moves 268 SQL functions, 171 triggers and 699 row-level security policies into TypeScript, and changes every type and query. That rewrite is the single biggest risk in the whole rebuild.
+- **Cloudflare can replace Supabase, but only by rewriting the database.** The Cloudflare-only design (a SQLite Durable Object per school) works, and is the cheapest to run, but it moves 304 SQL functions, 172 triggers and 699 row-level security policies into TypeScript, and changes every type and query. That rewrite is the single biggest risk in the whole rebuild.
 - **Neon keeps the database as it is.** The tables, functions, triggers and policies move with `pg_dump` and keep working. What changes is around the database: sign-in, files, scheduled jobs, live updates and the server routes. Eleven Supabase-specific hooks inside the database need replacing (listed below), not 1,100 objects.
 - **It costs more per school than the Cloudflare-only design, and less than Supabase today.** From the [cost study](02-cost-study.md), per school per month including Cloudflare:
   - today's school (about 1,200 users): **about $14**, against $25 on Supabase now;
@@ -16,7 +16,7 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). The 27 Oct version of t
 - **Four things the checks found that shape the design:**
   1. **Neon has no Indian region.** The nearest is Singapore (`aws-ap-southeast-1`). Requests from India add about 30–60 ms per database round trip, and school data would be stored outside India; confirm that no school contract forbids it.
   2. **Hyperdrive allows 25 configurations per account**, so it cannot give each school its own pool. Workers reach each school's database with Neon's serverless driver over HTTPS, using a connection string looked up per request.
-  3. **`pg_cron` runs only while a Neon compute is awake**, which would stop the database scaling to zero. Scheduled jobs move to Cloudflare Cron Triggers, which call the same SQL functions.
+  3. **`pg_cron` runs only while a Neon compute is awake**, which would stop the database scaling to zero. Scheduled jobs move to each school's Durable Object hub, whose timer queues them to a Worker that calls the same SQL functions, gathered into windows so the database can sleep.
   4. **Neon's Launch plan holds 100 projects.** One project per school works up to 100 schools; past that, either the Scale plan (compute price doubles) or pods of several schools' databases per project.
 
 ## What stays and what changes
@@ -25,15 +25,15 @@ Counts are from the live database (`mps-web`, read 5 Nov 2026).
 
 | Area | Today | Under Neon |
 | --- | --- | --- |
-| Tables, views, enums, indexes | 217 tables, 17 views, 37 enums, 879 indexes | Unchanged |
-| Functions and triggers | 268 functions, 171 triggers | Unchanged except the 6 that touch Supabase internals (below) |
+| Tables, views, enums, indexes | 221 tables, 17 views, 37 enums, 888 indexes | Unchanged |
+| Functions and triggers | 304 functions, 172 triggers | Unchanged except the 4 that call `pg_net` (below) |
 | Row-level security | 699 policies | Unchanged; `auth.uid()` is provided by a small shim fed by our own sign-in |
 | Browser to database | supabase-js from the browser, 126 files | Phase 1: Neon's Data API (PostgREST syntax) with the same queries; phase 2: one call per screen through the Worker ([16](16-frontend-and-api.md)) |
 | Server code | 57 Next.js API routes on Vercel | Worker routes |
 | Login | Supabase Auth, 1,178 accounts, bcrypt hashes | EduBerry's own accounts in each school's database ([12](12-auth-and-permissions.md)) |
 | Files | Supabase Storage, 2 buckets | R2 ([15](15-files-and-media.md)) |
 | Live updates | Supabase Realtime on 6 tables | A Durable Object hub per school with WebSockets ([14](14-jobs-messaging-realtime.md)) |
-| Scheduled jobs | 15 `pg_cron` jobs, 3 with `pg_net` | Cloudflare Cron Triggers and Queues calling the same functions |
+| Scheduled jobs | 18 `pg_cron` jobs, 5 of them every minute; 3 drains through `pg_net` | The hub's timer and Queues calling the same functions ([14](14-jobs-messaging-realtime.md)) |
 | Timetable solver | Python on Vercel | Cloudflare Containers |
 
 The Supabase-specific hooks inside the database, from the live catalogue:
@@ -42,9 +42,9 @@ The Supabase-specific hooks inside the database, from the live catalogue:
 | --- | --- | --- |
 | `auth.uid()` in 155 policies and 99 functions | RLS and helpers such as `get_user_role()` | A shim schema `auth` with `uid()` reading the user id our sign-in sets for each request; nothing in the policies changes |
 | `auth.jwt()` in 2 functions | `get_student_edu_dashboard`, `get_student_edu_standings` | The same shim returns the request's claims |
-| `auth.users` | 4 foreign keys (`profiles`, `announcement_likes`, `announcement_reads`, `push_subscriptions`), trigger `on_auth_user_created` → `handle_new_user`, function `sync_role_to_auth_metadata` | Our `auth.users` table in each school's database, keyed by the same ids; the trigger stays; the metadata sync is dropped |
-| `pg_net` in 3 functions | `fee_kick_drain`, `wa_kick_drain`, `transport_kick_drain` | Removed; Queues consumers drain the outboxes ([14](14-jobs-messaging-realtime.md)) |
-| `pg_cron` | 15 jobs | Cron Triggers |
+| `auth.users` | 4 foreign keys (`profiles`, `announcement_likes`, `announcement_reads`, `push_subscriptions`), trigger `on_auth_user_created` → `handle_new_user`, function `sync_role_to_auth_metadata` | Our `auth.users` table in each school's database, keyed by the same ids and column names; the trigger and the metadata sync stay unchanged |
+| `pg_net` in 4 functions | `fee_kick_drain`, `wa_kick_drain`, `transport_kick_drain`, `cleanup_net_responses` | Removed; Queues consumers drain the outboxes ([14](14-jobs-messaging-realtime.md)) |
+| `pg_cron` | 18 jobs | The hub's timer, through the `jobs` queue |
 | `supabase_vault` | Installed, used by no function | Dropped |
 | `storage.objects` policies | Storage buckets | R2 behind the Worker's permission checks |
 | Realtime publication | 6 tables | Writes on those tables publish to the school's hub |
@@ -98,7 +98,7 @@ Extensions in use that Neon supports: `pgcrypto`, `uuid-ossp`, `btree_gist`, `pg
 | R9, R10 | ✔ | ✔ | ✔ | ✔ | ✔ |
 | R11 Growth | ✔ no practical size cap | ✔ | △ 10 GB per object, archive old years | △ 10 GB | ✔ |
 | R12 No Supabase | ✔ | ✔ | ✔ | ✔ | ✔ |
-| R13 Smallest rewrite | ✔ database moves as is | ✔ | ✘ every function, trigger and policy rewritten | ✘ same | ✘ `school_id` on 217 tables and 699 policies |
+| R13 Smallest rewrite | ✔ database moves as is | ✔ | ✘ every function, trigger and policy rewritten | ✘ same | ✘ `school_id` on 221 tables and 699 policies |
 
 Only G and H meet R13. G is chosen to start, because it gives each school its own restore and its own compute, and needs no change to the database at all. H is the cost lever for later (§ Option H).
 
@@ -121,7 +121,7 @@ flowchart LR
   hub["Durable Object hub per school<br/>live updates over WebSockets"]
   r2[("R2<br/>files under schools/&lt;id&gt;/")]
   q["Queues<br/>WhatsApp, push, email, webhooks"]
-  cron["Cron Triggers<br/>scheduled jobs"]
+  cron["Hub timer<br/>scheduled jobs"]
   browser --> route
   route --> kv
   kv -. miss .-> plat
@@ -130,7 +130,7 @@ flowchart LR
   route --> r2
   route --> hub
   route --> q
-  cron --> q
+  hub --> cron --> q
   q --> pga
 ```
 
@@ -179,7 +179,7 @@ It remains the cheapest to run (about $13 a month for a 10,000-user school, abou
 - **A. D1 per school:** no interactive transactions, a binding and redeploy per school, a round trip per query. Rejected.
 - **B / C. Shared or sharded D1:** 10 GB cap, one query at a time for every school, no row-level security. Rejected.
 - **E. Workers for Platforms + D1:** keeps D1's limits and adds $25 a month and an upload per school per release. Rejected.
-- **F. One shared Postgres with `school_id`:** cheap compute, but adding `school_id` to 217 tables and every policy is a rewrite of its own, one mistake leaks across schools, and a restore rolls back everyone. Rejected.
+- **F. One shared Postgres with `school_id`:** cheap compute, but adding `school_id` to 221 tables and every policy is a rewrite of its own, one mistake leaks across schools, and a restore rolls back everyone. Rejected.
 
 ## What replaces each Supabase and Vercel piece
 
@@ -195,7 +195,7 @@ It remains the cheapest to run (about $13 a month for a 10,000-user school, abou
 | Supabase Auth | EduBerry's own accounts in each school's database | bcrypt hashes import as they are |
 | Supabase Storage | R2, keys prefixed by school | [15](15-files-and-media.md) |
 | Supabase Realtime | Durable Object hub per school | |
-| `pg_cron` | Cron Triggers fanned out through a queue | |
+| `pg_cron` | The hub's timer per school, through the `jobs` queue; a Cron Trigger only as a watchdog | [14](14-jobs-messaging-realtime.md) |
 | `pg_net` | Queues consumers | |
 | `payment_secrets` table | Stays, encrypted at rest with a key held in Workers Secrets | [17](17-integrations-and-secrets.md) |
 | Python solver on Vercel | Cloudflare Containers | |
@@ -211,7 +211,7 @@ It remains the cheapest to run (about $13 a month for a 10,000-user school, abou
 | S4 | How fast are screens from India to Singapore? | Home, attendance and the fee counter answer in under 300 ms at the 95th percentile through the Worker |
 | S5 | Does a 10,000-user school fit its compute? | Synthetic 10,000-user data; 100 requests a second for 10 minutes; autoscaling stays under 2 CU; no pool exhaustion |
 | S6 | Do old passwords work? | Imported bcrypt hashes sign in and re-hash on success |
-| S7 | Does a school scale to zero at night? | With jobs on Cron Triggers, the compute is suspended from 21:00 to 06:00 except for the nightly job window |
+| S7 | Does a school scale to zero at night? | With jobs on the hub's timer, the compute is suspended from 21:00 to 06:00 except for the nightly job window |
 | S8 | Does a restore touch only one school? | Restore one school's project to an hour ago; others untouched; time to restore recorded |
 
 If S3 fails, phase 1 goes straight to Worker endpoints for the screens that need it. If S4 fails, move the heaviest screens to single SQL functions first.

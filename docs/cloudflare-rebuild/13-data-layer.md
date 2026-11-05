@@ -1,167 +1,148 @@
-# Data Layer: Postgres to SQLite
+# Data Layer: Supabase Postgres to Neon Postgres
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). The full live schema is in [reference/live-schema.md](reference/live-schema.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The full live schema is in [reference/live-schema.md](reference/live-schema.md). The design is a Neon Postgres project per school ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## Summary
 
-- **Each school's data moves from a Supabase Postgres project into the SQLite database inside its `School` object.** Tables, columns and ids keep their names and values wherever possible, so the section docs can translate table by table and the importer can copy rows straight across.
-- **Most of the schema translates mechanically.** The hard parts are money (Postgres `numeric` must become whole paise, never floating point), timestamps (one convention), 17 array columns, 4 exclusion constraints, and the 268 functions and 171 triggers, which become TypeScript in each section's module.
-- **Migrations run inside each school object**, checked on every wake and pushed to all schools by a sweep after each deploy.
-- **The 10 GB ceiling is handled by archiving closed academic years** into per-year archive objects that stay queryable, so the live database holds roughly the current and previous year.
-- **Backups:** 30 days of point-in-time recovery comes free; nightly exports to R2 add long-term copies.
+- **Each school's data moves from a Supabase Postgres 17 database to a Neon Postgres 17 database, as it is.** Tables, column types, ids, money in `numeric`, functions, triggers, policies and indexes move with `pg_dump` and `pg_restore`. No type map, no paise conversion and no rewrite of the business logic.
+- **The work is the Supabase-specific hooks inside the database.** Eleven of them have to be replaced: `auth.uid()` and `auth.jwt()`, `auth.users`, the Supabase roles, the `extensions` schema, `pg_net` in four functions, 18 `pg_cron` jobs, the realtime publication, storage policies and URLs, and the unused vault. Each is listed below.
+- **Migrations stay plain SQL files**, continuing `supabase-migrations/`. A small runner, `tools/migrate`, applies them to every school database in turn. Every release is first tried on a copy-on-write Neon branch of every school.
+- **Size is not a ceiling any more.** A 10,000-user school adds about 2 GB a year, which costs about $0.70 a month more each year. Archiving is optional and done to keep the working set (and so the compute size) small, not to fit a cap.
+- **Backups:** Neon's point-in-time restore covers each school separately, 7 days back on Launch and 30 on Scale. Weekly `pg_dump` copies to R2 keep a long-term record.
 
-## What has to be translated
+## What moves
 
-From the live database (27 Oct 2026):
+From the live database on 5 Nov 2026:
 
-| Object | Count | Notes |
+| Object | Count | Moves |
 | --- | --- | --- |
-| Tables | 217 | 2 are obsolete (`timetable_period_slot_times_backup`, first-generation `school_fees`/`school_fee_payments` are empty) |
-| Columns by type | uuid 736, text 613, timestamptz 417, numeric 138, boolean 113, date 105, integer 98, jsonb 62, enum 53, smallint 43, double 40, array 17, real 13, bigint 11, time 11 | |
-| Foreign keys | 541 | 262 `ON DELETE CASCADE`, 251 `SET NULL`, 16 `RESTRICT`, 12 `NO ACTION` |
-| Unique indexes (not primary) | 138 | |
-| Partial indexes | 81 | SQLite supports them |
-| Expression indexes | 14 | SQLite supports deterministic expressions |
-| Check constraints | 180 | Most carry over; regular-expression checks move to code |
-| Exclusion constraints | 4 | No-overlap date ranges; move to code |
-| Enum types | 37 | `TEXT` + `CHECK` |
-| Views | 17 | Fee and payroll reports; become queries or summary tables |
-| Column defaults | `now()` 331, `gen_random_uuid()` 183, `nextval` 7, JSON literals 20 | Set in code |
-| Generated columns | 1 | SQLite supports them |
-| Functions | 268 | Become module methods |
-| Triggers | 171 | Become module code; a few guards stay as SQLite triggers |
+| Tables in `public` | 221 | As they are. 2 are obsolete (`timetable_period_slot_times_backup`; first-generation `school_fees`/`school_fee_payments` are empty) and can be dropped first |
+| Indexes | 888 | As they are |
+| Functions in `public` | 304 | As they are, except the four that call `pg_net` (below) |
+| Triggers | 172 | As they are |
+| Row-level security policies | 699 on `public` tables, 12 on `storage.objects` | Those on `public` tables as they are; storage policies are dropped |
+| Views | 17 | As they are |
+| Database size | 207 MB | About two minutes to dump and restore |
 
-## Type mapping
+Extensions:
 
-Use SQLite `STRICT` tables so a wrong type is an error, not a silent conversion.
-
-| Postgres | SQLite | Rule |
+| Extension | On Supabase | On Neon |
 | --- | --- | --- |
-| `uuid` | `TEXT` | Keep every existing id. New ids from `crypto.randomUUID()` in code |
-| `text`, `varchar(n)` | `TEXT` | Add `CHECK (length(col) <= n)` only where the length matters |
-| `boolean` | `INTEGER` | `0`/`1`, `CHECK (col IN (0,1))` |
-| `smallint`, `integer`, `bigint` | `INTEGER` | |
-| `numeric(10,2)`, `numeric(12,2)` holding money | `INTEGER` in paise | Rupees × 100, rounded on import. All arithmetic in integers; format only for display. Column names gain no suffix, but the shared `Money` type documents the unit |
-| `numeric(5,2)`, `numeric(6,2)` holding days or counts (leave, LOP, encashable days) | `INTEGER` in hundredths | 1.5 days stored as 150 |
-| `numeric(5,2)` holding percentages or tax rates | `INTEGER` in basis points | 18% stored as 1800 |
-| `numeric` without precision (marks, scores) | `REAL` | Round to 2 decimal places on write; totals recomputed from parts, never accumulated |
-| `real`, `double precision` | `REAL` | Coordinates, distances, accuracy |
-| `date` | `TEXT` `YYYY-MM-DD` | A school-local calendar date, as today |
-| `time` | `TEXT` `HH:MM:SS` | School-local clock time |
-| `timestamptz` | `TEXT` ISO 8601 in UTC with `Z` (`2026-10-27T19:42:57.348Z`) | Sorts correctly as text, reads well in Data Studio, and matches the strings the front end already receives from Supabase |
-| `jsonb` | `TEXT` | `CHECK (json_valid(col))`; read with `json_extract`, `->>` |
-| `text[]`, `uuid[]`, `int[]`, `int2[]` | `TEXT` JSON array | Membership through `json_each`. Where an array is filtered on often (`tasks.classes`, `leave_applications.selected_approver_ids`, `timetable_entries.teacher_ids`), add a child table instead; each section doc decides |
-| Enum types | `TEXT` | `CHECK (col IN (...))`, with a TypeScript union generated from the same list |
-| `serial`/`nextval` | `INTEGER PRIMARY KEY` | Or a counters table where numbering is per year (`fee_number_series` already works that way) |
-| `daterange` exclusion constraints | Code | Inside the object the check and the insert run in one call that nothing else can interleave with, so "check for overlap, then insert" is safe |
+| `plpgsql`, `pgcrypto`, `uuid-ossp`, `btree_gist`, `pg_stat_statements` | Installed in schema `extensions` (except `plpgsql`) | Supported. Install them in a schema named `extensions` too, so qualified names and `search_path` settings keep working |
+| `pg_cron` | 18 jobs | Not used: it runs only with scale to zero turned off, which would keep every school's compute awake ([14](14-jobs-messaging-realtime.md)) |
+| `pg_net` | 4 functions | Not supported; replaced by queue consumers |
+| `supabase_vault` | Installed, unused | Dropped |
 
-Postgres features with no SQLite equivalent and their replacement:
+## Supabase hooks and their replacements
 
-| Postgres | Replacement |
-| --- | --- |
-| Row-level security | The permission module ([12](12-auth-and-permissions.md)) |
-| `SECURITY DEFINER` functions | Module methods; the object already runs with full access, and every method checks its caller |
-| `FOR UPDATE`, `SKIP LOCKED`, advisory locks (89 + 6 + 6 uses) | Not needed: one call at a time per school |
-| `now()`, `current_date` | One timestamp taken at the start of each call (`ctx.now`), so every row a call writes agrees, and tests can fix the clock |
-| `AT TIME ZONE`, `date_trunc` in a zone | Date maths in code with the school's time zone; store the local `date` where the business meaning is a local date (attendance, leave, fee due dates) |
-| `ILIKE`, `~` regular expressions | `LIKE` (case-insensitive for ASCII), lower-cased search columns, or FTS5; regular-expression checks in code |
-| `generate_series` | Recursive CTE or a loop in code |
-| `pg_cron`, `pg_net` | Alarms and Queues ([14](14-jobs-messaging-realtime.md)) |
-| Realtime publication | WebSockets on the object ([14](14-jobs-messaging-realtime.md)) |
-| Views | Queries in the module, or summary tables kept up to date on write |
-| `fee_search_index` view | An FTS5 table maintained on write |
+| # | Hook | Where it is used | Replacement |
+| --- | --- | --- | --- |
+| 1 | `auth.uid()` | 155 policies, 99 functions | Same function, reading the claims the Worker or the Data API sets for each transaction ([12](12-auth-and-permissions.md)) |
+| 2 | `auth.jwt()` | `get_student_edu_dashboard`, `get_student_edu_standings` (read `user_metadata.role`) | Same function; the access token carries `user_metadata.role` |
+| 3 | `auth.users` | 4 foreign keys (`profiles`, `announcement_likes`, `announcement_reads`, `push_subscriptions`); trigger `on_auth_user_created` → `handle_new_user`; `sync_role_to_auth_metadata` writes `raw_user_meta_data` | Our own `auth.users` table with the same ids and the columns these use ([12](12-auth-and-permissions.md)) |
+| 4 | Roles `anon`, `authenticated`, `service_role` and Supabase's default privileges | Every grant and many policies (`TO authenticated`) | Created in each school database before the restore; login roles `app_worker` and `app_jobs` added ([11](11-tenancy-and-control-plane.md)) |
+| 5 | Schema `extensions` | `pgcrypto` in `fee_seal_receipt`, `fee_verify_document`, `payroll_lock_run`, `payroll_verify_lock` | Same schema name on Neon |
+| 6 | `pg_net` | `fee_kick_drain`, `wa_kick_drain`, `transport_kick_drain` (call the app's drain routes); `cleanup_net_responses` | Dropped. The outbox tables stay; queue consumers drain them ([14](14-jobs-messaging-realtime.md)) |
+| 7 | `pg_cron` | 18 jobs, 5 of them every minute | The school's `SchoolHub` timer calls the same SQL functions through the `jobs` queue, only when something is due ([14](14-jobs-messaging-realtime.md)) |
+| 8 | Realtime publication `supabase_realtime` | `leave_applications`, `leave_approvals`, `transport_trip_runs`, `transport_run_stops`, `transport_run_passengers`, `transport_alerts` | Dropped. After a write to one of these tables the Worker publishes an event to the `SchoolHub` ([14](14-jobs-messaging-realtime.md)) |
+| 9 | `storage.objects` policies and Storage URLs | 12 policies; URL columns such as `avatar_url`, `attachment_url`, `banner_url`, `logo_url` and branding JSON in `site_settings` | Files in R2, served by the Worker after a permission check; stored URLs rewritten at import ([15](15-files-and-media.md)) |
+| 10 | Runtime URLs and the cron secret stored in the database | `site_settings.fee_runtime`, `transport_runtime_config`, `wa_runtime_config` | Not needed; left unused, removed in a later contract migration |
+| 11 | `supabase_vault` | Installed, unused | Dropped |
 
-SQLite inside a Durable Object includes the JSON functions, FTS5 full-text search and the math functions. Foreign-key enforcement must be confirmed in spike S1 (D1 enforces by default); the importer and migrations must assume it is on.
+Everything else in the schema is plain Postgres and needs no change.
 
 ## Functions and triggers
 
-Every function in the [reference](reference/live-schema.md#functions-by-section) falls into one of five kinds. Each section doc assigns every one of its functions to a target.
+Because the database engine stays, the logic stays where it is. Each section doc lists its functions with one of these targets:
 
-| Kind | Examples | Target |
+| Target | Meaning | Examples |
 | --- | --- | --- |
-| Access helpers | `get_user_role`, `is_classroom_staff`, `has_fee_permission`, `transport_run_is_mine` | Shared `authz` helpers in TypeScript |
-| Business operations | `fee_collect`, `fee_reverse_payment`, `staff_attendance_punch`, `transport_start_run`, `generate_salary_cycle` | Module methods, each one transaction |
-| Data triggers | `fee_alloc_refresh`, `tg_component_mark_recompute`, `transport_apply_fix`, `handle_profile_delete` | Explicit code in the method that makes the change. Hidden side effects become visible calls |
-| Guard triggers | `fee_ledger_append_only`, `fee_payments_immutable`, `admin_audit_append_only`, `payroll_reject_locked_write` | Kept as SQLite triggers (`RAISE(ABORT, ...)`) as a safety net, and also enforced in code |
-| Reports and feeds | `get_announcement_feed`, `transport_report_ontime`, `get_classroom_edu_leaderboard`, fee views | Module query methods, backed by summary tables where they scan large ranges |
-| Scheduled ticks | `fee_autogen_tick`, `transport_tick`, cleanups | Jobs run from the school's alarm |
+| Unchanged | Moves with the dump, called as today | `fee_collect`, `staff_attendance_punch`, `transport_start_run`, `generate_salary_cycle`, `get_announcement_feed`, every guard trigger |
+| Called by a job | Unchanged function; the hub timer calls it instead of `pg_cron` | `fee_autogen_tick`, `fee_reminder_tick`, `transport_tick`, cleanups |
+| Drained by a consumer | The function still writes its outbox row; a queue consumer sends it | WhatsApp, push, fee and transport notifications |
+| Replaced | The function goes; the Worker or a consumer does the work | The three `*_kick_drain` functions and `cleanup_net_responses` |
+| New endpoint (phase 2) | A screen's several browser queries become one SQL function behind one Worker route | Each section's screen list ([16](16-frontend-and-api.md)) |
 
-`update_task_updated_at` and `update_updated_at_column` (used by 109 tables) become one line in the shared write helper that stamps `updated_at = ctx.now`.
+CPU-heavy work that does not belong in Postgres (password hashing, PDF rendering, spreadsheet parsing, webhook signatures) is already outside the database today and stays in the Worker.
 
 ## Schema migrations
 
 | Rule | Detail |
 | --- | --- |
-| One schema package | `packages/schema` defines every school table (Drizzle, SQLite dialect) and generates numbered SQL migrations. The platform D1 has its own migration folder applied with `wrangler d1 migrations apply` |
-| Applied on wake | The `School` constructor runs `blockConcurrencyWhile(migrate)`: read `_migrations`, apply anything newer, in one transaction per migration |
-| Applied after deploy | The `jobs` queue calls `system.migrate` on every school after a deploy that adds a migration, so users rarely wait for one |
-| Backward compatible | Gradual deploys mean old and new code run at once for a while. Migrations only add (expand); removals (contract) ship in a later release once nothing reads the old shape |
-| No table rebuilds on big tables in the request path | SQLite's `ALTER TABLE` is limited and some changes need a copy of the table. For a large table, do the copy in batches from the alarm, not inside the wake-up migration |
-| Tested on real data | CI applies every pending migration to an anonymised copy of the largest school before release |
+| One folder | `db/migrations/` holds numbered plain SQL files for every school database, starting with a baseline taken from the live schema after the hook replacements. `db/platform/` holds the platform database's own |
+| One runner | `tools/migrate` lists the schools from the platform database, fetches each school's owner credentials from the Neon API, and applies pending files in order, one transaction per file. It records version and checksum in `platform.school_migrations` |
+| One school at a time | A failure stops that school only; the runner reports it and moves on. A school is never left half-migrated, because each file is one transaction |
+| Dry run on branches | Before a release, CI creates a Neon branch of every school's database (copy-on-write, seconds, no copy of data), applies the pending migrations there, runs the database tests, and deletes the branches |
+| Backward compatible | Migrations go out before the Worker that needs them, and old and new Workers run side by side during a gradual deploy. Migrations only add (expand); removals (contract) ship in a later release once nothing reads the old shape |
+| Long operations | Index builds use `CREATE INDEX CONCURRENTLY` (in a file of its own, outside a transaction); large backfills run in batches as a job |
 | Never edit a released migration | Write a new one |
 
 ## Query rules
 
-These keep the bill and the school's single thread in check (see the cost study: rows written are 60% of the bill).
+These keep latency and compute in check. The database is in Singapore, so each round trip from India costs about 30–60 ms, and compute is billed for every minute the database is awake ([02](02-cost-study.md)).
 
-1. **Index every column used to join or filter on a hot path.** SQLite does not index foreign keys automatically.
-2. **Every index must pay for itself.** Each index on a written column adds a billed row per write. Today's 879 indexes were tuned for Postgres; each section doc re-justifies its indexes.
-3. **No `SELECT *`.** Return the columns the screen shows (today's README rule on `profiles(*)` applies everywhere).
-4. **Lists of ids:** at most 100 bound parameters per statement. Pass one JSON array and use `IN (SELECT value FROM json_each(?))`.
-5. **Page with keys, not offsets** (`WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT 50`).
-6. **Summary tables for anything that counts a term or a year** (attendance percentages, fee collection by head, edu points), updated in the same call as the change.
-7. **Long work in batches:** anything touching more than about 2,000 rows runs as a job in batches of a few hundred rows per alarm tick.
+1. **One SQL call per screen.** Multi-step reads and writes stay in SQL functions. A Worker route never runs a loop of queries.
+2. **No `SELECT *`.** Return the columns the screen shows (today's README rule on `profiles(*)` applies everywhere).
+3. **Index every column used to join or filter on a hot path**; Postgres does not index foreign keys automatically. Drop indexes that `pg_stat_statements` and `pg_stat_user_indexes` show are never used.
+4. **Page with keys, not offsets** (`WHERE (created_at, id) < ($1, $2) ORDER BY created_at DESC, id DESC LIMIT 50`).
+5. **Summary tables for anything that counts a term or a year** (attendance percentages, fee collection by head, edu points), kept up to date by triggers as today.
+6. **Long work in batches** from a job: anything touching more than a few thousand rows runs in batches, so no transaction holds locks for long.
+7. **Nothing polls the database.** No health checks, no "every minute" jobs, no open idle connections. Anything that wakes a school's compute when nobody is using the app costs money ([14](14-jobs-messaging-realtime.md)).
+8. **Short transactions only.** The HTTP driver sends a whole transaction in one request; nothing holds a transaction open across round trips.
 
 ## Moving each school's data from Supabase
 
-A one-off importer (`tools/import-supabase`) moves one school at a time. It runs from an operator's machine or a Worker with access to the school's Postgres connection string and the platform API.
+A one-off importer (`tools/import-supabase`) moves one school at a time, from an operator's machine with the Supabase database URL and the platform's Neon API key.
 
 ```mermaid
 flowchart LR
-  pg[("Supabase Postgres<br/>(read-only mode)")] --> ex["Export<br/>table by table, ordered by id"]
-  ex --> tr["Transform<br/>money → paise, timestamps → UTC ISO,<br/>arrays → JSON, booleans → 0/1,<br/>file URLs → R2 keys"]
-  tr --> im["Import<br/>School.call('system.importBatch')<br/>parents before children, ≤ 1 MB per batch"]
-  im --> vf["Verify<br/>row counts, money totals,<br/>checksums per table"]
+  sb[("Supabase Postgres<br/>(app in read-only mode)")] --> dump["pg_dump<br/>schema public, data and schema"]
+  sb --> au["copy auth.users columns"]
+  prep["Neon project prepared:<br/>roles, extensions schema,<br/>auth schema and shim"] --> rest
+  au --> rest["pg_restore into Neon"]
+  dump --> rest
+  rest --> adapt["Adaptation migration:<br/>drop pg_net functions and publication,<br/>rewrite file URLs, grants"]
+  adapt --> vf["Verify:<br/>row counts, money totals,<br/>checksums, RLS tests"]
   st[("Supabase Storage")] --> r2[("R2 schools/&lt;id&gt;/...")]
-  au[("auth.users")] --> tr
 ```
 
 | Step | Detail |
 | --- | --- |
-| 1. Freeze | Put the school's current app in read-only mode (a banner and blocked writes) for the cutover window |
-| 2. Export | Every table in `public` plus `auth.users` (see [12](12-auth-and-permissions.md)), streamed as JSON in primary-key order |
-| 3. Transform | Apply the type map above. Money: `round(value * 100)`; reject any value with more than 2 decimal places. Rewrite every Supabase Storage URL found in a column (`avatar_url`, `attachment_url`, `banner_url`, `logo_url`, `photo_url`, `image_url`, `file_url`, branding JSON in `site_settings`) to the file's new path |
-| 4. Import | Batches sent to the school object, each committed as one transaction; tables in foreign-key order; triggers and jobs disabled until the import completes |
-| 5. Files | Copy each object from Supabase Storage to R2 under `schools/<schoolId>/` keeping the rest of its path |
-| 6. Verify | For every table: row count equal; for money tables: totals per student and per academic year equal; a checksum of ids and key columns equal |
-| 7. Switch | Point the school's host at the new platform; Supabase stays read-only for 30 days as a fallback |
+| 1. Prepare | Provision the school's Neon project ([11](11-tenancy-and-control-plane.md), steps 1–3). Create the roles, the `extensions` schema with its extensions, and the `auth` schema with our `auth.users`, `auth.sessions` and the `auth.uid()` functions |
+| 2. Freeze | Put the school's current app in read-only mode (a banner and blocked writes) for the cutover window |
+| 3. Accounts | Copy the needed columns of `auth.users` into the new `auth.users` ([12](12-auth-and-permissions.md)) |
+| 4. Dump and restore | `pg_dump --schema=public --no-owner --no-privileges` from Supabase; `pg_restore` into Neon as the owner; then re-apply grants from the baseline. Run the restore with triggers' side effects in mind: data is restored as it is, so no trigger needs to fire |
+| 5. Adapt | Apply the adaptation migration: drop the `pg_net` functions and the realtime publication, leave the runtime-URL settings unused, and rewrite every Supabase Storage URL in a column to its new `/files/...` path |
+| 6. Files | Copy each object from Supabase Storage to R2 under `schools/<schoolId>/`, keeping the rest of its path |
+| 7. Verify | For every table: row count equal; for money tables: totals per student and per academic year equal; a checksum of ids and key columns equal; the RLS test suite passes against the new database ([91](91-test-and-parity-plan.md)) |
+| 8. Switch | Point the school's host at the new platform; Supabase stays read-only for 30 days as a fallback |
 
-The live school's database is 192 MB and its files about 1 GB, so a full import takes minutes, not hours.
+The live school's database is 207 MB and its files about 1 GB, so the whole move takes minutes. Spike S1 rehearses it on a copy.
 
-## Archiving closed academic years
+## Keeping the working set small
 
-A 10,000-user school adds about 2 GB a year, so the live database would reach the 10 GB cap in about five years. Most of that growth is year-bound: attendance, staff punches, location checks, task history, exam answers, transport history.
+Compute size is set by memory: the current year's attendance, fees and marks should fit in RAM ([02](02-cost-study.md)). Data nobody reads makes the database bigger but rarely slower, and costs little to store. Two kinds of data are still worth moving out:
 
-| Data | When a year closes |
+| Data | What to do |
 | --- | --- |
-| Year-bound records still needed by screens (attendance, marks, report cards, fee ledgers, payroll) | Moved in batches to a per-year archive object, `SCHOOL_ARCHIVE.idFromName("<schoolId>:<yearCode>")`, with the same tables. Read-only methods there serve the academic record, old report cards and audits |
-| Logs nobody browses (location attempts, GPS telemetry, notification history) | Written to R2 as compressed newline-delimited JSON, then deleted |
-| Summaries (attendance percentages, fee totals per year) | Stay in the live object |
+| High-volume logs nobody browses (GPS telemetry, location attempts, notification history) | Already pruned by cleanup jobs today. Keep doing so, writing the old rows to R2 as compressed newline-delimited JSON first where they must be kept ([36](36-transport.md)) |
+| Closed academic years | Stay in the database. If a large school's tables grow big enough to slow queries, partition the biggest (attendance, staff punches) by academic year; decide per table when it happens |
 
-Closing a year is already an explicit action (`academic_years.status`, promotion). The archive move is a job started from it. Indian record-keeping rules for fees and payroll (8 years) are met by the archive objects, which cost $0.20 per GB-month.
+Indian record-keeping rules for fees and payroll (8 years) are met by keeping the rows in the database, plus the long-term `pg_dump` copies below.
 
 ## Backups
 
 | Layer | What it gives | Who runs it |
 | --- | --- | --- |
-| Point-in-time recovery | Restore one school to any moment in the last 30 days | Built in; a platform-console action wraps `onNextSessionRestoreBookmark` |
-| Nightly export | Rows changed since the last export (by `updated_at`), all tables, to `backups/<schoolId>/<date>/` in R2 | Job, per school, staggered across the night |
-| Weekly full export | Every row of every table, same format as the offboarding export | Job |
-| Retention | Nightly kept 35 days, weekly kept 1 year (R2 lifecycle rules) | R2 |
-| Restore drill | Quarterly: restore one school's weekly export into a scratch object and run the verify step | Platform team |
+| Point-in-time restore | Restore one school's database to any moment in the last 7 days (Launch) or 30 days (Scale), as a new branch, without affecting any other school | Neon; a platform-console action wraps it |
+| Restoring part of a school | Branch the school at a point in time, copy the needed rows from the branch, delete the branch | Platform team, from the console |
+| Weekly logical copy | `pg_dump` of every school, run in the nightly job window so it does not wake the compute separately, to `backups/<schoolId>/<date>/` in R2 | Job in a container |
+| Retention | Weekly copies kept 1 year, monthly copies kept 8 years (R2 lifecycle rules) | R2 |
+| Restore drill | Quarterly: restore one school's weekly copy into a scratch Neon project and run the verify step | Platform team |
 
 ## Open questions
 
-- [ ] Confirm Drizzle's Durable Objects driver and migrator in spike S1, or fall back to raw SQL with a small migration runner.
-- [ ] Which array columns become child tables (decided per section).
-- [ ] Should new ids switch to time-ordered UUIDv7 for better index locality? Existing ids stay as they are either way.
+- [ ] Spike S1: does `pg_restore` of the live dump into Neon succeed with only the preparation above, and how long does it take?
+- [ ] Spike S2: our own `auth.uid()` shim or `pg_session_jwt`?
+- [ ] Query layer: Kysely with types generated from the schema, or plain tagged SQL? Either way the SQL functions are the interface.
+- [ ] Should the 2 obsolete tables be dropped in the current app before the move?

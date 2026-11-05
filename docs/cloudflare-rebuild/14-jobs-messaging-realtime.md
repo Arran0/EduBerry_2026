@@ -1,40 +1,42 @@
 # Scheduled Jobs, Messaging and Live Updates
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## Summary
 
-- **`pg_cron` (15 jobs) becomes each school's own alarm.** Every school object keeps a `scheduled_jobs` table and sets one alarm for the next due job, in the school's own time zone. A Cron Trigger runs only as a watchdog.
-- **`pg_net` calls to drain routes become Queues.** Messages are still written to an outbox inside the same transaction as the change that caused them; the object then hands them to the `outbox` queue, whose consumer sends WhatsApp, web push and email and reports back.
-- **Push notifications move to the server.** Today the browser calls `/api/announcements/notify` and `/api/leave/notify` after making a change; in the target the method that makes the change queues the push itself, so a push can no longer be skipped by a closed tab.
-- **Supabase Realtime (6 tables, 4 screens) becomes WebSockets on the school object**, using the hibernation API so idle connections cost nothing. Busy bus-run traffic can move to a per-run object.
+- **Nothing scheduled runs inside Postgres, so a school's database can sleep.** Neon bills compute for every minute the database is awake, and it suspends after 5 idle minutes. Today 5 of the 18 `pg_cron` jobs run every minute, all day and all night; on Neon that alone would keep every school awake around the clock and roughly double its bill ([02](02-cost-study.md)).
+- **`pg_cron` becomes each school's `SchoolHub` timer.** The hub, a small Durable Object, keeps the school's schedule in the school's time zone and sets one alarm for the next due job. When it fires, the job goes on the `jobs` queue and the consumer calls the same SQL function `pg_cron` calls today. Night jobs are gathered into one window, so the database wakes once a night.
+- **`pg_net` drain calls become Queues.** Messages are still written to `notification_outbox` in the same transaction as the change that caused them. The Worker sees that the transaction left work in the outbox and sends a drain message to the `outbox` queue, whose consumer sends WhatsApp, web push and email and reports back.
+- **Push notifications move to the server.** Today the browser calls `/api/announcements/notify` and `/api/leave/notify` after making a change. In the target the SQL function that makes the change queues the push, so a closed tab can no longer skip it.
+- **Supabase Realtime (6 tables, 4 screens) becomes WebSockets on the `SchoolHub`**, using the hibernation API so idle connections cost nothing. The hub holds no school data; it forwards small events published by the Worker after a write.
 - **Inbound webhooks get one URL shape**, `/hooks/<schoolId>/<provider>`, verified against that school's secret and processed once, whatever the provider retries.
 
 ## How it works today
 
 ### Scheduled jobs
 
-From `cron.job` on the live project (times UTC; IST = UTC + 5:30):
+From `cron.job` on the live project, 5 Nov 2026 (times UTC; IST = UTC + 5:30):
 
 | Job | When | What it does | Section |
 | --- | --- | --- | --- |
 | `transport-tick` | every minute, all day | `transport_tick()`: stale-GPS detection, delay and not-started alerts, auto start and end of runs | 36 |
 | `transport-notify-drain` | every minute | `transport_kick_drain()`: if the outbox has work, `pg_net` POSTs to `/api/transport/notify/drain` | 14 |
 | `fee-drain` | every minute | `fee_kick_drain()`: same for `/api/fees/cron/drain` | 14 |
+| `wa-reminders-tick` | every minute | `wa_reminders_tick()`: queues WhatsApp reminders that have come due | 25, 33 |
+| `wa-reminders-drain` | every minute | `wa_kick_drain()`: same as the other drains, for WhatsApp reminders | 14 |
 | `transport-watch-outbox` | every 15 minutes | Flags stuck outbox rows | 14 |
-| `transport-materialise-runs` | 21:30 (03:00 IST) | Creates tomorrow's bus runs from schedules, in the school's time zone | 36 |
 | `fee-autogen` | 20:30 (02:00 IST) | Generates invoices whose installment is due | 33 |
 | `fee-overdue` | 21:00 (02:30 IST) | Marks overdue invoices, applies late fees | 33 |
-| `fee-reminders` | 04:30 (10:00 IST) | Queues fee reminders by schedule | 33 |
+| `transport-materialise-runs` | 21:30 (03:00 IST) | Creates tomorrow's bus runs from schedules, in the school's time zone | 36 |
 | `transport-archive-telemetry` | 02:30 | Thins old GPS fixes into the archive | 36 |
 | `cleanup-transport-telemetry` | 03:00 | Deletes raw fixes older than 7 days | 36 |
 | `cleanup-transport-archive` | 03:15 | Deletes old archive rows | 36 |
 | `cleanup-net-responses` | 03:20 | Clears `pg_net`'s response log | 14 |
+| `wa-reminders-log-purge` | 03:25 | Purges the old WhatsApp reminder log | 25 |
 | `transport-rollup-metrics` | 03:45 | Per-run and per-stop daily metrics | 36 |
 | `cleanup-attendance-location-attempts` | 04:00 | Deletes old geofence attempts | 23 |
+| `fee-reminders` | 04:30 (10:00 IST) | Queues fee reminders by schedule | 33 |
 | `cleanup-stale-push-subscriptions` | 05:00 | Removes dead push subscriptions | 25 |
-
-The WhatsApp reminders branch (not live) adds `wa_reminders_tick` every minute.
 
 ### Outgoing messages
 
@@ -50,8 +52,8 @@ flowchart LR
 ```
 
 - `notification_outbox` holds every queued message with a `dedupe_key`, channel, template, variables, attempts and status (`queued` → `sending` → `sent`/`delivered`/`failed`/`skipped`/`cancelled`).
-- The drain address and secret are stored in the database (`site_settings.fee_runtime`, `transport_runtime_config`) the first time a staff member opens the relevant screen.
-- Two drains split the outbox by `module` (`fees` vs everything else).
+- The drain address and secret are stored in the database (`site_settings.fee_runtime`, `transport_runtime_config`, `wa_runtime_config`) the first time a staff member opens the relevant screen.
+- The drains split the outbox by `module`.
 
 ### Push notifications
 
@@ -82,113 +84,128 @@ Elsewhere screens poll: task unread counts (`task_unread_comment_count`), the mi
 
 ## Target design
 
-### Jobs inside each school
+### The rule: wake the database only when there is work
+
+| Source of wake-ups today | Target |
+| --- | --- |
+| Three drains every minute | None. A drain message is queued only when a transaction actually left work in the outbox |
+| `transport-tick` every minute, 24 hours | Every minute only between the first scheduled start and the last scheduled end of today's runs, which the nightly materialise job reports to the hub. A school without buses never ticks |
+| `wa-reminders-tick` every minute | The tick function also returns when the next reminder is due; the hub sets its alarm for then |
+| `transport-watch-outbox` every 15 minutes | Replaced by queue retries, the dead-letter queue and an alert |
+| Ten night and morning jobs at scattered times | One nightly window per school, about 02:00 local: every cleanup, rollup and nightly job in sequence, then the weekly `pg_dump` on its day. The database wakes once, works for a few minutes and sleeps |
+| `fee-reminders` at 10:00 IST | Unchanged time; the database is awake then anyway |
+
+Any health check, monitoring ping or open idle connection would undo this. Monitoring reads Neon's API and Workers metrics, never the database ([10](10-target-architecture.md)).
+
+### Jobs: the hub timer
 
 ```mermaid
 flowchart LR
-  alarm["School.alarm()"] --> due["SELECT due jobs<br/>FROM scheduled_jobs<br/>WHERE next_run_at <= now"]
-  due --> run["Run each job<br/>(bounded batch)"]
-  run --> next["Compute next_run_at<br/>(school time zone, school calendar)"]
-  next --> set["setAlarm(min next_run_at)"]
-  cron["Cron Trigger, every 10 min<br/>(watchdog)"] --> q["jobs queue"] --> ensure["School.call('system.ensureAlarm')<br/>for each active school"]
+  alarm["SchoolHub.alarm()"] --> due["Due jobs from the hub's schedule<br/>(school time zone, school calendar)"]
+  due --> q["jobs queue:<br/>{schoolId, job, window}"]
+  q --> c["Jobs consumer (Worker)"]
+  c --> db[("School database, app_jobs role:<br/>select fee_autogen_tick() ...")]
+  db --> c
+  c -- "next due time, run windows" --> hub["SchoolHub: set the next alarm"]
+  cron["Cron Trigger, hourly<br/>(watchdog)"] --> ensure["For each active school:<br/>SchoolHub.ensureAlarm()"]
 ```
 
-| Column of `scheduled_jobs` | Meaning |
+The hub's schedule lives in its own Durable Object storage and is rebuilt from the school's settings if lost:
+
+| Field | Meaning |
 | --- | --- |
-| `key` | `fees.autogen`, `fees.overdue`, `fees.reminders`, `transport.tick`, `transport.materialise`, `cleanup.locationAttempts`, ... |
-| `schedule` | Local-time rule: `daily 02:00`, `every 1m between 06:00-19:30 on school days`, `weekly sun 03:00` |
+| `key` | `fees.autogen`, `fees.overdue`, `fees.reminders`, `wa.reminders`, `transport.tick`, `transport.materialise`, `nightly.maintenance`, ... |
+| `rule` | Local-time rule: `daily 02:00`, `every 1m within today's run window`, `at next_due`, `weekly sun 02:30` |
 | `next_run_at` | UTC instant of the next run |
-| `cursor` | Where a batched job stopped (for jobs that run across several alarm ticks) |
-| `last_run_at`, `last_status`, `last_error`, `attempts` | For the admin's job status screen and alerts |
+| `last_run_at`, `last_status`, `last_error`, `attempts` | Copied to the school's `job_runs` table by the consumer for the admin's job status screen and alerts |
 | `enabled` | Some jobs are off until the school turns the feature on (transport, WhatsApp) |
 
-Each `pg_cron` job maps to a school job. The differences are on purpose:
-
-| Today | Target |
-| --- | --- |
-| `transport-tick` runs every minute, 24 hours a day, for every school | Runs every minute only while a run is scheduled or active today; otherwise not at all. A school without buses never ticks |
-| Drain kicks every minute | Not needed: messages go to the queue right after the change commits |
-| Daily jobs at fixed UTC times chosen for India | Daily jobs at the school's local time |
-| Cleanups as separate jobs | One nightly `maintenance` job per school running every cleanup, rollup and the nightly backup export in sequence |
-| A failed job is visible only in `cron.job_run_details` | Failures recorded on the job row, shown to admins, and alerted on through Analytics Engine |
-
-Alarms retry automatically if the handler throws. The watchdog only repairs a school whose alarm was never set (for example after a bug), by calling `system.ensureAlarm` through the `jobs` queue; it does nothing to schools that are healthy.
+- Each job is one call to an existing SQL function, run with the `app_jobs` role, which may execute those functions and nothing else ([11](11-tenancy-and-control-plane.md)).
+- A job that has more work than fits one call returns a cursor; the consumer queues the next batch at once.
+- Queue retries cover a failed call; after the retries the message lands in a dead-letter queue and raises an alert.
+- The hourly watchdog only repairs a hub whose alarm was never set (for example after a bug). It touches the hub, not the database.
 
 ### Outgoing messages through Queues
 
 ```mermaid
 sequenceDiagram
-  participant S as School object
+  participant W as Worker (route or job consumer)
+  participant N as School database
   participant Q as outbox queue
-  participant C as Outbox consumer (Worker)
+  participant C as Outbox consumer
   participant P as Provider (Meta / push / email)
-  S->>S: method writes change + outbox rows (one transaction)
-  S->>Q: sendBatch(message ids + payloads), mark rows 'queued'
-  Q->>C: batch of messages
+  W->>N: one transaction: the change, outbox rows (by the same functions and triggers as today), then app_after_write()
+  N-->>W: result + {outbox: 3, live: [...]}
+  W->>Q: send {schoolId, drain}
+  Q->>C: drain message
+  C->>N: claim a batch (FOR UPDATE SKIP LOCKED, as today)
   C->>P: send (WhatsApp template, push, email)
   P-->>C: provider id or error
-  C->>S: call('outbox.report', results)
-  S->>S: update status, write per-module log
-  Note over C,Q: failures retry with backoff; after N tries → dead-letter queue
+  C->>N: report results, update status and per-module logs
+  Note over C,Q: failures retry with backoff; after N tries the dead-letter queue
 ```
 
-- The outbox table keeps today's `dedupe_key` rule, so the same fact is never messaged twice.
-- A Durable Object holds outgoing messages until its storage write is durable, so a message is never queued for a change that did not commit.
-- The alarm sweeps `outbox` rows left `pending` for more than a minute and queues them again, covering a failed queue send.
+- Every write transaction the Worker sends ends with `app_after_write()`. In the same round trip it returns how many outbox rows this transaction queued and which live events it produced, so no route needs its own code for either.
+- The outbox table keeps today's `dedupe_key` rule, so the same fact is never messaged twice, and today's claim function, so two consumers never send the same row.
+- A drain message is sent only after the transaction committed, so a change that rolls back never produces a message.
+- Phase 1 only: queries the browser sends through the Data API proxy (`/api/db`, [16](16-frontend-and-api.md)) do not end with `app_after_write()`. Writes that queue messages or feed live screens (leave apply and decide, announcements, the driver and transport operations actions) therefore go through Worker routes from the start. As a safety net, while the school's compute is awake the hub sends one drain message a minute; it reads the compute's state from the Neon API, which does not wake it.
 - Messages that expire (`expires_at`) are dropped by the consumer and reported as `skipped`, as today.
-- One consumer handles every module; per-module behaviour (which phone-number id, which template) is data carried on the message.
+- One consumer handles every module; per-module behaviour (which phone-number id, which template) is data on the outbox row.
 - Rate limits per provider (Meta's per-number throughput, Cloudflare Email's daily quota) are respected with queue batch size and concurrency settings.
 
 ### Push notifications
 
 | Today | Target |
 | --- | --- |
-| Browser calls a `/notify` route after the change | The method that makes the change writes push rows to the outbox |
-| `web-push` library with Node crypto, VAPID keys per deployment | One platform VAPID key pair. Web push (ECDH, AES-128-GCM, ES256 VAPID signature) works with Workers' WebCrypto; `node:crypto` is also available. Confirm the library choice in a spike |
-| Subscriptions per user per deployment | Same table, in the school object; dead endpoints (404/410) removed by the consumer's report |
+| Browser calls a `/notify` route after the change | The SQL function that publishes the announcement or decides the leave writes push rows to the outbox; recipients are worked out in SQL, as the `/notify` routes do today in Node |
+| `web-push` library with Node crypto, VAPID keys per deployment | One platform VAPID key pair. Web push (ECDH, AES-128-GCM, ES256 VAPID signature) works with Workers' WebCrypto; `node:crypto` is also available. Confirm the library in a spike |
+| Subscriptions per user per deployment | Same table in the school database; dead endpoints (404/410) removed by the consumer's report |
 
 ### Live updates
 
 ```mermaid
 flowchart LR
-  b1["Admin: Transport ops"] -- "wss /api/live?ch=transport:ops" --> w["Router Worker<br/>checks session cookie"]
-  b2["Parent: bus view"] -- "wss /api/live?ch=transport:child" --> w
-  b3["Staff: leave badge"] -- "wss /api/live?ch=leave:me" --> w
-  w --> s["School object<br/>acceptWebSocket(ws, tags)"]
-  w --> r["RunLive object (per bus run)<br/>optional"]
-  s -- "after each relevant write:<br/>broadcast to sockets with that tag" --> b1
-  r --> b2
+  b1["Admin: Transport ops"] -- "wss /api/live?topic=transport:ops" --> w["Router Worker<br/>checks the access token<br/>and the topic"]
+  b2["Parent: bus view"] -- "wss /api/live?topic=transport:child" --> w
+  b3["Staff: leave badge"] -- "wss /api/live?topic=leave:me" --> w
+  w --> h["SchoolHub<br/>acceptWebSocket(ws, tags)"]
+  wr["Worker after a write:<br/>live events from app_after_write()"] -- "publish(topic, event)" --> h
+  h -- "forward to sockets<br/>with that tag" --> b1
+  h --> b2
+  h --> b3
 ```
 
-- The Worker authenticates the upgrade with the session cookie and checks the person may watch that channel, then passes the socket to the object.
-- The object accepts it with the hibernation API and tags it (`leave:user:<id>`, `transport:ops`, `transport:run:<runId>`, `transport:child:<studentId>`). Idle sockets are not billed; incoming socket messages are billed at 1/20 of a request.
-- After a method commits a change that a channel cares about, it broadcasts a small message (what changed, and the new row or a "refetch" hint).
+- A trigger on each of the six live tables records a small event (table, row id, operation, the topics it concerns) for the current transaction; `app_after_write()` returns and clears them. The Worker publishes them to the hub after commit.
+- The Worker authenticates the upgrade with the access token and checks, with one SQL call, that the person may watch that topic; then it hands the socket to the hub. Idle sockets are not billed while the hub hibernates.
+- Events carry what changed and the new row, or a "refetch" hint for larger changes.
 - If the socket cannot connect (some school networks block WebSockets), the screen falls back to polling every 30 seconds.
-- Polling that exists today for counts (task unread comments) can move to the same channel later; it is not required for launch.
+- Polling that exists today for counts (task unread comments) can move to the same hub later; it is not required for launch.
 
-[36-transport.md](36-transport.md) decides that live bus runs stay in the school object at launch. A 50-bus school sends about 3–10 GPS fixes a second at peak, and each fix writes to SQL only when something changes, which is well within one object's capacity. Runs move to one `RunLive` object each only if load tests or production show the morning bus peak slowing attendance and fees.
+GPS fixes are the heaviest live traffic: a 50-bus school sends about 3–10 fixes a second at peak. The hub can keep each bus's latest position in memory and forward it to watchers without a database write; Postgres records only stop arrivals, alerts and a thinned trail. [36-transport.md](36-transport.md) decides the details.
 
 ### Inbound webhooks
 
 | Step | Where | Detail |
 | --- | --- | --- |
-| 1 | Worker | `POST /hooks/<schoolId>/<provider>`: look up the school in `platform`; reject unknown or deleted schools |
-| 2 | School object | `call('hooks.receive', provider, headers, rawBody)`: verify the signature with this school's stored secret (HMAC is cheap) |
-| 3 | School object | Record the provider's event id in `webhook_events` (unique); a repeat returns "already processed" |
-| 4 | School object | Apply the event (settle a payment, update a payout, record a receipt or STOP) in the same transaction |
-| 5 | Worker | Return 200 quickly; anything slow (a reconciliation sweep) is queued |
+| 1 | Worker | `POST /hooks/<schoolId>/<provider>`: look up the school in `platform`; reject unknown or deleted schools; rate-limit |
+| 2 | Worker | Verify the signature with this school's secret for that provider (read from the school database, kept encrypted in isolate memory for a few minutes) |
+| 3 | Worker | Put the verified event on the `webhooks` queue (raw body and the headers that matter, well under the 128 KB limit) and return 200 at once |
+| 4 | Webhooks consumer | Call the provider's SQL function with the `app_jobs` role: record the provider's event id in `webhook_events` (unique), so a repeat changes nothing, and apply the event (settle a payment, update a payout, record a receipt or STOP) in the same transaction |
+| 5 | Webhooks consumer | Queue anything slow (a reconciliation sweep) as a job |
 
 Old URLs (`/api/fees/upi/webhook` and the rest) keep working on each school's own host during the move: the Worker maps them to the new handler using the host's school, so banks and Meta do not have to be re-configured on cutover day.
 
 ## Cost notes
 
-- Each alarm run is one Durable Object request; each `setAlarm` is one row written. A school with buses ticking every minute for 13 hours on 24 days is about 19,000 alarm runs a month, about $0.003.
-- Queue messages cost about 3 operations each; a busy school's 2,000 messages a day is about 0.15 million operations a month, inside the included million for the first schools.
+- Each night window costs one wake-up: a few minutes of work plus the 5-minute suspend delay, about 0.25 CU for 15 minutes, under $0.01 a night. Waking every minute all night instead would cost about $1.70 a month per school at the smallest size, and much more at larger sizes ([02](02-cost-study.md)).
+- Hub alarms and publishes are Durable Object requests: a school with buses ticking every minute for 13 hours on 24 days is about 19,000 alarm runs a month, about $0.003.
+- Queue messages cost about 3 operations each; a busy school's 2,000 messages a day is about 0.2 million operations a month, inside the included million for the first schools.
 - Hibernated WebSockets cost nothing while idle.
 
 ## Parity checklist
 
-- [ ] Every job in the table above runs at the same local time with the same effect.
+- [ ] Every job in the table above runs at the same local time, or inside its window, with the same effect.
+- [ ] A school with no activity overnight shows its compute suspended from the end of the night window to the morning.
 - [ ] A fee reminder, bus alert and WhatsApp reminder each produce exactly one message per `dedupe_key`.
 - [ ] A change that rolls back never produces a message.
 - [ ] Delivery receipts and STOP replies update the outbox and the per-module logs.

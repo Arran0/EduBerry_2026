@@ -7,7 +7,7 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). Builds on the decision 
 - **One deployment serves every school.** A single router Worker answers every host name; the school is found from the host, never from anything the browser sends.
 - **Each school keeps its own Postgres database, in its own Neon project.** Tables, functions, triggers and row-level security move from Supabase as they are. The Worker reaches the database with Neon's serverless driver, using the school's connection string from the platform database.
 - **Row-level security still decides who sees what.** Every query runs as the signed-in user: the Worker (or Neon's Data API) sets the user's id for the transaction, and the existing `auth.uid()` calls in 155 policies and 99 functions read it.
-- **The browser app is static files** served free from Workers Static Assets. In phase 1 it keeps today's PostgREST-style queries against Neon's Data API; in phase 2 each screen moves to one Worker endpoint ([16](16-frontend-and-api.md)).
+- **The browser app is static files** served free from Workers Static Assets. In phase 1 it keeps today's PostgREST-style queries, sent through a thin Worker proxy to Neon's Data API; in phase 2 each screen moves to one Worker endpoint ([16](16-frontend-and-api.md)).
 - **A small Durable Object per school, the `SchoolHub`,** holds live WebSocket connections and the school's job timer. It holds no school data.
 - **Background work** runs from the hub's timer and Cron Triggers through Queues. Nothing scheduled runs inside Postgres, so a school's database can sleep when nobody is using the app.
 
@@ -28,7 +28,7 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). Builds on the decision 
 | `SolverContainer` | Containers | Platform | The Python CP-SAT timetable solver |
 | Rate limiter | Rate Limiting binding | Platform | Login, forgot-password and public endpoints |
 | Usage metrics | Workers Analytics Engine | Platform | Requests, errors and latency per school and route |
-| Secrets | Workers Secrets | Platform | Token signing keys, the key that encrypts connection strings and school secrets, VAPID, email, Neon API key |
+| Secrets | Workers Secrets | Platform | The key that encrypts connection strings, per-school token signing keys and school secrets; VAPID, email, Neon API key |
 
 Created per school: a Neon project (by the Neon API, at signup), one `platform.schools` row, the hub (automatically, on first use) and a custom host name if the school brings its own domain.
 
@@ -67,7 +67,7 @@ Today Supabase's API gateway turns the browser's JWT into `request.jwt.claims` f
 | Path | How the user is set |
 | --- | --- |
 | Worker routes | Each request's transaction starts with `set local role authenticated` and `select set_config('request.jwt.claims', <claims>, true)`; the claims come from the access token the Worker has just verified |
-| Neon Data API (phase 1) | The browser sends the access token as a bearer token; Neon checks it against our public key (JWKS) and provides `auth.uid()` from its `sub` claim |
+| Neon Data API (phase 1) | The browser sends the access token as a bearer token through the Worker's `/api/db` proxy; Neon checks it against the school's public key (JWKS) and provides `auth.uid()` from its `sub` claim |
 
 `auth.uid()` must return the same id on both paths. Spike S2 in [01](01-architecture-options.md) decides whether to use Neon's `pg_session_jwt` functions for both, or our own small `auth` schema shim for the Worker path. Either way no policy or function changes ([12](12-auth-and-permissions.md)).
 
