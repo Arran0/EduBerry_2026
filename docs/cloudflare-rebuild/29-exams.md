@@ -1,6 +1,6 @@
 # Exams
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Online exams: staff build an exam (questions of five kinds, images, Excel import
 
 Live: 15 exams, 59 questions, 217 submissions, 430 answers, 6 templates.
 
-What changes: the security that today relies on two `SECURITY DEFINER` routes and two guard triggers (students must never see correct answers before release; a submitted attempt can never change) becomes the exam module's own rules; scoring stays in the existing data-driven TypeScript engine (`examScoring.ts`), now run inside the object; timing uses the server clock.
+What changes: the security that today relies on two `SECURITY DEFINER` routes and two guard triggers (students must never see correct answers before release; a submitted attempt can never change) stays as it is: the triggers move with the dump, and the two routes become Worker routes. Scoring stays in the existing data-driven TypeScript engine (`examScoring.ts`), run by the submit route; timing uses the server clock.
 
 ## 2. Users and screens
 
@@ -50,21 +50,23 @@ Code: `src/lib/exam.ts` (1,507 lines), `examScoring.ts` (371, the scoring engine
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `can_manage_exam`, `is_exam_owner`, `is_exam_student`, `submission_exam_id`, `student_can_review_exam` | Relationship helpers in the exam module |
-| `get_exam_questions_for_student` | `exams.questionsForStudent(examId)`: strips `correct_answer` and checks the window against `ctx.now` |
-| `exam_submissions_guard`, `exam_answers_guard` (triggers) | The only student write methods are `exams.start`, `exams.saveAnswer`, `exams.submit`; each enforces the same rules |
-| `exam_set_created_by` (trigger) | Set from the session |
-| `reorder_exam_questions` | `exams.reorderQuestions` |
-| `exam_debug_whoami` | Dropped (debug helper) |
+| `can_manage_exam`, `is_exam_owner`, `is_exam_student`, `submission_exam_id`, `student_can_review_exam` | Unchanged |
+| `get_exam_questions_for_student` | Unchanged |
+| `exam_submissions_guard`, `exam_answers_guard` (triggers) | Unchanged |
+| `exam_set_created_by` (trigger) | Unchanged |
+| `reorder_exam_questions` | Unchanged |
+| `exam_debug_whoami` | Unchanged |
 
 ## 6. Server routes and integrations
 
 | Route | Target |
 | --- | --- |
 | `/api/exam/create` | `exams.create` |
-| `/api/exam/submit` | `exams.submit` (auto-grading inside the object, which can read correct answers; the student never can) |
+| `/api/exam/submit` | `exams.submit`: a Worker route that scores with `examScoring.ts`, reading the answer key through a function only the `app_jobs` role may call; the student never can |
 
 ## 7. Jobs, files and live updates
 
@@ -78,13 +80,15 @@ None.
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-Carried over. Marks and scores are `REAL` rounded to 2 decimals ([13](13-data-layer.md)). Indexes: `exam_audiences (homeroom_id)`, `(user_id)`; `exam_submissions (exam_id, student_id)` unique; `exam_answers (submission_id, question_id)` unique.
+Carried over unchanged ([13](13-data-layer.md)). Indexes to check: `exam_audiences (homeroom_id)`, `(user_id)`; `exam_submissions (exam_id, student_id)` unique; `exam_answers (submission_id, question_id)` unique.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `exams.list` (to take, to grade, mine) | signed in |
 | `exams.create`, `update`, `delete`, `questions.*`, `audience.*`, `graders.*`, `importQuestions`, `templates.*` | `exams.author` (staff); edits by owner or `exams.manage` |
@@ -94,11 +98,11 @@ Carried over. Marks and scores are `REAL` rounded to 2 decimals ([13](13-data-la
 | `exams.review` | the student after release |
 | `exams.linkToAssessment` | owner with classroom staff rights |
 
-`saveAnswer` is called often during an attempt (each answer change). It is a single small write; for a 40-student class finishing together that is a short burst well within one object's capacity, but the take screen should debounce saves (for example every few seconds or on question change).
+`saveAnswer` is called often during an attempt (each answer change). It is a single small write; for a 40-student class finishing together that is a short burst well within the compute's capacity, but the take screen should debounce saves (for example every few seconds or on question change).
 
 ## 10. Moving existing data
 
-Straight copy; question image URLs → R2 keys.
+Moves with the dump ([13](13-data-layer.md)); question image URLs → R2 keys.
 
 ## 11. Parity checklist
 

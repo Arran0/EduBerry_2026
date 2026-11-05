@@ -1,12 +1,12 @@
 # Users, Profiles and Admin
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Sign-in, sessions and the permission model are in [12-auth-and-permissions.md](12-auth-and-permissions.md); this doc covers the people records and the screens that manage them.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Sign-in, sessions and the permission model are in [12-auth-and-permissions.md](12-auth-and-permissions.md); this doc covers the people records and the screens that manage them.
 
 ## 1. Summary
 
 The section holds every person the school knows about: login accounts (`profiles`, one per Supabase Auth user), their extended student and staff records (`student_details`, `staff_details`), support staff who have no login (`support_staff`), and the admin audit log. Admins manage them in the Student and Staff Profile Managers, reached from Admin Space.
 
-What changes: accounts move into the school object ([12](12-auth-and-permissions.md)); the 12 admin API routes become `admin.*` object methods behind one permission check; the student roster's server-side paging moves from a Postgres function to an object query; sensitive student and staff fields get their own permission; bulk import runs as a batched job instead of one long request. The data model barely changes.
+What changes: accounts move from Supabase Auth into our own `auth.users` in the school's database, with the same ids ([12](12-auth-and-permissions.md)); the 12 admin API routes become Worker routes that each call one `admin_*` SQL function, which checks the caller's role itself; the roster paging function stays as it is; sensitive student and staff fields get their own policy; bulk import runs as a batched job instead of one long request. The data model does not change.
 
 ## 2. Users and screens
 
@@ -47,30 +47,32 @@ Main code: `src/lib/admin.ts` (profiles, roster paging, account actions), `stude
 | `student_details` | 928 | 1:1 extended student record (42 columns: admission, roll, parents, guardian phones, Aadhaar, PEN, UDISE, CBSE, category, caste, income, TC, WhatsApp opt-in...) | Sensitive. Split read access: contact fields vs identity and socio-economic fields |
 | `staff_details` | 59 | 1:1 HR record (44 columns: employee id, designation, department, qualifications, CBSE, Aadhaar, PAN, EPF, NPS, bank, PT jurisdiction, exit...) | Sensitive; bank and identity numbers readable by admin and payroll roles only |
 | `support_staff` | 28 | People without logins, for attendance and salary | Unchanged |
-| `admin_audit_log` | 17 | Actor, action, target, details, IP | Append-only guard kept as a SQLite trigger |
+| `admin_audit_log` | 17 | Actor, action, target, details, IP | Append-only guard trigger, unchanged |
 
 Full column lists: [reference/live-schema.md §20](reference/live-schema.md#20--users-profiles-and-admin).
 
 ## 5. Logic in the database
 
-| Function | Kind | What it guarantees | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Kind | What it guarantees | Under Neon |
 | --- | --- | --- | --- |
-| `handle_new_user` (trigger on `auth.users`) | Data trigger | Every login has a profile, starting as `student` | Part of `admin.createUser` (one transaction creates `users` and `profiles`) |
-| `guard_profile_insert` | Guard | Non-admins cannot create a profile with a privileged role or flags | Permission check in the methods; no browser path can insert profiles |
-| `guard_profile_privileged_columns` | Guard | Non-admins cannot change role, email, grade, section, ban or flags, even on their own profile | `profile.updateOwn` accepts only name and avatar; everything else needs `admin.users.manage` |
-| `sync_role_to_auth_metadata` | Data trigger | Role copied into the JWT metadata | Not needed: the role is read from the database on every call |
-| `handle_profile_delete` | Data trigger | Content reassignment and clean-up on delete | Explicit steps in `admin.deleteUser`, same order and rules |
-| `admin_audit_append_only` | Guard | Audit rows cannot be changed | SQLite trigger + no update method |
-| `staff_directory` | Read helper | Staff directory columns for any signed-in staff | `directory.staff` query |
-| `student_roster_facets` | Read helper | Grade/section counts for filters | `admin.students.facets` query |
-| `get_user_role` | Access helper | Role of the caller | Session's user |
+| `handle_new_user` (trigger on `auth.users`) | Data trigger | Every login has a profile, starting as `student` | Unchanged, except `handle_new_user`: unchanged; fires on our own `auth.users` ([12](12-auth-and-permissions.md)) |
+| `guard_profile_insert` | Guard | Non-admins cannot create a profile with a privileged role or flags | Unchanged |
+| `guard_profile_privileged_columns` | Guard | Non-admins cannot change role, email, grade, section, ban or flags, even on their own profile | Unchanged |
+| `sync_role_to_auth_metadata` | Data trigger | Role copied into the JWT metadata | Unchanged; fires on our own `auth.users` ([12](12-auth-and-permissions.md)) |
+| `handle_profile_delete` | Data trigger | Content reassignment and clean-up on delete | Unchanged |
+| `admin_audit_append_only` | Guard | Audit rows cannot be changed | Unchanged |
+| `staff_directory` | Read helper | Staff directory columns for any signed-in staff | Unchanged |
+| `student_roster_facets` | Read helper | Grade/section counts for filters | Unchanged |
+| `get_user_role` | Access helper | Role of the caller | Unchanged |
 
 ## 6. Server routes and integrations
 
-| Route today | Target method | Notes |
+| Route today | Target (phase 2 name) | Notes |
 | --- | --- | --- |
 | `POST /api/admin/create-user` | `admin.createUser` | Password hashing in the Worker; invite email via the outbox |
-| `POST /api/admin/bulk-import` | `admin.import.start` + job | Rows stored in an `import_jobs` table, processed 50 per alarm tick, results polled by the screen |
+| `POST /api/admin/bulk-import` | `admin.import.start` + job | Rows stored in an `import_jobs` table, processed 50 at a time through the `jobs` queue, results polled by the screen |
 | `POST /api/admin/update-profile` | `admin.updateProfile` | Keeps "cannot demote the last admin" |
 | `POST /api/admin/set-staff-flag` | `admin.setFlag` | |
 | `POST /api/admin/toggle-ban` | `admin.setBanned` | Deletes the person's sessions on ban |
@@ -94,20 +96,22 @@ Email (invites and password links) goes through the account-email templates ([12
 
 | Assumption | Fix |
 | --- | --- |
-| Accounts live in the deployment's Supabase Auth | Accounts in the school object |
+| Accounts live in the deployment's Supabase Auth | Accounts in the school database's own `auth.users` |
 | `handle_profile_delete` hands content to "the oldest other admin" | Same rule, but only within the school (automatic in the target) |
 | Student emails are generated on the school's domain (`@muthamilpublicschool.edu.in`) by the import sheet | A per-school "generated email domain" setting, or admission-number sign-in (open question in [12](12-auth-and-permissions.md)) |
 | `STUDENT_PASSWORD` env var in `scripts/bulk-create-students.js` | Removed; import uses invites or generated passwords |
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables (school database)
 
-`users` and `sessions` from [12](12-auth-and-permissions.md); `profiles`, `student_details`, `staff_details`, `support_staff`, `admin_audit_log` carried over column for column with the type map from [13](13-data-layer.md). New: `import_jobs` (id, kind, status, total, done, failed, created_by, created_at) and `import_rows` (job_id, row_no, input JSON, result, error).
+`auth.users`, `auth.sessions` and `auth.one_time_tokens` from [12](12-auth-and-permissions.md); `profiles`, `student_details`, `staff_details`, `support_staff`, `admin_audit_log` carried over as they are ([13](13-data-layer.md)). New: `import_jobs` (id, kind, status, total, done, failed, created_by, created_at) and `import_rows` (job_id, row_no, input JSON, result, error).
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission | Notes |
+| Endpoint | Permission | Notes |
 | --- | --- | --- |
 | `profile.me` | signed in | Own profile and permissions |
 | `profile.updateOwn` | signed in | Name and avatar only |
@@ -119,9 +123,11 @@ Email (invites and password links) goes through the account-email templates ([12
 | `admin.import.start`, `admin.import.status` | `admin.users.import` | |
 | `supportStaff.list` / `save` / `deactivate` | `admin.users.manage` | |
 
-### Permission rows added
+### Access rules
 
-| Permission | Default roles |
+These names label rules carried by the policies and the `admin_*` functions. Only the sensitive-field rule is new: the sensitive columns of `student_details` and `staff_details` move behind a policy of their own ([12](12-auth-and-permissions.md)).
+
+| Rule | Roles |
 | --- | --- |
 | `directory.read` | teacher, coordinator, principal, admin |
 | `admin.users.read`, `admin.users.manage`, `admin.users.import` | admin |
@@ -130,9 +136,9 @@ Email (invites and password links) goes through the account-email templates ([12
 
 ## 10. Moving existing data
 
-- `profiles`, `student_details`, `staff_details`, `support_staff`, `admin_audit_log`: straight copy with the type map; `avatar_url` rewritten to an R2 key.
-- `auth.users` → `users` as described in [12](12-auth-and-permissions.md#moving-existing-accounts).
-- Check: every `profiles.id` has a `users` row and vice versa (one live auth user has no profile today: 1,178 vs 1,177; decide whether to import it).
+- `profiles`, `student_details`, `staff_details`, `support_staff`, `admin_audit_log`: move with the dump; `avatar_url` rewritten to an R2 key.
+- `auth.users`: the needed columns copied into our own `auth.users`, as described in [12](12-auth-and-permissions.md#moving-existing-accounts).
+- Check: every `profiles.id` has an `auth.users` row and vice versa (one live auth user has no profile today: 1,178 vs 1,177; decide whether to import it).
 
 ## 11. Parity checklist
 

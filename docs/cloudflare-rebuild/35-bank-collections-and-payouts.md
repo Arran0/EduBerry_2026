@@ -1,6 +1,6 @@
 # Bank Collections and Payouts
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Fee billing is in [33-fees.md](33-fees.md), salary and payroll in [34-payroll-and-salary.md](34-payroll-and-salary.md), secrets and the bank gateway container in [17-integrations-and-secrets.md](17-integrations-and-secrets.md). The planned payout batches (round C4) are in `docs/payroll-multi-location-plan.md`.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Fee billing is in [33-fees.md](33-fees.md), salary and payroll in [34-payroll-and-salary.md](34-payroll-and-salary.md), secrets and the bank gateway container in [17-integrations-and-secrets.md](17-integrations-and-secrets.md). The planned payout batches (round C4) are in `docs/payroll-multi-location-plan.md`.
 
 ## 1. Summary
 
@@ -39,7 +39,7 @@ So the whole money-movement path is built and tested, but unused in production. 
 
 What changes:
 
-- The provider-agnostic TypeScript (`bankClient.ts`, `bankConfig.ts`, `smartCollect.ts`, `payoutProvider.ts`, `payoutClaim.ts`, `payoutWebhook.ts`) moves into the school's payments module almost unchanged.
+- The provider-agnostic TypeScript (`bankClient.ts`, `bankConfig.ts`, `smartCollect.ts`, `payoutProvider.ts`, `payoutClaim.ts`, `payoutWebhook.ts`) moves into the Worker almost unchanged; the SQL functions it calls move with the dump.
 - Webhooks move to `/hooks/<schoolId>/<provider>` and are made idempotent through `webhook_events`.
 - Calls that need a client certificate go through the bank gateway container.
 - Secrets come only from the school's encrypted secrets; every environment-variable fallback is removed.
@@ -147,29 +147,31 @@ Planned in round C4 (not built): `payroll_bank_accounts`, `payroll_payout_batche
 
 ## 5. Logic in the database
 
-| Today | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Today | Under Neon |
 | --- | --- |
-| Admin-only row-level security on `payment_secrets` | Secrets encrypted in the school object and readable only by server code ([17](17-integrations-and-secrets.md)); never returned to the browser |
-| World-readable `site_settings` rows for public config | `settings.get` returns only non-secret keys; payment config is admin-read |
-| Conditional update as the payout claim | A check and write inside one `transactionSync()` in the object (single-threaded, so no race between two admins) |
-| `fee_pay_refund` (refund payout) | `fees.refunds.pay` ([33](33-fees.md)); today it records a manual refund only |
+| Admin-only row-level security on `payment_secrets` | Unchanged |
+| World-readable `site_settings` rows for public config | Unchanged |
+| Conditional update as the payout claim | Unchanged |
+| `fee_pay_refund` (refund payout) | Unchanged |
 
 ## 6. Server routes and integrations
 
 | Route today | Target |
 | --- | --- |
-| `/api/fees/upi/create-collect`, `/api/bus/upi/create-collect` | `payments.collect.start(billIds)`: one method for fee and bus bills (bus fees are fee bills in v2, see [33](33-fees.md)) |
+| `/api/fees/upi/create-collect`, `/api/bus/upi/create-collect` | `payments.collect.start(billIds)`: one route for fee and bus bills (bus fees are fee bills in v2, see [33](33-fees.md)) |
 | `/api/fees/upi/webhook`, `/api/bus/upi/webhook` | `POST /hooks/<schoolId>/bank-collect`: one endpoint; the router passes the raw body and headers to `payments.collect.callback` |
 | `/api/fees/online/order`, `/api/fees/online/verify`, `/api/fees/razorpay/create-order` | `fees.online.order`, `fees.online.verify` |
 | `/api/fees/razorpay/webhook`, `/api/bus/razorpay/webhook` | `POST /hooks/<schoolId>/razorpay` |
 | `/api/salary/payout/initiate`, `/api/bus/payroll/payout/initiate` | `payments.payout.initiate(source, id)`: source is a salary cycle, a driver cycle, or (later) a v2 payroll run |
 | `/api/salary/payout/webhook`, `/api/bus/payroll/payout/webhook` | `POST /hooks/<schoolId>/bank-payout`: the reference prefix or a lookup decides staff or driver |
-| (none) | `payments.payout.poll`: an alarm that uses `status_path` for sends still `initiated` after a set time |
+| (none) | `payments.payout.poll`: a job on the hub's timer that uses `status_path` for sends still `initiated` after a set time |
 
 Webhook handling in the target:
 
-1. The router finds the school from the path and passes the raw body and headers to the school object. There is no user session.
-2. The object verifies the signature with the school's secret, stores the event in `webhook_events (provider, event_key, received_at, outcome)` with a unique key (the UTR, Razorpay payment id, or bank payout id plus status), and returns early on a duplicate.
+1. The router finds the school from the path. There is no user session.
+2. The Worker verifies the signature with the school's secret and queues the event; the webhooks consumer stores it in `webhook_events (provider, event_key, received_at, outcome)` with a unique key (the UTR, Razorpay payment id, or bank payout id plus status), and returns early on a duplicate.
 3. Matching and settlement run in one transaction with the payment and bill updates.
 4. The handler always returns 2xx for events it does not track, as today, so the bank stops retrying.
 
@@ -177,7 +179,7 @@ Webhook handling in the target:
 
 - **Jobs:**
   - Payout batches larger than one call go through the `jobs` queue, one message per bank batch, each recording its result before the next.
-  - A per-school alarm polls the status of unconfirmed sends when `status_path` is set.
+  - A job on the school's hub timer polls the status of unconfirmed sends when `status_path` is set.
   - Collection allocation is synchronous: the payer is waiting.
 - **Files:** bank payout files are generated on demand and stored under `schools/<schoolId>/payouts/<batchId>/<filename>` for audit, so an uploaded file can always be shown later. Statutory files are covered in [34](34-payroll-and-salary.md).
 - **Live updates:** the payer's page waits for confirmation. Today it polls `/api/fees/online/verify`. In the target, a WebSocket message on the student's channel can replace polling, with polling kept as a fallback.
@@ -190,15 +192,17 @@ Webhook handling in the target:
 | Callback URLs are deployment-relative (`/api/fees/upi/webhook` and others, listed in the README and in Settings) | Settings components, README | `/hooks/<schoolId>/<provider>` on the platform host; Settings shows the full URL for that school |
 | One bank arrangement per deployment for fees and bus | `collectSetup.ts` | One per school (unchanged within a school) |
 | Bank-collect references are unique per deployment (`SCHFEE-...`) | create-collect routes | Unique per school; the school is already known from the webhook path, so references never cross schools |
-| OAuth2 tokens cached per server process | `bankClient.ts` | Cached in the school object's memory, or in its storage with an expiry |
+| OAuth2 tokens cached per server process | `bankClient.ts` | Cached in the Worker isolate's memory per school, or in KV with an expiry, encrypted |
 | Legacy `smart_collect_config` and its secret fallback | `collectSetup.ts` | Not carried over (no live school uses it); import any secret it holds into `bank_collect` |
 | Legacy RazorpayX and Cashfree payout providers | `payoutProvider.ts` | Not carried over; no live school uses them |
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Module
 
-A `payments` module in the school object owns:
+A `payments` module in the Worker (the TypeScript in `src/lib` today) owns:
 
 - the bank connection configuration and secrets (through the secrets module);
 - collection start and callbacks for every bill type;
@@ -223,7 +227,7 @@ A `payments` module in the school object owns:
 
 - One `payout_batches` / `payout_items` / `payout_events` design, as planned for round C4, serves both salary cycles and v2 runs. The legacy `payout_status` columns are then derived from items.
 - Claiming, eligibility and `failureApplies` move unchanged.
-- The bank call happens after the claim is committed. A Durable Object lets other requests run while it awaits a `fetch`, so the commit-before-call order matters exactly as it does today.
+- The bank call happens after the claim is committed, exactly as today: the claim is its own short transaction, so nothing holds a lock while the bank answers.
 - **Bank file mode:**
   - the batch moves to `awaiting_bank_approval` when the file is downloaded;
   - the admin confirms the upload;
@@ -234,12 +238,12 @@ A `payments` module in the school object owns:
 - Banks that require a client certificate are called through the bank gateway container ([17](17-integrations-and-secrets.md)).
   - The payments module sends the request, plus the certificate and key decrypted for that call only, over the container binding.
   - The container makes the call exactly as `bankClient.ts` does today.
-- Banks without mutual TLS are called with `fetch` directly from the object.
+- Banks without mutual TLS are called with `fetch` directly from the Worker.
 - If a bank allow-lists caller IP addresses, the same container is the place to give it a fixed egress address (open question in [17](17-integrations-and-secrets.md)).
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `payments.config.get` / `save` (collect, payout, Razorpay) | `payments.configure` (admin) |
 | `payments.secrets.save` (write-only), `payments.secrets.status` (which keys are set) | `payments.configure` |
@@ -256,8 +260,8 @@ Account numbers are shown masked everywhere except the bank-file download and th
 
 ## 10. Moving existing data
 
-- Copy bank accounts (staff and drivers) and payout state on salary records as they are, converting money to paise.
-- Copy `site_settings` payment configuration into the school's settings, and `payment_secrets` into encrypted school secrets. Both stored rows are empty at the live school today.
+- Bank accounts (staff and drivers) and payout state on salary records move with the dump.
+- `site_settings` payment configuration moves as it is; `payment_secrets` values are encrypted with the platform key on the way in ([17](17-integrations-and-secrets.md)). Both stored rows are empty at the live school today.
 - Re-enter the Razorpay keys if they live only in environment variables (check before cutover).
 - Re-register every webhook with the bank and with Razorpay at the new `/hooks/<schoolId>/...` URLs before switching DNS. Keep the old routes forwarding to the new ones for a week, in case a provider retries an old event.
 
@@ -272,7 +276,7 @@ Account numbers are shown masked everywhere except the bank-file download and th
 - [ ] A bank-collect callback is matched in each of the three modes, credits the amount that arrived, and is idempotent on its UTR.
 - [ ] Callbacks with a bad signature are rejected. Unknown events return 2xx and change nothing.
 - [ ] A school's callback cannot settle another school's bill: the school comes from the path, and the secret is that school's.
-- [ ] Secrets are never returned by any method. Write-only keys show only "configured".
+- [ ] Secrets are never returned by any route. Write-only keys show only "configured".
 
 ## 12. Open questions
 

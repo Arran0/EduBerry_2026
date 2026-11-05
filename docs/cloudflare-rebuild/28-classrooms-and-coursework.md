@@ -1,6 +1,6 @@
 # Classrooms and Coursework (LMS)
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Assessments, marks and report cards that live inside classrooms are in [30-grades-and-report-cards.md](30-grades-and-report-cards.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Assessments, marks and report cards that live inside classrooms are in [30-grades-and-report-cards.md](30-grades-and-report-cards.md).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ A classroom is a subject class (for example "Grade 7 B Science") with staff and 
 
 Live: 325 classrooms, 10,706 memberships, 27 folders, 110 files, 1,293 progress rows, 85 submissions, 40 discussion posts; about 1 GB of files in storage, most of it classroom material.
 
-What changes: the edu-point and analysis functions (several hard-coded to `Asia/Kolkata`) move into the classroom module and read from a points summary; files become private and served per member; the classroom manager list pages server-side as today.
+What changes: the edu-point and analysis functions stay in SQL; those hard-coded to `Asia/Kolkata` read the school's time zone instead, and can read from a points summary; files become private and served per member; the classroom manager list pages server-side as today.
 
 ## 2. Users and screens
 
@@ -47,14 +47,16 @@ Assessment tables (`classroom_assessments`, `classroom_assessment_marks`, compon
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `is_classroom_member`, `user_is_classroom_member`, `is_classroom_staff`, `_assert_classroom_staff`, `owns_submission` | Relationship helpers `isClassroomMember`, `isClassroomStaff`, `ownsSubmission` |
-| `_classroom_edu_earned` | Replaced by an `edu_points_ledger` written when progress or a completion changes (student, classroom, source, points, earned_on in the school's time zone) |
-| `get_classroom_edu_leaderboard`, `get_classroom_edu_month_summary`, `get_classroom_edu_monthly`, `get_classroom_edu_top3`, `get_classroom_homework_edu_top3`, `get_student_edu_dashboard`, `get_student_edu_standings` | Queries over `edu_points_ledger` (or a monthly summary of it) |
-| `get_classroom_assessment_trend` | Owned by [30](30-grades-and-report-cards.md) |
-| `classroom_manager_page`, `classroom_member_counts` | `classrooms.managerPage(search, cursor)` with a member count kept on `classrooms` |
-| `get_homeroom_classrooms` | [22](22-academic-structure.md) |
+| `is_classroom_member`, `user_is_classroom_member`, `is_classroom_staff`, `_assert_classroom_staff`, `owns_submission` | Unchanged |
+| `_classroom_edu_earned` | Unchanged |
+| `get_classroom_edu_leaderboard`, `get_classroom_edu_month_summary`, `get_classroom_edu_monthly`, `get_classroom_edu_top3`, `get_classroom_homework_edu_top3`, `get_student_edu_dashboard`, `get_student_edu_standings` | Unchanged, except `get_student_edu_dashboard`, `get_student_edu_standings`: unchanged; the access token carries `user_metadata.role` for `auth.jwt()` ([12](12-auth-and-permissions.md)) |
+| `get_classroom_assessment_trend` | Unchanged |
+| `classroom_manager_page`, `classroom_member_counts` | Unchanged |
+| `get_homeroom_classrooms` | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -75,15 +77,17 @@ None today (all browser queries). The AI assistant button only opens an external
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-Carried over: `classrooms`, `classroom_members`, `classroom_folders`, `classroom_files`, `classroom_file_progress`, `classroom_submissions`, `classroom_discussions`. Add `classrooms.student_count` (maintained on membership change), `edu_points_ledger` (student_id, classroom_id, source_kind `file`/`homework`, source_id, points, earned_on, unique per student and source), and keep it in step whenever progress or a homework completion changes state (points removed if the state goes back).
+Carried over unchanged: `classrooms`, `classroom_members`, `classroom_folders`, `classroom_files`, `classroom_file_progress`, `classroom_submissions`, `classroom_discussions`. Worth adding `classrooms.student_count` (maintained on membership change), `edu_points_ledger` (student_id, classroom_id, source_kind `file`/`homework`, source_id, points, earned_on, unique per student and source), and keep it in step whenever progress or a homework completion changes state (points removed if the state goes back).
 
 Indexes: `classroom_members (user_id, classroom_id)` and `(classroom_id, role)`; `classroom_files (folder_id, sort_order)`; `classroom_file_progress (file_id, student_id)` unique, `(student_id)`; `classroom_submissions (file_id, student_id)`; `edu_points_ledger (classroom_id, earned_on)`, `(student_id, earned_on)`.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `classrooms.mine` | signed in |
 | `classrooms.get(id)` (one call: header, folders, files, my progress or class progress) | members |
@@ -98,7 +102,7 @@ Indexes: `classroom_members (user_id, classroom_id)` and `(classroom_id, role)`;
 
 ## 10. Moving existing data
 
-Straight copy; attachment and submission URLs to R2 keys with files copied; build `edu_points_ledger` from current `completed` progress and homework completions (using `updated_at` as `earned_on` in the school's time zone, as today's function does), and check leaderboards match.
+Moves with the dump ([13](13-data-layer.md)); attachment and submission URLs to R2 keys with files copied; if `edu_points_ledger` is added, its migration builds it from current `completed` progress and homework completions (using `updated_at` as `earned_on` in the school's time zone, as today's function does), and check leaderboards match.
 
 ## 11. Parity checklist
 

@@ -1,6 +1,6 @@
 # Attendance: Students, Staff and Support Staff
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -12,7 +12,7 @@ Three kinds of attendance, one rules engine:
 
 Day rules (late and checkout cutoffs, holidays, non-working days) can apply to everyone or to named groups of staff, by date or by weekday. When a rule changes, past staff days in the window are recomputed.
 
-This is the heaviest daily write path in the app: about 1,050 student marks and 50–80 staff punches a school day today, about 9,000 marks and 1,400 punches at a 10,000-user school. What changes: the 2,700-line `staff_attendance_punch` family of functions becomes one TypeScript module running inside the school object (one call per punch, no row locks); leave-to-attendance sync moves from the browser into the leave approval method; recompute runs as a job; reports read from summary tables.
+This is the heaviest daily write path in the app: about 1,050 student marks and 50–80 staff punches a school day today, about 9,000 marks and 1,400 punches at a 10,000-user school. What changes: little. The 2,700-line `staff_attendance_punch` family of functions moves unchanged, row locks and all; the location-attempt clean-up moves from `pg_cron` to the hub's timer; in phase 2, leave-to-attendance sync moves from the browser into the leave decision function, and reports read from a summary table.
 
 ## 2. Users and screens
 
@@ -83,19 +83,21 @@ Also read: `profiles.geofence_exempt`, `profiles.attendance_hidden`, `homerooms`
 
 ## 5. Logic in the database
 
-| Function | Target in the attendance module |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `staff_attendance_punch` (9.6 KB) | `attendance.punch(action, reading)`: same slot rules, gap, verdict and status logic, in one call |
-| `attendance_effective_fence`, `attendance_location_verdict`, `attendance_polygon_signed_distance_m`, `attendance_haversine_m`, `attendance_no_position_verdict`, `attendance_failure_class` | Pure TypeScript geometry and verdict functions in `packages/shared` (unit-tested, also usable by the phone for a preview) |
-| `attendance_effective_cutoffs`, `attendance_day_off_kind`, `attendance_derived_status`, `attendance_minute_of_day` | Pure functions over the day-rule tables, loaded once per call |
-| `attendance_timezone`, `get_server_time` | School settings and `ctx.now` |
-| `attendance_queue_recompute`, `attendance_rule_changed`, `attendance_rule_member_changed`, `attendance_config_changed` (triggers) | Rule-save methods enqueue recompute scopes directly |
-| `attendance_recompute_pending`, `recompute_staff_attendance_dates` | `attendance.recompute` job, batched by date |
-| `force_attendance_marked_by`, `guard_attendance_location_columns` (triggers) | The marker and position always come from the session and the punch method; no other method writes them |
-| `ack_forgotten_checkout` | `attendance.ackForgottenCheckout` |
-| `homeroom_attendance_counts`, `student_attendance_tally` | Summary queries, backed by a `student_attendance_daily` summary (counts per homeroom per date) |
-| `get_monthly_member_stats` | Team analytics (shared with [26](26-tasks-and-projects.md)) |
-| `cleanup_attendance_location_attempts` (cron) | Nightly maintenance job; old attempts archived to R2 |
+| `staff_attendance_punch` (9.6 KB) | Unchanged |
+| `attendance_effective_fence`, `attendance_location_verdict`, `attendance_polygon_signed_distance_m`, `attendance_haversine_m`, `attendance_no_position_verdict`, `attendance_failure_class` | Unchanged |
+| `attendance_effective_cutoffs`, `attendance_day_off_kind`, `attendance_derived_status`, `attendance_minute_of_day` | Unchanged |
+| `attendance_timezone`, `get_server_time` | Unchanged |
+| `attendance_queue_recompute`, `attendance_rule_changed`, `attendance_rule_member_changed`, `attendance_config_changed` (triggers) | Unchanged |
+| `attendance_recompute_pending`, `recompute_staff_attendance_dates` | Unchanged |
+| `force_attendance_marked_by`, `guard_attendance_location_columns` (triggers) | Unchanged |
+| `ack_forgotten_checkout` | Unchanged |
+| `homeroom_attendance_counts`, `student_attendance_tally` | Unchanged |
+| `get_monthly_member_stats` | Unchanged |
+| `cleanup_attendance_location_attempts` (cron) | Unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
 
 ## 6. Server routes and integrations
 
@@ -103,7 +105,7 @@ No API routes today; everything is browser queries and RPCs. No external service
 
 ## 7. Jobs, files and live updates
 
-- **Jobs:** recompute after rule changes; nightly clean-up; year-end archive of `attendance_records`, `staff_attendance_records` and attempts into the year's archive object.
+- **Jobs:** recompute after rule changes; nightly clean-up of location attempts, writing old ones to R2 first if they must be kept ([13](13-data-layer.md#keeping-the-working-set-small)).
 - **WhatsApp:** the reminders branch adds "absent without leave" parent messages from this data (see `docs/whatsapp-system-status.md`).
 - **Files:** none (reports are generated in the browser).
 - **Live updates:** the smartboard and today's tally could use a `attendance:homeroom:<id>` channel; not required.
@@ -113,28 +115,29 @@ No API routes today; everything is browser queries and RPCs. No external service
 | Assumption | Fix |
 | --- | --- |
 | Time zone from `site_settings.attendance_config`, default `Asia/Kolkata` | School setting `school.timezone`, required at provisioning |
-| `PERFORM set_config('app.attendance_write', 'on')` session flag to let only the punch write positions | Not needed: only the punch method writes those columns |
+| `PERFORM set_config('app.attendance_write', 'on')` session flag to let only the punch write positions | Unchanged: the punch function sets the flag inside its own transaction, which behaves the same on Neon |
 | Week numbering (`EXTRACT(DOW)`, Sunday = 0) | Same convention in shared code; the school's first day of week as a setting if needed |
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-All tables above, carried over. Changes:
+All tables above, carried over unchanged. Worth adding:
 
-- `staff_attendance_records`: positions as `REAL`; keep the four-punch layout (it is what reports read). Rename status `e` → `exception` with the importer mapping it.
-- New `student_attendance_daily` (homeroom_id, date, present, absent, late, on_leave, excused, on_duty, half_day), updated in the same call that marks a sheet, so tallies and monthly percentages never scan raw marks.
+- `student_attendance_daily` (homeroom_id, date, present, absent, late, on_leave, excused, on_duty, half_day), kept up to date by a trigger on `attendance_records`, so tallies and monthly percentages never scan raw marks.
 - Indexes: `attendance_records (homeroom_id, date)`, `(student_id, date)`; `staff_attendance_records (staff_id, date)` unique, `(date)`; rule tables by `(scope_type, scope_date)` and `(scope_type, scope_weekday)`; members by `staff_id`.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission | Notes |
+| Endpoint | Permission | Notes |
 | --- | --- | --- |
 | `attendance.sheet(homeroomId, date)` | class teacher of the homeroom, `attendance.mark_students`, or the homeroom's smartboard | Members, marks, approved leave, holiday notice — one call |
 | `attendance.saveSheet(homeroomId, date, rows)` | same | Upsert + daily summary + outbox (absence messages, if enabled) |
 | `attendance.tally(date)` | `attendance.reports` | From the daily summary |
 | `attendance.myMonth(month)` | the student or staff member | |
-| `attendance.punch(action, reading)` | staff with attendance tracking (not hidden) | CPU-light; all checks local |
+| `attendance.punch(action, reading)` | staff with attendance tracking (not hidden) | One call to `staff_attendance_punch` |
 | `attendance.adminMark(staffId, date, status)` / `clear` | `attendance.manage_staff` | |
 | `attendance.supportStaff.mark` / `report` | `attendance.manage_staff` | |
 | `attendance.rules.*` (timings, holidays, non-working days, groups) | `attendance.rules` (admin) | Each save enqueues recompute |
@@ -148,7 +151,7 @@ All tables above, carried over. Changes:
 
 ## 10. Moving existing data
 
-Straight copy with the type map. Map `e` → `exception`. Build `student_attendance_daily` from `attendance_records` after import. Verify per-homeroom per-month counts against today's report screens.
+Moves with the dump ([13](13-data-layer.md)). If `student_attendance_daily` is added, its migration builds it from `attendance_records`. Verify per-homeroom per-month counts against today's report screens.
 
 ## 11. Parity checklist
 
@@ -158,7 +161,7 @@ Straight copy with the type map. Map `e` → `exception`. Build `student_attenda
 - [ ] Approving leave writes the same student or staff attendance as today, in the same transaction.
 - [ ] Nobody can set a punch position or verdict except through a punch.
 - [ ] Daily tallies and monthly percentages match today's reports for the imported data.
-- [ ] The morning rush (all staff punching between 08:00 and 08:30, all homerooms marking by 09:00) stays under 300 ms per call at a 10,000-user school (spike S2).
+- [ ] The morning rush (all staff punching between 08:00 and 08:30, all homerooms marking by 09:00) stays under 300 ms per call at a 10,000-user school (spike S5).
 
 ## 12. Open questions
 

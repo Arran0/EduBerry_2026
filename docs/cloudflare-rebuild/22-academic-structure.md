@@ -1,6 +1,6 @@
 # Academic Structure: Years, Homerooms and Teams
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Classrooms (the LMS) are in [28-classrooms-and-coursework.md](28-classrooms-and-coursework.md); timetable subjects and groups in [31-timetable.md](31-timetable.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Classrooms (the LMS) are in [28-classrooms-and-coursework.md](28-classrooms-and-coursework.md); timetable subjects and groups in [31-timetable.md](31-timetable.md).
 
 ## 1. Summary
 
@@ -10,7 +10,7 @@ Three shared structures that most other sections hang off:
 - **Homerooms** (`homerooms`, `homeroom_members`): a class-section such as "Grade 5 A" for one academic year, with a class teacher, its students, an optional smartboard kiosk and an expiry date. Student attendance, smartboards, leave and many reports are organised by homeroom.
 - **Teacher teams** (`teams`, `team_members`, `team_coordinators`): groups of staff with one or more coordinators, used for task assignment, leave approval routing, announcements and visibility rules.
 
-What changes: little in the data. The `SECURITY DEFINER` helpers (`my_teammate_ids`, `shares_team_with`, `is_homeroom_member`, `get_homeroom_classrooms`) become shared relationship helpers in the permission module; academic-year management moves from the fee settings screen to a core admin screen; closing a year becomes the trigger for archiving ([13](13-data-layer.md#archiving-closed-academic-years)).
+What changes: nothing in the data or its functions. The `SECURITY DEFINER` helpers (`my_teammate_ids`, `shares_team_with`, `is_homeroom_member`, `get_homeroom_classrooms`) stay and keep serving the policies; academic-year management moves from the fee settings screen to a core admin screen.
 
 ## 2. Users and screens
 
@@ -49,22 +49,24 @@ Full columns: [reference/live-schema.md §22](reference/live-schema.md#22--acade
 
 ## 5. Logic in the database
 
-| Function | What it does | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | What it does | Under Neon |
 | --- | --- | --- |
-| `current_academic_year`, `current_academic_year_id` | Active year | `years.active()` cached in the object |
-| `academic_year_code_for`, `academic_year_id_for`, `normalize_academic_year_code` | Map a date or code to a year | Shared TypeScript in `packages/shared` (already mirrored in `academicYear.ts`) |
-| `ensure_academic_year` | Create a year if missing | `years.ensure()` |
-| `set_active_academic_year` | Switch the active year; close the old one | `years.setActive()`; also schedules the archive job for the closed year |
-| Exclusion constraint on `academic_years` | No overlapping date ranges | Checked in `years.create`/`update` |
-| `is_homeroom_member`, `get_homeroom_classrooms` | Access and the "classrooms holding my students" list | Relationship helper; `homerooms.classrooms()` query |
-| `my_teammate_ids`, `shares_team_with` | Team visibility | Relationship helpers, cached per call |
-| `get_grade_sections_with_students` | Distinct grade-sections that have students | `structure.gradeSections()` query |
-| `homeroom_attendance_counts`, `student_attendance_tally` | Attendance summaries per homeroom | Owned by [23-attendance.md](23-attendance.md) |
-| `restrict_smartboard_homeroom_update` (trigger) | Smartboard may change only its banner | Method-level check ([27](27-smartboard.md)) |
+| `current_academic_year`, `current_academic_year_id` | Active year | Unchanged |
+| `academic_year_code_for`, `academic_year_id_for`, `normalize_academic_year_code` | Map a date or code to a year | Unchanged |
+| `ensure_academic_year` | Create a year if missing | Unchanged |
+| `set_active_academic_year` | Switch the active year; close the old one | Unchanged |
+| Exclusion constraint on `academic_years` | No overlapping date ranges | Unchanged |
+| `is_homeroom_member`, `get_homeroom_classrooms` | Access and the "classrooms holding my students" list | Unchanged |
+| `my_teammate_ids`, `shares_team_with` | Team visibility | Unchanged |
+| `get_grade_sections_with_students` | Distinct grade-sections that have students | Unchanged |
+| `homeroom_attendance_counts`, `student_attendance_tally` | Attendance summaries per homeroom | Unchanged |
+| `restrict_smartboard_homeroom_update` (trigger) | Smartboard may change only its banner | Unchanged |
 
 ## 6. Server routes and integrations
 
-`/api/admin/sync-homerooms` becomes the batched `admin.syncHomerooms` job. Everything else is direct browser queries today and becomes object methods. No integrations.
+`/api/admin/sync-homerooms` becomes the batched `admin.syncHomerooms` job. Everything else is direct browser queries today: they run unchanged through the Data API in phase 1 and become endpoints in phase 2. No integrations.
 
 ## 7. Jobs, files and live updates
 
@@ -82,15 +84,17 @@ Full columns: [reference/live-schema.md §22](reference/live-schema.md#22--acade
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
 Carried over: `academic_years`, `homerooms`, `homeroom_members`, `teams`, `team_members`, `team_coordinators`. Drop the legacy text `academic_year` columns once every reader uses `academic_year_id` (keep them through the import, drop in a later migration). `homeroom_expiry_dates` moves to `settings`.
 
 Indexes worth keeping: `homeroom_members (student_id)`, `homeroom_members (homeroom_id)`, `homerooms (academic_year_id, grade, section)` unique, `team_members (user_id)`, `team_coordinators (user_id)`.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `years.list`, `years.active` | signed in |
 | `years.create`, `years.update`, `years.setActive` | `structure.years.manage` (admin) |
@@ -102,13 +106,13 @@ Indexes worth keeping: `homeroom_members (student_id)`, `homeroom_members (homer
 | `teams.list`, `teams.save`, `teams.setMembers`, `teams.setCoordinators` | `structure.teams.manage` (admin, coordinator) |
 | `structure.gradeSections` | staff |
 
-### Shared helpers (permission module)
+### Shared helpers
 
-`isClassTeacher(user, homeroomId)`, `homeroomsOf(student)`, `teammatesOf(user)`, `sharesTeam(a, b)`, `coordinatorsOf(user)`. Each is one indexed query, memoised for the length of a call.
+Today's `SECURITY DEFINER` helpers (`my_teammate_ids`, `shares_team_with`, `is_homeroom_member`, `get_homeroom_classrooms`) stay in SQL and serve both the policies and the phase 2 functions.
 
 ## 10. Moving existing data
 
-Straight copy. Check: every homeroom's `academic_year_id` is set (fill from the text code with `ensure_academic_year` logic where it is not); every student in `homeroom_members` matches their profile's grade and section, and list mismatches for the admin.
+Moves with the dump ([13](13-data-layer.md)). Check: every homeroom's `academic_year_id` is set (fill from the text code with `ensure_academic_year` logic where it is not); every student in `homeroom_members` matches their profile's grade and section, and list mismatches for the admin.
 
 ## 11. Parity checklist
 

@@ -1,6 +1,6 @@
 # Announcements and Notifications
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Message delivery (outbox, Queues, push sending, WhatsApp) is in [14-jobs-messaging-realtime.md](14-jobs-messaging-realtime.md) and [17-integrations-and-secrets.md](17-integrations-and-secrets.md); this doc covers the school notice board and the in-app notification surfaces.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Message delivery (outbox, Queues, push sending, WhatsApp) is in [14-jobs-messaging-realtime.md](14-jobs-messaging-realtime.md) and [17-integrations-and-secrets.md](17-integrations-and-secrets.md); this doc covers the school notice board and the in-app notification surfaces.
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Coordinators, principals and admins post announcements (title, rich text, attach
 
 Live: 9 announcements, 25 audience rows, 71 likes, 919 read markers; push subscriptions 0 (push not yet enabled on live).
 
-What changes: visibility, today enforced by row-level security on the feed function, becomes an explicit audience resolver in the object; push moves server-side; read state moves fully to the server (today it is split between `localStorage` high-water marks and a reads table); attachments become private.
+What changes: visibility stays with today's row-level security and feed function; push moves server-side, queued by the function that publishes the post; read state moves fully to the server (today it is split between `localStorage` high-water marks and a reads table); attachments are private (since 28 Oct 2026).
 
 ## 2. Users and screens
 
@@ -43,26 +43,28 @@ Code: `src/lib/announcements.ts`, `announcementReads.ts`, `notificationDismissal
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `get_announcement_feed` | `announcements.feed(cursor)` using `visibleAnnouncementIds(user)` |
-| `announcement_ids_addressed_to_me`, `announcement_ids_for_staff_audience`, `announcement_ids_for_student_audience` | The audience resolver, one function for feed, badge, push recipients and smartboard |
-| `get_unread_announcements`, `count_unread_announcements` | `announcements.unread()` from `announcement_reads` |
-| `get_homeroom_announcement_feed` | `announcements.homeroomFeed(homeroomId)` for smartboards |
-| `cleanup_stale_push_subscriptions` (cron) | Removed: dead endpoints are deleted when a send returns 404/410 |
+| `get_announcement_feed` | Unchanged |
+| `announcement_ids_addressed_to_me`, `announcement_ids_for_staff_audience`, `announcement_ids_for_student_audience` | Unchanged |
+| `get_unread_announcements`, `count_unread_announcements` | Unchanged |
+| `get_homeroom_announcement_feed` | Unchanged |
+| `cleanup_stale_push_subscriptions` (cron) | Unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
 
 ## 6. Server routes and integrations
 
 | Route | Target |
 | --- | --- |
-| `/api/announcements/notify` | Removed; `announcements.create` writes push rows to the outbox |
+| `/api/announcements/notify` | A Worker route in phase 1; then removed, once the function that publishes a post writes push rows to the outbox ([14](14-jobs-messaging-realtime.md)) |
 | `/api/push/subscribe`, `/api/push/unsubscribe` | `push.subscribe`, `push.unsubscribe` |
 
 ## 7. Jobs, files and live updates
 
 - **Files:** `announcements/<announcementId>/...`, private; readable by the audience.
 - **Live updates:** optional `announcements` channel to refresh badges instantly; polling the unread count on navigation is enough for launch.
-- **WhatsApp:** the reminders branch adds an "announcement reminder" to parents of the student audience; it reuses the same audience resolver.
+- **WhatsApp:** the reminders branch adds an "announcement reminder" to parents of the student audience; it reuses the same audience rules.
 
 ## 8. Single-tenant assumptions
 
@@ -70,19 +72,21 @@ VAPID keys per deployment become one platform key pair ([17](17-integrations-and
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
 Carried over. Drop the stored `type` (derived on read by the resolver, or kept as a cached column maintained by `create`/`update`). Add an index on `announcement_audiences (team_id)`, `(grade, section)`, `(user_id)` and `announcements (pinned DESC, created_at DESC)`.
 
 Move home-box dismissals and the "last read" mark to the server (`notification_reads (user_id, kind, ref_id, read_at)`), so badges agree across devices.
 
-### Audience resolver
+### Audience rules
 
-`audienceOf(announcement)` → set of user ids; `visibleAnnouncementIds(user)` → ids visible to a user. Both follow today's rules exactly; both are covered by tests per role. The push recipients of a new post are `audienceOf(post)` minus the author minus people who opted out in `notification_preferences`.
+Today's feed function and policies decide who sees a post, and they stay, covered by tests per role ([91](91-test-and-parity-plan.md)). The push recipients of a new post are that same audience minus the author minus people who opted out in `notification_preferences`, worked out in SQL by the publishing function.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `announcements.feed`, `announcements.unread`, `announcements.markRead`, `announcements.like` | signed in |
 | `announcements.create`, `announcements.update` | `announcements.post` (coordinator, principal, admin) |
@@ -94,7 +98,7 @@ Move home-box dismissals and the "last read" mark to the server (`notification_r
 
 ## 10. Moving existing data
 
-Straight copy; attachment URLs inside `attachments` JSON rewritten to R2 keys. Push subscriptions are not migrated (browsers re-subscribe; the endpoint is tied to the old VAPID key).
+Moves with the dump ([13](13-data-layer.md)); attachment URLs inside `attachments` JSON rewritten to R2 keys. Push subscriptions are not migrated (browsers re-subscribe; the endpoint is tied to the old VAPID key).
 
 ## 11. Parity checklist
 

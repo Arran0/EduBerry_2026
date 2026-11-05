@@ -1,6 +1,6 @@
 # Transport
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Design history: `docs/transport-expansion-plan.md` (rounds 1 to 5b applied) and `docs/transport-round-4-checklist.md`. GPS gateway status: `docs/gps-system-status.md`. Related docs:
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Design history: `docs/transport-expansion-plan.md` (rounds 1 to 5b applied) and `docs/transport-round-4-checklist.md`. GPS gateway status: `docs/gps-system-status.md`. Related docs:
 
 - Bus fees are fee bills: [33-fees.md](33-fees.md).
 - Driver payroll: [34-payroll-and-salary.md](34-payroll-and-salary.md).
@@ -17,7 +17,7 @@ The school bus system has these parts:
 - **Parent view:** "where is my child's bus" and an ETA to the child's stop.
 - **Admin:** a live operations board, alerts with a lifecycle, SOS and incidents, push and WhatsApp notifications, replay of past runs, nightly metrics with five reports, GTFS static and realtime exports, and GPS hardware ingest through a shared Traccar gateway.
 
-Almost all of the logic is in the database: 53 functions (about 2,100 lines of PL/pgSQL, 7 of them trigger functions) and 8 cron jobs. That makes transport the largest move from SQL to TypeScript in the rebuild after fees.
+Almost all of the logic is in the database: 53 functions (about 2,100 lines of PL/pgSQL, 7 of them trigger functions) and 8 cron jobs. Under Neon all of it moves unchanged; only the way the cron jobs are called changes.
 
 Live data:
 
@@ -42,14 +42,12 @@ The GPS gateway is built but not live. The device-link API and the Traccar clien
 
 What changes:
 
-1. **The derivation engine moves into TypeScript** in the school object. It runs once per fix, as today, with no trigger chain.
-2. **Positions stop being database rows.**
-   - Each bus's live state is kept in memory and persisted as one summary row on each event, and at most every 30 seconds.
-   - The trail is written as one chunk row per minute, then saved to R2 as one file per run.
-   - This removes about 90% of transport's write cost ([02-cost-study.md](02-cost-study.md)).
-3. **Live updates use the school object's WebSockets** (hibernation API), tagged by run. They replace Supabase Realtime on four tables.
-4. **The minute tick becomes a school alarm** that runs only during the school's transport window, in the school's time zone.
+1. **The derivation engine stays in SQL.** The 53 functions and their triggers move with the dump and run once per fix, as today.
+2. **Fixes reach the database through a Worker route** (a batch of up to 50) instead of straight from the browser, so the Worker can publish the live state each batch produces. Device fixes arrive at a hook URL.
+3. **Live updates use the school's hub** (WebSockets with the hibernation API), tagged by run. They replace Supabase Realtime on four tables.
+4. **The minute tick runs from the hub's timer** only during the school's transport window, in the school's time zone, so the database can sleep at night. The other seven cron jobs run in the night window ([14](14-jobs-messaging-realtime.md)).
 5. **The Traccar admin token becomes one platform secret** that no school deployment can read. This closes the shared-token gap in `docs/gps-system-status.md`.
+6. **Fewer writes per fix is a later saving, not part of the move:** an index review and keeping trails in R2 instead of Postgres are ordinary migrations, done once measurement shows they are worth it.
 
 ## 2. Users and screens
 
@@ -144,31 +142,33 @@ Enums: 18 `transport_*` types (alert type, severity and status; boarding event a
 
 ## 5. Logic in the database
 
-| Function or trigger | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function or trigger | Under Neon |
 | --- | --- |
-| `transport_apply_fix` (trigger) → `transport_process_fix`, `transport_point_to_path_m`, `transport_recompute_eta` | `transport.live.ingestFix(runId, fix)`: TypeScript engine (`engine/derive.ts`), one call per fix or batch. `path.ts` and `geofence.ts` already hold the geometry; the SQL rules port next to them, with tests |
-| `transport_tick`, `transport_resolve_moot_alerts`, `transport_humanise_gap` | `transport.tick()` from the school alarm, every minute during the transport window only |
-| `transport_raise_alert`, `transport_clear_alert` | `alerts.raise(key, ...)` / `alerts.clear(key)` with the stable dedupe keys from the lifecycle fix |
-| `transport_materialise_runs` | `transport.runs.materialise(date)` as a due job at 03:00 school time |
-| `transport_start_run`, `transport_end_run` | `transport.runs.start` / `end` |
-| `transport_mark_boarding`, `transport_scan_boarding`, `transport_issue_credential`, `transport_register_card` | `transport.boarding.mark` / `scan`, `transport.credentials.*` (each one transaction) |
-| `transport_notify_*` (4 triggers), `transport_notify_student`, `transport_kick_drain`, `transport_watch_outbox` | Explicit `outbox.enqueue` calls in the methods that make the change; the outbox queue and watchdog ([14](14-jobs-messaging-realtime.md)) |
-| `transport_student_contact` | Internal helper inside the outbox consumer; never a method |
-| `transport_raise_incident` | `transport.incidents.raise` (the SOS path: written first, then fanned out) |
-| `transport_archive_telemetry`, `cleanup_transport_telemetry`, `cleanup_transport_archive` | Replaced by trail files in R2 with a lifecycle rule (§9) |
-| `transport_replay_run` | `transport.replay(runId)`: reads the run's trail file |
-| `transport_rollup_metrics`, `transport_report_*` (5) | `transport.metrics.rollup(date)` at run end (not nightly), and `transport.reports.*` |
-| `transport_gtfs_static`, `transport_gtfs_realtime` | `transport.gtfs.static` (zip built in the Worker) and `transport.gtfs.realtime`, public per school if enabled |
-| `transport_today_snapshot`, `transport_route_counts` | `transport.board(date)` |
-| `transport_copy_year`, `transport_route_year_cascade`, `transport_fill_academic_year`, `transport_academic_year_for` | `transport.copyYear`; the year is set explicitly on write |
-| `transport_simulate_day`, `transport_simulation_clear` | `transport.simulate.*`, admin only, blocked on production schools unless enabled |
-| `is_trip_driver`, `is_trip_passenger`, `transport_is_crew`, `transport_is_transport_staff`, `transport_route_is_mine`, `transport_run_is_mine`, `transport_stop_is_mine`, `transport_route_has_crew` | `authz` relationship helpers |
+| `transport_apply_fix` (trigger) → `transport_process_fix`, `transport_point_to_path_m`, `transport_recompute_eta` | Unchanged |
+| `transport_tick`, `transport_resolve_moot_alerts`, `transport_humanise_gap` | Unchanged, except `transport_tick`: unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| `transport_raise_alert`, `transport_clear_alert` | Unchanged |
+| `transport_materialise_runs` | Unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| `transport_start_run`, `transport_end_run` | Unchanged |
+| `transport_mark_boarding`, `transport_scan_boarding`, `transport_issue_credential`, `transport_register_card` | Unchanged |
+| `transport_notify_*` (4 triggers), `transport_notify_student`, `transport_kick_drain`, `transport_watch_outbox` | Unchanged, except `transport_watch_outbox`: replaced by queue retries, the dead-letter queue and an alert ([14](14-jobs-messaging-realtime.md)); `transport_kick_drain`: replaced: the `outbox` queue consumer drains the outbox ([14](14-jobs-messaging-realtime.md)) |
+| `transport_student_contact` | Unchanged |
+| `transport_raise_incident` | Unchanged |
+| `transport_archive_telemetry`, `cleanup_transport_telemetry`, `cleanup_transport_archive` | Unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| `transport_replay_run` | Unchanged |
+| `transport_rollup_metrics`, `transport_report_*` (5) | Unchanged, except `transport_rollup_metrics`: unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| `transport_gtfs_static`, `transport_gtfs_realtime` | Unchanged |
+| `transport_today_snapshot`, `transport_route_counts` | Unchanged |
+| `transport_copy_year`, `transport_route_year_cascade`, `transport_fill_academic_year`, `transport_academic_year_for` | Unchanged |
+| `transport_simulate_day`, `transport_simulation_clear` | Unchanged |
+| `is_trip_driver`, `is_trip_passenger`, `transport_is_crew`, `transport_is_transport_staff`, `transport_route_is_mine`, `transport_run_is_mine`, `transport_stop_is_mine`, `transport_route_has_crew` | Unchanged |
 
 ## 6. Server routes and integrations
 
 | Route | Target |
 | --- | --- |
-| Browser inserts into `transport_telemetry` | `POST /api/transport/runs/<runId>/fixes` (batch of up to 50) → `transport.live.ingestFixes`; the crew is checked in the object |
+| Browser inserts into `transport_telemetry` | `POST /api/transport/runs/<runId>/fixes` (batch of up to 50) → the Worker inserts them as the driver (the policies check the crew, as today) and publishes the live state to the hub |
 | `/api/transport/ingest` | `POST /hooks/<schoolId>/gps/<sourceId>?key=...&secret=...` (Traccar cannot sign, so the secret stays in the URL). Also an HMAC header form for vendor APIs that can sign |
 | `/api/transport/notify/drain` | Removed. The `outbox` queue consumer sends push and WhatsApp |
 | Device link API (branch only) | `transport.devices.link` / `relink` / `rotate` / `remove`: the platform Worker calls Traccar with the platform's admin token, setting the forward URL to `/hooks/<schoolId>/gps/<sourceId>` |
@@ -178,16 +178,16 @@ Enums: 18 `transport_*` types (alert type, severity and status; boarding event a
 ## 7. Jobs, files and live updates
 
 - **Jobs:**
-  - The school alarm runs `transport.tick` every minute from 30 minutes before the first scheduled start to 6 hours after the last scheduled end (the abandon backstop). Outside that window there is no tick, unless a run is still open.
-  - Due jobs: `transport.runs.materialise` at 03:00 school time, and `transport.metrics.rollup` after each run ends.
+  - The hub's timer runs `transport_tick()` every minute from 30 minutes before the first scheduled start to 6 hours after the last scheduled end (the abandon backstop). Outside that window there is no tick, unless a run is still open.
+  - Night window, in the school's time zone: `transport_materialise_runs` (03:00 today), the archive and clean-up jobs, and `transport_rollup_metrics`.
   - The outbox goes through the `outbox` queue.
 - **Files:**
-  - Trails: `schools/<schoolId>/transport/trails/<serviceDate>/<runId>.ndjson.gz`, with an R2 lifecycle rule deleting them after 180 days (today's archive retention).
+  - Trails stay in Postgres at launch; moving them to R2 is a later saving (§9).
   - GTFS exports are built on demand.
   - Vehicle and crew photos go under `transport/photos/` ([15](15-files-and-media.md)).
 - **Live updates:**
   - The board, driver and parent views subscribe to run and board topics.
-  - Each fix that changes the visible state broadcasts a small message to sockets tagged with that run: position, next stop, ETA, delay.
+  - Each batch of fixes that changes the visible state publishes a small message to sockets tagged with that run: position, next stop, ETA, delay.
   - Boarding events go to the driver, the board, and that child's parents.
 
 ## 8. Single-tenant assumptions
@@ -196,7 +196,7 @@ Enums: 18 `transport_*` types (alert type, severity and status; boarding event a
 | --- | --- | --- |
 | Drain URL and cron secret stored in `transport_runtime_config` | Drain route, `transport_kick_drain` | Removed. The queue consumer needs neither |
 | Materialise at 21:30 UTC (03:00 IST) | cron job | Due job at 03:00 in the school's time zone |
-| Tick every minute, all day, for one school | cron job | Per-school alarm, transport window only |
+| Tick every minute, all day, for one school | cron job | The hub's timer, transport window only |
 | One Traccar admin token copied into every school's Vercel project; nightly sync redeploys them | `provision.py`, workflow | One platform secret held by the platform Worker. Schools never see it. No per-school redeploy |
 | Device ownership on the gateway recorded as the school's site URL | Link API | Recorded as the school id. Domain changes no longer orphan devices |
 | Forward URL `https://<school-domain>/api/transport/ingest` | Link API | `https://<platform-host>/hooks/<schoolId>/gps/<sourceId>` |
@@ -206,9 +206,11 @@ Enums: 18 `transport_*` types (alert type, severity and status; boarding event a
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Where the live state runs
 
-The question left open in [10-target-architecture.md](10-target-architecture.md): should each live run get its own Durable Object (`RunLive`), or stay in the school object?
+The question left open in [10-target-architecture.md](10-target-architecture.md): one `SchoolHub` per school for every live socket, or a hub per live run?
 
 Load at a 10,000-user school, with the cost model's 50 buses:
 
@@ -221,51 +223,34 @@ Load at a 10,000-user school, with the cost model's 50 buses:
 
 Against the limits:
 
-- A Durable Object handles about 1,000 requests a second.
+- A Durable Object handles about 1,000 requests a second; publishes arrive in batches, far fewer than one per fix.
 - The hibernation API allows 32,768 WebSockets per object.
 - Outgoing WebSocket messages are not billed as requests; incoming messages are billed at 20:1.
-- Derivation for one fix (path projection over a few hundred points, geofence tests for about 20 stops, ETA) takes well under a millisecond of CPU.
+- Postgres takes 10–15 small inserts a second, with today's triggers, without strain; the cost model allows 1 ms of database time per fix ([02](02-cost-study.md)). The database is awake during bus hours anyway.
 
-So transport fits in the school object with large headroom.
-
-**Decision: keep live transport in the school object at launch.**
-
-- Put all live-run state behind one interface (`LiveRuns`: `ingestFix`, `state(runId)`, `subscribe`), so it can be moved later without touching callers.
-- Move it to a `RunLive` object per run (`idFromName(schoolId + ':' + runId)`) only if measurement shows the school object's p95 latency for other calls rising above 200 ms during the bus peak, or its CPU above 50%.
-  - The run object would then own fixes, derivation and parent sockets.
-  - It would call the school object only for events: stop arrival, alert, end.
-  - Boarding stays in the school object, because it writes student records and notifications.
+**Decision: one `SchoolHub` per school at launch.** Move the sockets of a run to a hub of its own (`idFromName(schoolId + ':' + runId)`) only if measurement shows the school's hub slowing other live topics during the bus peak. The hub only forwards; it holds no transport data.
 
 ### Write path for a fix
 
-Today each fix inserts a telemetry row (8 indexes) and updates the run (15 indexes), plus stop events and alerts. In SQLite billing, each index entry written counts as a row written. The target:
+1. The driver's phone posts a batch of fixes to `POST /api/transport/runs/<runId>/fixes`; a device's fixes arrive at `/hooks/<schoolId>/gps/<sourceId>`.
+2. The Worker sends one transaction to the school's database: the same `transport_telemetry` insert the browser makes today, as the driver (the policies check the crew), or as `app_jobs` for a device; the triggers derive stop events, ETAs, delays and alerts as today; `app_after_write()` returns the live events and outbox count.
+3. The Worker publishes the events to the hub (position, next stop, ETA, delay, boarding), which forwards them to the run's watchers, and queues a drain if the transaction left messages.
+4. The nightly window thins and prunes telemetry and rolls up metrics, as the cron jobs do today.
 
-1. Validate: crew or source, age, accuracy, implied speed. Suspect fixes are kept in the trail but not derived.
-2. Derive against the run's in-memory model. The route path, stops and passengers are loaded once when the run starts and kept in memory; after an eviction they are rebuilt from SQL on the next fix.
-3. Write to SQL **only when something changes:**
-   - a stop event or alert, written in the same transaction as the outbox entry;
-   - the run summary row, at most every 30 s and on every event.
-4. Append the fix to the in-memory trail buffer. Once a minute, or on any event, flush the buffer as one row in `transport_trail_chunks (run_id, seq, fixes_json)`.
-5. At run end:
-   - write the chunks as one gzip NDJSON file to R2;
-   - compute the run's metrics;
-   - delete the chunks.
-6. Broadcast the new visible state to the run's sockets.
+Later savings, each an ordinary migration once measured:
 
-An eviction loses at most the last minute of trail points, but no events or summary. That is acceptable for a replay trail. Rows written per fix fall from at least 10 today (the telemetry row and its 8 index entries, plus the run update) to well under 1 on average.
+- Index review: `transport_trip_runs` has 15 indexes and `transport_telemetry` 8. Keep `(service_date, status)`, `(route_id, service_date)`, `(driver_id, service_date)` and `(schedule_id, service_date)` unique on runs; the live summary columns need no index.
+- Update the run row only when its visible state changes, and at most every 30 seconds.
+- Keep trails out of Postgres: write each run's fixes to R2 as one gzip NDJSON file at run end (`schools/<schoolId>/transport/trails/<serviceDate>/<runId>.ndjson.gz`, deleted after 180 days by a lifecycle rule) instead of the telemetry archive.
 
 ### Tables
 
-- Setup, runs, boarding, alerts, incidents and metrics: carried over.
-- `transport_telemetry` and `transport_telemetry_archive`: not carried over. Replaced by `transport_trail_chunks` plus R2 trails.
-- Arrays (`days_of_week`) and JSON (`polyline`, `cumulative`, `polygon`, `settings`, `metrics`, `snapshot`) stored as JSON text.
-- Coordinates as `REAL`. Distances in metres as `REAL`. Money (stop fees, legacy bus fees) in paise.
-- Index review: `transport_trip_runs` has 15 indexes today. Keep `(service_date, status)`, `(route_id, service_date)`, `(driver_id, service_date)`, and `(schedule_id, service_date)` unique. The live summary columns must not be indexed.
-- Alerts: unique index on `dedupe_key` where `status IN ('open','acknowledged')`. SQLite supports partial indexes.
+- Every transport table carried over unchanged, `transport_telemetry` and `transport_telemetry_archive` included (both empty today).
+- Alerts keep their partial unique index on `dedupe_key` where `status IN ('open','acknowledged')`.
 
-### Methods (grouped)
+### Endpoints (phase 2, grouped)
 
-| Group | Methods | Permission |
+| Group | Endpoints | Permission |
 | --- | --- | --- |
 | Setup | `transport.routes.*`, `stops.*`, `paths.*`, `schedules.*`, `vehicles.*`, `staff.*`, `assignments.*`, `stopFees.*`, `copyYear`, `settings.*` | `transport.manage` |
 | Runs | `transport.board(date)`, `runs.materialise`, `runs.create` / `replace` / `cancel`, `runs.start` / `end` | `transport.manage`; start and end also by the run's crew |
@@ -288,19 +273,19 @@ An eviction loses at most the last minute of trail points, but no events or summ
 
 ## 10. Moving existing data
 
-- **Copy:** setup tables, runs, boarding, alerts (or only open and recent alerts: the 6,788 resolved `no_gps` rows have no value), incidents, metrics and credentials. Convert money to paise.
+- **Moves with the dump:** setup tables, runs, boarding, alerts, incidents, metrics and credentials. The 6,788 resolved `no_gps` alerts have no value and can be deleted first.
 - **Positions:** none to move; raw telemetry is empty and the archive is empty.
 - **Legacy bus fees:** import the 2 `bus_fees` rows through the existing `fee_import_bus_ledger` before cutover if that has not already been done. Then drop the `bus_*` fee tables.
-- **Legacy driver payroll:** copy `driver_payroll_base` and `driver_bank_accounts` into the salary module with `person_kind = 'driver'` ([34](34-payroll-and-salary.md)).
+- **Legacy driver payroll:** moves as it is; merging it into the salary tables with `person_kind = 'driver'` is the later choice in [34](34-payroll-and-salary.md).
 - **Devices:** re-point any linked device's Traccar forward URL to the new hook URL during cutover. Today none are linked.
 
 ## 11. Parity checklist
 
-- [ ] Replaying a recorded run's fixes through the TypeScript engine produces the same stop events, ETAs, delays and alerts as the SQL engine, fix for fix. Record fixtures from `transport_simulate_day` and from real runs before cutover.
+- [ ] Replaying a recorded run's fixes through the Worker route on Neon produces the same stop events, ETAs, delays and alerts as on Supabase, fix for fix. Record fixtures from `transport_simulate_day` and from real runs before cutover.
 - [ ] Geofence verdicts (inside, outside, uncertain) match `geofence.ts` and the SQL mirror for circles and polygons.
 - [ ] A run with passengers still `boarded` is closed by the 6-hour backstop. Stable alert keys open one row per episode.
 - [ ] Boarding by tap, card and QR is atomic and idempotent, and notifies each family once.
-- [ ] Parents see only their own children's runs. Crew see only their runs. `transport_student_contact` is not reachable as a method.
+- [ ] Parents see only their own children's runs. Crew see only their runs. `transport_student_contact` is not callable by `authenticated`.
 - [ ] A fix from a source belonging to another school is rejected. A school's hook URL never accepts another school's source id.
 - [ ] Phone fixes buffered offline and pushed later are accepted in order, and do not raise false `no_gps` alerts after they arrive.
 - [ ] Replay, the five reports, CSV export, and GTFS static and realtime output match today's for the same runs.

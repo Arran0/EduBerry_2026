@@ -1,6 +1,6 @@
 # Assessments, Marks and Report Cards
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Teachers record assessments inside each classroom (tests, assignments; "main" or
 
 Live: 252 assessments, 697 components, 6,213 assessment marks, 17,587 component marks, 10 report-card titles; no publications or remarks yet.
 
-What changes: the component-to-total recompute trigger becomes explicit code in the mark-saving method; publication stays the gate for students reading marks of a report-card title (enforced in the current app since 28 Oct 2026 by `assessment_marks_released` in the marks policies; before that students could read their raw marks before publication); class-wise marks and trends read from indexed queries inside the object.
+What changes: the component-to-total recompute trigger stays; publication stays the gate for students reading marks of a report-card title (enforced in the current app since 28 Oct 2026 by `assessment_marks_released` in the marks policies; before that students could read their raw marks before publication); class-wise marks and trends become single SQL functions in phase 2.
 
 ## 2. Users and screens
 
@@ -45,12 +45,14 @@ Code: report-card and marks functions in `src/lib/classrooms.ts`, `classwiseMark
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `tg_component_mark_recompute` → `recompute_assessment_component_totals` | `grades.saveComponentMarks` recomputes the affected students' totals in the same call |
-| `tg_component_sync_assessment` | `grades.saveComponents` sets the assessment max |
-| `can_publish_report_cards` | Relationship helper (class teacher of that grade-section, principal, admin) |
-| `get_classroom_assessment_trend` | `grades.trend(classroomId, studentId?)` |
+| `tg_component_mark_recompute` → `recompute_assessment_component_totals` | Unchanged |
+| `tg_component_sync_assessment` | Unchanged |
+| `can_publish_report_cards` | Unchanged |
+| `get_classroom_assessment_trend` | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -58,7 +60,7 @@ None (browser queries). PDF and print rendering stay in the browser.
 
 ## 7. Jobs, files and live updates
 
-None. Year-end archive moves a closed year's marks with the year ([13](13-data-layer.md)); the academic record reads archived years through the archive object.
+None. Closed years' marks stay in the database; the academic record reads them as today.
 
 ## 8. Single-tenant assumptions
 
@@ -69,18 +71,20 @@ None. Year-end archive moves a closed year's marks with the year ([13](13-data-l
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-Carried over. Marks as `REAL` (2 decimals). Indexes: `classroom_assessments (classroom_id, report_card_title)`; marks `(assessment_id, student_id)` unique and `(student_id)`; component marks `(component_id, student_id)` unique; publications `(grade, section, report_card_title)` unique; remarks `(student_id, report_card_title)`.
+Carried over unchanged. Indexes to check: `classroom_assessments (classroom_id, report_card_title)`; marks `(assessment_id, student_id)` unique and `(student_id)`; component marks `(component_id, student_id)` unique; publications `(grade, section, report_card_title)` unique; remarks `(student_id, report_card_title)`.
 
 ### Rules
 
 - A student reads marks for an assessment only if it has no report-card title, or its title is published for the assessment's class (classroom grade and section). Remarks follow the same rule for the student's own class. (Live since 28 Oct 2026; carry it over as is.)
 - Staff read marks of classrooms they teach; class teachers read their grade-section; coordinators, principal and admin read all.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `grades.assessments(classroomId)`, `grades.marks(assessmentId)` | classroom staff |
 | `grades.saveAssessment`, `grades.deleteAssessment`, `grades.saveComponents` | classroom staff |
@@ -94,7 +98,7 @@ Carried over. Marks as `REAL` (2 decimals). Indexes: `classroom_assessments (cla
 
 ## 10. Moving existing data
 
-Straight copy. After import, recompute every assessment that has components and compare with the imported totals; any difference points to a total that was edited directly and needs a decision.
+Moves with the dump ([13](13-data-layer.md)). After import, recompute every assessment that has components and compare with the imported totals; any difference points to a total that was edited directly and needs a decision.
 
 ## 11. Parity checklist
 

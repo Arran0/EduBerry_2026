@@ -1,6 +1,6 @@
 # School Settings and Branding
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Each school customises how the app looks and names itself: school name, tagline,
 
 The same table also holds settings that belong to other sections (attendance time zone and geofence, fee UPI and Razorpay config, payout config, the bus school location) and one secret that should not be there (`fee_runtime`, the drain URL and cron secret).
 
-What changes: settings move into the school object as a typed table where each key has a schema, an owner section and read/write permissions; branding becomes readable before sign-in through a public endpoint; the runtime secret disappears; the hard-coded "Muthamil Public School" defaults become neutral; the PWA manifest and favicon are generated per school.
+What changes: `site_settings` moves with the database unchanged. Around it, branding becomes readable before sign-in through a cached public route; the runtime secret and drain URLs are no longer needed; the hard-coded "Muthamil Public School" defaults become neutral; the PWA manifest and favicon are generated per school. A typed, namespaced settings table (§9) is a later improvement, not part of the move.
 
 ## 2. Users and screens
 
@@ -57,12 +57,14 @@ Other settings tables: `app_settings` (1 row, `homeroom_expiry_dates`, owned by 
 
 ## 5. Logic in the database
 
-| Function or trigger | What it does | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function or trigger | What it does | Under Neon |
 | --- | --- | --- |
-| `site_settings_version()` | Max `updated_at` + row count, for the browser cache | `settings.version` counter in the object, bumped on every write, returned by `/api/auth/me` and `/api/settings/public` |
-| `is_sensitive_site_setting(key)` | Marks `fee_runtime` as admin-only | Per-key read permission in the settings registry |
-| `site_settings_touch_updated_at` (trigger) | Stamps `updated_at` | Write helper |
-| `attendance_config_changed` (trigger) | Queues attendance recompute when attendance settings change | The `settings.save` method calls the attendance module's recompute when an attendance key changes |
+| `site_settings_version()` | Max `updated_at` + row count, for the browser cache | Unchanged |
+| `is_sensitive_site_setting(key)` | Marks `fee_runtime` as admin-only | Unchanged |
+| `site_settings_touch_updated_at` (trigger) | Stamps `updated_at` | Unchanged |
+| `attendance_config_changed` (trigger) | Queues attendance recompute when attendance settings change | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -91,9 +93,11 @@ Other settings tables: `app_settings` (1 row, `homeroom_expiry_dates`, owned by 
 
 ## 9. Target design
 
-### Table
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
 
-`settings` (school database):
+### Table (later improvement)
+
+A `settings` table in the school database, replacing `site_settings` and `app_settings` once every reader has moved:
 
 | Column | Meaning |
 | --- | --- |
@@ -104,9 +108,9 @@ Other settings tables: `app_settings` (1 row, `homeroom_expiry_dates`, owned by 
 
 A code-side registry lists every key: owner module, Zod schema, default, read permission (`public`, `member`, `staff`, or a module permission), write permission, and whether changing it triggers work in another module. Settings that belong to a section are documented and owned by that section; this section owns the registry and the branding keys.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission | Notes |
+| Endpoint | Permission | Notes |
 | --- | --- | --- |
 | `settings.public` | none (host-scoped) | Branding, login, icons, themes, banners |
 | `settings.bundle` | signed in | Everything the person may read, plus the version |
@@ -116,14 +120,13 @@ A code-side registry lists every key: owner module, Zod schema, default, read pe
 
 ### Browser cache
 
-Keep the flash-free warm start: the SPA stores the last `settings.public` and `settings.bundle` per host in `localStorage`, paints from it, and refreshes only when the version from `/api/auth/me` differs.
+Keep the flash-free warm start: the SPA stores the last `settings.public` and `settings.bundle` per host in `localStorage`, paints from it, and refreshes only when the version from `/api/auth/refresh` differs.
 
 ## 10. Moving existing data
 
-- Copy every `site_settings` row to `settings`, renaming keys to the namespaced form and dropping `fee_runtime`.
+- `site_settings` and `app_settings` move with the dump; `fee_runtime`, `transport_runtime_config` and `wa_runtime_config` are left unused and removed later.
 - Rewrite image URLs inside `branding`, `login_config`, banners, `welcome_banner`, `profile_banner` and `school_profile.seal_url` to R2 keys and copy the images.
-- `app_settings.homeroom_expiry_dates` → `settings` key `homerooms.expiry_dates`.
-- Validate every migrated value against its new schema; report anything that fails.
+- If the typed `settings` table is adopted later, its migration copies each key to its namespaced form (`app_settings.homeroom_expiry_dates` → `homerooms.expiry_dates`) and validates every value against the key's schema, reporting anything that fails.
 
 ## 11. Parity checklist
 

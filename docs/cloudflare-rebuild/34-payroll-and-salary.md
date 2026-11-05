@@ -1,6 +1,6 @@
 # Payroll and Salary
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). Design detail: `docs/payroll-upgrade-plan.md` (rounds A and B shipped) and `docs/payroll-multi-location-plan.md` (round C1 shipped; C2–C4 planned). Bank payouts are in [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). Design detail: `docs/payroll-upgrade-plan.md` (rounds A and B shipped) and `docs/payroll-multi-location-plan.md` (round C1 shipped; C2–C4 planned). Bank payouts are in [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md).
 
 ## 1. Summary
 
@@ -15,7 +15,7 @@ Two payroll systems live side by side, and the rebuild has to choose how to carr
 
 Both depend on attendance (working days, leave, late, half days), task bonus points, statutory rules (EPF/ESI/PT), and bank accounts.
 
-What changes: all calculation already lives in pure TypeScript (`src/lib/payroll/engine/*`, `src/lib/salary*.ts`, `statutory.ts`) and moves unchanged. The database guards that make a locked run immutable and rule sets frozen once published become SQLite triggers plus module checks. A run's calculation over hundreds of employees runs as a batched job inside the object.
+What changes: all calculation already lives in pure TypeScript (`src/lib/payroll/engine/*`, `src/lib/salary*.ts`, `statutory.ts`) and moves unchanged. The database guards that make a locked run immutable and rule sets frozen once published move with the dump unchanged. A run's calculation over hundreds of employees runs as a batched job through the `jobs` queue instead of in the browser.
 
 ## 2. Users and screens
 
@@ -55,19 +55,21 @@ Code: `src/lib/salary.ts`, `salaryEdits.ts`, `salaryStats.ts`, `driverSalary.ts`
 
 ## 5. Logic in the database
 
-| Function or trigger | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function or trigger | Under Neon |
 | --- | --- |
-| `generate_salary_cycle`, `generate_driver_payroll_cycle` | `salary.cycles.generate` (batched for large staff) |
-| `salary_cycle_tallies`, `driver_cycle_tallies` | Tallies from the records, computed in the call |
-| `salary_record_belongs_to_me`, `driver_payroll_record_belongs_to_me`, `payroll_belongs_to_me`, `payroll_line_is_mine_and_final` | Self-service relationship checks |
-| `payroll_lock_run`, `payroll_verify_lock`, `payroll_run_is_locked` | `payroll.runs.lock` computes and stores the hash; `verify` recomputes |
-| `payroll_reject_locked_write`, `payroll_allow_payout_update` (triggers) | SQLite trigger rejecting changes to lines of a locked run except payout fields, plus module checks |
-| `payroll_runs_guard_status` (trigger) | `workflow.ts` transition table enforced by `payroll.runs.transition` |
-| `payroll_events_append_only` (trigger) | SQLite trigger |
-| `payroll_rule_sets_freeze_published` (trigger) | SQLite trigger + module check |
-| `payroll_repayments_guard` (trigger) | Module check |
-| `payroll_resolve_rule_set` | Engine `statutory.ts` resolution |
-| Exclusion constraints on `payroll_employee_structures`, `payroll_location_members`, `payroll_rule_sets` (no overlapping effective ranges) | Checked in the saving methods |
+| `generate_salary_cycle`, `generate_driver_payroll_cycle` | Unchanged |
+| `salary_cycle_tallies`, `driver_cycle_tallies` | Unchanged |
+| `salary_record_belongs_to_me`, `driver_payroll_record_belongs_to_me`, `payroll_belongs_to_me`, `payroll_line_is_mine_and_final` | Unchanged |
+| `payroll_lock_run`, `payroll_verify_lock`, `payroll_run_is_locked` | Unchanged |
+| `payroll_reject_locked_write`, `payroll_allow_payout_update` (triggers) | Unchanged |
+| `payroll_runs_guard_status` (trigger) | Unchanged |
+| `payroll_events_append_only` (trigger) | Unchanged |
+| `payroll_rule_sets_freeze_published` (trigger) | Unchanged |
+| `payroll_repayments_guard` (trigger) | Unchanged |
+| `payroll_resolve_rule_set` | Unchanged |
+| Exclusion constraints on `payroll_employee_structures`, `payroll_location_members`, `payroll_rule_sets` (no overlapping effective ranges) | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -96,6 +98,8 @@ Code: `src/lib/salary.ts`, `salaryEdits.ts`, `salaryStats.ts`, `driverSalary.ts`
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Decision needed: one payroll or two
 
 | Option | Effect |
@@ -106,11 +110,11 @@ Code: `src/lib/salary.ts`, `salaryEdits.ts`, `salaryStats.ts`, `driverSalary.ts`
 
 ### Tables
 
-All carried over with money in paise, days in hundredths, percentages in basis points. Driver payroll tables stay with transport or merge into the same salary module with a `person_kind` (staff, support staff, driver); merging is simpler to maintain.
+All carried over unchanged ([13](13-data-layer.md)). Driver payroll tables stay with transport or merge into the same salary module with a `person_kind` (staff, support staff, driver); merging is simpler to maintain.
 
-### Methods (grouped)
+### Endpoints (phase 2, grouped)
 
-| Group | Methods | Permission |
+| Group | Endpoints | Permission |
 | --- | --- | --- |
 | Self-service | `salary.mine`, `payroll.me.payslips`, `payroll.me.declaration.*` | the employee |
 | Cycles | `salary.cycles.*`, `salary.records.update`, `salary.items.*`, `salary.statements`, `salary.epfDocuments` | `payroll.manage` |
@@ -120,11 +124,11 @@ All carried over with money in paise, days in hundredths, percentages in basis p
 | Payout | `payroll.payout.*` | `payroll.pay` |
 | Simulation | `payroll.simulate` | `payroll.configure` |
 
-Calculating a run for 700 employees with full traces is CPU work inside the object: split into batches of ~50 employees per alarm tick so no call exceeds a few hundred milliseconds, with progress on the run screen.
+Calculating a run for 700 employees with full traces is CPU work for the Worker: split into batches of ~50 employees, one `jobs` message each, so no step exceeds a few seconds, with progress on the run screen.
 
 ## 10. Moving existing data
 
-Straight copy with unit conversion. Verify each cycle's totals and each record's net pay recompute to the same paise. If option B is chosen, a separate, reviewed mapping step converts cycles to runs.
+Moves with the dump ([13](13-data-layer.md)). Verify each cycle's totals and each record's net pay recompute to the same amount. If option B is chosen, a separate, reviewed mapping step converts cycles to runs.
 
 ## 11. Parity checklist
 

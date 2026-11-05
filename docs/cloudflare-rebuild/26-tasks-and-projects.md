@@ -1,6 +1,6 @@
 # Task Manager and Projects
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ The staff Task Manager: tasks assigned to staff with a due date, a time or timet
 
 This is the busiest part of the app today: `tasks` (57,917 rows) and `task_assignees` (57,901) are the two largest tables, about 10,000 new tasks a month for 86 teachers (40,799 tasks are tied to a timetable period), and task queries account for most rows read (32 million index fetches on `tasks` in 13 days). At 700 staff that becomes roughly 80,000 tasks a month.
 
-What changes: each task row already has exactly one assignee (assigning to N people creates N rows), so `task_assignees` folds into a column on `tasks`, halving rows and writes; `tasks` keeps far fewer than today's 10 indexes; week views read from one indexed query per person; closed academic years move to the archive.
+What changes: nothing needed for the move. Each task row already has exactly one assignee (assigning to N people creates N rows), so a later migration can fold `task_assignees` into a column on `tasks`, halving rows and writes; `tasks` can drop most of today's 10 indexes; week views read from one indexed query per person.
 
 ## 2. Users and screens
 
@@ -52,20 +52,22 @@ Code: `src/lib/tasks.ts` (1,137 lines), `projects.ts` (621), `planner.ts`, `task
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `tasks_for_user_week` | `tasks.week(userId, weekStart)`: one indexed query by assignee and due date plus recurring templates |
-| `tasks_overdue_for_user` | `tasks.overdue(userId)` |
-| `tasks_bonus_for_user` | `tasks.bonusTotal(userId, range)`, from a per-person monthly summary |
-| `task_stats_rows_for_user` | `tasks.stats(userId, period)` |
-| `task_unread_comment_count` | `tasks.unreadComments(userId)`; later a live channel |
-| `get_monthly_member_stats` | `analytics.memberMonth(memberIds, month)` (shared with attendance) |
-| `record_app_open` | Owned by [37](37-home-profile-and-misc.md) (streaks) |
-| Row-level security (staff only) | `tasks.*` permission (teacher, coordinator, principal, admin) plus assignee/creator/verifier relationship checks |
+| `tasks_for_user_week` | Unchanged |
+| `tasks_overdue_for_user` | Unchanged |
+| `tasks_bonus_for_user` | Unchanged |
+| `task_stats_rows_for_user` | Unchanged |
+| `task_unread_comment_count` | Unchanged |
+| `get_monthly_member_stats` | Unchanged |
+| `record_app_open` | Unchanged |
+| Row-level security (staff only) | Unchanged |
 
 ## 6. Server routes and integrations
 
-`/api/analytics/team` becomes `tasks.teamAnalytics(month)`, computed inside the object from summaries, with no 1,000-row paging workaround.
+`/api/analytics/team` becomes `tasks.teamAnalytics(month)`, one SQL function over summaries, with no 1,000-row paging workaround.
 
 ## 7. Jobs, files and live updates
 
@@ -79,11 +81,13 @@ None specific.
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
 | Table | Change |
 | --- | --- |
-| `tasks` | Add `assignee_id` (from `task_assignees`); keep `task_assignees` only if multi-assignee tasks are wanted (today's 37 multi rows are anomalies). `classes` stays a JSON array (only filtered by the planner) |
+| `tasks` | Add `assignee_id` (from `task_assignees`); keep `task_assignees` only if multi-assignee tasks are wanted (today's 37 multi rows are anomalies). `classes` stays an array (only filtered by the planner) |
 | `task_checklist_items`, `task_comments` | Carried over |
 | `projects`, `project_members`, `subtasks`, `subtask_checklist_items`, `subtask_comments`, `subtask_comment_attachments`, `calendar_access` | Carried over |
 | New `task_stats_monthly` | Per person per month: assigned, done, checked, overdue, bonus points; updated on each status change |
@@ -98,9 +102,9 @@ Indexes on `tasks`, the most important cost decision in this section (each index
 
 Everything else today's 10 indexes cover is served by these three or by `task_stats_monthly`.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission | Notes |
+| Endpoint | Permission | Notes |
 | --- | --- | --- |
 | `tasks.week`, `tasks.overdue`, `tasks.get` | staff; assignee, creator, verifier, team coordinator | Week call returns tasks, subtasks and counts in one response |
 | `tasks.create`, `tasks.createFromTimetable`, `tasks.importPlanner` | `tasks.assign` (staff); assigning to others limited to team members for teachers, anyone for coordinators and above (as today) | Conflict checks run in the same call |
@@ -113,10 +117,10 @@ Everything else today's 10 indexes cover is served by these three or by `task_st
 
 ## 10. Moving existing data
 
-- `tasks` + `task_assignees` → `tasks.assignee_id`: one row per task; for the 37 tasks with several assignee rows, split into one task per extra assignee (matching the "one row per assignee" rule) and report them; for the 155 tasks with no assignee, assign to the creator (as `createTask` does) or drop, after review.
+- Everything moves with the dump ([13](13-data-layer.md)), `task_assignees` included.
 - Comment attachment URLs → R2 keys.
-- Build `task_stats_monthly` from history.
-- Tasks from closed academic years go straight into the year's archive object.
+- If the later migration folds `task_assignees` into `tasks.assignee_id`: split the 37 tasks with several assignee rows into one task per extra assignee (matching the "one row per assignee" rule) and report them; assign the 155 tasks with no assignee to the creator (as `createTask` does) or drop them, after review.
+- If `task_stats_monthly` is added, its migration builds it from history.
 
 ## 11. Parity checklist
 

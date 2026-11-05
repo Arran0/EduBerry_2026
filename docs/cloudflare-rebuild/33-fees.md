@@ -1,6 +1,6 @@
 # Fees
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). The business design, invariants and round history are in `docs/fee-upgrade-plan.md` (rounds 1–4 delivered, then the `fee_v2`–`fee_v5` migrations); this doc covers what has to move and how. Bank collection, UPI, Razorpay settlement and webhooks shared with payroll are in [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). The business design, invariants and round history are in `docs/fee-upgrade-plan.md` (rounds 1–4 delivered, then the `fee_v2`–`fee_v5` migrations); this doc covers what has to move and how. Bank collection, UPI, Razorpay settlement and webhooks shared with payroll are in [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ The fee app bills students and collects money: a price grid (terms and monthly h
 
 It is the module with the strictest rules, and the one where Postgres features carry the most weight today: 83 functions, 14 reporting views, append-only triggers, row locks for receipt numbers, and amount masking inside views.
 
-What changes: every rule stays, but it moves from PL/pgSQL into one TypeScript fee module whose methods each run as a single transaction in the school object, so the locking that numbering and allocation need comes for free. Money becomes integer paise everywhere. Masking happens in the module's response shaping. The existing pure engine (`src/lib/fees/engine/`: allocation, late fee, schedule, proration, money, words; with tests) moves unchanged into `packages/shared` and is called by the object.
+What changes: very little, which is the main reason for choosing Neon. Every function, view, trigger and row lock moves unchanged, and money stays in `numeric`. The scheduled ticks move from `pg_cron` to the hub's timer and the drain from `pg_net` to the `outbox` queue ([14](14-jobs-messaging-realtime.md)). The existing pure engine (`src/lib/fees/engine/`: allocation, late fee, schedule, proration, money, words; with tests) moves unchanged into `packages/shared`, for the browser and the Worker routes that use it today.
 
 Live: 49 invoices, 4 payments, 80 ledger entries, 102 fee profiles, 196 role grants, 27 reminder log rows; the module is configured but early in real use.
 
@@ -66,20 +66,22 @@ The flows below are summarised; each is specified in the fee plan.
 
 ## 5. Logic in the database
 
-All 83 fee functions move into the fee module. The mapping by kind:
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
 
-| Kind | Functions | Target |
+The 83 fee functions, by kind:
+
+| Kind | Functions | Under Neon |
 | --- | --- | --- |
-| Permission and actor | `fee_actor`, `fee_actor_can`, `has_fee_permission`, `has_fee_permission_for`, `my_fee_permissions`, `fee_requires`, `fee_is_service_context`, `apply_fee_permission_preset`, `fee_guard_permission_lockout` (trigger) | The shared permission module ([12](12-auth-and-permissions.md)); fee keys become ordinary permission keys; the lockout rule is checked in `permissions.save` |
-| Masking | `fee_visible_amount` (2), the 14 `_v`/report views | One response-shaping function in the module: amounts removed unless the caller holds `fees.view_amounts` or is the row's own student |
-| Issuing | `fee_issue_grid`, `fee_issue_charge`, `fee_issue_transport`, `fee_undo_issue`, `fee_issue_blockers`, `fee_generate_invoices`, `fee_create_profiles`, `fee_ensure_profile`, `fee_row_students`, `fee_clone_grid`, `fee_clone_year`, `fee_set_rates`, `fee_cell_locked`, `fee_rates_guard_lock`, `fee_v2_guard_issued_parent`, `fee_grade_groups_no_overlap`, `fee_months_guard`, `fee_save_charge`, `fee_delete_charge`, `fee_set_charge_optional`, `fee_sync_transport_heads`, `fee_transport_head` | Module methods; large issues (thousands of students) run as a batched job with a preview first |
-| Invoice maths | `fee_refresh_invoice`, `fee_invoice_lines_refresh`, `fee_alloc_refresh`, `fee_payment_status_refresh`, `fee_refresh_structure_total` | One `recalcInvoice(id)` called by every method that changes lines or allocations |
-| Money movement | `fee_collect`, `fee_reverse_payment`, `fee_post_ledger`, `fee_next_number`, `fee_seal_receipt`, `fee_receipt_payload`, `fee_verify_document`, `fee_instrument_transition`, `fee_request_refund`, `fee_decide_refund`, `fee_pay_refund`, `fee_carry_forward`, `fee_import_bus_ledger`, `fee_record_rte` | Module methods, each one transaction; numbering is a read-increment-write that cannot race inside the object |
-| Adjustments | `fee_apply_concession`, `fee_decide_concession`, `fee_remove_concession`, `fee_add_fine`, `fee_waive_fine`, `fee_compute_late_fee`, `fee_late_fee_sweep`, `fee_waive_late_fee`, `fee_set_late_fee_rule_enabled` | Module methods; `computeLateFee` already lives in the engine |
-| Settings and audit | `fee_setting`, `fee_save_setting`, `fee_settings_freeze_published` (trigger), `fee_log`, `fee_audit_append_only` (trigger), `fee_ledger_append_only` (trigger), `fee_payments_immutable`, `fee_payments_no_delete` | Settings methods; append-only and immutability guards kept as SQLite triggers as a second line of defence |
-| Messaging | `fee_queue_reminder`, `fee_reminder_tick`, `fee_claim_outbox`, `fee_kick_drain`, `fee_contact_msisdn`, `fee_may_message`, `fee_students_by_msisdn`, `fee_resolve_pay_link`, `normalize_msisdn` | Reminder job + outbox ([14](14-jobs-messaging-realtime.md)); pay-link resolution as a public method |
-| Scheduled | `fee_autogen_tick`, `fee_overdue_tick`, `fee_reminder_tick`, `fee_late_fee_sweep` | School jobs at the school's local time |
-| Reports | `fee_bill_register`, `fee_collection_by_head`, report views | Report methods over summary tables (`fee_daily_collection`, `fee_student_balance`) kept current on every money movement |
+| Permission and actor | `fee_actor`, `fee_actor_can`, `has_fee_permission`, `has_fee_permission_for`, `my_fee_permissions`, `fee_requires`, `fee_is_service_context`, `apply_fee_permission_preset`, `fee_guard_permission_lockout` (trigger) | Unchanged |
+| Masking | `fee_visible_amount` (2), the 14 `_v`/report views | Unchanged |
+| Issuing | `fee_issue_grid`, `fee_issue_charge`, `fee_issue_transport`, `fee_undo_issue`, `fee_issue_blockers`, `fee_generate_invoices`, `fee_create_profiles`, `fee_ensure_profile`, `fee_row_students`, `fee_clone_grid`, `fee_clone_year`, `fee_set_rates`, `fee_cell_locked`, `fee_rates_guard_lock`, `fee_v2_guard_issued_parent`, `fee_grade_groups_no_overlap`, `fee_months_guard`, `fee_save_charge`, `fee_delete_charge`, `fee_set_charge_optional`, `fee_sync_transport_heads`, `fee_transport_head` | Unchanged |
+| Invoice maths | `fee_refresh_invoice`, `fee_invoice_lines_refresh`, `fee_alloc_refresh`, `fee_payment_status_refresh`, `fee_refresh_structure_total` | Unchanged |
+| Money movement | `fee_collect`, `fee_reverse_payment`, `fee_post_ledger`, `fee_next_number`, `fee_seal_receipt`, `fee_receipt_payload`, `fee_verify_document`, `fee_instrument_transition`, `fee_request_refund`, `fee_decide_refund`, `fee_pay_refund`, `fee_carry_forward`, `fee_import_bus_ledger`, `fee_record_rte` | Unchanged |
+| Adjustments | `fee_apply_concession`, `fee_decide_concession`, `fee_remove_concession`, `fee_add_fine`, `fee_waive_fine`, `fee_compute_late_fee`, `fee_late_fee_sweep`, `fee_waive_late_fee`, `fee_set_late_fee_rule_enabled` | Unchanged |
+| Settings and audit | `fee_setting`, `fee_save_setting`, `fee_settings_freeze_published` (trigger), `fee_log`, `fee_audit_append_only` (trigger), `fee_ledger_append_only` (trigger), `fee_payments_immutable`, `fee_payments_no_delete` | Unchanged |
+| Messaging | `fee_queue_reminder`, `fee_reminder_tick`, `fee_claim_outbox`, `fee_kick_drain`, `fee_contact_msisdn`, `fee_may_message`, `fee_students_by_msisdn`, `fee_resolve_pay_link`, `normalize_msisdn` | Unchanged, except `fee_kick_drain`: replaced: the `outbox` queue consumer drains the outbox ([14](14-jobs-messaging-realtime.md)); `fee_reminder_tick`: unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| Scheduled | `fee_autogen_tick`, `fee_overdue_tick`, `fee_reminder_tick`, `fee_late_fee_sweep` | Unchanged, except `fee_autogen_tick`, `fee_overdue_tick`, `fee_reminder_tick`: unchanged; called by the hub's timer through the `jobs` queue ([14](14-jobs-messaging-realtime.md)) |
+| Reports | `fee_bill_register`, `fee_collection_by_head`, report views | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -96,7 +98,7 @@ All 83 fee functions move into the fee module. The mapping by kind:
 | `/api/fees/online/order`, `/api/fees/online/verify` | `fees.online.order`, `fees.online.verify` |
 | `/api/fees/razorpay/create-order`, `/api/fees/razorpay/webhook` | Razorpay order through the same `fees.online.order`; webhook at `/hooks/<schoolId>/razorpay` |
 | `/api/fees/upi/create-collect`, `/api/fees/upi/webhook` | `fees.upi.createCollect`; webhook at `/hooks/<schoolId>/bank-collect` ([35](35-bank-collections-and-payouts.md)) |
-| `/api/fees/pay/[token]`, `/api/fees/verify/[token]` | Public methods `fees.payLink.resolve`, `fees.receipt.verify` on the school host, rate-limited |
+| `/api/fees/pay/[token]`, `/api/fees/verify/[token]` | Public routes `fees.payLink.resolve`, `fees.receipt.verify` on the school host, running as `anon`, rate-limited |
 | `/api/fees/cron/drain` | Removed (outbox queue) |
 
 ## 7. Jobs, files and live updates
@@ -120,24 +122,26 @@ All 83 fee functions move into the fee module. The mapping by kind:
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-All live `fee_*` tables carried over, with every money column as integer paise and every percentage as basis points ([13](13-data-layer.md)). Decide at import whether to drop the superseded round-1 price-list tables (`fee_structures`, `fee_structure_items`, `fee_installments`, `fee_installment_items`, `fee_groups`, `fee_group_assignments`) if no live invoice references them (`fee_invoices.installment_id`, `fee_profiles.structure_id`), and the empty first-generation `school_fees` tables.
+All live `fee_*` tables carried over unchanged ([13](13-data-layer.md)). Decide before the move whether to drop the superseded round-1 price-list tables (`fee_structures`, `fee_structure_items`, `fee_installments`, `fee_installment_items`, `fee_groups`, `fee_group_assignments`) if no live invoice references them (`fee_invoices.installment_id`, `fee_profiles.structure_id`), and the empty first-generation `school_fees` tables.
 
-New summary tables, written in the same call as the money they summarise: `fee_student_balance` (student, year, billed, discounted, paid, balance), `fee_daily_collection` (date, method, collector, head, amount). Every report view becomes a query over these and the base tables.
+Worth adding as summary tables, kept up to date by triggers on the money they summarise: `fee_student_balance` (student, year, billed, discounted, paid, balance), `fee_daily_collection` (date, method, collector, head, amount). Report views can then read these instead of scanning the base tables.
 
-### Invariants, restated for the object
+### Invariants, kept as they are today
 
-1. Nothing that touched money is updated in place or deleted: methods only insert contra rows; SQLite triggers reject `UPDATE`/`DELETE` on `fee_ledger_entries`, `fee_audit_log` and settled `fee_payments`.
-2. Numbers come from `fee_number_series` inside the paying call; the object runs one call at a time, so two clerks always get consecutive numbers.
+1. Nothing that touched money is updated in place or deleted: functions only insert contra rows; triggers reject `UPDATE`/`DELETE` on `fee_ledger_entries`, `fee_audit_log` and settled `fee_payments`.
+2. Numbers come from `fee_number_series` inside the paying transaction, under a row lock, so two clerks always get consecutive numbers.
 3. Every concession, fine and late fee is a line on a named invoice.
 4. Automatic charges start the day they are enabled (`enabled_from = today`).
-5. Every bulk action has a preview method returning exactly what the commit method will do (same engine call).
+5. Every bulk action has a preview returning exactly what the commit will do (same function).
 6. A caller without `fees.view_amounts` never receives an amount (except their own bills, as a student).
 
-### Methods (grouped)
+### Endpoints (phase 2, grouped)
 
-| Group | Methods | Permission |
+| Group | Endpoints | Permission |
 | --- | --- | --- |
 | Setup | `fees.years.*`, `fees.terms.*`, `fees.heads.*`, `fees.gradeGroups.*`, `fees.rates.save`, `fees.charges.*`, `fees.optins.*`, `fees.settings.*`, `fees.permissions.*` | `fees.configure` and finer keys from today's catalogue |
 | Issue | `fees.issue.preview`, `fees.issue.commit` (job), `fees.issue.undo`, `fees.issue.blockers` | `fees.issue` |
@@ -152,12 +156,12 @@ New summary tables, written in the same call as the money they summarise: `fee_s
 
 ### Performance notes
 
-Issuing a term for 9,000 students is about 9,000 invoices, 30,000 lines and 9,000 ledger rows, with index rows several times that: run it as a job in batches of a few hundred students per alarm tick, with progress on screen. A single collection is a handful of rows and well under the 20 ms call budget.
+Issuing a term for 9,000 students is about 9,000 invoices, 30,000 lines and 9,000 ledger rows, with index rows several times that: run it as a job in batches of a few hundred students through the `jobs` queue, with progress on screen. A single collection is a handful of rows in one transaction.
 
 ## 10. Moving existing data
 
-- Money columns: rupees × 100 → paise, rejecting anything with more than two decimals; percentages × 100 → basis points.
-- Recompute every invoice from its lines and allocations after import and compare with the imported totals; any difference stops the import.
+- Everything moves with the dump; money stays in `numeric`, so nothing is converted.
+- Recompute every invoice from its lines and allocations after import and compare with the imported totals; any difference stops the switch.
 - Recompute every student's ledger running balance and compare.
 - Verify receipt hashes (`receipt_hash`) still validate with the same algorithm, so old QR codes verify.
 - Keep `verify_token` and pay-link tokens unchanged so printed and sent links keep working.
@@ -169,7 +173,7 @@ Issuing a term for 9,000 students is about 9,000 invoices, 30,000 lines and 9,00
 - [ ] Two simultaneous collections never share a receipt number.
 - [ ] Issue, undo and blockers behave as today, including issued-cell locks.
 - [ ] Late-fee sweep, autogen and overdue produce the same lines on the same days.
-- [ ] Masking: a non-permitted caller receives no amount from any method or report.
+- [ ] Masking: a non-permitted caller receives no amount from any route or report.
 - [ ] Old receipt QR codes and pay links work after the move.
 - [ ] Bus fees issued from transport appear as fee bills exactly as today.
 

@@ -1,6 +1,6 @@
 # Certificates and Public Verification
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md).
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)).
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ Admins issue student certificates as PDFs: transfer, bonafide, study, no-due, at
 
 Live: 7 certificates issued, 0 custom templates.
 
-What changes: the public verify endpoint is resolved per school from the host (the QR's host), so a number can never be checked against the wrong school; PDF rendering stays in the browser; templates and the registry move into the school object.
+What changes: the public verify endpoint is resolved per school from the host (the QR's host), so a number can never be checked against the wrong school; PDF rendering stays in the browser; templates and the registry move with the dump.
 
 ## 2. Users and screens
 
@@ -61,13 +61,15 @@ None beyond `update_task_updated_at` and row-level security (admin write; no pub
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
 Carried over. Index `certificates (certificate_no)` unique, `(student_id)`.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `certificates.context(type, studentId)` | `certificates.issue` (admin) |
 | `certificates.issue(input)` | `certificates.issue` |
@@ -77,7 +79,7 @@ Carried over. Index `certificates (certificate_no)` unique, `(student_id)`.
 
 ## 10. Moving existing data
 
-Straight copy. Confirm every issued certificate's QR host is mapped to the school in `platform.school_hosts`.
+Moves with the dump ([13](13-data-layer.md)). Confirm every issued certificate's QR host is mapped to the school in `platform.school_hosts`.
 
 ## 11. Parity checklist
 

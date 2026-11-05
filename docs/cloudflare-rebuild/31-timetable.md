@@ -1,6 +1,6 @@
 # Timetable
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). The feature history and design detail are in `docs/timetable-expansion-plan.md` (rounds 1–8 done) and `services/solver/README.md`.
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). The feature history and design detail are in `docs/timetable-expansion-plan.md` (rounds 1–8 done) and `services/solver/README.md`.
 
 ## 1. Summary
 
@@ -8,7 +8,7 @@ An aSc-style timetable builder: subjects, rooms, period slots (with optional slo
 
 Live: 1 config, 1 timetable, 1,472 entries, 452 requirements, 177 constraints, 38 subjects, 6 rooms, 14 period slots, 26 combined classes.
 
-What changes: almost nothing in the logic, because the generator and every scheduling rule already live in TypeScript (`src/lib/timetable/*`, 7,500 lines with tests). The data moves into the school object; saving a generated week (`replace_timetable_entries`) becomes one object call; the solver service runs as a Cloudflare Container.
+What changes: almost nothing in the logic, because the generator and every scheduling rule already live in TypeScript (`src/lib/timetable/*`, 7,500 lines with tests). The data and `replace_timetable_entries` move with the dump; the generator keeps running where it runs today; the solver service runs as a Cloudflare Container.
 
 ## 2. Users and screens
 
@@ -49,10 +49,12 @@ What changes: almost nothing in the logic, because the generator and every sched
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `replace_timetable_entries` | `timetable.saveEntries(timetableId, rows)`: delete and insert in one call; teacher names filled from profiles |
-| Row-level security (admin write, everyone read) | `timetable.manage` permission for writes; reads for all signed-in users |
+| `replace_timetable_entries` | Unchanged |
+| Row-level security (admin write, everyone read) | Unchanged |
 
 ## 6. Server routes and integrations
 
@@ -75,13 +77,15 @@ None. Exports (`export.ts`) are generated in the browser.
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-Carried over, with array columns (`teacher_ids`, `teacher_names`, `working_days`) as JSON arrays. Consider a child table `timetable_entry_teachers (entry_id, teacher_id)` if teacher-week queries (every staff member's view, task generation) need an index on teacher; today they filter the grid in code, which is fine at 1,500 entries per school but would be ~15,000 at a large school. Indexes: `timetable_entries (timetable_id, homeroom_id)`, plus the teacher table if added.
+Carried over, array columns (`teacher_ids`, `teacher_names`, `working_days`) included. Consider a child table `timetable_entry_teachers (entry_id, teacher_id)` if teacher-week queries (every staff member's view, task generation) need an index on teacher; today they filter the grid in code, which is fine at 1,500 entries per school but would be ~15,000 at a large school. Indexes: `timetable_entries (timetable_id, homeroom_id)`, plus the teacher table if added.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `timetable.config` (everything the builder needs in one call) | `timetable.manage` |
 | `timetable.save*` for each setup table | `timetable.manage` |
@@ -93,7 +97,7 @@ The generator stays in the browser (it streams progress and is stoppable), sendi
 
 ## 10. Moving existing data
 
-Straight copy; drop the backup table. Verify the published grid renders identically for every homeroom and teacher.
+Moves with the dump ([13](13-data-layer.md)); drop the backup table. Verify the published grid renders identically for every homeroom and teacher.
 
 ## 11. Parity checklist
 

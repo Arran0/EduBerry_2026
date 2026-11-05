@@ -1,6 +1,6 @@
 # Home, Profile and Other Screens
 
-As of 27 Oct 2026. Part of the [Cloudflare rebuild docs](README.md). This doc covers what no other section owns:
+As of 5 Nov 2026. Part of the [rebuild docs](README.md). The design is a Neon Postgres project per school with Cloudflare for everything else ([01](01-architecture-options.md), [10](10-target-architecture.md)). This doc covers what no other section owns:
 
 - the home dashboards;
 - the `/more` hub;
@@ -81,16 +81,18 @@ Things that change home:
 
 ## 5. Logic in the database
 
-| Function | Target |
+Under Neon every function, trigger and policy below moves unchanged with the database ([13](13-data-layer.md)), and the policies keep deciding who sees what. The right-hand column notes the exceptions: jobs `pg_cron` called, which the hub's timer now calls, and anything that used `pg_net`, Supabase Auth or Storage.
+
+| Function | Under Neon |
 | --- | --- |
-| `record_app_open(p_today)` | `streaks.recordOpen()`: today is computed on the server in the school's time zone |
-| Row-level security on `feedbacks` (own rows; admin all) | `feedback.*` permissions (below) |
+| `record_app_open(p_today)` | Unchanged |
+| Row-level security on `feedbacks` (own rows; admin all) | Unchanged |
 
 ## 6. Server routes and integrations
 
 | Today | Target |
 | --- | --- |
-| Many browser queries on home | `home.load()`: one object call, returning a payload per visible card. Cards still render independently on the client from that payload |
+| Many browser queries on home | `home.load()`: one SQL function, returning a payload per visible card. Cards still render independently on the client from that payload |
 | `/api/admin/update-banner` | `settings.banners.save` ([21](21-school-settings-and-branding.md)) |
 | Wikipedia thumbnail lookup from the browser | Unchanged (public API, no secrets). Optionally cache the resolved URL per author in the platform database |
 
@@ -109,18 +111,20 @@ Things that change home:
 | --- | --- |
 | Home banner and avatars in the shared public `classroom-files` bucket | Per-school R2 keys behind the files route |
 | `/more` tiles assume every module exists | Modules per school from `plans.modules` and `school_features` ([11](11-tenancy-and-control-plane.md)); `home.load` and the tile list honour them |
-| Home card visibility kept in `localStorage` per browser | Optional: a per-user preference in the school object so it follows the user |
+| Home card visibility kept in `localStorage` per browser | Optional: a per-user preference in the school database so it follows the user |
 | Streak date from the browser's clock | Server date in the school's time zone |
 
 ## 9. Target design
 
+Under Neon ([01](01-architecture-options.md)) this section's tables, functions and policies move as they are; nothing below is needed for the move itself. What follows is the phase 2 design ([16](16-frontend-and-api.md)): the endpoints the screens call, each running one SQL function as the signed-in user, and schema improvements worth making along the way as ordinary migrations. An endpoint written `section.action` is `POST /api/section/action`. Permission names label today's rules, which stay in the policies and functions; the fee module's grants remain the only named permission system.
+
 ### Tables
 
-Carried over. `feedbacks` gains `file_key` (an R2 key) in place of `file_url`. `user_activity_streaks` is unchanged.
+Carried over. `feedbacks.file_url` holds an R2 key after the import rewrite. `user_activity_streaks` is unchanged.
 
-### Methods
+### Endpoints (phase 2)
 
-| Method | Permission |
+| Endpoint | Permission |
 | --- | --- |
 | `home.load()` | signed in; returns only cards for the caller's role, switched-on modules and settings |
 | `streaks.recordOpen()`, `streaks.mine()` | signed in |
@@ -128,7 +132,7 @@ Carried over. `feedbacks` gains `file_key` (an R2 key) in place of `file_url`. `
 | `feedback.submit`, `feedback.mine`, `feedback.file(id)` | signed in (own) |
 | `feedback.all`, `feedback.reply`, `feedback.delete`, `feedback.file(id)` | `feedback.manage` (admin) |
 
-`home.load()` gathers each card's data by calling the owning module's read methods inside the object. For example, the overdue-fees card calls `fees.mine.outstanding`. No SQL is duplicated in the home module.
+`home_load()` gathers each card's data by calling the owning section's SQL functions. For example, the overdue-fees card calls the function behind `fees.mine.outstanding`. No SQL is duplicated in the home function.
 
 ## 10. Moving existing data
 
