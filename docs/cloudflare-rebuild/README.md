@@ -1,45 +1,48 @@
-# EduBerry Cloudflare Rebuild Docs
+# EduBerry Rebuild Docs: Neon and Cloudflare
 
-Started 27 Oct 2026. These documents describe the EduBerry app section by section: how each part works today as a one-school-per-deployment app on Supabase and Vercel, and what it must become in the multi-tenant version on Cloudflare. They are written to be the brief for rebuilding the app in a new repository cloned from this one.
+Started 27 Oct 2026; rewritten around Neon on 5 Nov 2026. These documents describe the EduBerry app section by section: how each part works today as a one-school-per-deployment app on Supabase and Vercel, and what it must become in the multi-tenant version on Neon Postgres and Cloudflare. They are written to be the brief for rebuilding the app in a new repository cloned from this one.
 
 ## Why these docs exist
 
-Today every school is a separate copy of the app: its own Vercel project, its own Supabase project (database, login, files, realtime, scheduled jobs) and its own environment variables. The target is one app that serves every school, runs entirely on Cloudflare, and uses no Supabase service, including Supabase Auth.
+Today every school is a separate copy of the app: its own Vercel project, its own Supabase project (database, login, files, realtime, scheduled jobs) and its own environment variables. The target is one app that serves every school. Each school keeps its own Postgres database, moved from Supabase to a Neon project of its own; everything else runs on Cloudflare; no Supabase service is used, including Supabase Auth.
 
-The new repository starts as a clone of this one. Read these docs in order, run the spikes in the architecture doc, then rebuild one section at a time in the order given in [92-build-order.md](92-build-order.md). Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
+The new repository starts as a clone of this one. Read these docs in order, run the spikes in the architecture doc, then build the platform and move the sections in the order given in [92-build-order.md](92-build-order.md). Each section doc lists what exists today in enough detail (tables, functions, triggers, routes, screens, jobs, integrations, single-school assumptions) that nothing is lost, and says how it maps onto the target design.
 
 ## Target in one paragraph
 
-One router Worker serves the app for every school. It finds the school from the host name, checks the session cookie, and calls that school's **School Durable Object**, which holds the school's data in its own SQLite database (up to 10 GB) and runs the school's business logic one request at a time. One **D1 database** holds the platform's own records (schools, domains, plans, provisioning). Files go to **R2** under a per-school prefix. **Queues** carry outgoing WhatsApp, push, email and webhook work; each school object sets its own **alarms** for scheduled work, with a **Cron Trigger** as a watchdog. The browser app is a static single-page app served free from **Workers Static Assets**. The reasoning, the options rejected and the spikes to run first are in [01-architecture-options.md](01-architecture-options.md); the costs are in [02-cost-study.md](02-cost-study.md).
+One router Worker serves the app for every school. It finds the school from the host name, verifies the user's access token, and runs each request as that user against the school's own **Neon Postgres database**, where today's tables, functions, triggers and row-level security policies keep working unchanged. A **platform database** (also Neon, reached through Hyperdrive, cached in KV) holds the platform's own records: schools, hosts, plans, encrypted connection strings. Files go to **R2** under a per-school prefix. A small **`SchoolHub` Durable Object** per school holds live WebSockets and the school's job timer, so nothing scheduled runs inside Postgres and each database can sleep when nobody is using the app. **Queues** carry outgoing WhatsApp, push, email, webhook and job work. The browser app is a static single-page app served free from **Workers Static Assets**; in phase 1 it keeps today's queries through Neon's Data API, and in phase 2 each screen moves to one Worker endpoint. The reasoning, the options rejected and the spikes to run first are in [01-architecture-options.md](01-architecture-options.md); the costs are in [02-cost-study.md](02-cost-study.md).
 
 ## Words used in every doc
 
 | Term | Meaning |
 | --- | --- |
-| School, tenant | One customer school. Today: one Vercel project + one Supabase project. Target: one row in the platform D1 + one School object + one R2 prefix |
+| School, tenant | One customer school. Today: one Vercel project + one Supabase project. Target: one row in the platform database + one Neon project (or a database in a pod) + one `SchoolHub` + one R2 prefix |
 | Router Worker | The single Worker that receives every request for every school |
-| School object | The SQLite-backed Durable Object that owns one school's data and logic, addressed as `SCHOOL.idFromName(schoolId)` |
-| Platform D1 | The one shared D1 database for platform records; never holds school data |
-| Today | `main` at commit `4762ae2` and the live database `mps-web` (Supabase project `tgxxqzeaqxiwoqzopcku`, Mumbai), as of 27 Oct 2026 |
+| School database | The school's own Postgres database in Neon, holding its data and logic as today |
+| `SchoolHub` | The small Durable Object per school for live sockets and the job timer; it holds no school data |
+| Platform database | The one shared Neon database for platform records; never holds school data |
+| Pod | A Neon project holding several small schools' databases on one compute, to save cost ([11](11-tenancy-and-control-plane.md)) |
+| Phase 1, phase 2 | Phase 1: today's browser queries through Neon's Data API. Phase 2: one Worker endpoint per screen ([16](16-frontend-and-api.md)) |
+| Today | The live database `mps-web` (Supabase project `tgxxqzeaqxiwoqzopcku`, Mumbai), counts read on 5 Nov 2026; section docs were written against `main` at commit `4762ae2` on 27 Oct 2026 |
 | Single-tenant assumption | Anything that works only because a deployment serves one school: environment variables, singleton settings rows, hard-coded names, domains or time zones |
 
 ## Documents and status
 
-Status: **Done** = written and pushed. All eight rounds are done; the order of work in the new repository is in [92-build-order.md](92-build-order.md).
+Status: **Done** = written and pushed. All rounds are done; round 10 rewrote the set around Neon. The order of work in the new repository is in [92-build-order.md](92-build-order.md).
 
 | Round | Doc | Covers | Status |
 | --- | --- | --- | --- |
 | 1 | [README.md](README.md) | This index, the plan and the template | Done |
-| 1 | [01-architecture-options.md](01-architecture-options.md) | D1 per school vs shared D1 vs Durable Objects vs others; validation; recommendation; spikes | Done |
-| 1 | [02-cost-study.md](02-cost-study.md) + [tools/costmodel.py](tools/costmodel.py) | Workload model from live data; cost per school and per fleet up to 10,000 users | Done |
+| 1 | [01-architecture-options.md](01-architecture-options.md) | Neon per school (chosen) vs pods vs Durable Objects vs D1 and others; validation; decision; spikes S1–S8 | Done |
+| 1 | [02-cost-study.md](02-cost-study.md) + [tools/costmodel.py](tools/costmodel.py) | Workload model from live data; Neon compute model; cost per school and per fleet up to 10,000 users, against Durable Objects and Supabase | Done |
 | 9 | [03-cost-efficiency.md](03-cost-efficiency.md) | Cost-efficiency practices checked against the cost study; what is done, what the rebuild must do, a checklist per screen | Done |
-| 2 | [10-target-architecture.md](10-target-architecture.md) | Repository layout, Workers and Durable Object classes, request lifecycle, environments, deploys, observability | Done |
-| 2 | [11-tenancy-and-control-plane.md](11-tenancy-and-control-plane.md) | Platform D1, finding the school from the host, domains, provisioning and offboarding, platform admin | Done |
-| 2 | [12-auth-and-permissions.md](12-auth-and-permissions.md) | Replacing Supabase Auth; sessions; password import; invites and resets; replacing row-level security | Done |
-| 2 | [13-data-layer.md](13-data-layer.md) | Postgres to SQLite rules, migrations inside each school, data export and import, archiving, backups | Done |
-| 2 | [14-jobs-messaging-realtime.md](14-jobs-messaging-realtime.md) | `pg_cron`, `pg_net` and Realtime replaced by alarms, Cron Triggers, Queues and WebSockets | Done |
+| 2 | [10-target-architecture.md](10-target-architecture.md) | Building blocks, request lifecycle, how the database knows the user, repository layout, environments, deploys, observability, limits | Done |
+| 2 | [11-tenancy-and-control-plane.md](11-tenancy-and-control-plane.md) | Platform database, finding the school from the host, roles in each school database, domains, provisioning through the Neon API, pods and the 100-project limit, offboarding, platform console | Done |
+| 2 | [12-auth-and-permissions.md](12-auth-and-permissions.md) | Replacing Supabase Auth with our own sign-in; `auth.users` kept; tokens; `auth.uid()` on both paths; row-level security kept | Done |
+| 2 | [13-data-layer.md](13-data-layer.md) | Supabase Postgres to Neon Postgres: the 11 hooks to replace, migrations per school, query rules, dump and restore, backups | Done |
+| 2 | [14-jobs-messaging-realtime.md](14-jobs-messaging-realtime.md) | `pg_cron`, `pg_net` and Realtime replaced by the hub's timer, Queues and WebSockets; keeping databases asleep | Done |
 | 2 | [15-files-and-media.md](15-files-and-media.md) | Supabase Storage to R2 | Done |
-| 2 | [16-frontend-and-api.md](16-frontend-and-api.md) | Next.js to a static app; API conventions; CSP; PWA and push | Done |
+| 2 | [16-frontend-and-api.md](16-frontend-and-api.md) | Next.js to a static app; phase 1 through the Data API proxy; phase 2 endpoints; CSP; PWA | Done |
 | 2 | [17-integrations-and-secrets.md](17-integrations-and-secrets.md) | Banks, Razorpay, WhatsApp, GPS gateway, email, web push, solver; per-school secrets | Done |
 | 2 | [reference/live-schema.md](reference/live-schema.md) | Every live table, column, link, trigger, function, enum, view and cron job, by section | Done |
 | 3 | [20-users-profiles-and-admin.md](20-users-profiles-and-admin.md) | Profiles, student and staff details, user management, bulk import, audit | Done |
@@ -60,7 +63,7 @@ Status: **Done** = written and pushed. All eight rounds are done; the order of w
 | 6 | [35-bank-collections-and-payouts.md](35-bank-collections-and-payouts.md) | Bank smart collect, UPI, payouts, webhooks, Razorpay | Done |
 | 7 | [36-transport.md](36-transport.md) | Routes, runs, GPS, driver app, alerts, live tracking, bus fees and bus payroll | Done |
 | 8 | [37-home-profile-and-misc.md](37-home-profile-and-misc.md) | Home dashboards, profile, feedback, gamification, quotes | Done |
-| 8 | [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md) | Moving each live school from Supabase to its School object | Done |
+| 8 | [90-data-migration-and-cutover.md](90-data-migration-and-cutover.md) | Moving each live school from Supabase to its Neon project | Done |
 | 8 | [91-test-and-parity-plan.md](91-test-and-parity-plan.md) | How to prove each section matches today | Done |
 | 8 | [92-build-order.md](92-build-order.md) | Order of work in the new repository, milestones | Done |
 
@@ -78,8 +81,8 @@ Every section doc (20 onwards) follows this outline, so that each one can be use
 6. **Server routes and integrations** — API routes, external services, secrets.
 7. **Jobs, files and live updates** — scheduled work, storage buckets, realtime channels.
 8. **Single-tenant assumptions** — everything that only works because one deployment serves one school.
-9. **Target design** — tables in the School object, API endpoints and object methods, permission matrix, jobs, files, live updates, integrations.
-10. **Moving existing data** — transforms needed from Postgres to SQLite.
+9. **Target design** — what moves unchanged, phase 2 endpoints, schema improvements worth making later, jobs, files, live updates, integrations.
+10. **Moving existing data** — checks and rewrites needed when the school's database is dumped and restored into Neon.
 11. **Parity checklist** — behaviours the rebuilt section must reproduce, as testable statements.
 12. **Open questions** — decisions for the owner.
 
@@ -121,3 +124,4 @@ Divide by the days since `pg_postmaster_start_time()`.
 | 27 Oct 2026 | 7 | Section doc 36: transport (live runs stay in the school object; positions move out of SQL into trail chunks and R2) |
 | 27 Oct 2026 | 8 | Doc 37 (home, profile, feedback, streaks); 90 data migration and cutover runbook; 91 test and parity plan; 92 build order with milestones M0–M7 and the list of issues to fix now versus in the rebuild |
 | 28 Oct 2026 | 9 | Doc 03 (cost efficiency). Live fixes in the current app: home fee figures, private attachments, subtask uploads, report-card marks gate, profile email visibility |
+| 5 Nov 2026 | 10 | Decision changed to Neon Postgres per school, Cloudflare for everything else: rewrote 01, 02 (Neon cost model), 03, 10–17, 90–92 and this index; updated section docs 20–37 (functions and policies move unchanged; jobs on the hub's timer; phase 2 endpoints). The Durable Object design is kept in 01 and git history as the alternative |
