@@ -1,4 +1,4 @@
-# Database and Region Options: MongoDB, Firebase, India-hosted Postgres and Neon
+# Database and Region Options: MongoDB, Firebase, DigitalOcean, India-hosted Postgres and Neon
 
 As of 5 Nov 2026. Part of the [rebuild docs](README.md). Neon has no Indian region, which raised two questions: should the rebuild use MongoDB instead, and what would an India-hosted database cost? This doc compares the realistic hosts for a multi-tenant EduBerry, using the same workload model as the [cost study](02-cost-study.md). The numbers come from `db_options()` in [`tools/costmodel.py`](tools/costmodel.py).
 
@@ -99,6 +99,68 @@ Money is not the only cost. The rebuild's effort depends on how much of today's 
 | Aurora or RDS (Mumbai) | Moves as is | No Data API: either run PostgREST ourselves per school, or move every screen to Worker endpoints before cutover | Connection pooling from Workers (Hyperdrive allows 25 configurations, so shared servers need our own pooler); no branching for tests and previews | Baseline plus a few months |
 | MongoDB | Rewritten: every function, trigger and policy becomes application code; tenant and role checks move into every query | No | Every screen's data access, the importer, money and payroll transactions, reports | Largest: more than the Durable Object design rejected on 5 Nov |
 
+## DigitalOcean (Bangalore), checked on 5 Nov 2026
+
+DigitalOcean runs managed Postgres (versions 15–18), droplets, Spaces and Functions in Bangalore (BLR1). It supports the extensions the app uses: `pgcrypto`, `uuid-ossp`, `btree_gist` and `pg_stat_statements`, plus `pg_cron` on the Standard edition. The admin user `doadmin` is not a superuser.
+
+### Does the multi-tenant model work on it?
+
+Yes, at the database level. [`tools/spike-do/verify.sh`](tools/spike-do/verify.sh) checks every piece of the school-isolation model with an admin restricted like `doadmin` (CREATEROLE and CREATEDB, no superuser, no BYPASSRLS). On a local Postgres 16, all 16 checks passed:
+
+| Check | Result |
+| --- | --- |
+| Shared `anon` and `authenticated` roles; a database per school | Pass |
+| A login role per school, NOINHERIT, that can open only its own database | Pass. Another school's login gets "permission denied for database" |
+| Row-level security as the user: `set local role` plus `request.jwt.claims`, read by the `auth.uid()` shim | Pass. A student sees one profile and a teacher sees all; writing someone else's row is refused; the login role alone reads nothing |
+| `SECURITY DEFINER` helpers, the `auth.users` trigger, `pgcrypto` in an `extensions` schema, a `btree_gist` exclusion constraint | Pass |
+| A new school cloned from a template database | Pass, in about 0.2 seconds, so instant sign-up works without a pool of ready databases |
+| `pg_dump` and `pg_restore` without superuser rights | Pass |
+
+DigitalOcean's docs do not list `doadmin`'s exact rights. Run the same script on a real Bangalore cluster to confirm them before committing ([`tools/spike-do/README.md`](tools/spike-do/README.md)).
+
+### What changes around the database
+
+| Area | Neon design | On DigitalOcean |
+| --- | --- | --- |
+| Where the API runs | Cloudflare Workers, querying Neon over HTTPS | **Servers in Bangalore next to the database** (App Platform or droplets), keeping a small connection pool per school. Workers would have to open a new connection to Bangalore for every request, and Hyperdrive allows only 25 configurations, not one per school database. Cloudflare stays in front for the static app, CDN, firewall and R2 |
+| Phase 1 (today's browser queries) | Neon's Data API | No Data API. Either run PostgREST per school on the API servers (about 30 MB each), or move every screen to an endpoint before cutover |
+| Database exposure | Public endpoint with TLS | Trusted sources can limit the database to the API servers only, which is safer |
+| Sleeping when idle | Yes | No: clusters run all month |
+| High availability | Built into Neon's storage | From 30 Nov 2026, new **Standard** clusters are limited to 4 GiB and cannot add a standby node. A standby needs the **Advanced** edition (8 GiB from about $130 per node, the standby the same again), or our own droplets |
+| Connections | Pooled by Neon (10,000 clients) | 97 connections on a 4 GiB cluster, and 21 PgBouncer pools per cluster. About 10 schools per cluster if each holds a few connections, unless we run our own PgBouncer |
+| Scheduled jobs | Hub timer, so the database sleeps | `pg_cron` works on Standard (but not Advanced), but `pg_net` does not, so the outbox drains still need our own worker |
+| Restore | Per school (project) or per pod | Per cluster, the last 7 days, into a new cluster; one school is then copied back with `pg_dump` |
+| Test and preview databases | Neon branches in seconds | Postgres in Docker for CI; a restored cluster for staging |
+| Limits | 100 projects on Launch | 10 clusters per account by default (raised on request) |
+
+### Cost per school
+
+USD per month, including the Cloudflare share, from `db_options()`:
+
+| Host | 1,000 users | 3,000 | 10,000 |
+| --- | --- | --- | --- |
+| Neon pods (Singapore) | $4 | $9 | $15 |
+| Neon, project per school (Singapore) | $9 | $19 | $30 |
+| Supabase, project per school (Mumbai) | $10 | $16 | $62 |
+| DigitalOcean managed, Standard 4 GiB, no standby | $15 | $31 | $63 |
+| DigitalOcean managed, Advanced 8 GiB with standby | $33 | $66 | $132 |
+| DigitalOcean droplets with Postgres run by us, with standby | $11 | $22 | $36 |
+
+The DigitalOcean API servers in Bangalore add about $50–100 a month in total, shared by all schools.
+
+### Verdict
+
+- **DigitalOcean works for the multi-tenant model.** It is the fastest option for Indian users, with the API and the database in the same Bangalore datacentre.
+- **It is not cheaper than the alternatives unless we run Postgres ourselves.**
+  - Its managed Postgres costs more than Supabase in Mumbai at every size.
+  - High availability needs the Advanced edition.
+  - Running Postgres on droplets is cheaper, but then backups, failover, upgrades and monitoring are our job.
+- **It also means more of our own infrastructure:** API servers, PostgREST per school for phase 1, connection pooling, and no sleeping or branching.
+- **Where it fits:**
+  - When storing data in India is required, Supabase in Mumbai is the simpler first step.
+  - DigitalOcean droplets suit large schools later, once there is someone to run the database.
+  - If India storage is not required, Neon stays cheapest and simplest. Spike S4 decides whether its speed is acceptable.
+
 ## Firebase (Firestore), checked on 5 Nov 2026
 
 Firestore runs in Mumbai and Delhi, and Firebase Auth can import today's bcrypt passwords. But Firestore is a document database like MongoDB, so it has the same problem: every table, function, trigger and policy is rewritten.
@@ -141,3 +203,4 @@ Firebase Data Connect puts Postgres (Cloud SQL) behind Firebase, in Mumbai too, 
 - Neon pricing and regions: <https://neon.com/pricing>, <https://neon.com/docs/introduction/regions>
 - Supabase pricing: <https://supabase.com/pricing>
 - Firestore pricing: <https://cloud.google.com/firestore/pricing>
+- DigitalOcean PostgreSQL limits, extensions, pricing and regional availability: <https://docs.digitalocean.com/products/databases/postgresql/details/limits/>, <https://docs.digitalocean.com/products/databases/postgresql/details/supported-extensions/>, <https://www.digitalocean.com/pricing/managed-databases>, <https://www.digitalocean.com/pricing/droplets>, <https://docs.digitalocean.com/platform/regional-availability/>

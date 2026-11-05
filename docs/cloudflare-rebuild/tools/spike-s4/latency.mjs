@@ -10,6 +10,8 @@
 //                    test that reads one row through Supabase's API, as today's browser does
 //   SUPABASE_DB_URL  Optional: Supabase session-pooler connection string, for a like-for-like Postgres test
 //   SUPABASE_CA      Optional: path to Supabase's CA certificate, if the TLS check fails for SUPABASE_DB_URL
+//   DO_DB_URL        Optional: a DigitalOcean Bangalore Postgres connection string (see ../spike-do)
+//   DO_CA            Optional: path to that cluster's CA certificate (Download CA certificate in the DO console)
 // Flags: --n 30 (round trips per test), --label jio, --only neon-http
 
 import { neon } from '@neondatabase/serverless'
@@ -80,6 +82,14 @@ const tests = {
       try { return { connect, ...(await series(() => c.query('select 1'))) } } finally { await c.end() }
     },
   },
+  'do-tcp': {
+    what: 'DigitalOcean Postgres in Bangalore',
+    skip: !process.env.DO_DB_URL && 'set DO_DB_URL to include it',
+    run: async () => {
+      const c = pgClient(process.env.DO_DB_URL, process.env.DO_CA); const connect = await ms(() => c.connect())
+      try { return { connect, ...(await series(() => c.query('select 1'))) } } finally { await c.end() }
+    },
+  },
 }
 
 const f = (x) => (x === undefined ? '' : `${x.toFixed(0)} ms`).padStart(9)
@@ -104,7 +114,7 @@ if (neonMid && sbMid) {
   console.log(`\nNeon Singapore adds about ${extra.toFixed(0)} ms per round trip compared with Supabase Mumbai.`)
   console.log(`A screen making 1 call: +${extra.toFixed(0)} ms. A screen making 12 calls one after another: +${(12 * extra).toFixed(0)} ms.`)
 }
-const row = [new Date().toISOString(), LABEL, ...['neon-http', 'neon-tcp', 'supabase-https', 'supabase-tcp'].map((k) => out[k]?.p50?.toFixed(0) ?? '')].join(',')
+const row = [new Date().toISOString(), LABEL, ...['neon-http', 'neon-tcp', 'supabase-https', 'supabase-tcp', 'do-tcp'].map((k) => out[k]?.p50?.toFixed(0) ?? '')].join(',')
 fs.appendFileSync(new URL('./results.csv', import.meta.url), row + '\n')
 console.log(`\nSaved to results.csv: ${row}`)
 console.log('Paste the table above into the chat. It contains no passwords.')

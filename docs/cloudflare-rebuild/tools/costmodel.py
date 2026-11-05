@@ -167,6 +167,9 @@ HOSTS = dict(
     rds_16gb=0.225,           # RDS PostgreSQL db.r6g.large (16 GiB, 2 vCPU), per hour, single-AZ, US East
     rds_reserved=0.65,        # 1-year reserved, about a third off
     mongo=dict(flex=8.0, m10=0.08, m20=0.20, m30=0.54, m40=1.04),  # Atlas, per hour (Flex per month)
+    do_std_4gb=60.90,         # DigitalOcean managed Postgres, Standard 4 GiB, per month (largest Standard plan for new clusters from 30 Nov 2026; no standby)
+    do_adv_8gb=130.0,         # DigitalOcean managed Postgres, Advanced 8 GiB node, per month (a standby costs the same)
+    do_droplet_32gb=168.0,    # DigitalOcean Memory-Optimized droplet, 32 GiB / 4 vCPU, per month (Postgres run by us)
 )
 
 
@@ -202,6 +205,9 @@ def db_options(users, scenario='typical', year=1):
         'Shared RDS server, single-AZ (Mumbai)': rds + cf,
         'Shared RDS server, Multi-AZ (Mumbai)': 2 * rds + cf,
         'Shared RDS server, Multi-AZ, reserved (Mumbai)': 2 * rds * HOSTS['rds_reserved'] + cf,
+        'DigitalOcean managed, Standard 4 GiB, no standby (Bangalore)': HOSTS['do_std_4gb'] / (4 // ram) + cf,
+        'DigitalOcean managed, Advanced 8 GiB + standby (Bangalore)': 2 * HOSTS['do_adv_8gb'] / (8 // ram) + cf,
+        'DigitalOcean droplets, Postgres run by us, + standby (Bangalore)': 2 * HOSTS['do_droplet_32gb'] / (32 // ram) + cf,
         'MongoDB Atlas, cluster per school (Mumbai)': mongo_own + cf,
         'MongoDB Atlas, shared M40 clusters (Mumbai)': mongo_shared + cf,
     }
