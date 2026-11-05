@@ -21,6 +21,18 @@ As of 5 Nov 2026. Part of the [rebuild docs](README.md). Neon has no Indian regi
   3. Confirm that no school contract requires storage in India.
   4. If either check fails, use India-hosted Postgres for the schools that need it. Nothing in the design has to change except where those schools' databases live.
 
+## Lessons from running on Supabase today
+
+The live school runs on a Supabase **Micro** compute: 1 GB of RAM, a shared CPU, and 60 direct connections. On 5 Nov 2026, 43 of those 60 were open, 21 of them held by Supabase's API (PostgREST). The limits felt so far come from that size:
+
+| Problem felt | Cause on Supabase | Neon | DigitalOcean |
+| --- | --- | --- | --- |
+| Running out of compute | A fixed size per project (Micro $10, Small $15, Medium $60, Large $110); on Micro and Small, a disk IO budget that throttles to the baseline when used up; resizing restarts the database | Autoscales between a floor and a ceiling (for example 0.25–2 CU) as load changes, with no restart; billed by the CU-hour actually used | Fixed size; resizing is manual |
+| Connection limit | 60 direct connections and 200 pooled clients on Micro, shared by everything in the project | Up to 10,000 pooled clients per database; Workers use the HTTP driver, which holds no connections | 97 connections on 4 GiB and 21 pools per cluster, shared by every school on the cluster |
+| Inflexible pricing | Pro is $25 per organisation plus each project's compute size. The $599 Team plan adds compliance, SSO and support, not capacity | Pay per CU-hour and GB; nothing to pick per school beyond the autoscaling range | A fixed price per cluster or droplet |
+
+In EdZee each school has its own database, so one school's load never uses up another school's limits. That holds on Neon projects and Supabase projects; on pods and shared servers, schools share a compute or a cluster.
+
 ## The two concerns behind "no servers in India"
 
 | Concern | What it means for EduBerry |
@@ -204,3 +216,4 @@ Firebase Data Connect puts Postgres (Cloud SQL) behind Firebase, in Mumbai too, 
 - Supabase pricing: <https://supabase.com/pricing>
 - Firestore pricing: <https://cloud.google.com/firestore/pricing>
 - DigitalOcean PostgreSQL limits, extensions, pricing and regional availability: <https://docs.digitalocean.com/products/databases/postgresql/details/limits/>, <https://docs.digitalocean.com/products/databases/postgresql/details/supported-extensions/>, <https://www.digitalocean.com/pricing/managed-databases>, <https://www.digitalocean.com/pricing/droplets>, <https://docs.digitalocean.com/platform/regional-availability/>
+- Supabase compute sizes, connections and disk IO budget: <https://supabase.com/docs/guides/platform/compute-and-disk>
