@@ -1,4 +1,4 @@
-# Database and Region Options: MongoDB, India-hosted Postgres and Neon
+# Database and Region Options: MongoDB, Firebase, India-hosted Postgres and Neon
 
 As of 5 Nov 2026. Part of the [rebuild docs](README.md). Neon has no Indian region, which raised two questions: should the rebuild use MongoDB instead, and what would an India-hosted database cost? This doc compares the realistic hosts for a multi-tenant EduBerry, using the same workload model as the [cost study](02-cost-study.md). The numbers come from `db_options()` in [`tools/costmodel.py`](tools/costmodel.py).
 
@@ -99,6 +99,22 @@ Money is not the only cost. The rebuild's effort depends on how much of today's 
 | Aurora or RDS (Mumbai) | Moves as is | No Data API: either run PostgREST ourselves per school, or move every screen to Worker endpoints before cutover | Connection pooling from Workers (Hyperdrive allows 25 configurations, so shared servers need our own pooler); no branching for tests and previews | Baseline plus a few months |
 | MongoDB | Rewritten: every function, trigger and policy becomes application code; tenant and role checks move into every query | No | Every screen's data access, the importer, money and payroll transactions, reports | Largest: more than the Durable Object design rejected on 5 Nov |
 
+## Firebase (Firestore), checked on 5 Nov 2026
+
+Firestore runs in Mumbai and Delhi, and Firebase Auth can import today's bcrypt passwords. But Firestore is a document database like MongoDB, so it has the same problem: every table, function, trigger and policy is rewritten.
+
+| Area | Today (Postgres) | On Firestore |
+| --- | --- | --- |
+| Tables | 221 tables, 541 foreign keys | Collections with copied data; no joins, so screens that join tables need duplicated fields kept in step |
+| Logic | 304 SQL functions, 172 triggers | Cloud Functions, rewritten one by one |
+| Who sees what | 699 row-level security policies | Security Rules, rewritten. A rule can look up only a few other documents, so rules such as "teacher of this classroom" or "approver on this leave" need extra copied data |
+| Money | Fee allocation and payroll in single SQL transactions with row locks | Firestore transactions, with tighter limits on size and contention |
+| Reports | SQL over the year's rows | Totals kept up to date by functions, or every document read and billed |
+| Billing | Compute hours | Every document read and written. A 10,000-user school reading about 30 documents per screen would cost roughly $40–150 a month, more if reports read raw data; a bug that loops can run up the bill |
+| Several schools | A database per school | One Firebase project with a school field on every document, guarded by rules (one mistake shows one school's data to another), or a Google Cloud project per school |
+
+Firebase Data Connect puts Postgres (Cloud SQL) behind Firebase, in Mumbai too, but it replaces row-level security with its own access layer and runs an always-on Cloud SQL instance. If Google's Postgres in India were wanted, plain Cloud SQL or AlloyDB in Mumbai would sit in the same place as AWS RDS in the table above.
+
 ## What would make each option the right one
 
 | If… | Then… |
@@ -107,7 +123,7 @@ Money is not the only cost. The rebuild's effort depends on how much of today's 
 | Some schools must keep data in India | Those schools on India-hosted Postgres: a Supabase project in Mumbai while small, a shared RDS server in Mumbai once there are several large ones. The rest stay on Neon. The Worker already looks up each school's connection string, so a mixed fleet needs only a second database driver path |
 | Every school must keep data in India | Supabase in Mumbai, project per school, for the first years; shared RDS in Mumbai when large schools make it cheaper. Expect a higher price per school and plan the price list for it |
 | Neon opens an Indian region | Move schools there with a dump and restore, school by school |
-| Anyone proposes MongoDB again | The answer above stands: dearer per school, no row-level security, and a full rewrite of the logic that handles money |
+| Anyone proposes MongoDB or Firebase again | The answer above stands: dearer per school, no row-level security, and a full rewrite of the logic that handles money |
 
 ## Open questions
 
@@ -124,3 +140,4 @@ Money is not the only cost. The rebuild's effort depends on how much of today's 
 - DigitalOcean Managed PostgreSQL pricing (Standard Edition limited to 4 GiB for new clusters from 30 Nov 2026): <https://docs.digitalocean.com/products/databases/postgresql/details/pricing/>
 - Neon pricing and regions: <https://neon.com/pricing>, <https://neon.com/docs/introduction/regions>
 - Supabase pricing: <https://supabase.com/pricing>
+- Firestore pricing: <https://cloud.google.com/firestore/pricing>
