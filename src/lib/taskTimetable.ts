@@ -113,10 +113,24 @@ export function periodsForDates(tt: TeacherTimetable, teacherId: string, dates: 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
+ * The configs whose bell schedule sets the day's length: every active config,
+ * or, while none is active, the newest one. A config only turns active when
+ * its timetable is published, but its periods are set up long before that, so
+ * a school that has configured 11 periods and not yet published still gets 11
+ * rows rather than the default.
+ */
+export function slotConfigIds(configs: { id: string; is_active: boolean; created_at: string }[]): string[] {
+  const active = configs.filter(c => c.is_active).map(c => c.id)
+  if (active.length > 0) return active
+  const newest = [...configs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+  return newest ? [newest.id] : []
+}
+
+/**
  * The teacher's lessons in every published timetable of an active config. A
  * teacher with no lessons still gets a period count — the longest day of the
- * school — so their calendar has rows; with no timetable at all it is the
- * default.
+ * school — so their calendar has rows; with no periods set up at all it is
+ * the default.
  */
 export async function fetchTeacherTimetable(teacherId: string): Promise<TeacherTimetable> {
   const empty: TeacherTimetable = {
@@ -125,13 +139,18 @@ export async function fetchTeacherTimetable(teacherId: string): Promise<TeacherT
   if (!UUID_RE.test(teacherId)) return empty
 
   try {
-    const { data: configs } = await supabase.from('timetable_configs').select('id').eq('is_active', true)
-    const configIds = (configs ?? []).map(c => c.id as string)
-    if (configIds.length === 0) return empty
+    const { data: configs } = await supabase.from('timetable_configs').select('id, is_active, created_at')
+    const allConfigs = (configs ?? []) as { id: string; is_active: boolean; created_at: string }[]
+    const slotIds = slotConfigIds(allConfigs)
+    if (slotIds.length === 0) return empty
+    // Lessons only come from configs that are live (active, published).
+    const activeIds = allConfigs.filter(c => c.is_active).map(c => c.id)
 
     const [{ data: slots }, { data: timetables }] = await Promise.all([
-      supabase.from('timetable_period_slots').select('id, config_id, group_id, position, is_break').in('config_id', configIds),
-      supabase.from('timetables').select('id, config_id').in('config_id', configIds).eq('status', 'published'),
+      supabase.from('timetable_period_slots').select('id, config_id, group_id, position, is_break').in('config_id', slotIds),
+      activeIds.length > 0
+        ? supabase.from('timetables').select('id, config_id').in('config_id', activeIds).eq('status', 'published')
+        : Promise.resolve({ data: [] as { id: string; config_id: string }[] }),
     ])
     const { periodOf, countOf } = numberPeriods((slots ?? []) as PeriodSlot[])
     const schoolLongest = Math.max(0, ...countOf.values())

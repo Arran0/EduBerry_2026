@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { numberPeriods, periodsForDates, type TeacherTimetable } from './taskTimetable'
+import { numberPeriods, periodsForDates, slotConfigIds, type TeacherTimetable } from './taskTimetable'
 import { classLabel, sortClassLabels, taskDisplayTitle } from './taskClasses'
 import type { EntryOverride } from './timetable/overrides'
 
@@ -32,6 +32,23 @@ describe('numberPeriods', () => {
     expect(periodOf.has('pb')).toBe(false)
     expect(countOf.get('cfg|primary')).toBe(3)
     expect(countOf.get('cfg|secondary')).toBe(4)
+  })
+})
+
+describe('slotConfigIds', () => {
+  const cfg = (id: string, is_active: boolean, created_at: string) => ({ id, is_active, created_at })
+
+  it('uses every active config', () => {
+    expect(slotConfigIds([cfg('a', true, '2026-01-01'), cfg('b', false, '2026-06-01'), cfg('c', true, '2026-03-01')]))
+      .toEqual(['a', 'c'])
+  })
+
+  it('falls back to the newest config while none is published', () => {
+    expect(slotConfigIds([cfg('old', false, '2025-04-01'), cfg('new', false, '2026-04-01')])).toEqual(['new'])
+  })
+
+  it('is empty with no configs', () => {
+    expect(slotConfigIds([])).toEqual([])
   })
 })
 

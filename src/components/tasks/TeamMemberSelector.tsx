@@ -61,19 +61,22 @@ export default function TeamMemberSelector({
   return (
     // The picker always sits at the right of its row, so the menu opens from
     // the button's own right edge and grows leftwards onto the screen.
-    <div ref={ref} className="relative min-w-0">
+    // On one line and never wider than the space it is given: a long name
+    // shrinks the font on a phone and then ends in "…" (the full name is in
+    // the tooltip and the menu).
+    <div ref={ref} className="relative min-w-0 max-w-full">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
         title={isViewingSelf ? 'Showing your tasks' : `Showing ${displayName}'s tasks`}
-        className={`tk-btn !px-3 max-w-[11rem] sm:max-w-[15rem] min-h-9 !h-auto py-1 !whitespace-normal text-left leading-tight ${
+        className={`tk-btn !px-2.5 sm:!px-3 !gap-1 sm:!gap-1.5 max-w-full sm:max-w-[15rem] !text-[11.5px] sm:!text-[12.5px] text-left ${
           isViewingSelf ? 'tk-btn-soft' : 'text-white bg-gradient-to-br from-amber-500 to-orange-500 shadow-[0_6px_14px_-8px_rgba(234,88,12,.8)]'
         }`}
       >
-        {isViewingSelf ? <User size={14} className="flex-shrink-0 text-amber-600" /> : <Eye size={14} className="flex-shrink-0" />}
-        <span className="min-w-0 break-words">
+        {isViewingSelf ? <User size={13} className="flex-shrink-0 text-amber-600" /> : <Eye size={13} className="flex-shrink-0" />}
+        <span className="min-w-0 truncate">
           {isViewingSelf ? (selfLabel || 'You') : displayName}
         </span>
         <ChevronDown size={11} className={`flex-shrink-0 transition-transform opacity-50 ${open ? 'rotate-180' : ''}`} />
