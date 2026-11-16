@@ -18,7 +18,8 @@ import {
   type SendResult, type TemplateMessage, type WhatsAppCredentials, type WhatsAppProvider,
 } from './provider'
 
-const GRAPH_VERSION = 'v21.0'
+// Meta switches v21.0 off on 21 Jan 2027; v26.0 runs until 2028 or later.
+export const GRAPH_VERSION = 'v26.0'
 
 /** Error codes where retrying the identical request cannot help. */
 const PERMANENT_CODES = new Set([
@@ -27,6 +28,7 @@ const PERMANENT_CODES = new Set([
   132000, // template param count mismatch
   132001, // template does not exist in this language
   132005, // template param text too long
+  132018, // invalid template parameters (reported from v23.0)
   131051, // unsupported message type
   100,    // malformed request
 ])

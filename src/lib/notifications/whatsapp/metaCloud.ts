@@ -2,6 +2,18 @@ import 'server-only'
 import { render } from '../templates'
 import type { SendResult, WhatsAppMessage, WhatsAppProvider } from './provider'
 
+const GRAPH_VERSION = 'v26.0'
+
+/**
+ * The Graph API version to call. A version saved in the school's settings is
+ * used only if it is at least v26.0: Meta switches v21.0 off on 21 Jan 2027,
+ * and an old saved value must not pin the school to a version that stops working.
+ */
+export function graphVersion(configured: string | undefined): string {
+  const m = /^v(\d+)\.(\d+)$/.exec((configured ?? '').trim())
+  return m && Number(m[1]) >= 26 ? `v${m[1]}.${m[2]}` : GRAPH_VERSION
+}
+
 /**
  * Meta WhatsApp Cloud API.
  *
@@ -17,7 +29,7 @@ export const metaCloud: WhatsAppProvider = {
   async send(msg: WhatsAppMessage, config: Record<string, string>): Promise<SendResult> {
     const phoneNumberId = config.phone_number_id
     const token = config.access_token
-    const version = config.api_version || 'v21.0'
+    const version = graphVersion(config.api_version)
 
     if (!phoneNumberId || !token) {
       return { ok: false, error: 'WhatsApp is not configured', retryable: false }
