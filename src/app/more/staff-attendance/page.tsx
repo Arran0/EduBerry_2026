@@ -282,8 +282,8 @@ export default function StaffAttendancePage() {
               />
             </motion.div>
 
-            {/* A fixed, one-screen box: scrolled to, the report fills the
-                screen under the navbar (and above the phone's bottom bar), and
+            {/* A fixed box, a quarter taller than the screen under the navbar
+                (and above the phone's bottom bar) so more names show at once;
                 switching day, list or roster only changes what scrolls inside
                 it — never its height. Its list hands the scroll back to the
                 page at either end. -mx-2 claws back most of the phone gutter
@@ -292,7 +292,7 @@ export default function StaffAttendancePage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: 'easeOut', delay: 0.08 }}
-              className="-mx-2 sm:mx-0 h-[calc(100dvh-8.5rem)] md:h-[calc(100dvh-5.5rem)] min-h-[26rem]"
+              className="-mx-2 sm:mx-0 h-[calc((100dvh_-_8.5rem)_*_1.25)] md:h-[calc((100dvh_-_5.5rem)_*_1.25)] min-h-[32.5rem]"
             >
               <AllStaffAttendanceReport
                 viewerId={user.id}
