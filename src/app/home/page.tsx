@@ -529,6 +529,12 @@ export default function HomePage() {
   const bannerMask = useMotionTemplate`linear-gradient(to bottom, #000 ${bannerMaskSolid}%, transparent ${bannerMaskEnd}%)`
   const belowBannerTransform = useTransform(bannerReveal, p =>
     p >= 1 ? 'none' : `translateY(calc(${((p - 1) * 0.5).toFixed(4)} * var(--home-banner-h)))`)
+  // While the page below is lifted, its foot sits that far above where it will
+  // rest, and the strip it leaves above the sticky footer would show the body
+  // gradient. A white skirt under More Apps, exactly as tall as the lift,
+  // fills it; at rest it is 0 tall, so it never adds scroll.
+  const belowBannerSkirtHeight = useTransform(bannerReveal, p =>
+    p >= 1 ? '0px' : `calc(${((1 - p) * 0.5).toFixed(4)} * var(--home-banner-h))`)
 
 
   // The banner photo. Decoded off-screen first so it swaps in complete rather
@@ -1885,7 +1891,12 @@ export default function HomePage() {
               the sticky footer below — no custom background image here. ── */}
           {/* Breathing room above the band, at every width — it used to sit
               hard against whatever section came before it. */}
-          <motion.div variants={cardVariants} className="mt-8 lg:mt-12">
+          <motion.div variants={cardVariants} className="relative mt-8 lg:mt-12">
+            <motion.div
+              aria-hidden
+              className="absolute inset-x-0 top-full bg-white pointer-events-none"
+              style={{ height: belowBannerSkirtHeight }}
+            />
             <div className="relative w-full overflow-hidden bg-white">
               {/* Content */}
               <div className="relative z-10 home-container py-5">

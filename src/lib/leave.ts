@@ -827,3 +827,38 @@ export async function fetchLeaveApplicationsForStudentByMonth(
   return (data || []) as LeaveApplicationWithDetails[]
 }
 
+
+/**
+ * Which of these staff have a leave application (pending or approved) that
+ * covers `date`. The attendance report uses it to escalate absentees who
+ * applied for nothing. A rejected application does not count: the absence is
+ * still unauthorised.
+ *
+ * Returns null when the lookup failed, so the caller can hold back the flag
+ * rather than accuse everyone of not applying. Only coordinators, principals
+ * and admins can read other staff's applications (RLS); for anyone else the
+ * answer would be empty, so callers should not ask.
+ */
+export async function fetchStaffIdsWithLeaveOnDate(
+  staffIds: string[],
+  date: string
+): Promise<Set<string> | null> {
+  const covered = new Set<string>()
+  if (staffIds.length === 0) return covered
+  const CHUNK = 150
+  for (let i = 0; i < staffIds.length; i += CHUNK) {
+    const { data, error } = await supabase
+      .from('leave_applications')
+      .select('applicant_id')
+      .in('applicant_id', staffIds.slice(i, i + CHUNK))
+      .in('status', ['pending', 'approved'])
+      .lte('start_date', date)
+      .gte('end_date', date)
+    if (error) {
+      console.error('fetchStaffIdsWithLeaveOnDate error:', error)
+      return null
+    }
+    for (const row of data ?? []) covered.add((row as { applicant_id: string }).applicant_id)
+  }
+  return covered
+}

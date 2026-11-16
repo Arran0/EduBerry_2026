@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import {
   Users, Clock, Loader2, CircleSlash,
-  Umbrella, Ban, Settings, FileText, ShieldAlert, HardHat,
+  Umbrella, Ban, Settings, FileText, ShieldAlert, HardHat, FileX,
 } from 'lucide-react'
 import { GlassSegments } from '@/components/transport/glass'
 import StaffCalendarModal from '@/components/attendance/StaffCalendarModal'
@@ -40,6 +40,7 @@ import {
 import { useSchoolClock } from '@/hooks/useSchoolClock'
 import { fetchTeamsForDropdown, fetchTeamStaffById } from '@/lib/teams'
 import type { TeamRoster } from '@/lib/teams'
+import { fetchStaffIdsWithLeaveOnDate } from '@/lib/leave'
 import type { LeaveApplicationWithDetails } from '@/lib/leave'
 import { DateToggler, SmartSelect } from '@/components/workspace/ui'
 import type { SmartOption } from '@/components/workspace/ui'
@@ -492,6 +493,7 @@ export default function AllStaffAttendanceReport({
       '#staff-present': 'present',
       '#staff-unverified': 'present',
       '#staff-absent': 'absent',
+      '#staff-no-leave': 'absent',
       '#staff-exceptions': 'irregular',
     }
     const tab = tabByHash[hash]
@@ -724,6 +726,47 @@ export default function AllStaffAttendanceReport({
     rows.sort((a, b) => (a.staff.full_name ?? '').localeCompare(b.staff.full_name ?? ''))
     return rows
   }, [exceptions.absent, virtualAbsents, query])
+
+  // Absentees with no leave application for the day, escalated the way
+  // unverified punches are on the Present tab: an absence nobody applied for
+  // is the one an admin needs to chase. Only viewers who can read other
+  // staff's applications (coordinator and up, per RLS) get the flag — for a
+  // teacher the lookup would come back empty and accuse everyone.
+  const canSeeLeave = viewerRole !== 'teacher'
+  const absentStaffKey = useMemo(() => {
+    const ids = new Set<string>()
+    // A record already tied to a leave application is covered by definition.
+    for (const r of exceptions.absent) if (!r.leave_application_id) ids.add(r.staff_id)
+    for (const s of virtualAbsents) ids.add(s.id)
+    return [...ids].sort().join(',')
+  }, [exceptions.absent, virtualAbsents])
+  const [leaveCover, setLeaveCover] = useState<{ key: string; ids: Set<string> } | null>(null)
+  useEffect(() => {
+    if (!canSeeLeave || loading || teamLoading || !absentStaffKey) return
+    const key = `${date}|${absentStaffKey}`
+    let cancelled = false
+    fetchStaffIdsWithLeaveOnDate(absentStaffKey.split(','), date).then(ids => {
+      if (!cancelled && ids) setLeaveCover({ key, ids })
+    })
+    return () => { cancelled = true }
+  }, [canSeeLeave, loading, teamLoading, absentStaffKey, date, refreshKey])
+
+  // null until the lookup for exactly this day and these absentees is back,
+  // so a stale answer never flags (or clears) the wrong names.
+  const noLeaveIds = useMemo(() => {
+    if (!canSeeLeave || !absentStaffKey || !leaveCover || leaveCover.key !== `${date}|${absentStaffKey}`) return null
+    return new Set(absentStaffKey.split(',').filter(id => !leaveCover.ids.has(id)))
+  }, [canSeeLeave, absentStaffKey, leaveCover, date])
+
+  const noLeaveAbsentRows = useMemo(
+    () => (noLeaveIds ? absentRows.filter(x => noLeaveIds.has(x.staff.id)) : []),
+    [absentRows, noLeaveIds]
+  )
+  const otherAbsentRows = useMemo(
+    () => (noLeaveIds ? absentRows.filter(x => !noLeaveIds.has(x.staff.id)) : absentRows),
+    [absentRows, noLeaveIds]
+  )
+  const noLeaveCount = noLeaveIds?.size ?? 0
 
   const absentTabTotal = absentRows.length + exceptions.on_leave.length
   // Late still counts as present — shown at the top of the Present tab, not under Irregular.
@@ -958,6 +1001,16 @@ export default function AllStaffAttendanceReport({
                   {warningCount} unverified
                 </button>
               )}
+              {noLeaveCount > 0 && (
+                <button
+                  onClick={() => setActiveTab('absent')}
+                  title="Absent with no leave application for this day. Tap to see who."
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 font-semibold text-red-700 hover:bg-red-100 transition-colors"
+                >
+                  <FileX size={11} className="flex-shrink-0" />
+                  {noLeaveCount} no leave
+                </button>
+              )}
             </>}
           />
         )}
@@ -1018,6 +1071,30 @@ export default function AllStaffAttendanceReport({
                 </ReportEmpty>
               ) : (
                 <div className="space-y-2">
+                  {/* No leave application first, set apart like the Present
+                      tab's unverified block: these absences are unaccounted
+                      for, so they are the ones to follow up. */}
+                  {noLeaveAbsentRows.length > 0 && (
+                    <div id="staff-no-leave" className="border border-red-200/80 bg-red-50/40 rounded-2xl overflow-hidden">
+                      <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-red-200/70 bg-red-50/80">
+                        <FileX size={14} className="text-red-600 flex-shrink-0" />
+                        <p className="text-[12.5px] font-semibold text-red-800">No leave application</p>
+                        <span className="text-[12px] text-red-500 tabular-nums">{noLeaveAbsentRows.length}</span>
+                      </div>
+                      <div className="sa-list">
+                        <AnimatePresence initial={false}>
+                          {noLeaveAbsentRows.map(({ key, staff, record }) => (
+                            <StaffRow
+                              key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
+                              streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
+                              onSet={handleSet} viewerId={viewerId} viewerRole={viewerRole}
+                              onViewLeave={onViewLeave}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )}
                   {filteredOnLeave.length > 0 && (
                     <RowList>
                       {filteredOnLeave
@@ -1028,9 +1105,9 @@ export default function AllStaffAttendanceReport({
                         ))}
                     </RowList>
                   )}
-                  {absentRows.length > 0 && (
+                  {otherAbsentRows.length > 0 && (
                     <RowList>
-                      {absentRows.map(({ key, staff, record }) => (
+                      {otherAbsentRows.map(({ key, staff, record }) => (
                         <StaffRow
                           key={key} staff={staff} record={record} savingId={savingId} canEdit={canEdit}
                           streak={streakMap.get(staff.id)} derivedStatus={record ? undefined : 'absent'}
