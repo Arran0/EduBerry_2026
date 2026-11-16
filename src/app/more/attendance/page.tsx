@@ -1173,11 +1173,12 @@ function StudentAttendanceReport({ scopeHomerooms }: StudentAttendanceReportProp
     // On phones the report is full-bleed with square corners so the lists get
     // the whole screen; from sm up it is a rounded glass sheet like the
     // student view above it.
-    // A fixed height — the screen, less the top bar (and the tab bar on a
-    // phone) — so the controls stay put and only the records scroll.
+    // A fixed height — a quarter more than the screen less the top bar (and
+    // the tab bar on a phone), so more records show at once — so the controls
+    // stay put and only the records scroll.
     <section
       id={REPORT_ANCHOR}
-      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc(100dvh-9.5rem)] sm:h-[calc(100dvh-5.5rem)] min-h-[26rem]"
+      className="lg-pane -mx-4 sm:mx-0 !rounded-none sm:!rounded-[28px] scroll-mt-[4.5rem] flex flex-col h-[calc((100dvh_-_9.5rem)_*_1.25)] sm:h-[calc((100dvh_-_5.5rem)_*_1.25)] min-h-[32.5rem]"
     >
       <div className="relative flex flex-col flex-1 min-h-0">
         {/* ── Header: what this is, which way it is cut, and which day ── */}
